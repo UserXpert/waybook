@@ -1,0 +1,394 @@
+---
+title: Quick Start
+description: Go from zero to available slots in 5 minutes.
+---
+
+This guide walks you through computing available time slots, checking slot availability, and rendering a basic booking UI.
+
+## 1. Define availability rules
+
+Availability rules use RRULE syntax to define recurring schedules:
+
+```typescript
+import type { AvailabilityRuleInput } from "@thebookingkit/core";
+
+const rules: AvailabilityRuleInput[] = [
+  {
+    // "Every Mon-Fri" in iCalendar recurrence format
+    rrule: "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+    startTime: "09:00",
+    endTime: "17:00",
+    timezone: "America/New_York",
+  },
+];
+```
+
+This creates a Monday-Friday, 9am-5pm schedule in Eastern time.
+
+## 2. Compute available slots
+
+```typescript
+import { getAvailableSlots } from "@thebookingkit/core";
+
+const slots = getAvailableSlots(
+  rules,                // availability rules
+  [],                   // no overrides
+  [],                   // no existing bookings
+  {                     // date range (UTC) — Dates must be UTC — use new Date("...Z") or Date.UTC()
+    start: new Date("2026-03-09T00:00:00Z"),
+    end: new Date("2026-03-14T23:59:59Z"),
+  },
+  "America/New_York",   // customer's timezone for display
+  {
+    duration: 30,       // 30-minute slots
+    bufferBefore: 0,
+    bufferAfter: 15,    // 15-minute gap between appointments
+  }
+);
+
+console.log(slots[0]);
+// {
+//   startTime: "2026-03-09T14:00:00.000Z",  // UTC
+//   endTime: "2026-03-09T14:30:00.000Z",
+//   localStart: "2026-03-09T09:00:00",      // Eastern
+//   localEnd: "2026-03-09T09:30:00",
+// }
+```
+
+## 3. Check if a specific slot is available
+
+```typescript
+import { isSlotAvailable } from "@thebookingkit/core";
+
+const result = isSlotAvailable(
+  rules,                                    // availability rules
+  [],                                       // overrides
+  existingBookings,                         // existing bookings
+  new Date("2026-03-10T14:00:00.000Z"),    // slot start (UTC)
+  new Date("2026-03-10T14:30:00.000Z"),    // slot end (UTC)
+  0,                                        // bufferBefore (minutes)
+  15                                        // bufferAfter (minutes)
+);
+
+if (result.available) {
+  // Proceed with booking
+} else {
+  console.log(result.reason);
+  // "outside_availability" | "already_booked" | "blocked_date" | "buffer_conflict"
+}
+```
+
+## 4. Add overrides and bookings
+
+Real-world usage includes overrides (blocked days, extra hours) and existing bookings:
+
+```typescript
+import type { AvailabilityOverrideInput, BookingInput } from "@thebookingkit/core";
+
+// Block a specific day
+const overrides: AvailabilityOverrideInput[] = [
+  {
+    date: new Date("2026-03-11"),
+    isUnavailable: true,     // March 11 is blocked
+  },
+  {
+    date: new Date("2026-03-12"),
+    startTime: "09:00",
+    endTime: "12:00",        // March 12 shortened to morning only
+    isUnavailable: false,
+  },
+];
+
+// Existing bookings reduce available slots
+const bookings: BookingInput[] = [
+  {
+    startsAt: new Date("2026-03-10T14:00:00.000Z"),
+    endsAt: new Date("2026-03-10T14:30:00.000Z"),
+    status: "confirmed",
+  },
+];
+
+const dateRange = {
+  start: new Date("2026-03-09T00:00:00Z"),
+  end: new Date("2026-03-14T23:59:59Z"),
+};
+
+const slots = getAvailableSlots(rules, overrides, bookings, dateRange, 'America/New_York', { duration: 30 });
+```
+
+## 5. Render the booking UI
+
+Copy the UI components from `registry/ui/src/components/` into your project:
+
+```tsx
+import { BookingCalendar } from "./components/booking-calendar";
+import { TimeSlotPicker } from "./components/time-slot-picker";
+
+function BookingPage() {
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+
+  return (
+    <div>
+      <BookingCalendar
+        availableDates={dates}
+        selectedDate={selectedDate}
+        onDateSelect={setSelectedDate}
+      />
+
+      {selectedDate && (
+        <TimeSlotPicker
+          slots={slotsForDate}
+          selectedSlot={selectedSlot}
+          onSlotSelect={setSelectedSlot}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+## Complete example: Build a booking page
+
+The example below uses React with `useState`/`useEffect`. The `'use client'` directive is required for **Next.js App Router** only — remove it if you're using Remix, Vite, Astro, or any other framework.
+
+```typescript
+'use client'; // Next.js App Router only — remove for Remix, Vite, Astro, etc.
+
+import { useState, useEffect } from 'react';
+import { getAvailableSlots, isSlotAvailable } from '@thebookingkit/core';
+import type { AvailabilityRuleInput, Slot } from '@thebookingkit/core';
+
+export default function BookingPage() {
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Provider's availability (example: Mon-Fri 9am-5pm Eastern)
+  const rules: AvailabilityRuleInput[] = [
+    {
+      rrule: 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
+      startTime: '09:00',
+      endTime: '17:00',
+      timezone: 'America/New_York',
+    },
+  ];
+
+  // Load provider's bookings from your database
+  const [existingBookings, setExistingBookings] = useState([]);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+
+    setLoading(true);
+
+    // Compute available slots for the selected date
+    const dateStart = new Date(selectedDate);
+    dateStart.setUTCHours(0, 0, 0, 0);
+
+    const dateEnd = new Date(selectedDate);
+    dateEnd.setUTCHours(23, 59, 59, 999);
+
+    const availableSlots = getAvailableSlots(
+      rules,                             // availability rules
+      [],                                // overrides
+      existingBookings,                  // existing bookings
+      { start: dateStart, end: dateEnd }, // date range (UTC)
+      'America/New_York',                // customer timezone
+      { duration: 30, bufferAfter: 15 }  // options
+    );
+
+    setSlots(availableSlots);
+    setLoading(false);
+  }, [selectedDate]);
+
+  const handleSlotSelect = async (slot: Slot) => {
+    setSelectedSlot(slot);
+
+    // Verify the slot is still available before booking
+    const slotStart = new Date(slot.startTime);
+    const slotEnd = new Date(slot.endTime);
+
+    const available = isSlotAvailable(
+      rules,
+      [],
+      existingBookings,
+      slotStart,
+      slotEnd,
+      0,
+      15
+    );
+
+    if (!available.available) {
+      alert('This slot is no longer available. Please select another.');
+      return;
+    }
+
+    // Proceed with booking
+    await submitBooking(slot);
+  };
+
+  const submitBooking = async (slot: Slot) => {
+    const response = await fetch('/api/bookings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: 'John Doe',
+        customerEmail: 'john@example.com',
+        startsAt: slot.startTime,
+        endsAt: slot.endTime,
+      }),
+    });
+
+    if (response.ok) {
+      alert('Booking confirmed!');
+    } else {
+      alert('Booking failed. Please try again.');
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">Book an Appointment</h1>
+
+      {/* Date Picker */}
+      <div className="mb-8">
+        <label className="block text-sm font-medium mb-2">Select a date:</label>
+        <input
+          type="date"
+          onChange={(e) => setSelectedDate(e.target.valueAsDate)}
+          className="px-4 py-2 border rounded"
+          min={new Date().toISOString().split('T')[0]}
+        />
+      </div>
+
+      {/* Slot Selection */}
+      {selectedDate && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Available times</h2>
+          {loading ? (
+            <p>Loading slots...</p>
+          ) : slots.length === 0 ? (
+            <p>No availability on this date</p>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              {slots.map((slot, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSlotSelect(slot)}
+                  className={`px-4 py-2 rounded ${
+                    selectedSlot === slot
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
+                >
+                  {slot.localStart.split('T')[1]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Booking Summary */}
+      {selectedSlot && (
+        <div className="mt-8 p-4 border rounded bg-gray-50">
+          <h3 className="font-semibold mb-2">Booking Summary</h3>
+          <p>Date: {new Date(selectedSlot.startTime).toLocaleDateString()}</p>
+          <p>Time: {selectedSlot.localStart.split('T')[1]} - {selectedSlot.localEnd.split('T')[1]}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Resource Booking Quick Start
+
+The examples above show provider-based booking (1:1 appointments with people). The Booking Kit also supports **resource-based booking** for physical spaces: restaurant tables, hotel rooms, coworking desks, tennis courts, etc.
+
+```typescript
+import { getResourceAvailableSlots, assignResource } from '@thebookingkit/core';
+
+// Define a pool of restaurant tables
+const tables = [
+  {
+    id: 'table-1',
+    name: 'Table 1',
+    type: 'standard',
+    capacity: 2,            // seats 2 people
+    isActive: true,
+    rules: [{
+      rrule: 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
+      startTime: '11:00',
+      endTime: '22:00',
+      timezone: 'America/Los_Angeles',
+    }],
+    overrides: [],
+    bookings: existingReservations,
+  },
+  {
+    id: 'table-4',
+    name: 'Table 4',
+    type: 'standard',
+    capacity: 4,            // seats 4 people
+    isActive: true,
+    rules: [{
+      rrule: 'FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR,SA,SU',
+      startTime: '11:00',
+      endTime: '22:00',
+      timezone: 'America/Los_Angeles',
+    }],
+    overrides: [],
+    bookings: existingReservations,
+  },
+];
+
+// Find all available 90-minute seating slots for a party of 4
+const availableSlots = getResourceAvailableSlots(
+  tables,
+  {
+    start: new Date('2026-03-15T00:00:00Z'),
+    end: new Date('2026-03-16T23:59:59Z'),
+  },
+  'America/Los_Angeles',
+  {
+    duration: 90,        // 90-minute seating
+    minCapacity: 4,      // party size
+    bufferAfter: 15,     // 15-min turnover between seatings
+  }
+);
+
+console.log(`${availableSlots.length} available time slots`);
+// Each slot includes:
+// - startTime, endTime (UTC)
+// - localStart, localEnd (Pacific time for display)
+// - availableResources: [{ resourceId, resourceName, remainingCapacity }]
+
+// Auto-assign the best-fit table (smallest table that fits the party)
+const assignment = assignResource(
+  tables,
+  new Date('2026-03-15T18:00:00Z'),
+  new Date('2026-03-15T19:30:00Z'),
+  {
+    strategy: 'best_fit',  // Options: best_fit, first_available, round_robin, largest_first
+    minCapacity: 4,
+    requestedCapacity: 4,
+  }
+);
+
+console.log(`Assigned: ${assignment.resourceName} via ${assignment.reason}`);
+// Output: Assigned Table 4 via best_fit
+```
+
+Resource booking uses the same three-step availability pipeline as provider booking but operates on capacity instead of individual availability windows. Use `getResourceAvailableSlots` to show customers available times and `assignResource` to pick the best resource programmatically.
+
+## Next steps
+
+- [Architecture](/getting-started/architecture) — Understand the three-layer model
+- [Slot Engine](/core-concepts/slot-engine) — Deep dive into slot computation
+- [Resource Engine](/core-concepts/resource-engine) — Resource pool scheduling
+- [Event Types](/features/event-types) — Configure duration, questions, and limits
+- [Team Scheduling](/features/team-scheduling) — Handle multiple providers
+- [Payments](/features/payments) — Accept payments and manage fees

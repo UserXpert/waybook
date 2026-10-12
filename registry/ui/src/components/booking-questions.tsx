@@ -1,0 +1,324 @@
+import React from "react";
+import { useForm, type SubmitHandler } from "react-hook-form";
+import type { BookingQuestion } from "@thebookingkit/core";
+import { cn } from "../utils/cn.js";
+
+/** Data collected from the booking questions form */
+export interface BookingFormData {
+  /** Customer name (always required) */
+  name: string;
+  /** Customer email (always required) */
+  email: string;
+  /** Customer phone (optional) */
+  phone?: string;
+  /** Custom question responses keyed by question key */
+  responses: Record<string, string>;
+}
+
+/** Props for the BookingQuestions component */
+export interface BookingQuestionsProps {
+  /** Custom questions defined on the event type */
+  questions?: BookingQuestion[];
+  /** Callback when form is submitted */
+  onSubmit: (data: BookingFormData) => void;
+  /** Whether the form is in a submitting state */
+  isSubmitting?: boolean;
+  /** Submit button text */
+  submitLabel?: string;
+  /** Additional CSS class name */
+  className?: string;
+  /** Inline styles */
+  style?: React.CSSProperties;
+}
+
+/**
+ * Booking questions form that collects customer info and custom question responses.
+ *
+ * Always includes name and email fields. Renders dynamic custom questions
+ * based on the event type configuration.
+ *
+ * @example
+ * ```tsx
+ * <BookingQuestions
+ *   questions={eventType.customQuestions}
+ *   onSubmit={handleBookingSubmit}
+ * />
+ * ```
+ */
+export function BookingQuestions({
+  questions = [],
+  onSubmit,
+  isSubmitting = false,
+  submitLabel = "Continue",
+  className,
+  style,
+}: BookingQuestionsProps) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<Record<string, string>>();
+
+  const onFormSubmit: SubmitHandler<Record<string, string>> = (data) => {
+    const { name, email, phone, ...rest } = data;
+    onSubmit({
+      name,
+      email,
+      phone: phone || undefined,
+      responses: rest,
+    });
+  };
+
+  return (
+    <form
+      className={cn("tbk-booking-questions", className)}
+      style={style}
+      onSubmit={handleSubmit(onFormSubmit)}
+      noValidate
+    >
+      {/* Standard fields */}
+      <div className="tbk-field">
+        <label htmlFor="tbk-name" className="tbk-label">
+          Name <span className="tbk-required">*</span>
+        </label>
+        <input
+          id="tbk-name"
+          type="text"
+          className="tbk-input"
+          {...register("name", { required: "Name is required" })}
+          aria-invalid={!!errors.name}
+        />
+        {errors.name && (
+          <p className="tbk-error" role="alert">
+            {errors.name.message as string}
+          </p>
+        )}
+      </div>
+
+      <div className="tbk-field">
+        <label htmlFor="tbk-email" className="tbk-label">
+          Email <span className="tbk-required">*</span>
+        </label>
+        <input
+          id="tbk-email"
+          type="email"
+          className="tbk-input"
+          {...register("email", {
+            required: "Email is required",
+            pattern: {
+              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "Please enter a valid email address",
+            },
+          })}
+          aria-invalid={!!errors.email}
+        />
+        {errors.email && (
+          <p className="tbk-error" role="alert">
+            {errors.email.message as string}
+          </p>
+        )}
+      </div>
+
+      <div className="tbk-field">
+        <label htmlFor="tbk-phone" className="tbk-label">
+          Phone
+        </label>
+        <input
+          id="tbk-phone"
+          type="tel"
+          className="tbk-input"
+          {...register("phone", {
+            pattern: {
+              value: /^[+]?[\d\s()-]{7,20}$/,
+              message: "Please enter a valid phone number",
+            },
+          })}
+          aria-invalid={!!errors.phone}
+        />
+        {errors.phone && (
+          <p className="tbk-error" role="alert">
+            {errors.phone.message as string}
+          </p>
+        )}
+      </div>
+
+      {/* Custom questions */}
+      {questions.map((q) => (
+        <div key={q.key} className="tbk-field">
+          <label htmlFor={`tbk-q-${q.key}`} className="tbk-label">
+            {q.label}
+            {q.isRequired && <span className="tbk-required"> *</span>}
+          </label>
+          {renderQuestionInput(q, register, errors)}
+        </div>
+      ))}
+
+      <button
+        type="submit"
+        className="tbk-submit-button"
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? "Submitting..." : submitLabel}
+      </button>
+    </form>
+  );
+}
+
+function renderQuestionInput(
+  q: BookingQuestion,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register: any,
+  errors: Record<string, unknown>,
+) {
+  const validation = q.isRequired ? { required: `${q.label} is required` } : {};
+
+  switch (q.type) {
+    case "long_text":
+      return (
+        <>
+          <textarea
+            id={`tbk-q-${q.key}`}
+            className="tbk-textarea"
+            rows={3}
+            {...register(q.key, validation)}
+            aria-invalid={!!errors[q.key]}
+          />
+          {errors[q.key] ? (
+            <p className="tbk-error" role="alert">
+              {String((errors[q.key] as { message?: string })?.message ?? "")}
+            </p>
+          ) : null}
+        </>
+      );
+
+    case "single_select":
+      return (
+        <>
+          <select
+            id={`tbk-q-${q.key}`}
+            className="tbk-select"
+            {...register(q.key, validation)}
+            aria-invalid={!!errors[q.key]}
+          >
+            <option value="">Select...</option>
+            {q.options?.map((opt: string) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+          {errors[q.key] ? (
+            <p className="tbk-error" role="alert">
+              {String((errors[q.key] as { message?: string })?.message ?? "")}
+            </p>
+          ) : null}
+        </>
+      );
+
+    case "checkbox":
+      return (
+        <div className="tbk-checkbox-wrapper">
+          <input
+            id={`tbk-q-${q.key}`}
+            type="checkbox"
+            className="tbk-checkbox"
+            {...register(q.key, validation)}
+            aria-invalid={!!errors[q.key]}
+          />
+          {errors[q.key] ? (
+            <p className="tbk-error" role="alert">
+              {String((errors[q.key] as { message?: string })?.message ?? "")}
+            </p>
+          ) : null}
+        </div>
+      );
+
+    case "number":
+      return (
+        <>
+          <input
+            id={`tbk-q-${q.key}`}
+            type="number"
+            className="tbk-input"
+            {...register(q.key, {
+              ...validation,
+              validate: (v: string) =>
+                !v || !isNaN(Number(v)) || "Must be a number",
+            })}
+            aria-invalid={!!errors[q.key]}
+          />
+          {errors[q.key] ? (
+            <p className="tbk-error" role="alert">
+              {String((errors[q.key] as { message?: string })?.message ?? "")}
+            </p>
+          ) : null}
+        </>
+      );
+
+    case "email":
+      return (
+        <>
+          <input
+            id={`tbk-q-${q.key}`}
+            type="email"
+            className="tbk-input"
+            {...register(q.key, {
+              ...validation,
+              pattern: {
+                value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                message: "Please enter a valid email address",
+              },
+            })}
+            aria-invalid={!!errors[q.key]}
+          />
+          {errors[q.key] ? (
+            <p className="tbk-error" role="alert">
+              {String((errors[q.key] as { message?: string })?.message ?? "")}
+            </p>
+          ) : null}
+        </>
+      );
+
+    case "phone":
+      return (
+        <>
+          <input
+            id={`tbk-q-${q.key}`}
+            type="tel"
+            className="tbk-input"
+            {...register(q.key, {
+              ...validation,
+              pattern: {
+                value: /^[+]?[\d\s()-]{7,20}$/,
+                message: "Please enter a valid phone number",
+              },
+            })}
+            aria-invalid={!!errors[q.key]}
+          />
+          {errors[q.key] ? (
+            <p className="tbk-error" role="alert">
+              {String((errors[q.key] as { message?: string })?.message ?? "")}
+            </p>
+          ) : null}
+        </>
+      );
+
+    default: // short_text and multi_select fallback
+      return (
+        <>
+          <input
+            id={`tbk-q-${q.key}`}
+            type="text"
+            className="tbk-input"
+            {...register(q.key, validation)}
+            aria-invalid={!!errors[q.key]}
+          />
+          {errors[q.key] ? (
+            <p className="tbk-error" role="alert">
+              {String((errors[q.key] as { message?: string })?.message ?? "")}
+            </p>
+          ) : null}
+        </>
+      );
+  }
+}

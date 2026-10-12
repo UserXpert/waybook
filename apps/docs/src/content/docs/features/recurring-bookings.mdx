@@ -1,0 +1,216 @@
+---
+title: Recurring Bookings
+description: Create weekly, biweekly, and monthly booking series.
+---
+
+Recurring bookings let customers book a series of appointments at a regular cadence — weekly therapy sessions, biweekly coaching calls, monthly check-ups.
+
+## Creating a series
+
+```typescript
+import { generateOccurrences } from "@thebookingkit/core";
+import type { RecurringSeriesInput, RecurringOccurrence } from "@thebookingkit/core";
+
+const input: RecurringSeriesInput = {
+  startsAt: new Date("2026-03-10T14:00:00.000Z"),  // First appointment (UTC)
+  durationMinutes: 30,
+  frequency: "weekly",
+  count: 8,  // Generate 8 occurrences
+};
+
+const occurrences: RecurringOccurrence[] = generateOccurrences(input);
+
+console.log(occurrences);
+// Output:
+// [
+//   { index: 0, startsAt: 2026-03-10T14:00:00Z, endsAt: 2026-03-10T14:30:00Z },
+//   { index: 1, startsAt: 2026-03-17T14:00:00Z, endsAt: 2026-03-17T14:30:00Z },
+//   { index: 2, startsAt: 2026-03-24T14:00:00Z, endsAt: 2026-03-24T14:30:00Z },
+//   { index: 3, startsAt: 2026-03-31T14:00:00Z, endsAt: 2026-03-31T14:30:00Z },
+//   ...8 total occurrences
+// ]
+```
+
+Different frequencies:
+
+```typescript
+import { generateOccurrences } from "@thebookingkit/core";
+
+// Weekly: every Tuesday at 2pm UTC, 6 sessions
+const weekly = generateOccurrences({
+  startsAt: new Date("2026-03-10T14:00:00.000Z"),
+  durationMinutes: 60,
+  frequency: "weekly",
+  count: 6,
+});
+
+// Biweekly: every other week, 4 sessions
+const biweekly = generateOccurrences({
+  startsAt: new Date("2026-03-10T14:00:00.000Z"),
+  durationMinutes: 60,
+  frequency: "biweekly",
+  count: 4,
+});
+
+// Monthly: same day of month, 3 sessions
+const monthly = generateOccurrences({
+  startsAt: new Date("2026-03-10T14:00:00.000Z"),
+  durationMinutes: 60,
+  frequency: "monthly",
+  count: 3,
+});
+```
+
+## Frequencies
+
+| Frequency | Description | Example |
+|---|---|---|
+| `weekly` | Same day and time every week | Every Tuesday at 2pm |
+| `biweekly` | Every two weeks | Every other Tuesday at 2pm |
+| `monthly` | Same day of month | 10th of every month at 2pm |
+
+## Availability checking
+
+```typescript
+import { checkRecurringAvailability } from "@thebookingkit/core";
+import type { AvailabilityRuleInput, BookingInput } from "@thebookingkit/core";
+
+// First, generate the series occurrences
+const occurrences = generateOccurrences({
+  startsAt: new Date("2026-03-10T14:00:00.000Z"),
+  durationMinutes: 30,
+  frequency: "weekly",
+  count: 8,
+});
+
+// Provider's availability rules (Monday-Friday 9am-5pm Eastern)
+const rules: AvailabilityRuleInput[] = [
+  {
+    rrule: "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+    startTime: "09:00",
+    endTime: "17:00",
+    timezone: "America/New_York",
+  },
+];
+
+// Existing bookings that might conflict
+const existingBookings: BookingInput[] = [];
+
+// Check if all occurrences can be booked
+const result = checkRecurringAvailability(
+  occurrences,
+  rules,
+  [],  // overrides
+  existingBookings
+);
+
+if (result.allAvailable) {
+  console.log("All 8 sessions are available!");
+} else {
+  console.log(`${result.conflicts.length} sessions have conflicts:`);
+  result.conflicts.forEach(index => {
+    console.log(`  - Session ${index + 1}: ${occurrences[index].startsAt}`);
+  });
+}
+```
+
+Customer can choose to book only available occurrences:
+
+```typescript
+import { generateOccurrences, checkRecurringAvailability } from "@thebookingkit/core";
+
+const occurrences = generateOccurrences({
+  startsAt: new Date("2026-03-10T14:00:00.000Z"),
+  durationMinutes: 30,
+  frequency: "weekly",
+  count: 8,
+});
+
+const availability = checkRecurringAvailability(
+  occurrences,
+  rules,
+  overrides,
+  existingBookings
+);
+
+// Show customer what's available
+const availableOccurrences = occurrences.filter(
+  occ => !availability.conflicts.includes(occ.index)
+);
+
+console.log(`${availableOccurrences.length} of ${occurrences.length} sessions available`);
+// Output: "6 of 8 sessions available"
+
+// Customer decides to book only the available ones
+const bookingsToCreate = availableOccurrences.map(occ => ({
+  startsAt: occ.startsAt,
+  endsAt: occ.endsAt,
+  occurrenceIndex: occ.index,
+}));
+```
+
+## Cancelling future occurrences
+
+```typescript
+import { cancelFutureOccurrences } from "@thebookingkit/core";
+import type { SeriesBooking } from "@thebookingkit/core";
+
+// Get all bookings in the series
+const seriesBookings: SeriesBooking[] = [
+  {
+    id: "booking-1",
+    index: 0,
+    startsAt: new Date("2026-03-10T14:00:00.000Z"),
+    endsAt: new Date("2026-03-10T14:30:00.000Z"),
+    status: "confirmed",
+  },
+  {
+    id: "booking-2",
+    index: 1,
+    startsAt: new Date("2026-03-17T14:00:00.000Z"),
+    endsAt: new Date("2026-03-17T14:30:00.000Z"),
+    status: "confirmed",
+  },
+  {
+    id: "booking-3",
+    index: 2,
+    startsAt: new Date("2026-03-24T14:00:00.000Z"),
+    endsAt: new Date("2026-03-24T14:30:00.000Z"),
+    status: "confirmed",
+  },
+  {
+    id: "booking-4",
+    index: 3,
+    startsAt: new Date("2026-03-31T14:00:00.000Z"),
+    endsAt: new Date("2026-03-31T14:30:00.000Z"),
+    status: "confirmed",
+  },
+];
+
+// Customer cancels all sessions from April 1 onward
+const result = cancelFutureOccurrences(
+  seriesBookings,
+  new Date("2026-04-01T00:00:00.000Z")
+);
+
+console.log(result);
+// {
+//   cancelledIds: ["booking-4"],  // index 3 is >= April 1
+//   skippedIds: [],
+// }
+// Sessions 0-2 (March) remain; session 3 (March 31) is on boundary
+```
+
+## UI component
+
+```tsx
+import { RecurringBookingPicker } from "./components/recurring-booking-picker";
+
+<RecurringBookingPicker
+  frequencies={["weekly", "biweekly", "monthly"]}
+  maxOccurrences={12}
+  occurrences={generatedOccurrences}
+  onFrequencyChange={handleFrequencyChange}
+  onCountChange={handleCountChange}
+/>
+```

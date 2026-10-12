@@ -1,0 +1,214 @@
+---
+title: KioskCalendar
+description: Full-screen interactive calendar for admin and reception use with day/week views, drag-and-drop rescheduling, and off-hours dimming.
+---
+
+Full-screen interactive calendar for admin and reception staff to manage bookings across multiple providers or resources. Supports day and week views with drag-and-drop rescheduling, resource reassignment, per-resource off-hours dimming, and customizable color coding.
+
+## Install
+
+```bash
+npx thebookingkit add kiosk-calendar
+```
+
+## Usage
+
+```tsx
+import {
+  KioskCalendar,
+  type KioskEvent,
+  type KioskResource,
+  type KioskScheduleEntry,
+} from "@/components/kiosk-calendar";
+import { useState } from "react";
+
+const resources: KioskResource[] = [
+  { id: "dr-1", title: "Dr. Chen" },
+  { id: "dr-2", title: "Dr. Patel" },
+];
+
+const events: KioskEvent[] = [
+  {
+    id: "booking-1",
+    title: "Appointment",
+    customerName: "John Doe",
+    customerEmail: "john@example.com",
+    startsAt: new Date("2026-03-10T09:00:00"),
+    endsAt: new Date("2026-03-10T10:00:00"),
+    status: "confirmed",
+    serviceName: "Consultation",
+    source: "online",
+    resourceId: "dr-1",
+  },
+];
+
+// Per-resource working hours — slots outside these ranges are dimmed
+const scheduleMap = new Map<string | number, KioskScheduleEntry>([
+  ["dr-1", { isOff: false, startTime: "09:00", endTime: "17:00" }],
+  ["dr-2", { isOff: false, startTime: "10:00", endTime: "18:00" }],
+]);
+
+export default function ClinicDashboard() {
+  const [calendarEvents, setCalendarEvents] = useState(events);
+
+  const handleEventDrop = async (
+    eventId: string,
+    newStart: Date,
+    newEnd: Date,
+    resourceId?: string | number,
+  ) => {
+    await fetch(`/api/bookings/${eventId}/reschedule`, {
+      method: "POST",
+      body: JSON.stringify({ newStart, newEnd, resourceId }),
+    });
+  };
+
+  const handleSlotDoubleClick = (start: Date, end: Date, resourceId?: string | number) => {
+    // Open new booking dialog
+  };
+
+  return (
+    <KioskCalendar
+      events={calendarEvents}
+      resources={resources}
+      scheduleMap={scheduleMap}
+      defaultView="day"
+      colorMode="status"
+      dayStartHour={8}
+      dayEndHour={18}
+      onEventDrop={handleEventDrop}
+      onSlotDoubleClick={handleSlotDoubleClick}
+      onEventClick={(event) => console.log("Clicked:", event)}
+    />
+  );
+}
+```
+
+## Props
+
+```typescript
+export interface KioskCalendarProps {
+  /** Events to display */
+  events: KioskEvent[];
+  /**
+   * Resources (providers, rooms, equipment, etc.) shown as columns.
+   *
+   * - **Day view**: all resources render as side-by-side columns for one day.
+   *   Drag-and-drop between columns reassigns the resource.
+   * - **Week view**: a resource picker appears in the toolbar so the user
+   *   can view one resource's schedule across 7 days.
+   * - **Solo mode**: omit this prop (or pass a single resource) and the
+   *   calendar renders a standard single-column timeline — no picker,
+   *   no resource headers.
+   */
+  resources?: KioskResource[];
+  /** Default view */
+  defaultView?: "day" | "week";
+  /** Color coding mode */
+  colorMode?: KioskColorMode;
+  /** Fields to show on compact event blocks */
+  showFields?: {
+    customerName?: boolean;
+    serviceName?: boolean;
+    status?: boolean;
+    price?: boolean;
+    notes?: boolean;
+  };
+  /** Start hour for the time grid (0–23). @default 6 */
+  dayStartHour?: number;
+  /** End hour for the time grid (0–23). @default 22 */
+  dayEndHour?: number;
+  /** Slot height in pixels (controls vertical zoom). @default 48 */
+  slotHeight?: number;
+  /**
+   * First day of the week for the week view grid.
+   * 0 = Sunday, 1 = Monday. @default 1
+   */
+  weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  /** Called when a booking is clicked */
+  onEventClick?: (event: KioskEvent) => void;
+  /** Called when an empty time slot is selected. resourceId is the column's resource in day view. */
+  onSlotDoubleClick?: (start: Date, end: Date, resourceId?: string | number) => void;
+  /**
+   * Called when a booking is dragged to a new time (or a new resource column).
+   * `resourceId` is the target resource when dragging between columns in day view.
+   */
+  onEventDrop?: (eventId: string, newStart: Date, newEnd: Date, resourceId?: string | number) => Promise<void>;
+  /** Called when a booking is resized */
+  onEventResize?: (eventId: string, newStart: Date, newEnd: Date) => Promise<void>;
+  /**
+   * Custom event style getter. Return a `{ style }` object to override the
+   * default status/source color coding for a specific event.
+   */
+  eventStyleGetter?: (event: KioskEvent) => { style: React.CSSProperties } | undefined;
+  /** Allow events to be resized by dragging their bottom edge. @default false */
+  resizable?: boolean;
+  /** Per-resource schedule map for dimming off-hours slots. Keyed by resource ID. */
+  scheduleMap?: Map<string | number, KioskScheduleEntry>;
+  /** Additional CSS class name */
+  className?: string;
+  /** Inline styles */
+  style?: React.CSSProperties;
+}
+
+export interface KioskEvent {
+  id: string;
+  title: string;
+  customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  startsAt: Date;
+  endsAt: Date;
+  status: BookingStatus;
+  serviceName: string;
+  source: "online" | "walk_in" | "phone" | "admin";
+  notes?: string;
+  priceCents?: number;
+  location?: string;
+  /** Resource ID — determines column placement in day view and filtering in week view */
+  resourceId?: string | number;
+  /** Whether this is a break/block (not a booking) */
+  isBlock?: boolean;
+  blockType?: "break" | "personal" | "meeting" | "closed";
+}
+
+export interface KioskResource {
+  /** Unique identifier */
+  id: string | number;
+  /** Display label shown in the column header */
+  title: string;
+}
+
+/** Per-resource working-hours entry for slot styling */
+export interface KioskScheduleEntry {
+  /** Whether the resource is completely off for the day */
+  isOff: boolean;
+  /** Working hours start in "HH:MM" format */
+  startTime: string;
+  /** Working hours end in "HH:MM" format */
+  endTime: string;
+}
+
+export type KioskColorMode = "status" | "event_type" | "source";
+```
+
+## CSS Classes
+
+The component applies the following classes for styling:
+
+| Class | Applied to | Description |
+|---|---|---|
+| `tbk-kiosk-slot` | Every time slot cell | Base class for all slots |
+| `tbk-slot-off` | Off-hours slot cells | Added when a slot falls outside the resource's working hours (via `scheduleMap`) or the resource is off for the day |
+| `tbk-kiosk-calendar` | Root container | Main wrapper |
+| `tbk-view-day` / `tbk-view-week` | Root container | Current view mode |
+
+Style off-hours slots in your CSS:
+
+```css
+.tbk-slot-off {
+  background-color: #f8fafc;
+  opacity: 0.5;
+  pointer-events: none;
+}
+```

@@ -1,0 +1,96 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DATABASE_URL: postgresql://thebookingkit:thebookingkit@localhost:5432/thebookingkit
+
+jobs:
+  integration:
+    name: DB Integration Tests (Postgres 15)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Start PostgreSQL container
+        run: |
+          docker run -d \
+            --name thebookingkit-test-db \
+            -e POSTGRES_DB=thebookingkit \
+            -e POSTGRES_USER=thebookingkit \
+            -e POSTGRES_PASSWORD=thebookingkit \
+            -p 5432:5432 \
+            postgres:15-alpine
+
+          # Wait until Postgres is ready (up to 30s)
+          ready=0
+          for i in $(seq 1 30); do
+            if docker exec thebookingkit-test-db pg_isready -U thebookingkit -q 2>/dev/null; then
+              ready=1
+              break
+            fi
+            echo "Waiting for Postgres... ($i/30)"
+            sleep 1
+          done
+          if [ "$ready" -eq 0 ]; then
+            echo "Postgres did not become ready within 30s"
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: npx turbo build
+
+      - name: Push Drizzle schema to database
+        working-directory: packages/db
+        run: |
+          # drizzle-kit push requires interactive confirmation — pipe yes to auto-accept
+          echo "yes" | npx drizzle-kit push --verbose
+
+      - name: Verify tables were created
+        working-directory: packages/db
+        run: |
+          node -e "
+            const postgres = require('postgres');
+            const sql = postgres(process.env.DATABASE_URL);
+            sql\`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename\`
+              .then(rows => {
+                console.log('Tables created:', rows.length);
+                rows.forEach(r => console.log('  -', r.tablename));
+                if (rows.length === 0) {
+                  console.error('ERROR: No tables were created by drizzle-kit push!');
+                  process.exit(1);
+                }
+                return sql.end();
+              })
+              .catch(err => { console.error('Table verification failed:', err.message); process.exit(1); });
+          "
+
+      - name: Run custom SQL migrations
+        working-directory: packages/db
+        run: node --import tsx/esm src/migrate.ts
+
+      - name: Run DB integration tests
+        working-directory: packages/db
+        run: npx vitest run src/__tests__/integration.test.ts
+
+      - name: Remove PostgreSQL container and volume
+        if: always()
+        run: |
+          docker stop thebookingkit-test-db || true
+          docker rm -v thebookingkit-test-db || true

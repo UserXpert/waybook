@@ -1,0 +1,419 @@
+/**
+ * Payment logic for booking prepayment, no-show fee holds,
+ * time-based cancellation fees, and payment history aggregation.
+ *
+ * Framework-agnostic — uses the {@link PaymentAdapter} interface
+ * for actual payment processing.
+ */
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** A single tier in a cancellation policy */
+export interface CancellationPolicyTier {
+  /** Hours before the booking start time */
+  hoursBefore: number;
+  /** Fee percentage (0–100) of the original payment */
+  feePercentage: number;
+}
+
+/** Cancellation policy for an event type */
+export type CancellationPolicy = CancellationPolicyTier[];
+
+/**
+ * Payment type discriminator.
+ *
+ * Values match `PaymentRecord.paymentType` exactly.
+ * - `"prepayment"` — full upfront charge at booking time.
+ * - `"deposit"` — partial upfront charge configured via `deposit_cents` /
+ *   `deposit_percentage` on the event type. Remaining balance is collected
+ *   out-of-band (in person, separate invoice, etc.).
+ * - `"no_show_hold"` — authorization hold released or captured on no-show.
+ * - `"cancellation_fee"` — fee charged on late cancellation per policy tier.
+ */
+export type PaymentType =
+  | "prepayment"
+  | "deposit"
+  | "no_show_hold"
+  | "cancellation_fee";
+
+/** Hold status for no-show fee holds */
+export type HoldStatus = "authorized" | "captured" | "released";
+
+/** Payment record stored in the database */
+export interface PaymentRecord {
+  id: string;
+  bookingId: string;
+  stripePaymentIntentId: string | null;
+  amountCents: number;
+  currency: string;
+  status: "pending" | "succeeded" | "failed" | "refunded" | "partially_refunded";
+  /** Discriminates between prepayment, no-show hold, and cancellation charges */
+  paymentType: PaymentType;
+  refundAmountCents: number;
+  createdAt: Date;
+}
+
+/** Result of evaluating a cancellation fee */
+export interface CancellationFeeResult {
+  /** The fee amount in cents */
+  feeCents: number;
+  /** The fee percentage that was applied */
+  feePercentage: number;
+  /** The refund amount (original - fee) */
+  refundCents: number;
+  /** The tier that matched */
+  matchedTier: CancellationPolicyTier;
+}
+
+/** Aggregated payment summary for dashboard */
+export interface PaymentSummary {
+  /** Total revenue in cents (succeeded payments) */
+  totalRevenueCents: number;
+  /** Total refunded in cents */
+  totalRefundedCents: number;
+  /** Net revenue (total - refunds) */
+  netRevenueCents: number;
+  /** Revenue from deposit-type payments (subset of totalRevenueCents) */
+  depositRevenueCents: number;
+  /** Count by status */
+  countByStatus: Record<string, number>;
+  /** Count by payment type */
+  countByType: Record<PaymentType, number>;
+  /** Total number of payments */
+  totalPayments: number;
+}
+
+/**
+ * Per-event-type deposit configuration.
+ *
+ * Matches the `deposit_cents` and `deposit_percentage` columns on the
+ * `event_types` table. If both are set, percentage takes precedence.
+ */
+export interface DepositConfig {
+  /** Fixed deposit amount in cents */
+  depositCents?: number | null;
+  /** Deposit as percentage of priceCents (0–100) */
+  depositPercentage?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+/** Error thrown when payment validation fails */
+export class PaymentValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentValidationError";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Cancellation Policy
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate a cancellation policy definition.
+ *
+ * Rules:
+ * - Must have at least one tier.
+ * - Each tier's `hoursBefore` must be >= 0.
+ * - Each tier's `feePercentage` must be 0–100.
+ * - Tiers must be sorted descending by `hoursBefore` (longest notice first).
+ * - No duplicate `hoursBefore` values.
+ *
+ * @throws {PaymentValidationError} If the policy is invalid.
+ */
+export function validateCancellationPolicy(policy: CancellationPolicy): void {
+  if (!Array.isArray(policy) || policy.length === 0) {
+    throw new PaymentValidationError(
+      "Cancellation policy must have at least one tier",
+    );
+  }
+
+  const seenHours = new Set<number>();
+
+  for (const tier of policy) {
+    if (typeof tier.hoursBefore !== "number" || tier.hoursBefore < 0) {
+      throw new PaymentValidationError(
+        `Invalid hoursBefore: ${tier.hoursBefore}. Must be >= 0`,
+      );
+    }
+
+    if (
+      typeof tier.feePercentage !== "number" ||
+      tier.feePercentage < 0 ||
+      tier.feePercentage > 100
+    ) {
+      throw new PaymentValidationError(
+        `Invalid feePercentage: ${tier.feePercentage}. Must be 0–100`,
+      );
+    }
+
+    if (seenHours.has(tier.hoursBefore)) {
+      throw new PaymentValidationError(
+        `Duplicate hoursBefore value: ${tier.hoursBefore}`,
+      );
+    }
+    seenHours.add(tier.hoursBefore);
+  }
+
+  // Check sorted descending by hoursBefore
+  for (let i = 1; i < policy.length; i++) {
+    if (policy[i].hoursBefore >= policy[i - 1].hoursBefore) {
+      throw new PaymentValidationError(
+        "Cancellation policy tiers must be sorted descending by hoursBefore",
+      );
+    }
+  }
+}
+
+/**
+ * Evaluate a cancellation policy to determine the fee for a cancellation.
+ *
+ * The policy tiers are checked from longest notice to shortest.
+ * The first tier where the remaining hours is <= `hoursBefore` is matched.
+ *
+ * Example policy:
+ * ```
+ * [
+ *   { hoursBefore: 24, feePercentage: 0 },    // Free cancellation 24h+
+ *   { hoursBefore: 2, feePercentage: 50 },     // 50% fee 2–24h before
+ *   { hoursBefore: 0, feePercentage: 100 },    // 100% fee <2h before
+ * ]
+ * ```
+ *
+ * @param policy - The cancellation policy tiers (sorted descending by hoursBefore)
+ * @param bookingStartsAt - When the booking starts
+ * @param cancelledAt - When the cancellation is happening
+ * @param originalAmountCents - The original payment amount in cents
+ * @returns The cancellation fee result
+ * @throws {PaymentValidationError} If inputs are invalid
+ */
+export function evaluateCancellationFee(
+  policy: CancellationPolicy,
+  bookingStartsAt: Date,
+  cancelledAt: Date,
+  originalAmountCents: number,
+): CancellationFeeResult {
+  if (originalAmountCents < 0) {
+    throw new PaymentValidationError("Original amount must be >= 0");
+  }
+
+  if (policy.length === 0) {
+    throw new PaymentValidationError("Cancellation policy must have at least one tier");
+  }
+
+  const hoursRemaining =
+    (bookingStartsAt.getTime() - cancelledAt.getTime()) / (1000 * 60 * 60);
+
+  if (hoursRemaining < 0) {
+    throw new PaymentValidationError("Cannot cancel a booking that has already started");
+  }
+
+  // Walk tiers from longest notice to shortest
+  // Find the tier where hoursRemaining is >= tier.hoursBefore
+  let matchedTier = policy[policy.length - 1]; // default to shortest notice tier
+
+  for (const tier of policy) {
+    if (hoursRemaining >= tier.hoursBefore) {
+      matchedTier = tier;
+      break;
+    }
+  }
+
+  const feeCents = Math.round(
+    (originalAmountCents * matchedTier.feePercentage) / 100,
+  );
+
+  return {
+    feeCents,
+    feePercentage: matchedTier.feePercentage,
+    refundCents: originalAmountCents - feeCents,
+    matchedTier,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Payment Summary
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute an aggregated payment summary from a list of payment records.
+ *
+ * @param payments - Array of payment records
+ * @returns Aggregated summary with revenue, refunds, and counts
+ */
+export function computePaymentSummary(
+  payments: PaymentRecord[],
+): PaymentSummary {
+  const countByStatus: Record<string, number> = {};
+  const countByType: Record<PaymentType, number> = {
+    prepayment: 0,
+    deposit: 0,
+    no_show_hold: 0,
+    cancellation_fee: 0,
+  };
+  let totalRevenueCents = 0;
+  let totalRefundedCents = 0;
+  let depositRevenueCents = 0;
+
+  for (const payment of payments) {
+    countByStatus[payment.status] =
+      (countByStatus[payment.status] || 0) + 1;
+    countByType[payment.paymentType] =
+      (countByType[payment.paymentType] || 0) + 1;
+
+    if (payment.status === "succeeded" || payment.status === "partially_refunded") {
+      totalRevenueCents += payment.amountCents;
+      if (payment.paymentType === "deposit") {
+        depositRevenueCents += payment.amountCents;
+      }
+    }
+
+    totalRefundedCents += payment.refundAmountCents;
+  }
+
+  return {
+    totalRevenueCents,
+    totalRefundedCents,
+    netRevenueCents: totalRevenueCents - totalRefundedCents,
+    depositRevenueCents,
+    countByStatus,
+    countByType,
+    totalPayments: payments.length,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Validation helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine whether an event type requires payment.
+ *
+ * @param priceCents - The event type price in cents
+ * @returns Whether the event type requires payment UI
+ */
+export function requiresPayment(priceCents: number | null | undefined): boolean {
+  return typeof priceCents === "number" && priceCents > 0;
+}
+
+/**
+ * Determine whether an event type has a no-show fee.
+ *
+ * @param noShowFeeCents - The no-show fee in cents
+ * @returns Whether the event type has a no-show hold
+ */
+export function hasNoShowFee(noShowFeeCents: number | null | undefined): boolean {
+  return typeof noShowFeeCents === "number" && noShowFeeCents > 0;
+}
+
+/**
+ * Compute the deposit amount in cents for a given event type configuration.
+ *
+ * Resolution rule:
+ * - If `depositPercentage` is a positive number, return `round(priceCents * pct / 100)`.
+ * - Else return `depositCents` (or 0 if unset).
+ * - The result is capped at `priceCents` so a deposit can never exceed the price.
+ *
+ * @param cfg - Deposit configuration from the event type
+ * @param priceCents - The event type price in cents (used for percentage math)
+ * @returns Deposit amount in cents (>= 0, <= priceCents)
+ * @throws {PaymentValidationError} On negative inputs or out-of-range percentage
+ */
+export function computeDepositAmount(
+  cfg: DepositConfig,
+  priceCents: number,
+): number {
+  if (!Number.isFinite(priceCents) || priceCents < 0) {
+    throw new PaymentValidationError(
+      `Invalid priceCents: ${priceCents}. Must be >= 0`,
+    );
+  }
+
+  const pct = cfg.depositPercentage ?? 0;
+  const fixed = cfg.depositCents ?? 0;
+
+  if (typeof pct !== "number" || pct < 0 || pct > 100) {
+    throw new PaymentValidationError(
+      `Invalid depositPercentage: ${pct}. Must be 0–100`,
+    );
+  }
+  if (typeof fixed !== "number" || fixed < 0) {
+    throw new PaymentValidationError(
+      `Invalid depositCents: ${fixed}. Must be >= 0`,
+    );
+  }
+
+  const raw = pct > 0 ? Math.round((priceCents * pct) / 100) : fixed;
+  return Math.min(raw, priceCents);
+}
+
+/**
+ * Determine whether an event type configuration requires a deposit.
+ *
+ * @param cfg - Deposit configuration from the event type
+ * @param priceCents - The event type price in cents
+ * @returns Whether a non-zero deposit must be collected
+ */
+export function requiresDeposit(
+  cfg: DepositConfig,
+  priceCents: number,
+): boolean {
+  if (!Number.isFinite(priceCents) || priceCents <= 0) return false;
+  return computeDepositAmount(cfg, priceCents) > 0;
+}
+
+/**
+ * Validate payment amount.
+ *
+ * @param amountCents - Amount in cents
+ * @throws {PaymentValidationError} If amount is invalid
+ */
+export function validatePaymentAmount(amountCents: number): void {
+  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+    throw new PaymentValidationError(
+      `Invalid payment amount: ${amountCents}. Must be a positive integer`,
+    );
+  }
+}
+
+/**
+ * Validate a 3-letter ISO 4217 currency code.
+ *
+ * @param currency - The currency code
+ * @throws {PaymentValidationError} If currency is invalid
+ */
+export function validateCurrency(currency: string): void {
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new PaymentValidationError(
+      `Invalid currency code: "${currency}". Must be a 3-letter ISO 4217 code (e.g., "USD")`,
+    );
+  }
+}
+
+/**
+ * Format a payment amount in cents to a display string.
+ *
+ * @param amountCents - Amount in cents
+ * @param currency - ISO 4217 currency code
+ * @returns Formatted string like "$25.00"
+ */
+export function formatPaymentAmount(
+  amountCents: number,
+  currency: string,
+): string {
+  const amount = amountCents / 100;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+    }).format(amount);
+  } catch {
+    // Fallback for unsupported currencies
+    return `${currency.toUpperCase()} ${amount.toFixed(2)}`;
+  }
+}

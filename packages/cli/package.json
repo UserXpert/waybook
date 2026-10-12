@@ -1,0 +1,54 @@
+{
+  "name": "@thebookingkit/cli",
+  "version": "0.5.0",
+  "description": "The Booking Kit CLI — scaffold projects, add 30+ booking UI components, and manage migrations",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zainalshanan/thebookingkit.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://thebookingkit.dev",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "thebookingkit": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.4"
+  },
+  "files": [
+    "dist",
+    "!dist/__tests__"
+  ],
+  "keywords": [
+    "thebookingkit",
+    "booking",
+    "scheduling",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
