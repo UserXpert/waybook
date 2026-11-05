@@ -12,10 +12,11 @@ function portFrom(host: string): string {
  * host. Local development keeps tenant subdomains; hosted environments stay on
  * the deployed Waybook origin until tenant domains are provisioned.
  */
-export function tenantDashboardHref(requestHost: string, tenantHostname: string): string {
+export function tenantDashboardHref(requestHost: string, tenantLocalHostname: string, tenantHostedHostname?: string): string {
   const requestHostname = hostnameFrom(requestHost);
   if (requestHostname === "localhost" || requestHostname.endsWith(".localhost")) {
-    return `http://${tenantHostname}${portFrom(requestHost)}/app`;
+    return `http://${tenantLocalHostname}${portFrom(requestHost)}/app`;
   }
+  if (tenantHostedHostname) return `https://${tenantHostedHostname}/app`;
   return `https://${requestHost.trim()}/app`;
 }
