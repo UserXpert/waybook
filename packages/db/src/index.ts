@@ -59,6 +59,9 @@ export { createDb, type Database } from "./client.js";
 // Migration runner
 export { runCustomMigrations } from "./migrate.js";
 
+// Waybook's isolated Control and tenant-database migration runner.
+export { migrateWaybookDatabase, createWaybookSql, type WaybookDatabaseKind } from "./waybook/index.js";
+
 // ---------------------------------------------------------------------------
 // Inferred TypeScript types from Drizzle schema
 // ---------------------------------------------------------------------------
