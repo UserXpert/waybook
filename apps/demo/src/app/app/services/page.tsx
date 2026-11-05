@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -15,8 +13,6 @@ type Assignment = { serviceId: string; teamMemberId: string };
 
 export default async function ServicesPage({ searchParams }: { searchParams: Promise<{ service?: string; new?: string }> }) {
   const { service, new: createNew } = await searchParams;
-  const identity = await requireIdentity();
-  if (identity.isPlatformAdmin) redirect("/control");
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requireFeature(tenant.id, "booking-essentials");

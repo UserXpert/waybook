@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
 import { AppointmentDrawerActions } from "@/components/appointment-drawer-actions";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { requireIdentity } from "@/lib/waybook/auth";
 import { availableSlots } from "@/lib/waybook/booking";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -53,8 +51,6 @@ function mergeSlots(slots: Slot[]): ScheduleEntry[] {
 
 export default async function CalendarsPage({ searchParams }: { searchParams: Promise<{ employee?: string; service?: string; week?: string; booking?: string }> }) {
   const { employee, service, week, booking: bookingId } = await searchParams;
-  const identity = await requireIdentity();
-  if (identity.isPlatformAdmin) redirect("/control");
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requireFeature(tenant.id, "calendars");
