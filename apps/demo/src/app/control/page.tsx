@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
 import { tenantFeatures, type TenantFeatureState } from "@/lib/waybook/features";
+import { tenantDashboardHref } from "@/lib/waybook/tenant-dashboard-link";
 import { ControlTenantManager, type ControlTenantRow } from "./control-tenant-manager";
 import { logout } from "../actions";
 
@@ -9,6 +11,8 @@ type ControlTenant = TenantRecord & { plan: string; migrationStatus: string; bac
 
 export default async function ControlPage({ searchParams }: { searchParams: Promise<{ tenant?: string }> }) {
   const { tenant: selectedTenantId } = await searchParams;
+  const requestHeaders = await headers();
+  const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3333";
   const identity = await requireIdentity();
   if (!identity.isPlatformAdmin) redirect("/app");
   const tenants = await controlDb<ControlTenant[]>`
@@ -25,7 +29,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
       db<{ count: number }[]>`SELECT count(*)::int AS count FROM team_members WHERE is_active = true`,
       tenantFeatures(tenant.id),
     ]);
-    return { ...tenant, bookingCount: bookings.count, staffCount: staff.count, features: features as TenantFeatureState[] };
+    return { ...tenant, bookingCount: bookings.count, staffCount: staff.count, features: features as TenantFeatureState[], workspaceHref: tenantDashboardHref(requestHost, tenant.hostname) };
   }));
   return <main className="waybook-data-page"><header><div><p>WAYBOOK CONTROL · DATABASE-BACKED</p><h1>Tenant operations</h1><span>Signed in as {identity.displayName}</span></div><form action={logout}><button>Sign out</button></form></header><ControlTenantManager tenants={rows} selectedTenantId={selectedTenantId} /></main>;
 }
