@@ -131,6 +131,10 @@ Waybook has one tenant-dashboard codebase, not one separately built dashboard pe
 
 No manual code change, dashboard build, or deployment should be required for a newly provisioned tenant. Nordic Studio and Copenhagen Physio are currently manually provisioned local seed tenants; automate this workflow before claiming self-service onboarding works.
 
+### Business onboarding prerequisites
+
+Before the Control **Create Business** workflow is enabled, implement Google SSO with Better Auth and invite-only workspace claiming. A new business owner must enter through a verified Google identity and accept a scoped, expiring invitation; provisioning must never create or expose a temporary password. The Control database remains the authority for identities, memberships, tenant connection references, and audit events.
+
 ### Tenant dashboards — Nordic Studio and Copenhagen Physio
 
 - Today/upcoming bookings, booking list, and calendar.
@@ -218,7 +222,7 @@ Service -> staff/resource -> date/time -> hold -> customer details -> confirmati
 | Automated Waybook tests | Partially tested | `npm run waybook:test:pooled` verifies two eligible employees: one hold leaves the shared time available, the second is assigned to the other employee, and then the time disappears. Add repeatable tests for tenant isolation, roles, DST, buffers, expiry, wider concurrency, token scope/revocation, migrations, and recovery. |
 | Desktop/mobile verification | Partial / browser-verified | Nordic public booking now has desktop confirmation and 390px mobile time/review verification, including server-selected employee display and the fully occupied shared-time state. The Clients dashboard has also been verified. Repeat for Copenhagen and the remaining authenticated modules before Phase 1 is called complete. |
 
-### Deferred identity and workspace-access work — later
+### Required identity and workspace-access work — before Business onboarding
 
 - **Google / Better Auth rebuild:** replace or extend the current local password-only sign-in with Google-backed Better Auth while retaining the existing Control database as the authoritative identity, membership, and approved tenant-connection registry. Do not import the separate `/Users/amit/Documents/Waybook` repository’s static dashboard, schema, or database-pool wiring.
 - **Invite-only workspace claiming:** rebuild the useful server-side invitation-claim pattern in the Control database for the existing `identities` and `tenant_memberships` model. It must use verified provider identity data only, accept an unexpired invitation transactionally, create/activate the correct membership once, audit the event, and then resolve the approved tenant connection server-side.
