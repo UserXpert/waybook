@@ -44,3 +44,24 @@ export async function findTenantByHostname(hostname: string): Promise<TenantReco
   `;
   return rows[0] ?? null;
 }
+
+/** Resolves a same-origin tenant route through the Control domain registry. */
+export async function findTenantByRouteSlug(routeSlug: string): Promise<TenantRecord | null> {
+  const normalized = routeSlug.trim().toLowerCase();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalized)) return null;
+  const rows = await controlDb<TenantRecord[]>`
+    SELECT t.id, t.slug, t.name, t.lifecycle_status AS "lifecycleStatus", t.database_env_key AS "databaseEnvKey", t.timezone
+    FROM tenant_domains d JOIN tenants t ON t.id = d.tenant_id
+    WHERE d.hostname = ${`${normalized}.localhost`} AND t.lifecycle_status = 'active'
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
+}
+
+export async function findTenantRouteSlug(tenantId: string, fallback: string): Promise<string> {
+  const rows = await controlDb<{ hostname: string }[]>`
+    SELECT hostname FROM tenant_domains WHERE tenant_id = ${tenantId} AND hostname LIKE '%.localhost'
+    ORDER BY is_primary DESC, created_at ASC LIMIT 1
+  `;
+  return rows[0]?.hostname.split(".")[0] ?? fallback;
+}

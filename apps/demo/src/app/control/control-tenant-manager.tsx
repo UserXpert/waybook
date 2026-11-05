@@ -1,7 +1,7 @@
 import type { TenantFeatureState } from "@/lib/waybook/features";
 import { setTenantFeature, setTenantLifecycle } from "./actions";
 
-export type ControlTenantRow = { id: string; slug: string; name: string; plan: string; lifecycleStatus: string; migrationStatus: string; backupStatus: string; hostname: string; hostedHostname: string | null; workspaceHref: string; timezone: string; bookingCount: number; staffCount: number; features: TenantFeatureState[] };
+export type ControlTenantRow = { id: string; slug: string; routeSlug: string; name: string; plan: string; lifecycleStatus: string; migrationStatus: string; backupStatus: string; hostname: string; workspaceHref: string; timezone: string; bookingCount: number; staffCount: number; features: TenantFeatureState[] };
 
 function Status({ children }: { children: string }) { return <span className="control-status">{children}</span>; }
 
@@ -12,7 +12,7 @@ function FeatureSwitch({ tenantId, feature }: { tenantId: string; feature: Tenan
 
 function TenantDrawer({ tenant }: { tenant: ControlTenantRow }) {
   return <div className="control-drawer-layer" role="presentation"><a className="control-drawer-scrim" aria-label="Close tenant details" href="/control" /><aside className="control-drawer" aria-label={`${tenant.name} details`}>
-    <header className="control-drawer-header"><div><p>Tenant profile</p><h2>{tenant.name}</h2><span>{tenant.slug}</span></div><a className="control-close" aria-label="Close tenant details" href="/control">×</a></header>
+    <header className="control-drawer-header"><div><p>Tenant profile</p><h2>{tenant.name}</h2><span>/{tenant.routeSlug}</span></div><a className="control-close" aria-label="Close tenant details" href="/control">×</a></header>
     <section className="control-summary-grid" aria-label="Tenant summary"><div><span>Plan</span><strong>{tenant.plan}</strong></div><div><span>Status</span><Status>{tenant.lifecycleStatus}</Status></div><div><span>This week</span><strong>{tenant.bookingCount} bookings</strong></div><div><span>Staff</span><strong>{tenant.staffCount} active</strong></div></section>
     <section className="control-drawer-section"><div className="control-section-heading"><div><h3>Operations</h3><p>Current tenant environment and access.</p></div></div><dl className="control-facts"><div><dt>Migration</dt><dd>{tenant.migrationStatus}</dd></div><div><dt>Backup</dt><dd>{tenant.backupStatus}</dd></div><div><dt>Timezone</dt><dd>{tenant.timezone}</dd></div></dl><a className="control-workspace-link" href={tenant.workspaceHref}>Open tenant dashboard <span aria-hidden="true">→</span></a></section>
     <section className="control-drawer-section"><div className="control-section-heading"><div><h3>Feature access</h3><p>Changes take effect server-side and are audit logged.</p></div></div><div className="control-feature-list">{tenant.features.map((feature) => <div className="control-feature" key={feature.featureKey}><div><strong>{feature.label}</strong><p>{feature.description}</p></div><FeatureSwitch tenantId={tenant.id} feature={feature} /></div>)}</div></section>

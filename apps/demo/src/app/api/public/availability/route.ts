@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { availableSlots } from "@/lib/waybook/booking";
-import { findTenantByHostname } from "@/lib/waybook/database";
+import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 
 export const runtime = "nodejs";
@@ -9,9 +9,9 @@ function invalid(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-/** Public availability is scoped exclusively by the Host header resolved on the server. */
+/** Public availability is scoped exclusively by the rewritten tenant route on the server. */
 export async function GET(request: NextRequest) {
-  const tenant = await findTenantByHostname(request.headers.get("host") ?? "");
+  const tenant = await tenantForPublicRequest(request.headers);
   if (!tenant) return invalid("Booking site not found.", 404);
   if (!await isFeatureEnabled(tenant.id, "booking-essentials")) return invalid("Booking is not available.", 404);
   const service = request.nextUrl.searchParams.get("service")?.trim();

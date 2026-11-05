@@ -1,16 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 type Member = { id: string; name: string };
 type Service = { id: string; title: string; durationMinutes: number };
 
 export function CalendarSelectors({ members, services, employeeId, serviceId, week }: { members: Member[]; services: Service[]; employeeId: string; serviceId?: string; week: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const go = (employee: string, service: string) => {
     const params = new URLSearchParams({ employee, week });
     if (service) params.set("service", service);
-    router.push(`/app/calendars?${params.toString()}`);
+    router.push(`${pathname}?${params.toString()}`);
   };
   return <div className="calendar-selectors">
     <label>Employee<select value={employeeId} onChange={(event) => go(event.target.value, "")}>{members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>

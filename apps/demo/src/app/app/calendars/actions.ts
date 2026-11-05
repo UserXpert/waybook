@@ -5,15 +5,13 @@ import { fromZonedTime } from "date-fns-tz";
 import { BookingConflictError, withSerializableRetry } from "@thebookingkit/server";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { availableSlots } from "@/lib/waybook/booking";
-import { controlDb, findTenantById, tenantDb } from "@/lib/waybook/database";
+import { tenantDb } from "@/lib/waybook/database";
+import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 
 async function editableCalendarTenant() {
-  const identity = await requireIdentity();
-  const [membership] = await controlDb<{ tenantId: string; role: string }[]>`SELECT tenant_id AS "tenantId", role FROM tenant_memberships WHERE identity_id = ${identity.id} LIMIT 2`;
-  if (!membership || !["owner", "manager"].includes(membership.role)) throw new Error("You do not have permission to manage calendars.");
-  const tenant = await findTenantById(membership.tenantId);
-  if (!tenant || tenant.lifecycleStatus !== "active") throw new Error("Tenant workspace is unavailable.");
+  const { tenant, membership } = await requireTenantWorkspace();
+  if (!["owner", "manager"].includes(membership.role)) throw new Error("You do not have permission to manage calendars.");
   await requireFeature(tenant.id, "calendars");
   return tenant;
 }
