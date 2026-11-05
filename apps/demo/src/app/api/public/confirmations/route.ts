@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { confirmBookingFromHold } from "@/lib/waybook/booking";
-import { findTenantByHostname } from "@/lib/waybook/database";
+import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ type ConfirmationRequest = { holdId?: unknown; idempotencyKey?: unknown; custome
 
 /** Confirmation performs the hold-to-booking transition, audit, token, and local outbox write in one transaction. */
 export async function POST(request: NextRequest) {
-  const tenant = await findTenantByHostname(request.headers.get("host") ?? "");
+  const tenant = await tenantForPublicRequest(request.headers);
   if (!tenant) return NextResponse.json({ error: "Booking site not found." }, { status: 404 });
   if (!await isFeatureEnabled(tenant.id, "booking-essentials")) return NextResponse.json({ error: "Booking is not available." }, { status: 404 });
   const body = await request.json().catch(() => null) as ConfirmationRequest | null;

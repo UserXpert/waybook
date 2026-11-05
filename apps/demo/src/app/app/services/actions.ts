@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireIdentity } from "@/lib/waybook/auth";
-import { controlDb, findTenantById, tenantDb } from "@/lib/waybook/database";
+import { tenantDb } from "@/lib/waybook/database";
+import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 
 function slugify(value: string) {
@@ -10,11 +11,8 @@ function slugify(value: string) {
 }
 
 export async function saveService(formData: FormData) {
-  const identity = await requireIdentity();
-  const [membership] = await controlDb<{ tenantId: string; role: string }[]>`SELECT tenant_id AS "tenantId", role FROM tenant_memberships WHERE identity_id = ${identity.id} LIMIT 2`;
-  if (!membership || !["owner", "manager"].includes(membership.role)) throw new Error("You do not have permission to manage services.");
-  const tenant = await findTenantById(membership.tenantId);
-  if (!tenant || tenant.lifecycleStatus !== "active") throw new Error("Tenant workspace is unavailable.");
+  const { tenant, membership } = await requireTenantWorkspace();
+  if (!["owner", "manager"].includes(membership.role)) throw new Error("You do not have permission to manage services.");
   await requireFeature(tenant.id, "booking-essentials");
   const id = String(formData.get("serviceId") ?? "");
   const title = String(formData.get("title") ?? "").trim();

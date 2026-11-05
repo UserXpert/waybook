@@ -4,10 +4,11 @@ import { requireIdentity } from "@/lib/waybook/auth";
 import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
 import { tenantFeatures, type TenantFeatureState } from "@/lib/waybook/features";
 import { tenantDashboardHref } from "@/lib/waybook/tenant-dashboard-link";
+import { routeSlugFromHostname } from "@/lib/waybook/tenant-routes";
 import { ControlTenantManager, type ControlTenantRow } from "./control-tenant-manager";
 import { logout } from "../actions";
 
-type ControlTenant = TenantRecord & { plan: string; migrationStatus: string; backupStatus: string; hostname: string; hostedHostname: string | null };
+type ControlTenant = TenantRecord & { plan: string; migrationStatus: string; backupStatus: string; hostname: string };
 
 export default async function ControlPage({ searchParams }: { searchParams: Promise<{ tenant?: string }> }) {
   const { tenant: selectedTenantId } = await searchParams;
@@ -17,7 +18,6 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
   if (!identity.isPlatformAdmin) redirect("/app");
   const tenants = await controlDb<ControlTenant[]>`
     SELECT t.id, t.slug, t.name, t.plan, t.lifecycle_status AS "lifecycleStatus", t.database_env_key AS "databaseEnvKey", t.timezone, d.hostname,
-      (SELECT hostname FROM tenant_domains hosted_domain WHERE hosted_domain.tenant_id = t.id AND hosted_domain.hostname LIKE '%.vercel.app' ORDER BY hosted_domain.created_at DESC LIMIT 1) AS "hostedHostname",
       COALESCE(m.status, 'pending') AS "migrationStatus", COALESCE(b.status, 'unknown') AS "backupStatus"
     FROM tenants t JOIN tenant_domains d ON d.tenant_id = t.id AND d.is_primary = true
     LEFT JOIN tenant_migration_statuses m ON m.tenant_id = t.id LEFT JOIN tenant_backup_statuses b ON b.tenant_id = t.id
@@ -30,7 +30,8 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
       db<{ count: number }[]>`SELECT count(*)::int AS count FROM team_members WHERE is_active = true`,
       tenantFeatures(tenant.id),
     ]);
-    return { ...tenant, bookingCount: bookings.count, staffCount: staff.count, features: features as TenantFeatureState[], workspaceHref: tenantDashboardHref(requestHost, tenant.hostname, tenant.hostedHostname ?? undefined) };
+    const routeSlug = routeSlugFromHostname(tenant.hostname, tenant.slug);
+    return { ...tenant, routeSlug, bookingCount: bookings.count, staffCount: staff.count, features: features as TenantFeatureState[], workspaceHref: tenantDashboardHref(requestHost, routeSlug) };
   }));
   return <main className="waybook-data-page"><header><div><p>WAYBOOK CONTROL · DATABASE-BACKED</p><h1>Tenant operations</h1><span>Signed in as {identity.displayName}</span></div><form action={logout}><button>Sign out</button></form></header><ControlTenantManager tenants={rows} selectedTenantId={selectedTenantId} /></main>;
 }

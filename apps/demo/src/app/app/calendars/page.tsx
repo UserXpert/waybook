@@ -6,7 +6,9 @@ import { AppointmentDrawerActions } from "@/components/appointment-drawer-action
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { availableSlots } from "@/lib/waybook/booking";
-import { controlDb, findTenantById, tenantDb } from "@/lib/waybook/database";
+import { tenantDb } from "@/lib/waybook/database";
+import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { requireFeature } from "@/lib/waybook/features";
 import { logout } from "../../actions";
 import { rescheduleBooking, updateBookingDetails, updateBookingStatus } from "./actions";
@@ -53,10 +55,8 @@ export default async function CalendarsPage({ searchParams }: { searchParams: Pr
   const { employee, service, week, booking: bookingId } = await searchParams;
   const identity = await requireIdentity();
   if (identity.isPlatformAdmin) redirect("/control");
-  const [membership] = await controlDb<{ tenantId: string; role: string }[]>`SELECT tenant_id AS "tenantId", role FROM tenant_memberships WHERE identity_id = ${identity.id} LIMIT 2`;
-  if (!membership) throw new Error("Tenant membership is required.");
-  const tenant = await findTenantById(membership.tenantId);
-  if (!tenant || tenant.lifecycleStatus !== "active") throw new Error("Tenant workspace is unavailable.");
+  const { tenant, membership } = await requireTenantWorkspace();
+  const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requireFeature(tenant.id, "calendars");
   const db = tenantDb(tenant);
   const members = await db<Member[]>`SELECT id, name, email FROM team_members WHERE tenant_id = ${tenant.id} AND is_active = TRUE ORDER BY name`;
@@ -91,7 +91,7 @@ export default async function CalendarsPage({ searchParams }: { searchParams: Pr
   const href = (next: { employee?: string; service?: string; week?: string; booking?: string }) => {
     const params = new URLSearchParams({ employee: next.employee ?? selected?.id ?? "", service: next.service ?? selectedService?.id ?? "", week: next.week ?? currentWeek });
     if (next.booking) params.set("booking", next.booking);
-    return `/app/calendars?${params.toString()}`;
+    return `${tenantPath(tenantSlug, "/app/calendars")}?${params.toString()}`;
   };
   const position = (entry: ScheduleEntry) => {
     const start = new Date(entry.startTime);
@@ -103,7 +103,7 @@ export default async function CalendarsPage({ searchParams }: { searchParams: Pr
   };
 
   return <main className="waybook-data-page tenant-dashboard-page">
-    <TenantDashboardNav tenantId={tenant.id} tenantName={tenant.name} active="calendars" />
+    <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="calendars" />
     <header><div><p>CALENDARS · DATABASE-BACKED</p><h1>{tenant.name}</h1><span>{tenant.timezone} · employee schedules affect live availability</span></div><form action={logout}><button>Sign out</button></form></header>
     {members.length === 0 ? <section className="waybook-data-card"><h2>Add a staff member first</h2><p>Calendars show staff schedules. Manage working hours and time off in Staff details.</p></section> : <>
       {selected ? <section className="waybook-data-card waybook-week-calendar"><div className="waybook-calendar-toolbar"><div><h2>{selected.name}’s schedule</h2><p>Confirmed bookings and live bookable periods in {tenant.timezone}.</p></div><div className="waybook-calendar-toolbar__actions"><Link href={href({ week: addDays(currentWeek, -7)})} aria-label="Previous week">←</Link><Link href={href({ week: weekStartFor(localDateKey(new Date(), tenant.timezone)) })}>Today</Link><Link href={href({ week: addDays(currentWeek, 7)})} aria-label="Next week">→</Link></div></div><CalendarSelectors members={members} services={services} employeeId={selected.id} serviceId={selectedService?.id} week={currentWeek} />{services.length === 0 ? <p className="waybook-permission-note">Assign a service to this staff member in Staff to calculate slots.</p> : null}{selectedService ? <div className="waybook-calendar-legend"><span><i className="is-booking" /> Received booking</span><span><i className="is-open" /> Bookable for {selectedService.title}</span></div> : null}<div className="waybook-week-calendar__scroll"><div className="waybook-week-calendar__grid" style={{ gridTemplateRows: `3rem repeat(${rowCount}, 2.65rem)` }}><div className="waybook-week-calendar__corner">Time</div>{days.map((day) => <div key={day} className="waybook-week-calendar__day">{calendarDate.format(new Date(`${day}T12:00:00Z`))}</div>)}{Array.from({ length: rowCount }, (_, index) => [<div className="waybook-week-calendar__time" key={`time-${index}`}>{index % 2 === 0 ? `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:00` : ""}</div>, ...days.map((day) => <div className="waybook-week-calendar__cell" key={`${day}-${index}`} />)])}{openPeriods.map((period) => <div key={period.startTime} className="waybook-week-calendar__entry is-open" style={position(period)}><strong>Bookable</strong><span>{clock.format(new Date(period.startTime))}–{clock.format(new Date(period.endTime))}</span></div>)}{bookings.map((booking) => <Link key={booking.id} href={href({ booking: booking.id })} className="waybook-week-calendar__entry is-booking" style={position({ startTime: booking.startsAt.toISOString(), endTime: booking.endsAt.toISOString() })}><strong>{booking.customerName}</strong><span>{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)} · {booking.serviceTitle}</span></Link>)}</div></div></section> : null}

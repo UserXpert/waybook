@@ -9,7 +9,7 @@ type Slot = { startTime: string; endTime: string; localStart: string; localEnd: 
 type Availability = { teamMemberId: string; slots: Slot[] };
 type AssignedMember = { id: string; name: string };
 type Step = "service" | "time" | "details" | "complete";
-type Props = { tenantName: string; timezone: string; services: Service[]; teamMembers: TeamMember[] };
+type Props = { tenantSlug: string; tenantName: string; timezone: string; services: Service[]; teamMembers: TeamMember[] };
 
 function isoDateInTimezone(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
@@ -29,7 +29,7 @@ function price(priceCents: number) {
   return new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(priceCents / 100);
 }
 
-export function PublicBookingFlow({ tenantName, timezone, services, teamMembers }: Props) {
+export function PublicBookingFlow({ tenantSlug, tenantName, timezone, services, teamMembers }: Props) {
   const [step, setStep] = useState<Step>("service");
   const [serviceId, setServiceId] = useState("");
   const [date, setDate] = useState(() => isoDateInTimezone(new Date(), timezone));
@@ -53,7 +53,7 @@ export function PublicBookingFlow({ tenantName, timezone, services, teamMembers 
     setIsLoading(true); setStatus(""); setSelectedSlot(null); setHoldId(null); setIdempotencyKey(null);
     const startsAt = fromZonedTime(`${selectedDate}T00:00:00`, timezone);
     const endsAt = fromZonedTime(`${selectedDate}T23:59:59.999`, timezone);
-    const response = await fetch(`/api/public/availability?service=${encodeURIComponent(selectedService.id)}&start=${encodeURIComponent(new Date(startsAt.getTime() - 24 * 60 * 60_000).toISOString())}&end=${encodeURIComponent(new Date(endsAt.getTime() + 24 * 60 * 60_000).toISOString())}`);
+    const response = await fetch(`/${tenantSlug}/api/public/availability?service=${encodeURIComponent(selectedService.id)}&start=${encodeURIComponent(new Date(startsAt.getTime() - 24 * 60 * 60_000).toISOString())}&end=${encodeURIComponent(new Date(endsAt.getTime() + 24 * 60 * 60_000).toISOString())}`);
     const payload = await response.json();
     setIsLoading(false);
     if (!response.ok) { setSlots([]); setStatus(payload.error ?? "Could not find availability."); return; }
@@ -81,7 +81,7 @@ export function PublicBookingFlow({ tenantName, timezone, services, teamMembers 
   const reserveSlot = async (slot: Slot) => {
     if (!selectedService) return;
     setIsLoading(true); setStatus("");
-    const response = await fetch("/api/public/holds", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ serviceId: selectedService.id, startsAt: slot.startTime, endsAt: slot.endTime }) });
+    const response = await fetch(`/${tenantSlug}/api/public/holds`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ serviceId: selectedService.id, startsAt: slot.startTime, endsAt: slot.endTime }) });
     const payload = await response.json();
     setIsLoading(false);
     if (!response.ok) { setStatus(payload.error ?? "That time is no longer available."); return; }
@@ -90,7 +90,7 @@ export function PublicBookingFlow({ tenantName, timezone, services, teamMembers 
   const confirm = async (formData: FormData) => {
     if (!holdId || !idempotencyKey) return;
     setIsLoading(true); setStatus("");
-    const response = await fetch("/api/public/confirmations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ holdId, idempotencyKey, customer: { name: formData.get("name"), email: formData.get("email"), phone: formData.get("phone") } }) });
+    const response = await fetch(`/${tenantSlug}/api/public/confirmations`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ holdId, idempotencyKey, customer: { name: formData.get("name"), email: formData.get("email"), phone: formData.get("phone") } }) });
     const payload = await response.json();
     setIsLoading(false);
     if (!response.ok) { setStatus(payload.error ?? "Could not confirm the booking."); return; }
