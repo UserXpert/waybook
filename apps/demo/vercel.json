@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "alias": [
+    "waybook-booking.vercel.app",
+    "nordic-waybook-booking.vercel.app",
+    "copenhagen-waybook-booking.vercel.app"
+  ]
+}
