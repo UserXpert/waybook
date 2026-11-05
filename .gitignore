@@ -19,3 +19,4 @@ apps/docs/.astro/
 
 # Lock files for sub-apps with their own package manager
 apps/docs/pnpm-lock.yaml
+.env.local

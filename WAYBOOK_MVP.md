@@ -27,7 +27,7 @@ waybook_nordic_studio
 waybook_copenhagen_physio
 ```
 
-No real client database, payment account, OAuth credential, or production environment may be connected during this phase.
+No real client database, payment account, or OAuth credential may be connected during this phase. The Vercel deployment is an isolated, seeded Waybook test environment; it is not a client production environment.
 
 ## Working-product standard
 
@@ -191,15 +191,16 @@ Service -> staff/resource -> date/time -> hold -> customer details -> confirmati
 
 ## Current status ledger
 
-**Branch:** `waybook/dashboard-foundation`  
+**Branch:** `main`
 **Baseline preserved:** `waybook-baseline` at `d2e03d7`  
-**Production/push status:** no commit, push, deployment, or production/database connection has been made for Waybook work.
+**Production/push status:** `main` is connected to Vercel automatic Git deployments. The hosted Vercel test environment uses isolated Neon PostgreSQL databases and must not be treated as a client production environment.
 
 | Area | Status | Evidence / next action |
 | --- | --- | --- |
 | Architecture and package decision | Designed | This document records the agreed product and package boundary. |
 | Control database | Database-backed / tested | Local PostgreSQL 16 runs at `127.0.0.1:5440`; `0001_control.sql` migrated and seeded with two active tenant records. |
 | Tenant databases | Database-backed / tested | `0001_operational.sql` migrated separately to Nordic and Copenhagen; each has distinct settings, owner, service, and availability seed data. |
+| Hosted Vercel test environment | Database-backed / tested | One Vercel-managed Neon resource hosts three isolated databases (`waybook_control`, `waybook_nordic_studio`, and `waybook_copenhagen_physio`). Vercel Secret connection variables are scoped to production, preview, and development; migrations and seed data were applied. Hosted login browser verification remains required. |
 | Authentication and roles | Database-backed / browser-verified | Local password-hashed identities, expiring hash-stored sessions, platform-admin and tenant-owner routing work. Other tenant roles still need tests and UI. |
 | Tenant routing | Database-backed / browser-verified | Tenant connection keys are allowlisted server-side; tenant workspace resolves the signed-in user’s Control membership. The public `/book` route and all booking APIs resolve `nordic.localhost` or `copenhagen.localhost` only on the server before selecting the approved tenant connection. |
 | Booking engine | Database-backed / tested | Tenant-scoped availability reads persisted services, schedules, overrides, bookings, and active holds through `@thebookingkit/core`; public pooled availability is the union of eligible employees’ slots and the hold endpoint revalidates and assigns a currently free eligible employee. Holds use `@thebookingkit/server` retry plus PostgreSQL exclusion constraints. `0002_hold_schedule.sql` stores the customer-visible appointment interval while database blocks reserve intervals including buffers. Local HTTP availability and hold requests passed. |

@@ -10,7 +10,8 @@ function passwordHash(password: string): string {
 }
 
 const seedPassword = process.env.WAYBOOK_LOCAL_PASSWORD ?? "waybook-local-only";
-const control = postgres(controlUrl, { max: 1, ssl: false });
+const sslFor = (url: string) => (url.includes("localhost") || url.includes("127.0.0.1") ? false : "require");
+const control = postgres(controlUrl, { max: 1, ssl: sslFor(controlUrl) });
 
 async function upsertIdentity(email: string, displayName: string, isPlatformAdmin: boolean) {
   const existing = await control<{ id: string }[]>`SELECT id FROM identities WHERE email = ${email} LIMIT 1`;
@@ -48,7 +49,7 @@ async function main() {
     await control`INSERT INTO platform_audit_events (actor_identity_id, tenant_id, action, target_type, target_id, metadata) VALUES (${adminId}, ${tenantId}, 'tenant.seeded', 'tenant', ${tenantId}, ${JSON.stringify({ source: "local-seed" })}::jsonb)`;
 
     const tenantUrl = process.env[tenant.env] ?? local(tenant.slug === "nordic-studio" ? "waybook_nordic_studio" : "waybook_copenhagen_physio");
-    const tenantDb = postgres(tenantUrl, { max: 1, ssl: false });
+    const tenantDb = postgres(tenantUrl, { max: 1, ssl: sslFor(tenantUrl) });
     await tenantDb`INSERT INTO tenant_settings (tenant_id, name, timezone, currency, booking_page) VALUES (${tenantId}, ${tenant.name}, 'Europe/Copenhagen', 'DKK', ${JSON.stringify({ publicName: tenant.name })}::jsonb) ON CONFLICT (tenant_id) DO UPDATE SET name = EXCLUDED.name`;
     const owner = await tenantDb<{ id: string }[]>`SELECT id FROM team_members WHERE tenant_id = ${tenantId} AND email = ${tenant.slug === "nordic-studio" ? "sofie@nordic.local" : "mikkel@copenhagen-physio.local"} LIMIT 1`;
     const ownerEmail = tenant.slug === "nordic-studio" ? "sofie@nordic.local" : "mikkel@copenhagen-physio.local";
