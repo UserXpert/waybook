@@ -1,7 +1,7 @@
 import type { TenantFeatureState } from "@/lib/waybook/features";
 import { setTenantFeature, setTenantLifecycle } from "./actions";
 
-export type ControlTenantRow = { id: string; slug: string; name: string; plan: string; lifecycleStatus: string; migrationStatus: string; backupStatus: string; hostname: string; workspaceHref: string; timezone: string; bookingCount: number; staffCount: number; features: TenantFeatureState[] };
+export type ControlTenantRow = { id: string; slug: string; name: string; plan: string; lifecycleStatus: string; migrationStatus: string; backupStatus: string; hostname: string; hostedHostname: string | null; workspaceHref: string; timezone: string; bookingCount: number; staffCount: number; features: TenantFeatureState[] };
 
 function Status({ children }: { children: string }) { return <span className="control-status">{children}</span>; }
 
