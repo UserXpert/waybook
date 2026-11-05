@@ -2,9 +2,11 @@ node_modules/
 dist/
 .turbo/
 .next/
+.next-dev/
 .env
 .env.local
 .env.*.local
+.waybook/
 *.tsbuildinfo
 .DS_Store
 coverage/

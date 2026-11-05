@@ -1,0 +1,120 @@
+import "server-only";
+
+import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput, type BookingInput } from "@thebookingkit/core";
+import { withSerializableRetry } from "@thebookingkit/server";
+import { createHash, randomBytes } from "node:crypto";
+import type { TenantRecord } from "./database";
+import { tenantDb } from "./database";
+
+type Service = { id: string; durationMinutes: number; bufferBeforeMinutes: number; bufferAfterMinutes: number };
+
+/** Calculates tenant-scoped slots from persisted services, schedules, bookings, and active holds. */
+export async function availableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options?: { excludeBookingBlockId?: string }) {
+  const db = tenantDb(tenant);
+  const [service] = await db<Service[]>`SELECT id, duration_minutes AS "durationMinutes", buffer_before_minutes AS "bufferBeforeMinutes", buffer_after_minutes AS "bufferAfterMinutes" FROM services WHERE tenant_id = ${tenant.id} AND (slug = ${serviceSlug} OR id::text = ${serviceSlug}) AND is_active = true LIMIT 1`;
+  if (!service) throw new Error("Service not found.");
+  await db`UPDATE booking_blocks SET state = 'expired' WHERE tenant_id = ${tenant.id} AND state = 'held' AND expires_at <= now()`;
+  const members = await db<{ id: string }[]>`SELECT tm.id FROM team_members tm JOIN service_team_members stm ON stm.team_member_id = tm.id AND stm.tenant_id = tm.tenant_id WHERE stm.tenant_id = ${tenant.id} AND stm.service_id = ${service.id} AND tm.is_active = true ORDER BY tm.id`;
+  const result = [];
+  for (const member of members) {
+    const rules = await db<AvailabilityRuleInput[]>`SELECT rrule, start_time AS "startTime", end_time AS "endTime", timezone, valid_from AS "validFrom", valid_until AS "validUntil" FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id}`;
+    // `local_date` is a calendar date, not an instant. Construct midnight UTC explicitly so
+    // core compares its UTC date components to the provider-local slot date consistently.
+    const overrides = await db<AvailabilityOverrideInput[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date, start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id}`;
+    const occupied = await db<BookingInput[]>`SELECT starts_at AS "startsAt", ends_at AS "endsAt", CASE WHEN state IN ('held', 'confirmed') THEN 'confirmed' ELSE 'cancelled' END AS status FROM booking_blocks WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id} AND state IN ('held', 'confirmed') AND (${options?.excludeBookingBlockId ?? null}::uuid IS NULL OR id <> ${options?.excludeBookingBlockId ?? null}::uuid)`;
+    result.push({ teamMemberId: member.id, slots: getAvailableSlots(rules, overrides, occupied, { start: startsAt, end: endsAt }, tenant.timezone, { duration: service.durationMinutes, bufferBefore: service.bufferBeforeMinutes, bufferAfter: service.bufferAfterMinutes }) });
+  }
+  return result;
+}
+
+/** Creates a ten-minute hold. PostgreSQL exclusion constraints remain authoritative for conflicts. */
+export async function createBookingHold(input: { tenant: TenantRecord; serviceId: string; teamMemberId: string; startsAt: Date; endsAt: Date }) {
+  const db = tenantDb(input.tenant);
+  return withSerializableRetry(async () => db.begin(async (transaction) => {
+    await transaction.unsafe("UPDATE booking_blocks SET state = 'expired' WHERE tenant_id = $1 AND state = 'held' AND expires_at <= now()", [input.tenant.id]);
+    const [service] = await transaction.unsafe<Service[]>(`
+      SELECT id, duration_minutes AS "durationMinutes", buffer_before_minutes AS "bufferBeforeMinutes", buffer_after_minutes AS "bufferAfterMinutes"
+      FROM services WHERE id = $1 AND tenant_id = $2 AND is_active = true
+    `, [input.serviceId, input.tenant.id]);
+    if (!service) throw new Error("Service is unavailable.");
+    const [assignment] = await transaction.unsafe<{ id: string; name: string }[]>(`
+      SELECT tm.id, tm.name FROM team_members tm
+      JOIN service_team_members stm ON stm.team_member_id = tm.id AND stm.tenant_id = tm.tenant_id
+      WHERE tm.id = $1 AND stm.service_id = $2 AND tm.tenant_id = $3 AND tm.is_active = true
+    `, [input.teamMemberId, service.id, input.tenant.id]);
+    if (!assignment) throw new Error("Team member cannot provide this service.");
+    if (input.endsAt.getTime() - input.startsAt.getTime() !== service.durationMinutes * 60_000) {
+      throw new Error("The selected appointment duration is invalid.");
+    }
+    const effectiveStartsAt = new Date(input.startsAt.getTime() - service.bufferBeforeMinutes * 60_000);
+    const effectiveEndsAt = new Date(input.endsAt.getTime() + service.bufferAfterMinutes * 60_000);
+    const [block] = await transaction.unsafe<{ id: string; expiresAt: Date }[]>(`
+      INSERT INTO booking_blocks (tenant_id, team_member_id, starts_at, ends_at, state, expires_at)
+      VALUES ($1, $2, $3, $4, 'held', now() + interval '10 minutes')
+      RETURNING id, expires_at AS "expiresAt"
+    `, [input.tenant.id, input.teamMemberId, effectiveStartsAt, effectiveEndsAt]);
+    const [hold] = await transaction.unsafe<{ id: string }[]>(`
+      INSERT INTO booking_holds (tenant_id, booking_block_id, service_id, expires_at, scheduled_starts_at, scheduled_ends_at)
+      VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+    `, [input.tenant.id, block.id, input.serviceId, block.expiresAt, input.startsAt, input.endsAt]);
+    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'hold.created', 'booking_hold', $2, $3::jsonb)", [input.tenant.id, hold.id, JSON.stringify({ blockId: block.id })]);
+    return { holdId: hold.id, expiresAt: block.expiresAt, teamMember: assignment };
+  }));
+}
+
+type ConfirmedBooking = { id: string; startsAt: Date; endsAt: Date };
+
+/** Confirms one valid hold atomically and queues a local confirmation email. */
+export async function confirmBookingFromHold(input: {
+  tenant: TenantRecord;
+  holdId: string;
+  customer: { name: string; email: string; phone?: string | null };
+  idempotencyKey: string;
+}) {
+  const db = tenantDb(input.tenant);
+  const normalizedEmail = input.customer.email.trim().toLowerCase();
+  const name = input.customer.name.trim();
+  if (!name || !normalizedEmail || !input.idempotencyKey) throw new Error("Customer details and idempotency key are required.");
+
+  return withSerializableRetry(async () => db.begin(async (transaction) => {
+    const [existing] = await transaction.unsafe<ConfirmedBooking[]>(`
+      SELECT id, starts_at AS "startsAt", ends_at AS "endsAt"
+      FROM bookings WHERE tenant_id = $1 AND idempotency_key = $2
+    `, [input.tenant.id, input.idempotencyKey]);
+    if (existing) return { booking: existing, managementToken: null, idempotent: true };
+
+    const [hold] = await transaction.unsafe<{
+      id: string; bookingBlockId: string; serviceId: string; expiresAt: Date; startsAt: Date; endsAt: Date; teamMemberId: string | null; resourceId: string | null; blockState: string;
+    }[]>(`
+      SELECT h.id, h.booking_block_id AS "bookingBlockId", h.service_id AS "serviceId", h.expires_at AS "expiresAt",
+        h.scheduled_starts_at AS "startsAt", h.scheduled_ends_at AS "endsAt", b.team_member_id AS "teamMemberId", b.resource_id AS "resourceId", b.state AS "blockState"
+      FROM booking_holds h JOIN booking_blocks b ON b.id = h.booking_block_id
+      WHERE h.id = $1 AND h.tenant_id = $2 FOR UPDATE OF h, b
+    `, [input.holdId, input.tenant.id]);
+    if (!hold || hold.blockState !== "held" || hold.expiresAt <= new Date() || !hold.startsAt || !hold.endsAt) {
+      throw new Error("This hold is no longer available.");
+    }
+    const [customer] = await transaction.unsafe<{ id: string }[]>(`
+      INSERT INTO customers (tenant_id, email, name, phone)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (tenant_id, email) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone, updated_at = now()
+      RETURNING id
+    `, [input.tenant.id, normalizedEmail, name, input.customer.phone?.trim() || null]);
+    await transaction.unsafe("UPDATE booking_blocks SET state = 'confirmed', expires_at = NULL WHERE id = $1 AND tenant_id = $2", [hold.bookingBlockId, input.tenant.id]);
+    const [booking] = await transaction.unsafe<ConfirmedBooking[]>(`
+      INSERT INTO bookings (tenant_id, booking_block_id, hold_id, service_id, team_member_id, resource_id, customer_id, starts_at, ends_at, status, idempotency_key)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'confirmed', $10)
+      RETURNING id, starts_at AS "startsAt", ends_at AS "endsAt"
+    `, [input.tenant.id, hold.bookingBlockId, hold.id, hold.serviceId, hold.teamMemberId, hold.resourceId, customer.id, hold.startsAt, hold.endsAt, input.idempotencyKey]);
+    const managementToken = randomBytes(32).toString("base64url");
+    const tokenHash = createHash("sha256").update(managementToken).digest("hex");
+    await transaction.unsafe(`
+      INSERT INTO customer_management_tokens (tenant_id, booking_id, token_hash, action_scope, expires_at)
+      VALUES ($1, $2, $3, 'view', now() + interval '30 days')
+    `, [input.tenant.id, booking.id, tokenHash]);
+    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.confirmed', $3::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
+    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.confirmed', 'booking', $2, $3::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
+    await transaction.unsafe("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::jsonb)", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, managementToken })]);
+    return { booking, managementToken, idempotent: false };
+  }));
+}

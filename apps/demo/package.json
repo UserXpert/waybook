@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --port 3333",
+    "dev": "WAYBOOK_NEXT_DIST_DIR=.next-dev next dev --port 3333",
     "build": "next build",
     "start": "next start --port 3333",
     "e2e": "playwright test --config e2e/playwright.config.ts",
@@ -14,6 +14,7 @@
   "dependencies": {
     "@thebookingkit/core": "*",
     "@thebookingkit/db": "*",
+    "@thebookingkit/server": "*",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "next": "^15.5.27",

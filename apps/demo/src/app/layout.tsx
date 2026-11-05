@@ -2,16 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "The Booking Kit — The Headless Booking Primitive | Live Demo",
-  description:
-    "Interactive demo of The Booking Kit: open-source scheduling toolkit for developers. Live booking flow powered by @thebookingkit/core pure functions.",
-  openGraph: {
-    title: "The Booking Kit — The Headless Booking Primitive",
-    description:
-      "Production-grade scheduling infrastructure. Slot engine, Drizzle schema, and copy-paste React components.",
-    url: "https://thebookingkit.dev",
-    siteName: "TheBookingKit",
-  },
+  title: "Waybook — Booking operations",
+  description: "Waybook control and client booking operations dashboards.",
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },

@@ -16,6 +16,10 @@
     "db:migrate": "npm -w @thebookingkit/db run db:migrate",
     "db:seed": "npm -w @thebookingkit/db run db:seed",
     "db:generate": "npm -w @thebookingkit/db run db:generate",
+    "waybook:db:start": "bash scripts/waybook-local-db.sh",
+    "waybook:db:migrate": "tsx scripts/migrate-waybook.ts",
+    "waybook:db:seed": "tsx scripts/seed-waybook.ts",
+    "waybook:test:pooled": "tsx scripts/verify-waybook-pooled-availability.ts",
     "registry:build": "npx tsx scripts/build-registry.ts",
     "check:node-esm": "node scripts/check-node-esm.mjs"
   },
