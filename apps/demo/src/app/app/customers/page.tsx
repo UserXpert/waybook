@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
@@ -10,8 +9,6 @@ import { saveCustomer } from "./actions";
 type CustomerRow = { id: string; name: string; email: string; phone: string | null; createdAt: Date; bookingCount: number };
 
 export default async function CustomersPage() {
-  const identity = await requireIdentity();
-  if (identity.isPlatformAdmin) redirect("/control");
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   if (!await isFeatureEnabled(tenant.id, "clients")) redirect(`/${tenantSlug}/app`);

@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
@@ -9,8 +7,6 @@ import { logout } from "../../actions";
 type BookingRow = { id: string; startsAt: Date; endsAt: Date; status: string; source: string; customerName: string; customerEmail: string; serviceTitle: string; teamMemberName: string | null };
 
 export default async function BookingsPage() {
-  const identity = await requireIdentity();
-  if (identity.isPlatformAdmin) redirect("/control");
   const { tenant } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "booking-essentials");
   const bookings = await tenantDb(tenant)<BookingRow[]>`

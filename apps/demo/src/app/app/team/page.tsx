@@ -1,8 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { StaffTableRow } from "@/components/staff-table-row";
-import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
@@ -18,8 +16,6 @@ const weekdays = [["MO", "Mon"], ["TU", "Tue"], ["WE", "Wed"], ["TH", "Thu"], ["
 
 export default async function TeamPage({ searchParams }: { searchParams: Promise<{ employee?: string; new?: string }> }) {
   const { employee, new: createNew } = await searchParams;
-  const identity = await requireIdentity();
-  if (identity.isPlatformAdmin) redirect("/control");
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requireFeature(tenant.id, "team");

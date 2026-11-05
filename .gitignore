@@ -6,7 +6,9 @@ dist/
 .env
 .env.local
 .env.*.local
-.waybook/
+.waybook/*
+!.waybook/docs/
+!.waybook/docs/**
 *.tsbuildinfo
 .DS_Store
 coverage/
