@@ -153,18 +153,8 @@ export function HeroSection() {
                 <span className="code-prop">{"duration"}</span>
                 {": "}
                 <span className="code-num">{"30"}</span>
-                {",       "}
+                {"        "}
                 <span className="code-comment">{"// minutes\n"}</span>
-                {"    "}
-                <span className="code-prop">{"bufferBefore"}</span>
-                {": "}
-                <span className="code-num">{"5"}</span>
-                {",\n"}
-                {"    "}
-                <span className="code-prop">{"bufferAfter"}</span>
-                {": "}
-                <span className="code-num">{"5"}</span>
-                {",\n"}
                 {"  }\n"}
                 {")\n\n"}
                 <span className="code-comment">{"// slots → Slot[] with localStart,\n"}</span>

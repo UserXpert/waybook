@@ -4,14 +4,27 @@ import { createWaybookSql } from "@thebookingkit/db";
 
 const localUrl = (name: string) => `postgresql://waybook@127.0.0.1:5440/${name}`;
 const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL ?? localUrl("waybook_control");
+type WaybookSql = ReturnType<typeof createWaybookSql>;
 
-export const controlDb = createWaybookSql(controlUrl);
+/**
+ * Next development reloads server modules without ending their module-scoped
+ * postgres pools. Keep these process-local clients on globalThis so a long
+ * local design or browser session stays bounded instead of exhausting Postgres.
+ */
+const globalConnections = globalThis as typeof globalThis & {
+  __waybookControlDb?: WaybookSql;
+  __waybookTenantClients?: Map<string, WaybookSql>;
+};
+
+export const controlDb = globalConnections.__waybookControlDb ?? createWaybookSql(controlUrl);
+globalConnections.__waybookControlDb = controlDb;
 
 const tenantUrls: Record<string, string> = {
   WAYBOOK_NORDIC_STUDIO_DATABASE_URL: process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL ?? localUrl("waybook_nordic_studio"),
   WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL: process.env.WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL ?? localUrl("waybook_copenhagen_physio"),
 };
-const tenantClients = new Map<string, ReturnType<typeof createWaybookSql>>();
+const tenantClients = globalConnections.__waybookTenantClients ?? new Map<string, WaybookSql>();
+globalConnections.__waybookTenantClients = tenantClients;
 
 export type TenantRecord = { id: string; slug: string; name: string; lifecycleStatus: string; databaseEnvKey: string; timezone: string };
 

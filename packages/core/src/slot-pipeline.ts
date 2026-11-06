@@ -216,8 +216,9 @@ export function expandRules(
  * three-step slot computation pipeline).
  *
  * For each override:
- * - `isUnavailable === true` — all windows whose provider-local start date
- *   matches the override date are removed.
+ * - `isUnavailable === true` with no hours — all windows whose provider-local
+ *   start date matches the override date are removed. With a start/end time,
+ *   only that local interval is subtracted (for a break or short leave).
  * - `isUnavailable === false` with `startTime`/`endTime` present — windows on
  *   that date are first removed, then a replacement window built from the
  *   override hours is added.
@@ -238,10 +239,22 @@ export function applyOverrides(
     const overrideDate = formatDateOnly(override.date);
 
     if (override.isUnavailable) {
-      // Remove all windows whose start falls on this local date
-      maskedWindows = maskedWindows.filter(
-        (w) => formatDateInTimezone(w.start, providerTz) !== overrideDate,
-      );
+      if (!override.startTime || !override.endTime) {
+        // Remove all windows whose start falls on this local date.
+        maskedWindows = maskedWindows.filter(
+          (w) => formatDateInTimezone(w.start, providerTz) !== overrideDate,
+        );
+      } else {
+        const blockStart = fromZonedTime(`${overrideDate}T${override.startTime}:00`, providerTz);
+        const blockEnd = fromZonedTime(`${overrideDate}T${override.endTime}:00`, providerTz);
+        maskedWindows = maskedWindows.flatMap((window) => {
+          if (window.end <= blockStart || window.start >= blockEnd) return [window];
+          const remaining: Array<{ start: Date; end: Date }> = [];
+          if (window.start < blockStart) remaining.push({ start: window.start, end: blockStart });
+          if (window.end > blockEnd) remaining.push({ start: blockEnd, end: window.end });
+          return remaining.filter((item) => item.end > item.start);
+        });
+      }
     } else if (override.startTime && override.endTime) {
       // First remove existing windows on this local date
       maskedWindows = maskedWindows.filter(

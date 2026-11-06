@@ -2,9 +2,23 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { requireIdentity } from "./auth";
-import { controlDb, findTenantByHostname, findTenantById, findTenantByRouteSlug, type TenantRecord } from "./database";
+import { controlDb, findTenantByHostname, findTenantById, findTenantByRouteSlug, tenantDb, type TenantRecord } from "./database";
 
 export type TenantMembership = { tenantId: string; role: string };
+
+async function assertActiveStaffMembership(tenant: TenantRecord, identityId: string, membership: TenantMembership) {
+  const [staff] = await tenantDb(tenant)<{ isActive: boolean }[]>`
+    SELECT is_active AS "isActive" FROM team_members
+    WHERE tenant_id = ${tenant.id} AND identity_id = ${identityId}
+    LIMIT 1
+  `;
+  // A linked profile is the lifecycle authority for every workspace role.
+  // Legacy owners can have no profile, but staff/read-only identities cannot.
+  if (staff && !staff.isActive) throw new Error("Your staff access is inactive for this workspace.");
+  if (!staff && ["staff", "read-only"].includes(membership.role)) {
+    throw new Error("Your staff profile is unavailable for this workspace.");
+  }
+}
 
 /**
  * Resolves the route-selected workspace only after checking the signed-in
@@ -25,6 +39,7 @@ export async function requireTenantWorkspace(): Promise<{ tenant: TenantRecord; 
       WHERE identity_id = ${identity.id} AND tenant_id = ${tenant.id} LIMIT 1
     `;
     if (!membership) throw new Error("You do not have access to this tenant workspace.");
+    await assertActiveStaffMembership(tenant, identity.id, membership);
     return { tenant, membership, isControlView: false };
   }
   const memberships = await controlDb<TenantMembership[]>`
@@ -33,6 +48,7 @@ export async function requireTenantWorkspace(): Promise<{ tenant: TenantRecord; 
   if (memberships.length !== 1) throw new Error("Choose a tenant workspace.");
   const tenant = await findTenantById(memberships[0].tenantId);
   if (!tenant || tenant.lifecycleStatus !== "active") throw new Error("Tenant workspace is unavailable.");
+  await assertActiveStaffMembership(tenant, identity.id, memberships[0]);
   return { tenant, membership: memberships[0], isControlView: false };
 }
 

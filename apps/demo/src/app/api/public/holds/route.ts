@@ -6,7 +6,7 @@ import { isFeatureEnabled } from "@/lib/waybook/features";
 
 export const runtime = "nodejs";
 
-type HoldRequest = { serviceId?: unknown; startsAt?: unknown; endsAt?: unknown };
+type HoldRequest = { serviceId?: unknown; locationId?: unknown; startsAt?: unknown; endsAt?: unknown };
 
 export async function POST(request: NextRequest) {
   const tenant = await tenantForPublicRequest(request.headers);
@@ -14,13 +14,14 @@ export async function POST(request: NextRequest) {
   if (!await isFeatureEnabled(tenant.id, "booking-essentials")) return NextResponse.json({ error: "Booking is not available." }, { status: 404 });
   const body = await request.json().catch(() => null) as HoldRequest | null;
   const serviceId = typeof body?.serviceId === "string" ? body.serviceId : "";
+  const locationId = typeof body?.locationId === "string" ? body.locationId : undefined;
   const startsAt = new Date(typeof body?.startsAt === "string" ? body.startsAt : "");
   const endsAt = new Date(typeof body?.endsAt === "string" ? body.endsAt : "");
   if (!serviceId || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
     return NextResponse.json({ error: "A valid service and ISO appointment interval are required." }, { status: 400 });
   }
   try {
-    const providers = await availableSlots(tenant, serviceId, new Date(startsAt.getTime() - 24 * 60 * 60_000), new Date(endsAt.getTime() + 24 * 60 * 60_000));
+    const providers = await availableSlots(tenant, serviceId, new Date(startsAt.getTime() - 24 * 60 * 60_000), new Date(endsAt.getTime() + 24 * 60 * 60_000), { locationId });
     const eligibleMembers = providers
       .filter((provider) => provider.slots.some((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime()))
       .map((provider) => provider.teamMemberId);
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     // capacity that another employee can still fulfil.
     for (const teamMemberId of eligibleMembers) {
       try {
-        return NextResponse.json(await createBookingHold({ tenant, serviceId, teamMemberId, startsAt, endsAt }), { status: 201 });
+        return NextResponse.json(await createBookingHold({ tenant, serviceId, teamMemberId, startsAt, endsAt, locationId }), { status: 201 });
       } catch (error) {
         if (!(error instanceof BookingConflictError)) throw error;
       }

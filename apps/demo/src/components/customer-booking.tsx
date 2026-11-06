@@ -59,7 +59,7 @@ export function CustomerBooking({ onApiCall }: { onApiCall?: (call: string) => v
     dayEnd.setHours(23, 59, 59, 999);
 
     onApiCall?.(
-      `getAvailableSlots(rules, overrides, bookings, { start, end }, "${timezone}", { duration: ${selectedService.duration}, bufferBefore: 5, bufferAfter: 5 })`,
+      `getAvailableSlots(rules, overrides, bookings, { start, end }, "${timezone}", { duration: ${selectedService.duration} })`,
     );
     fetchSlots(selectedService.slug, dayStart.toISOString(), dayEnd.toISOString(), timezone).then(
       (result) => {

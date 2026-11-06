@@ -20,6 +20,7 @@
     "waybook:db:migrate": "tsx scripts/migrate-waybook.ts",
     "waybook:db:seed": "tsx scripts/seed-waybook.ts",
     "waybook:test:pooled": "tsx scripts/verify-waybook-pooled-availability.ts",
+    "waybook:build": "npm --prefix apps/demo run build",
     "registry:build": "npx tsx scripts/build-registry.ts",
     "check:node-esm": "node scripts/check-node-esm.mjs"
   },

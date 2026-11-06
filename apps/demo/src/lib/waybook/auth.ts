@@ -10,6 +10,12 @@ const SESSION_COOKIE = "waybook_session";
 export type Identity = { id: string; email: string; displayName: string; isPlatformAdmin: boolean };
 
 function hash(value: string) { return createHash("sha256").update(value).digest("hex"); }
+/** Creates the format consumed by passwordMatches. Keep password creation on the
+ * server so neither salts nor password hashes are ever exposed to a client. */
+export function hashPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
+}
 function passwordMatches(password: string, stored: string) {
   const [salt, expected] = stored.split(":");
   if (!salt || !expected) return false;

@@ -25,7 +25,7 @@ export function PackageEcosystemSection() {
 const slots = getAvailableSlots(
   rules, overrides, bookings,
   { start, end }, timezone,
-  { duration: 30, bufferBefore: 5 }
+  { duration: 30 }
 );`,
     },
     {

@@ -60,7 +60,6 @@ async function seed() {
       slug: "consultation-30",
       description: "A standard 30-minute consultation session.",
       durationMinutes: 30,
-      bufferAfter: 5,
       locationType: "video",
     })
     .returning();
@@ -73,8 +72,6 @@ async function seed() {
       slug: "haircut",
       description: "Standard haircut service.",
       durationMinutes: 30,
-      bufferBefore: 5,
-      bufferAfter: 5,
       priceCents: 2500,
       locationType: "in_person",
     })

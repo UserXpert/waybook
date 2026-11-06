@@ -84,7 +84,7 @@ export function BookingSection() {
                 {currentApiCall
                   ? currentApiCall
                   : activeView === "customer"
-                  ? "getAvailableSlots(rules, overrides, bookings, range, tz, { duration, bufferBefore, bufferAfter })"
+                  ? "getAvailableSlots(rules, overrides, bookings, range, tz, { duration })"
                   : "fetchBookings() → SerializedBooking[] | changeBookingStatus(id, status)"}
               </span>
             </div>

@@ -41,6 +41,7 @@ This protocol deliberately does **not** require reading every document for a sma
 | Local session/auth | Database-backed / browser-verified | Password-hashed identities, expiring hash-stored sessions, platform-admin and owner routing work locally. Better Auth/Google/invite-only access is not implemented. |
 | Booking engine | Database-backed / tested / browser-verified | Persisted schedules, pooled employee slots, server-assigned holds, exclusion-constraint protection, confirmations, audits, outbox and token hashes; see Booking engine. |
 | Control and tenant dashboards | Database-backed / browser-verified (partial) | Control, bookings, services, clients, Staff, Calendars and public booking have real persisted paths. Module-specific proof and gaps are in Modules ledger. |
+| Dashboard product direction | Database-backed / tested / browser-verified (partial) | Nordic's tenant Overview has four desktop/mobile-verified operational widgets: upcoming appointments, daily staff booking workload, monthly appointment outcomes, and real staff target progress. Capacity, retention, and Control dashboard work remains designed; see Modules ledger. |
 | Automated business provisioning | Designed | Nordic and Copenhagen remain manually seeded. Create Business must wait for Google SSO and invitation claiming. |
 
 ## Working-product standard

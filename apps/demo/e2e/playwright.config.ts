@@ -14,7 +14,10 @@ export default defineConfig({
   timeout: 30_000,
 
   use: {
-    baseURL: "http://localhost:3333",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3333",
+    ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+      ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } }
+      : {}),
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     // Pin the browser timezone so slot availability is deterministic regardless of

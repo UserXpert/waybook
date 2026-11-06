@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
 import { RescheduleSlotPicker } from "@/components/reschedule-slot-picker";
 
 type ServerAction = (formData: FormData) => void | Promise<void>;
@@ -18,9 +19,20 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
   const detailsChanged = details.name !== customerName || details.email !== customerEmail || details.phone !== (customerPhone ?? "");
   const statusOptions = [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const;
 
+  if (status === "cancelled") {
+    return (
+      <section className="appointment-drawer__history">
+        <h3>Appointment status</h3>
+        <p className="appointment-drawer__status-readonly">Cancelled</p>
+        <p className="appointment-drawer__readonly">This appointment has been cancelled. Its customer and audit history remain available, but it can no longer be edited, rescheduled, or paid.</p>
+      </section>
+    );
+  }
+
   return <>
     <section><h3>Edit</h3><form action={saveDetails} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><label>Customer name<input name="customerName" value={details.name} onChange={(event) => setDetails({ ...details, name: event.target.value })} required /></label><label>Email<input name="customerEmail" type="email" value={details.email} onChange={(event) => setDetails({ ...details, email: event.target.value })} required /></label><label>Phone<input name="customerPhone" type="tel" value={details.phone} onChange={(event) => setDetails({ ...details, phone: event.target.value })} /></label><button type="submit" disabled={!detailsChanged}>Save changes</button></form></section>
-    {status !== "cancelled" ? <section><h3>Reschedule</h3><form action={reschedule} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><RescheduleSlotPicker timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} /><button type="submit" disabled={!hasNewTime}>Reschedule appointment</button></form></section> : null}
+    {status !== "completed" ? <section><h3>Reschedule</h3><form action={reschedule} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><RescheduleSlotPicker timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} /><button type="submit" disabled={!hasNewTime}>Reschedule appointment</button></form></section> : null}
     <section><h3>Appointment status</h3><p className="appointment-status-current">Current: {status.replace("_", " ")}</p><form action={updateStatus} className="appointment-status-form"><input type="hidden" name="bookingId" value={bookingId} /><input type="hidden" name="status" value={nextStatus ?? ""} /><div className="appointment-drawer__status-actions">{statusOptions.map(([value, label]) => <button type="button" key={value} className={nextStatus === value ? "is-selected" : ""} aria-pressed={nextStatus === value} disabled={value === status} onClick={() => setNextStatus(value)}>{label}</button>)}</div><button type="submit" disabled={!nextStatus}>Update status</button></form></section>
+    <section><h3>Sales ledger</h3><p className="appointment-status-current">Record payment received or a refund. Entries are immutable and feed paid-revenue reporting.</p><AppointmentPaymentForm bookingId={bookingId} outstandingCents={0} /></section>
   </>;
 }
