@@ -3,7 +3,12 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**"]
+      "outputs": ["dist/**", ".next/**"],
+      "env": [
+        "WAYBOOK_CONTROL_DATABASE_URL",
+        "WAYBOOK_NORDIC_STUDIO_DATABASE_URL",
+        "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL"
+      ]
     },
     "dev": {
       "cache": false,
