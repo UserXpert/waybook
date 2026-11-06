@@ -1,0 +1,30 @@
+import Link from "next/link";
+import { PerformanceTargetForm } from "@/components/performance-target-form";
+import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
+import { tenantDb } from "@/lib/waybook/database";
+import { requireFeature } from "@/lib/waybook/features";
+import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { logout } from "../../actions";
+
+type Target = { id: string; scopeType: 'staff' | 'service'; scopeId: string; metric: 'bookings' | 'booked_value_cents'; periodStart: string; targetValue: number; scopeName: string; actualValue: number };
+type Scope = { id: string; name: string };
+
+const money = (cents: number) => new Intl.NumberFormat('en-DK', { style: 'currency', currency: 'DKK', maximumFractionDigits: 0 }).format(cents / 100);
+const monthKey = (date: Date, timezone: string) => { const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year: 'numeric', month: '2-digit' }).formatToParts(date); const value = (type: string) => parts.find((part) => part.type === type)?.value ?? ''; return `${value('year')}-${value('month')}`; };
+
+export default async function TargetsPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
+  const { new: createNew } = await searchParams; const { tenant, membership } = await requireTenantWorkspace();
+  const permissions = await staffPermissionContext(tenant, membership);
+  if (!permissions.isManager) throw new Error('You do not have permission to manage targets.');
+  await requireFeature(tenant.id, 'booking-essentials');
+  const tenantSlug = await currentTenantRouteSlug(tenant.slug); const db = tenantDb(tenant); const currentMonth = monthKey(new Date(), tenant.timezone); const path = tenantPath(tenantSlug, '/app/targets');
+  const [targets, staff, services] = await Promise.all([
+    db.unsafe<Target[]>("WITH month_bounds AS (SELECT pt.id,pt.scope_type,pt.scope_id,pt.metric,pt.period_start,pt.target_value,(pt.period_start::timestamp AT TIME ZONE $2) AS starts_at,((pt.period_start + interval '1 month')::timestamp AT TIME ZONE $2) AS ends_at FROM performance_targets pt WHERE pt.tenant_id=$1) SELECT mb.id,mb.scope_type AS \"scopeType\",mb.scope_id AS \"scopeId\",mb.metric,mb.period_start::text AS \"periodStart\",mb.target_value AS \"targetValue\",coalesce(tm.name,s.title,'Unavailable') AS \"scopeName\",coalesce(CASE WHEN mb.metric='bookings' THEN count(b.id) FILTER (WHERE b.status <> 'cancelled') ELSE sum(b.booked_price_cents) FILTER (WHERE b.status <> 'cancelled') END,0)::int AS \"actualValue\" FROM month_bounds mb LEFT JOIN team_members tm ON mb.scope_type='staff' AND tm.id=mb.scope_id AND tm.tenant_id=$1 LEFT JOIN services s ON mb.scope_type='service' AND s.id=mb.scope_id AND s.tenant_id=$1 LEFT JOIN bookings b ON b.tenant_id=$1 AND ((mb.scope_type='staff' AND b.team_member_id=mb.scope_id) OR (mb.scope_type='service' AND b.service_id=mb.scope_id)) AND b.starts_at >= mb.starts_at AND b.starts_at < mb.ends_at GROUP BY mb.id,mb.scope_type,mb.scope_id,mb.metric,mb.period_start,mb.target_value,tm.name,s.title ORDER BY mb.period_start DESC,mb.scope_type,\"scopeName\"", [tenant.id, tenant.timezone]),
+    db.unsafe<Scope[]>('SELECT id,name FROM team_members WHERE tenant_id=$1 AND is_active=TRUE ORDER BY name', [tenant.id]),
+    db.unsafe<Scope[]>('SELECT id,title AS name FROM services WHERE tenant_id=$1 AND is_active=TRUE ORDER BY title', [tenant.id]),
+  ]);
+  const canManage = permissions.isManager;
+  return <main className="waybook-data-page tenant-dashboard-page"><TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="reports" /><header><div><p>REPORTS · DATABASE-BACKED</p><h1>{tenant.name}</h1><span>Monthly booking and booked-value targets for staff and services.</span></div><form action={logout}><button>Sign out</button></form></header><section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>MONTHLY TARGETS</p><h2>Performance against plan</h2><span>Actuals are tenant-local, non-cancelled bookings or immutable booked service value in the target month.</span></div>{canManage ? <Link className="waybook-primary-link" href={path + '?new=1'}>Set target</Link> : null}</div><div className="waybook-table-wrap"><table><thead><tr><th>Month</th><th>Scope</th><th>Measure</th><th>Actual</th><th>Target</th><th>Progress</th></tr></thead><tbody>{targets.map((target) => { const progress = Math.round(target.actualValue / target.targetValue * 100); const isValue = target.metric === 'booked_value_cents'; return <tr key={target.id}><td>{target.periodStart.slice(0, 7)}</td><td>{target.scopeType === 'staff' ? 'Staff' : 'Service'} · {target.scopeName}</td><td>{isValue ? 'Booked value' : 'Bookings'}</td><td>{isValue ? money(target.actualValue) : target.actualValue}</td><td>{isValue ? money(target.targetValue) : target.targetValue}</td><td>{progress}%</td></tr>; })}{targets.length === 0 ? <tr><td colSpan={6}>No monthly targets yet. Set a target to make progress visible here.</td></tr> : null}</tbody></table></div></section><p className="tenant-dashboard-path-note"><Link href={tenantPath(tenantSlug, '/app/reports')}>← Back to Reports</Link></p>{createNew === '1' ? <div className="tenant-drawer-layer" role="presentation"><Link className="tenant-drawer-scrim" aria-label="Close target editor" href={path} /><aside className="tenant-drawer" aria-label="Set monthly target"><header><div><p>MONTHLY TARGETS</p><h2>Set target</h2><span>Owner and manager changes are tenant-scoped and auditable.</span></div><Link className="tenant-drawer-close" aria-label="Close target editor" href={path}>×</Link></header>{canManage ? <PerformanceTargetForm staff={staff} services={services} defaultMonth={currentMonth} /> : <p className="tenant-drawer-note">Read-only access: targets require an owner or manager.</p>}</aside></div> : null}</main>;
+}

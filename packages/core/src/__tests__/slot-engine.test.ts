@@ -20,6 +20,21 @@ const weekdayRule: AvailabilityRuleInput = {
 };
 
 describe("getAvailableSlots", () => {
+  it("removes only a partial unavailable override, leaving surrounding slots bookable", () => {
+    const slots = getAvailableSlots(
+      [weekdayRule],
+      [{ date: new Date("2026-03-02T00:00:00Z"), startTime: "12:00", endTime: "13:00", isUnavailable: true }],
+      [],
+      { start: new Date("2026-03-02T00:00:00Z"), end: new Date("2026-03-02T23:59:59Z") },
+      "America/New_York",
+      { duration: 30 },
+    );
+    const localTimes = slots.map((slot) => slot.localStart);
+    expect(localTimes.some((value) => value.includes("T11:00"))).toBe(true);
+    expect(localTimes.some((value) => value.includes("T12:00"))).toBe(false);
+    expect(localTimes.some((value) => value.includes("T12:30"))).toBe(false);
+    expect(localTimes.some((value) => value.includes("T13:00"))).toBe(true);
+  });
   it("generates 30-min slots for a weekday (Mon-Fri 9-5)", () => {
     const dateRange = {
       start: new Date("2026-03-02T00:00:00Z"), // Monday
@@ -126,6 +141,59 @@ describe("getAvailableSlots", () => {
     expect(slotTimes).not.toContain(expect.stringContaining("T10:30"));
     // Slot count: 16 total - 3 removed = 13
     expect(slots.length).toBe(13);
+  });
+
+  it("uses a persisted booking block instead of the candidate service buffer", () => {
+    const dateRange = {
+      start: new Date("2026-03-02T00:00:00Z"),
+      end: new Date("2026-03-02T23:59:59Z"),
+    };
+    const bookings: BookingInput[] = [
+      {
+        // Existing appointment was made without a buffer, so its persisted
+        // reserved interval ends at 10:30 ET / 15:30 UTC.
+        startsAt: new Date("2026-03-02T15:00:00Z"),
+        endsAt: new Date("2026-03-02T15:30:00Z"),
+        blockedStartsAt: new Date("2026-03-02T15:00:00Z"),
+        blockedEndsAt: new Date("2026-03-02T15:30:00Z"),
+        status: "confirmed",
+      },
+    ];
+
+    const slots = getAvailableSlots(
+      [weekdayRule],
+      [],
+      bookings,
+      dateRange,
+      "America/New_York",
+      // The service currently being browsed has a 30-minute post-buffer.
+      // That buffer must apply only to a newly created booking, not the
+      // appointment above.
+      { duration: 15, bufferAfter: 30 },
+    );
+
+    expect(slots.some((slot) => slot.localStart.includes("T10:45"))).toBe(true);
+  });
+
+  it("keeps an adjacent start available when Waybook passes exact booking intervals", () => {
+    const slots = getAvailableSlots(
+      [weekdayRule],
+      [],
+      [{
+        startsAt: new Date("2026-03-02T15:00:00Z"),
+        endsAt: new Date("2026-03-02T16:00:00Z"),
+        status: "confirmed",
+      }],
+      { start: new Date("2026-03-02T00:00:00Z"), end: new Date("2026-03-02T23:59:59Z") },
+      "America/New_York",
+      { duration: 60, slotInterval: 30, bufferBefore: 0, bufferAfter: 0 },
+    );
+
+    const times = slots.map((slot) => slot.localStart);
+    expect(times.some((time) => time.includes("T09:00"))).toBe(true);
+    expect(times.some((time) => time.includes("T11:00"))).toBe(true);
+    expect(times.some((time) => time.includes("T09:30"))).toBe(false);
+    expect(times.some((time) => time.includes("T10:00"))).toBe(false);
   });
 
   it("ignores cancelled bookings", () => {

@@ -9,10 +9,23 @@
 ## Current implementation
 
 - Local identities use password hashes and expiring, hash-stored sessions.
+- The local sign-in page uses the Waybook brand and keeps the working password
+  form. Its **Forgot password?** option truthfully directs staff to their
+  workspace owner, who already owns the reset workflow. Google and Apple are
+  presented as unavailable provider choices until Better Auth/OAuth is wired;
+  neither is represented as live authentication.
 - Platform admin and tenant-owner routing work locally.
 - `admin@waybook.local` is a platform administrator and therefore lands on `/control` after login.
 - Tenant members land at `/{business}/app` through the root post-login route.
 - Control remains the authority for identities, memberships, tenant lifecycle, and approved tenant connection references.
+
+Tenant staff profiles can now be linked to a local identity by an owner using a
+one-time temporary password. An owner can reset that password; resets revoke
+the linked identity's active sessions. Deactivation is enforced when the staff
+identity next enters the tenant workspace, rather than merely hiding a profile.
+The controlled local login and authorization flow is build-verified; a new
+staff-login browser run remains outstanding in this workspace because the
+configured database host was unavailable during this pass.
 
 Other tenant-role UI and automated authorization coverage remain incomplete.
 

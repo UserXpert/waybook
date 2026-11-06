@@ -72,8 +72,12 @@ export function getAvailableSlots(
   const availableSlots = candidateSlots.filter((slot) => {
     // Check each booking for overlap (including buffer)
     for (const booking of activeBookings) {
-      const bookingStartWithBuffer = addMinutes(booking.startsAt, -bufferBefore);
-      const bookingEndWithBuffer = addMinutes(booking.endsAt, bufferAfter);
+      // A persisted booking block carries the buffers that belonged to the
+      // service when it was made. Re-applying the currently queried service's
+      // buffers here would make unrelated adjacent starts disappear whenever
+      // services use different buffer policies.
+      const bookingStartWithBuffer = booking.blockedStartsAt ?? addMinutes(booking.startsAt, -bufferBefore);
+      const bookingEndWithBuffer = booking.blockedEndsAt ?? addMinutes(booking.endsAt, bufferAfter);
 
       if (
         areIntervalsOverlapping(
@@ -148,13 +152,18 @@ export function isSlotAvailable(
   bufferBefore = 0,
   bufferAfter = 0,
 ): SlotAvailabilityResult {
-  // Check overrides first (blocked dates)
+  // Check overrides first (full-day and partial-day blocks).
   // Use provider timezone for local date comparison
   const isSlotProviderTz = resolveProviderTimezone(rules);
   const slotDateStr = formatDateInTimezone(startTime, isSlotProviderTz);
   for (const override of overrides) {
     if (override.isUnavailable && formatDateOnly(override.date) === slotDateStr) {
-      return { available: false, reason: "blocked_date" };
+      if (!override.startTime || !override.endTime) return { available: false, reason: "blocked_date" };
+      const blockStart = fromZonedTime(`${slotDateStr}T${override.startTime}:00`, isSlotProviderTz);
+      const blockEnd = fromZonedTime(`${slotDateStr}T${override.endTime}:00`, isSlotProviderTz);
+      if (areIntervalsOverlapping({ start: startTime, end: endTime }, { start: blockStart, end: blockEnd })) {
+        return { available: false, reason: "blocked_date" };
+      }
     }
   }
 

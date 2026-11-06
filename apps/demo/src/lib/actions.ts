@@ -106,11 +106,7 @@ export async function fetchSlots(
     bookings,
     { start: new Date(startISO), end: new Date(endISO) },
     customerTimezone,
-    {
-      duration: service.duration,
-      bufferBefore: 5,
-      bufferAfter: 5,
-    },
+    { duration: service.duration, bufferBefore: 0, bufferAfter: 0 },
   );
 }
 
@@ -154,15 +150,14 @@ export async function createBooking(
     existingBookings,
     startTime,
     endTime,
-    5,
-    5,
+    0,
+    0,
   );
 
   if (!availability.available) {
     const reasons: Record<string, string> = {
       outside_availability: "This time is outside business hours.",
       already_booked: "This slot was just booked by someone else.",
-      buffer_conflict: "This slot is too close to another appointment.",
       blocked_date: "This date is blocked.",
     };
     return { success: false, error: reasons[availability.reason ?? ""] ?? "Slot not available" };
@@ -274,39 +269,6 @@ export async function fetchSlotsComparison(
     );
     return { duration, slots, count: slots.length };
   });
-}
-
-export async function fetchBufferComparison(
-  dateISO: string,
-  timezone: string,
-): Promise<{
-  noBuffer: { slots: Slot[]; count: number };
-  withBuffer: { slots: Slot[]; count: number };
-}> {
-  const { start: dayStart, end: dayEnd } = buildDayRange(dateISO);
-
-  const noBuffer = getAvailableSlots(
-    AVAILABILITY_RULES,
-    getMockOverrides(),
-    getMockBookingsAsInput(),
-    { start: dayStart, end: dayEnd },
-    timezone,
-    { duration: 30, bufferBefore: 0, bufferAfter: 0 },
-  );
-
-  const withBuffer = getAvailableSlots(
-    AVAILABILITY_RULES,
-    getMockOverrides(),
-    getMockBookingsAsInput(),
-    { start: dayStart, end: dayEnd },
-    timezone,
-    { duration: 30, bufferBefore: 15, bufferAfter: 15 },
-  );
-
-  return {
-    noBuffer: { slots: noBuffer, count: noBuffer.length },
-    withBuffer: { slots: withBuffer, count: withBuffer.length },
-  };
 }
 
 export async function fetchTimezoneComparison(

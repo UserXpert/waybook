@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import type { Slot } from "@thebookingkit/core";
 import {
   fetchSlotsComparison,
-  fetchBufferComparison,
   fetchTimezoneComparison,
   fetchOverrideDemo,
   fetchEmbedSnippets,
@@ -24,7 +23,6 @@ export function FeatureShowcase() {
 
   const demos = [
     { id: "durations", label: "Slot Durations", icon: "\u23F1" },
-    { id: "buffers", label: "Buffer Time", icon: "\u{1F6E1}\uFE0F" },
     { id: "overrides", label: "Overrides", icon: "\u{1F4C5}" },
     { id: "timezones", label: "Timezones", icon: "\u{1F30D}" },
     { id: "embed", label: "Embed Code", icon: "\u{1F4CB}" },
@@ -52,7 +50,6 @@ export function FeatureShowcase() {
 
       <div className="demo-panel">
         {activeDemo === "durations" && <DurationsDemo />}
-        {activeDemo === "buffers" && <BufferDemo />}
         {activeDemo === "overrides" && <OverrideDemo />}
         {activeDemo === "timezones" && <TimezoneDemo />}
         {activeDemo === "embed" && <EmbedDemo />}
@@ -113,80 +110,6 @@ function DurationsDemo() {
             </div>
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Buffer Demo
-// ---------------------------------------------------------------------------
-
-function BufferDemo() {
-  const [data, setData] = useState<{
-    noBuffer: { slots: Slot[]; count: number };
-    withBuffer: { slots: Slot[]; count: number };
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const demoDate = getNextWeekday();
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  useEffect(() => {
-    fetchBufferComparison(demoDate, tz).then((r) => {
-      setData(r);
-      setLoading(false);
-    });
-  }, [demoDate, tz]);
-
-  if (loading || !data) return <p className="loading-slots">Computing...</p>;
-
-  const removed = data.noBuffer.count - data.withBuffer.count;
-
-  return (
-    <div>
-      <div className="demo-description">
-        <h3>Buffer Time Effect</h3>
-        <p>
-          Buffer time prevents back-to-back bookings. With existing bookings on {demoDate},
-          adding a 15-minute buffer before and after each booking removes {removed} additional
-          slot{removed !== 1 ? "s" : ""} from availability.
-        </p>
-      </div>
-
-      <div className="buffer-comparison">
-        <div className="buffer-card">
-          <h4>No Buffer</h4>
-          <div className="buffer-stat">{data.noBuffer.count} slots</div>
-          <code className="buffer-code">bufferBefore: 0, bufferAfter: 0</code>
-          <div className="buffer-slots">
-            {data.noBuffer.slots.slice(0, 12).map((s) => (
-              <span key={s.startTime} className="mini-slot">{formatTime(s.localStart)}</span>
-            ))}
-            {data.noBuffer.slots.length > 12 && (
-              <span className="mini-slot more">+{data.noBuffer.slots.length - 12}</span>
-            )}
-          </div>
-        </div>
-
-        <div className="buffer-arrow">
-          <span>+15 min buffer</span>
-          <span className="arrow">&rarr;</span>
-          <span className="removed">-{removed} slots</span>
-        </div>
-
-        <div className="buffer-card">
-          <h4>15 min Buffer</h4>
-          <div className="buffer-stat">{data.withBuffer.count} slots</div>
-          <code className="buffer-code">bufferBefore: 15, bufferAfter: 15</code>
-          <div className="buffer-slots">
-            {data.withBuffer.slots.slice(0, 12).map((s) => (
-              <span key={s.startTime} className="mini-slot">{formatTime(s.localStart)}</span>
-            ))}
-            {data.withBuffer.slots.length > 12 && (
-              <span className="mini-slot more">+{data.withBuffer.slots.length - 12}</span>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

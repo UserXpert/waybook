@@ -58,7 +58,7 @@ async function main() {
     const serviceSlug = tenant.slug === "nordic-studio" ? "studio-session" : "initial-assessment";
     const serviceTitle = tenant.slug === "nordic-studio" ? "Studio session" : "Initial physiotherapy assessment";
     const service = await tenantDb<{ id: string }[]>`SELECT id FROM services WHERE tenant_id = ${tenantId} AND slug = ${serviceSlug} LIMIT 1`;
-    const serviceId = service[0]?.id ?? (await tenantDb<{ id: string }[]>`INSERT INTO services (tenant_id, slug, title, duration_minutes, buffer_before_minutes, buffer_after_minutes, price_cents) VALUES (${tenantId}, ${serviceSlug}, ${serviceTitle}, 60, 10, 10, 65000) RETURNING id`)[0].id;
+    const serviceId = service[0]?.id ?? (await tenantDb<{ id: string }[]>`INSERT INTO services (tenant_id, slug, title, duration_minutes, buffer_before_minutes, buffer_after_minutes, price_cents) VALUES (${tenantId}, ${serviceSlug}, ${serviceTitle}, 60, 0, 0, 65000) RETURNING id`)[0].id;
     await tenantDb`INSERT INTO service_team_members (tenant_id, service_id, team_member_id) VALUES (${tenantId}, ${serviceId}, ${staffId}) ON CONFLICT DO NOTHING`;
     await tenantDb`INSERT INTO availability_rules (tenant_id, team_member_id, rrule, start_time, end_time, timezone) SELECT ${tenantId}, ${staffId}, 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', '09:00', '17:00', 'Europe/Copenhagen' WHERE NOT EXISTS (SELECT 1 FROM availability_rules WHERE tenant_id = ${tenantId} AND team_member_id = ${staffId})`;
     await tenantDb.end();

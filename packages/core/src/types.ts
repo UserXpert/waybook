@@ -134,6 +134,16 @@ export interface BookingInput {
   id?: string;
   startsAt: Date;
   endsAt: Date;
+  /**
+   * Persisted interval that actually reserves capacity for this booking.
+   *
+   * Booking systems commonly store this buffer-inclusive block separately
+   * from the customer-facing appointment times. When supplied, slot
+   * computation uses these exact bounds instead of applying the candidate
+   * service's buffers to this booking.
+   */
+  blockedStartsAt?: Date;
+  blockedEndsAt?: Date;
   status: BookingStatus;
   /** Resource ID for resource-based bookings. Omit for provider-only mode. */
   resourceId?: string;
