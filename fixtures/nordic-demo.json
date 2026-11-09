@@ -205,35 +205,40 @@
       "name": "Consultation · 5 visits",
       "service": "service-1",
       "units": 5,
-      "priceCents": 190000
+      "priceCents": 190000,
+      "customer": "customer-1"
     },
     {
       "key": "package-2",
       "name": "Recovery session · 5 visits",
       "service": "service-2",
       "units": 5,
-      "priceCents": 210000
+      "priceCents": 210000,
+      "customer": "customer-2"
     },
     {
       "key": "package-3",
       "name": "Deep tissue massage · 5 visits",
       "service": "service-3",
       "units": 5,
-      "priceCents": 230000
+      "priceCents": 230000,
+      "customer": "customer-3"
     },
     {
       "key": "package-4",
       "name": "Sports massage · 5 visits",
       "service": "service-4",
       "units": 5,
-      "priceCents": 250000
+      "priceCents": 250000,
+      "customer": "customer-4"
     },
     {
       "key": "package-5",
       "name": "Relaxation massage · 5 visits",
       "service": "service-5",
       "units": 5,
-      "priceCents": 270000
+      "priceCents": 270000,
+      "customer": "customer-5"
     }
   ],
   "giftCards": [
