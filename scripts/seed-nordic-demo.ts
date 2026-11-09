@@ -44,7 +44,9 @@ async function main() {
       await run("INSERT INTO commerce_package_service_entitlements (tenant_id,catalog_item_id,service_id,included_units) VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,catalog_item_id,service_id) DO NOTHING",[tenantId,ref(item.key),ref(item.service),item.units]);
     }
     for (const item of fixture.giftCards) {
-      const code = `DEMO-TEST-${item.lastFour}`;
+      // Keep demo card codes unguessable even though this fixture is committed.
+      const secretPart = createHmac("sha256",giftSecret!).update(`${fixture.fixture}:${tenantId}:${item.key}`).digest("hex").slice(0,16).toUpperCase();
+      const code = `DEMO-${secretPart}-${item.lastFour}`;
       const digest = createHmac("sha256",giftSecret!).update(code).digest("hex");
       const inserted = await run("INSERT INTO commerce_gift_cards (id,tenant_id,issued_to_customer_id,code_hash,code_hash_version,code_last_four,currency,metadata) VALUES ($1,$2,$3,$4,2,$5,'DKK',$6::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id",[ref(item.key),tenantId,ref(item.customer),digest,item.lastFour,JSON.stringify({notes:"Demo fixture: not a real purchase"})]);
       if (inserted.length) await run("INSERT INTO commerce_gift_card_entries (tenant_id,gift_card_id,kind,direction,amount_cents,currency,reason) VALUES ($1,$2,'issue','credit',$3,'DKK','Demo fixture')",[tenantId,ref(item.key),item.amountCents]);
