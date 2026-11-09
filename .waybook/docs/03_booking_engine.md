@@ -110,7 +110,33 @@ and confirmed its ledger, booking event, and audit record.
 
 Local HTTP confirmation and same-key retry proved exactly one booking, event, audit, outbox record, and token row. Customer-facing management UI, expiry/revocation coverage, and external delivery remain open.
 
+Commerce read-model bridge: `0036_booking_commerce_sales_read_model.sql`
+creates exactly one tenant-scoped `commerce_sales.booking_id` identity for
+each appointment, including a backfill for existing bookings. This is not a
+new payment ledger: appointment payment and refund history remains solely in
+`payment_records`, so totals and booking audits are not duplicated. Local
+verification on 2026-11-07 found complete Nordic and Copenhagen coverage with
+zero copied commerce transactions; manager desktop/mobile browser checks
+confirmed linked Sales and Booking views.
+
 ## Canonical public routes
+
+### Planned branded booking and website embed — Designed (2026-11-08)
+
+The public booking engine will retain pooled **Anyone** assignment: a client
+selects a location and service, and the server chooses a free eligible staff
+member. Named staff selection is intentionally out of scope. Tenant-managed
+public settings will control brand/logo, accessible colour, booking copy,
+policy version, locale/currency, service catalogue visibility, price display,
+and a call-us route for services that must not be booked online. Shareable
+booking links may preselect a location, service, or category.
+
+External websites will load an allowlisted Waybook launcher script. It opens
+the same tenant booking flow in an accessible iframe overlay, with a normal
+booking-link fallback. The embed must constrain framing with `frame-ancestors`,
+strictly validate parent-origin messages, attribute its verified source, and
+never expose tenant secrets or allow the host page to influence booking
+authorization or availability.
 
 Public booking uses the same-origin tenant paths such as `/nordic/book` and `/copenhagen/book`. Availability, hold, and confirmation requests preserve that prefix and resolve through the server-side Control registry.
 

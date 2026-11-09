@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "alias": [
     "waybook-booking.vercel.app"
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/overdue-bookings",
+      "schedule": "0 2 * * *"
+    }
   ]
 }

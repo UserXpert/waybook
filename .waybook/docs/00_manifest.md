@@ -4,7 +4,10 @@
 
 This is the compact, factual handoff for Waybook. It replaces the former monolithic `WAYBOOK_MVP.md` as the default entry point.
 
-Waybook Phase 1 is a real multi-tenant booking SaaS with three operating spaces: Waybook Control, Nordic Studio, and Copenhagen Physio. It is not a static dashboard or a client production environment.
+Waybook Phase 1 is a real multi-tenant appointment-operations SaaS for clinics
+first, then salons and other appointment businesses. It has three operating
+spaces: Waybook Control, Nordic Studio, and Copenhagen Physio. It is not a
+static dashboard or a client production environment.
 
 ## Documentation protocol — minimise context, preserve truth
 
@@ -22,6 +25,9 @@ This protocol deliberately does **not** require reading every document for a sma
 | Login, sessions, Google SSO, invitations, Create Business, provisioning | [02_auth_provisioning.md](02_auth_provisioning.md) | Identity or onboarding/provisioning behaviour changes |
 | Availability, slots, holds, bookings, tokens, DST, confirmation | [03_booking_engine.md](03_booking_engine.md) | Booking-domain behaviour or proof changes |
 | Control, tenant dashboard, feature flag, Staff, Calendars, public UI | [04_modules_ledger.md](04_modules_ledger.md) | A module/UI capability or its verification changes |
+| Products, sales, wallet, gift cards, memberships, packages, payment references | [05_commerce_foundation.md](05_commerce_foundation.md) | A commerce boundary, migration, or vertical slice changes |
+| AWS database ownership and provider cutover | [06_aws_rds_cutover.md](06_aws_rds_cutover.md) | Hosting, networking, migration, backup, or provider decision changes |
+| Prioritised remaining work and pilot stop gate | [07_delivery_backlog.md](07_delivery_backlog.md) | A slice is added, completed, deferred, or the pilot release boundary changes |
 
 ## Product and environment boundary
 
@@ -42,13 +48,36 @@ This protocol deliberately does **not** require reading every document for a sma
 | Booking engine | Database-backed / tested / browser-verified | Persisted schedules, pooled employee slots, server-assigned holds, exclusion-constraint protection, confirmations, audits, outbox and token hashes; see Booking engine. |
 | Control and tenant dashboards | Database-backed / browser-verified (partial) | Control, bookings, services, clients, Staff, Calendars and public booking have real persisted paths. Module-specific proof and gaps are in Modules ledger. |
 | Dashboard product direction | Database-backed / tested / browser-verified (partial) | Nordic's tenant Overview has four desktop/mobile-verified operational widgets: upcoming appointments, daily staff booking workload, monthly appointment outcomes, and real staff target progress. Capacity, retention, and Control dashboard work remains designed; see Modules ledger. |
+| Commerce-to-booking bridge | Database-backed / tested / browser-verified (partial) | Catalogue editability, bounded decoder-validated media, and the one-sale-per-booking read model are complete locally. Product add-ons, package redemption, and gift-card tender must converge through that sale without duplicating appointment payments; see Commerce foundation. |
 | Automated business provisioning | Designed | Nordic and Copenhagen remain manually seeded. Create Business must wait for Google SSO and invitation claiming. |
+| Bounded delivery plan | Designed / maintained | P0/P1 pilot backlog and explicit stop rules are in Delivery backlog; no new feature work is implicit outside that list. |
+
+## Clinic-first, operations-only boundary — Designed (2026-11-08)
+
+The first commercial pilot is for clinics, but the same product boundary
+applies to every vertical. Waybook is an appointment-operations product:
+scheduling, availability, people, rooms/equipment, service history, payments,
+and versioned policy acknowledgement. It may hold operational client data such
+as contact details, appointment/service history, and non-sensitive booking
+instructions. It must use tenant-configurable display terminology (for example
+**patient/client** and **practitioner/staff**) without creating separate clinic
+and salon products.
+
+Waybook is not an EHR or a professional-record system. Diagnoses, treatment or
+professional notes, prescriptions, insurance claims, clinical images, and
+sensitive health intake are out of scope across clinics, salons, and every
+other tenant type. General notes and forms must not become a workaround for
+that boundary; a later regulated-records product would need its own explicit
+data, compliance, retention, access, and integration decision. It is a future
+optional premium EHR add-on for clinics, never a prerequisite or hidden mode
+of the core appointment product.
 
 ## Working-product standard
 
 - Functional work follows: persisted data → server authorization → read/mutation path → focused test → desktop/mobile browser verification.
 - Database constraints, rather than UI checks, are authoritative for conflict prevention and tenancy boundaries.
 - Batch related visual changes and verify once. Reserve production builds and deeper checks for behaviour, security, migration, or integration boundaries.
+- Every icon-only control uses a semantic SVG icon inside the shared `waybook-icon-button` layout, with a fixed square target and grid centering on both axes; text glyphs and hand-drawn CSS icons are not used for new controls.
 - After two failed attempts at one obstacle, reassess using new evidence.
 
 ## Phase 1 gates still open

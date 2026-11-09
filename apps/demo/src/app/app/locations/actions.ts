@@ -21,7 +21,8 @@ export async function saveLocation(formData: FormData) {
   const fields = [String(formData.get('phone') ?? '').trim() || null, String(formData.get('addressLine1') ?? '').trim() || null, String(formData.get('addressLine2') ?? '').trim() || null, String(formData.get('city') ?? '').trim() || null, String(formData.get('region') ?? '').trim() || null, String(formData.get('postalCode') ?? '').trim() || null];
   const online = String(formData.get('isOnlineBookable') ?? 'on') === 'on';
   const active = String(formData.get('isActive') ?? 'on') === 'on';
-  const openingHours = [1, 2, 3, 4, 5, 6, 0].flatMap((day) => {
+  type OpeningHour = { day: number; start: string; end: string };
+  const legacyOpeningHours: OpeningHour[] = [1, 2, 3, 4, 5, 6, 0].flatMap((day) => {
     if (String(formData.get(`open-${day}`)) !== 'on') return [];
     const start = String(formData.get(`start-${day}`) ?? '09:00');
     const end = String(formData.get(`end-${day}`) ?? '17:00');
@@ -30,6 +31,22 @@ export async function saveLocation(formData: FormData) {
     }
     return [{ day, start, end }];
   });
+  let openingHours = legacyOpeningHours;
+  const serializedHours = String(formData.get('openingHours') ?? '');
+  if (serializedHours) {
+    try {
+      const parsed: unknown = JSON.parse(serializedHours);
+      if (!Array.isArray(parsed)) throw new Error();
+      openingHours = parsed.filter((entry): entry is OpeningHour => Boolean(entry) && typeof entry === 'object' && typeof (entry as OpeningHour).day === 'number' && typeof (entry as OpeningHour).start === 'string' && typeof (entry as OpeningHour).end === 'string');
+    } catch { throw new Error('Opening hours could not be read. Please try again.'); }
+    if (openingHours.some(({ day, start, end }) => !Number.isInteger(day) || day < 0 || day > 6 || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start)) throw new Error('Each opening period must end after it starts.');
+    const byDay = new Map<number, OpeningHour[]>();
+    for (const hour of openingHours) byDay.set(hour.day, [...(byDay.get(hour.day) ?? []), hour]);
+    for (const hours of byDay.values()) {
+      const ordered = [...hours].sort((left, right) => left.start.localeCompare(right.start));
+      if (ordered.some((hour, index) => index > 0 && hour.start < ordered[index - 1].end)) throw new Error('Opening periods on the same day cannot overlap.');
+    }
+  }
   let locationId = id;
   if (id) {
     const [row] = await db<{ id: string }[]>`UPDATE locations SET name=${name}, location_type=${locationType}, is_online_bookable=${online}, phone=${fields[0]}, address_line_1=${fields[1]}, address_line_2=${fields[2]}, city=${fields[3]}, region=${fields[4]}, postal_code=${fields[5]}, is_active=${active}, updated_at=now() WHERE id=${id} AND tenant_id=${tenant.id} RETURNING id`;
@@ -39,10 +56,10 @@ export async function saveLocation(formData: FormData) {
     const [row] = await db<{ id: string }[]>`INSERT INTO locations (tenant_id, slug, name, location_type, is_online_bookable, phone, address_line_1, address_line_2, city, region, postal_code, timezone, is_active) VALUES (${tenant.id}, ${count?.count ? `${base}-${count.count + 1}` : base}, ${name}, ${locationType}, ${online}, ${fields[0]}, ${fields[1]}, ${fields[2]}, ${fields[3]}, ${fields[4]}, ${fields[5]}, ${tenant.timezone}, ${active}) RETURNING id`;
     locationId = row.id;
   }
-  await db`DELETE FROM location_hours WHERE tenant_id=${tenant.id} AND location_id=${locationId}`;
-  for (const { day, start, end } of openingHours) {
-    await db`INSERT INTO location_hours (tenant_id, location_id, day_of_week, start_time, end_time) VALUES (${tenant.id}, ${locationId}, ${day}, ${start}, ${end})`;
-  }
+  await db.begin(async (transaction) => {
+    await transaction.unsafe('DELETE FROM location_hours WHERE tenant_id=$1 AND location_id=$2', [tenant.id, locationId]);
+    for (const { day, start, end } of openingHours) await transaction.unsafe('INSERT INTO location_hours (tenant_id, location_id, day_of_week, start_time, end_time) VALUES ($1,$2,$3,$4,$5)', [tenant.id, locationId, day, start, end]);
+  });
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${id ? 'location.updated' : 'location.created'}, 'location', ${locationId}, ${JSON.stringify({ name, locationType, online, active })}::jsonb)`;
   revalidatePath('/app'); revalidatePath('/app/locations'); revalidatePath('/app/team'); revalidatePath('/app/services'); revalidatePath('/app/calendars'); revalidatePath('/book');
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { OperationalTimeRange } from "@/components/operational-time-range";
 
 type Props = {
   memberId: string;
@@ -29,7 +30,6 @@ function monthDates(month: Date) {
   const days = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
   return [...Array<string | null>(firstDay).fill(null), ...Array.from({ length: days }, (_, index) => dateKey(new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), index + 1))))];
 }
-function timeLabel(value: string) { return new Intl.DateTimeFormat("en-GB", { hour: "numeric", minute: "2-digit", hour12: false, timeZone: "UTC" }).format(new Date(`1970-01-01T${value}:00Z`)); }
 function timeAt(slot: number) { return `${String(Math.floor(slot / 2)).padStart(2, "0")}:${slot % 2 ? "30" : "00"}`; }
 
 export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, initial }: Props) {
@@ -42,7 +42,6 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
   const [fullDay, setFullDay] = useState(!initial?.startTime || !initial?.endTime);
   const [startSlot, setStartSlot] = useState(initial?.startTime ? Number(initial.startTime.slice(0, 2)) * 2 + (initial.startTime.endsWith("30") ? 1 : 0) : 18);
   const [endSlot, setEndSlot] = useState(initial?.endTime ? Number(initial.endTime.slice(0, 2)) * 2 + (initial.endTime.endsWith("30") ? 1 : 0) : 34);
-  const [activeRangeHandle, setActiveRangeHandle] = useState<"start" | "end">("start");
   const months = [visibleMonth, addMonths(visibleMonth, 1)];
   const canGoBack = visibleMonth.getTime() > firstOfMonth(today).getTime();
   const selectedLabel = dateMode === "day" || startDate === endDate ? formatDate(startDate) : `${formatDate(startDate)} – ${formatDate(endDate)}`;
@@ -57,25 +56,6 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
     if (!rangeAnchor) { setStartDate(value); setEndDate(value); setRangeAnchor(value); return; }
     if (value < rangeAnchor) { setStartDate(value); setEndDate(rangeAnchor); } else { setStartDate(rangeAnchor); setEndDate(value); }
     setRangeAnchor(null);
-  }
-  function setRangeHandle(handle: "start" | "end", nextSlot: number) {
-    if (handle === "start") setStartSlot(Math.max(0, Math.min(nextSlot, endSlot - 1)));
-    else setEndSlot(Math.min(47, Math.max(nextSlot, startSlot + 1)));
-  }
-  function setRangeHandleFromPointer(handle: "start" | "end", clientX: number, element: HTMLButtonElement) {
-    const bounds = element.parentElement?.getBoundingClientRect();
-    if (!bounds) return;
-    const slot = Math.round(Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width)) * 47);
-    setRangeHandle(handle, slot);
-  }
-  function handleRangeKeys(handle: "start" | "end", event: KeyboardEvent<HTMLButtonElement>) {
-    const current = handle === "start" ? startSlot : endSlot;
-    const minimum = handle === "start" ? 0 : startSlot + 1;
-    const maximum = handle === "start" ? endSlot - 1 : 47;
-    const change = event.key === "ArrowLeft" || event.key === "ArrowDown" ? -1 : event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : 0;
-    if (change) { event.preventDefault(); setRangeHandle(handle, current + change); }
-    if (event.key === "Home") { event.preventDefault(); setRangeHandle(handle, minimum); }
-    if (event.key === "End") { event.preventDefault(); setRangeHandle(handle, maximum); }
   }
 
   return <form action={action} className="staff-timeoff-form">
@@ -117,17 +97,7 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
       {dateMode === "range" && rangeAnchor ? <p className="staff-timeoff-form__date-picker-hint" role="status">Now choose the last day of the range.</p> : null}
     </section>
     <div className="staff-timeoff-form__mode"><button type="button" className="staff-timeoff-form__switch" role="switch" aria-checked={fullDay} onClick={() => setFullDay((current) => !current)}><span aria-hidden="true" /><span><b>Full day</b><small>{fullDay ? "Blocks the selected date or date range from booking." : "Turn on to block every selected date."}</small></span></button></div>
-    {!fullDay ? <div className="staff-timeoff-form__range" aria-label="Partial-day lockout time range">
-      <input type="hidden" name="startTime" value={timeAt(startSlot)} /><input type="hidden" name="endTime" value={timeAt(endSlot)} />
-      <div className="staff-timeoff-form__range-values"><span><small>Starts</small><b>{timeLabel(timeAt(startSlot))}</b></span><span><small>Ends</small><b>{timeLabel(timeAt(endSlot))}</b></span></div>
-      <div className="staff-timeoff-form__range-track" data-active-handle={activeRangeHandle} style={{ "--range-start": `${(startSlot / 47) * 100}%`, "--range-end": `${(endSlot / 47) * 100}%`, "--range-mid": `${((startSlot + endSlot) / 2 / 47) * 100}%` } as CSSProperties}>
-        <span className="staff-timeoff-form__range-rail" aria-hidden="true" />
-        <span className="staff-timeoff-form__range-selection" aria-hidden="true" />
-        <output className="staff-timeoff-form__range-bubble" aria-live="polite">{timeLabel(timeAt(startSlot))} – {timeLabel(timeAt(endSlot))}</output>
-        <button type="button" className="staff-timeoff-form__range-handle staff-timeoff-form__range-handle--start" style={{ "--handle-position": `${(startSlot / 47) * 100}%` } as CSSProperties} role="slider" aria-label="Lockout starts" aria-valuemin={0} aria-valuemax={endSlot - 1} aria-valuenow={startSlot} aria-valuetext={timeLabel(timeAt(startSlot))} onFocus={() => setActiveRangeHandle("start")} onKeyDown={(event) => handleRangeKeys("start", event)} onPointerDown={(event) => { setActiveRangeHandle("start"); event.currentTarget.setPointerCapture(event.pointerId); setRangeHandleFromPointer("start", event.clientX, event.currentTarget); }} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) setRangeHandleFromPointer("start", event.clientX, event.currentTarget); }} />
-        <button type="button" className="staff-timeoff-form__range-handle staff-timeoff-form__range-handle--end" style={{ "--handle-position": `${(endSlot / 47) * 100}%` } as CSSProperties} role="slider" aria-label="Lockout ends" aria-valuemin={startSlot + 1} aria-valuemax={47} aria-valuenow={endSlot} aria-valuetext={timeLabel(timeAt(endSlot))} onFocus={() => setActiveRangeHandle("end")} onKeyDown={(event) => handleRangeKeys("end", event)} onPointerDown={(event) => { setActiveRangeHandle("end"); event.currentTarget.setPointerCapture(event.pointerId); setRangeHandleFromPointer("end", event.clientX, event.currentTarget); }} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) setRangeHandleFromPointer("end", event.clientX, event.currentTarget); }} />
-      </div><div className="staff-timeoff-form__range-scale" aria-hidden="true"><span>00:00</span><span>12:00</span><span>23:30</span></div>
-    </div> : null}
+    {!fullDay ? <OperationalTimeRange label="Partial-day lockout" startName="startTime" endName="endTime" startTime={timeAt(startSlot)} endTime={timeAt(endSlot)} onStartTimeChange={(value) => setStartSlot(Number(value.slice(0, 2)) * 2 + (value.endsWith("30") ? 1 : 0))} onEndTimeChange={(value) => setEndSlot(Number(value.slice(0, 2)) * 2 + (value.endsWith("30") ? 1 : 0))} /> : null}
     <label>Reason <span className="staff-timeoff-form__optional">Optional</span><input name="reason" defaultValue={initial?.reason ?? ""} placeholder="Holiday, leave, break, meeting" /></label>
     <div className="staff-timeoff-form__actions">
       <button type="submit">{initial ? "Save changes" : "Save time off"}</button>

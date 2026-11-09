@@ -17,14 +17,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers } });
   }
   const target = `/${rest.join("/")}`;
-  if (!rest.length || !["app", "book", "login", "api"].includes(rest[0])) {
+  if (!rest.length || !["app", "book", "embed", "login", "api"].includes(rest[0])) {
     return NextResponse.next({ request: { headers } });
   }
 
   headers.set("x-waybook-tenant-route", first);
   const url = request.nextUrl.clone();
   url.pathname = target;
-  return NextResponse.rewrite(url, { request: { headers } });
+  const response = NextResponse.rewrite(url, { request: { headers } });
+  // Third parties never frame the booking page directly. An allowlisted
+  // Waybook-owned `/embed` document is the sole parent for external embeds.
+  if (rest[0] === "book") response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  return response;
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image).*)"] };

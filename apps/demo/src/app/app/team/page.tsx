@@ -3,6 +3,7 @@ import { Pencil } from "lucide-react";
 import { StaffHoursEditor } from "@/components/staff-hours-editor";
 import { StaffAccessMenu } from "@/components/staff-access-menu";
 import { StaffTimeOffForm } from "@/components/staff-time-off-form";
+import { AsyncMultiSelect } from "@/components/async-multi-select";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
@@ -14,10 +15,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { addStaffTimeOff, deleteStaffTimeOff, saveStaffPermissions, saveTeamMember, updateStaffTimeOff } from "./actions";
 
 type StaffRow = { id: string; name: string; email: string; role: string; isActive: boolean; identityId: string | null; archivedAt: string | null; phone: string | null; jobTitle: string | null; specialty: string | null; workLocation: string | null; staffCode: string | null; internalNotes: string | null; calendarColor: string };
-type ServiceRow = { id: string; title: string };
-type Location = { id: string; name: string };
-type Assignment = { teamMemberId: string; serviceId: string };
-type LocationAssignment = { teamMemberId: string; locationId: string };
+type Selection = { id: string; name: string };
 type Rule = { rrule: string; startTime: string; endTime: string };
 type Override = { id: string; localDate: string; startTime: string | null; endTime: string | null; isUnavailable: boolean; reason: string | null };
 type StaffPermissions = { canUpdateAppointmentStatus: boolean; canManageOwnAppointments: boolean; canViewTeamCalendar: boolean; canManageTeamAppointments: boolean; canManageOwnTimeOff: boolean; canManageTeamTimeOff: boolean; canManageWaitlist: boolean; canViewClients: boolean; canManageClients: boolean; canAccessReports: boolean; canManageResources: boolean; canManageServiceSettings: boolean };
@@ -33,8 +31,8 @@ function displayOverrideDate(localDate: string) {
   return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${localDate}T12:00:00Z`));
 }
 
-export default async function TeamPage({ searchParams }: { searchParams: Promise<{ employee?: string; tab?: string; new?: string; editTimeOff?: string }> }) {
-  const { employee, tab: requestedTab, new: createNew, editTimeOff } = await searchParams;
+export default async function TeamPage({ searchParams }: { searchParams: Promise<{ employee?: string; tab?: string; new?: string; editTimeOff?: string; q?: string; after?: string }> }) {
+  const { employee, tab: requestedTab, new: createNew, editTimeOff, q, after } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "team");
   const canManage = ["owner", "manager"].includes(membership.role);
@@ -43,16 +41,22 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const db = tenantDb(tenant);
   const archiveAvailable = await staffLifecycleAvailable(tenant);
-  const [members, services, assignments, locations, locationAssignments] = await Promise.all([
-    archiveAvailable
-      ? db<StaffRow[]>`SELECT tm.id, tm.name, tm.email, tm.role, tm.is_active AS "isActive", tm.identity_id AS "identityId", tm.archived_at::text AS "archivedAt", tm.phone, tm.job_title AS "jobTitle", tm.specialty, tm.work_location AS "workLocation", tm.staff_code AS "staffCode", tm.internal_notes AS "internalNotes", tm.calendar_color AS "calendarColor" FROM team_members tm WHERE tm.tenant_id = ${tenant.id} ${canManage ? db`` : db`AND tm.id = ${signedInPermissions.teamMemberId}`} ORDER BY tm.archived_at NULLS FIRST, tm.is_active DESC, tm.name`
-      : db<StaffRow[]>`SELECT tm.id, tm.name, tm.email, tm.role, tm.is_active AS "isActive", tm.identity_id AS "identityId", NULL::text AS "archivedAt", tm.phone, tm.job_title AS "jobTitle", tm.specialty, tm.work_location AS "workLocation", tm.staff_code AS "staffCode", tm.internal_notes AS "internalNotes", tm.calendar_color AS "calendarColor" FROM team_members tm WHERE tm.tenant_id = ${tenant.id} ${canManage ? db`` : db`AND tm.id = ${signedInPermissions.teamMemberId}`} ORDER BY tm.is_active DESC, tm.name`,
-    db<ServiceRow[]>`SELECT id, title FROM services WHERE tenant_id = ${tenant.id} AND is_active = TRUE ORDER BY title`,
-    db<Assignment[]>`SELECT team_member_id AS "teamMemberId", service_id AS "serviceId" FROM service_team_members WHERE tenant_id = ${tenant.id}`,
-    db<Location[]>`SELECT id, name FROM locations WHERE tenant_id = ${tenant.id} AND is_active = TRUE ORDER BY CASE WHEN slug = 'primary' THEN 0 ELSE 1 END, name`,
-    db<LocationAssignment[]>`SELECT team_member_id AS "teamMemberId", location_id AS "locationId" FROM team_member_locations WHERE tenant_id = ${tenant.id}`,
-  ]);
-  const selected = members.find((member) => member.id === employee) ?? members[0] ?? null;
+  const search = (q ?? "").trim().slice(0, 100);
+  const rawCursor = (after ?? "").trim();
+  const cursor = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(rawCursor) ? rawCursor : null;
+  const archiveSelect = archiveAvailable ? "tm.archived_at::text AS \"archivedAt\"" : "NULL::text AS \"archivedAt\"";
+  const archiveOrder = archiveAvailable ? "tm.archived_at NULLS FIRST," : "";
+  const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.internal_notes AS \"internalNotes\",tm.calendar_color AS \"calendarColor\" FROM team_members tm`;
+  const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1 AND ($2::uuid IS NULL OR tm.id=$2::uuid) AND ($3='' OR tm.name ILIKE $4 OR tm.email ILIKE $4) AND ($5::uuid IS NULL OR (tm.name,tm.id) > (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$5::uuid),''),$5::uuid)) ORDER BY ${archiveOrder}tm.is_active DESC,tm.name,tm.id LIMIT 51`;
+  const memberRows = await db.unsafe<StaffRow[]>(staffDirectorySql, [tenant.id, canManage ? null : signedInPermissions.teamMemberId, search, `%${search}%`, cursor]);
+  const hasMoreMembers = memberRows.length > 50;
+  const members = memberRows.slice(0, 50);
+  const selectedFromDirectory = members.find((member) => member.id === employee) ?? null;
+  const selected = selectedFromDirectory ?? (employee && canManage ? (await db.unsafe<StaffRow[]>(staffColumns + " WHERE tm.tenant_id=$1 AND tm.id=$2::uuid", [tenant.id, employee]))[0] ?? null : null) ?? members[0] ?? null;
+  const [selectedServices, selectedLocations] = selected ? await Promise.all([
+    db<Selection[]>`SELECT s.id,s.title AS name FROM service_team_members stm JOIN services s ON s.id=stm.service_id AND s.tenant_id=stm.tenant_id WHERE stm.tenant_id=${tenant.id} AND stm.team_member_id=${selected.id} ORDER BY s.title`,
+    db<Selection[]>`SELECT l.id,l.name FROM team_member_locations tml JOIN locations l ON l.id=tml.location_id AND l.tenant_id=tml.tenant_id WHERE tml.tenant_id=${tenant.id} AND tml.team_member_id=${selected.id} ORDER BY l.name`,
+  ]) : [[], []] as [Selection[], Selection[]];
   const tab: StaffTab = requestedTab === "permissions" && !canManage
     ? "details"
     : tabs.includes(requestedTab as StaffTab) ? requestedTab as StaffTab : "details";
@@ -66,11 +70,10 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
     ? await db<StaffPermissions[]>`SELECT can_update_appointment_status AS "canUpdateAppointmentStatus", can_manage_own_appointments AS "canManageOwnAppointments", can_view_team_calendar AS "canViewTeamCalendar", can_manage_team_appointments AS "canManageTeamAppointments", can_manage_own_time_off AS "canManageOwnTimeOff", can_manage_team_time_off AS "canManageTeamTimeOff", can_manage_waitlist AS "canManageWaitlist", can_view_clients AS "canViewClients", can_manage_clients AS "canManageClients", can_access_reports AS "canAccessReports", can_manage_resources AS "canManageResources", can_manage_service_settings AS "canManageServiceSettings" FROM staff_permissions WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} LIMIT 1`
     : permissionRows;
   const schedule = rules.flatMap((rule) => (rule.rrule.match(/BYDAY=([^;]+)/)?.[1].split(",") ?? []).map((day) => ({ day, startTime: rule.startTime, endTime: rule.endTime })));
-  const selectedServiceIds = new Set(assignments.filter((entry) => entry.teamMemberId === selected?.id).map((entry) => entry.serviceId));
-  const selectedLocationIds = new Set(locationAssignments.filter((entry) => entry.teamMemberId === selected?.id).map((entry) => entry.locationId));
   const editingOverride = overrides.find((override) => override.id === editTimeOff) ?? null;
   const basePath = tenantPath(tenantSlug, "/app/team");
   const staffPath = (memberId: string, targetTab = tab) => basePath + "?employee=" + memberId + "&tab=" + targetTab;
+  const moreStaffHref = basePath + "?" + new URLSearchParams({ ...(search ? { q: search } : {}), after: members.at(-1)?.id ?? "" }).toString();
 
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="team" />
@@ -81,6 +84,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           {canManage ? <Link className="waybook-primary-link" href={basePath + "?new=1"}>Add staff</Link> : null}
         </div>
         <p className="staff-workspace__directory-copy">Select a person to manage their profile, schedule, services, and time off.</p>
+        {canManage ? <form method="get" className="waybook-list-filter"><label>Search staff<input name="q" type="search" defaultValue={search} placeholder="Name or email" /></label><button type="submit">Search</button></form> : null}
         <nav>
           {members.map((member) => <Link key={member.id} href={staffPath(member.id)} aria-current={selected?.id === member.id ? "page" : undefined}>
             <span className="staff-workspace__avatar" aria-hidden="true">{member.name.slice(0, 1)}</span>
@@ -88,11 +92,12 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
             <i className={member.isActive ? "is-active" : ""}>{member.isActive ? "Active" : "Inactive"}</i>
           </Link>)}
         </nav>
+        {hasMoreMembers ? <Link className="waybook-secondary-link" href={moreStaffHref}>Load more staff</Link> : null}
       </aside>
       <section className="staff-workspace__content">
         {createNew === "1" ? <section className="staff-workspace__panel staff-workspace__new">
           <PanelHeading title="Create a staff profile" text="Save core details first, then add services and a weekly schedule." />
-          {canManage ? <ProfileForm member={null} locations={locations} services={services} selectedLocationIds={new Set()} selectedServiceIds={new Set()} canAssignManager={membership.role === "owner"} /> : <p>Read-only access.</p>}
+          {canManage ? <ProfileForm member={null} selectedLocations={[]} selectedServices={[]} canAssignManager={membership.role === "owner"} /> : <p>Read-only access.</p>}
         </section> : null}
         {!createNew && selected ? <>
           <header className="staff-workspace__profile-header">
@@ -105,7 +110,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </nav>
           {tab === "details" ? <section className="staff-workspace__panel">
             <PanelHeading title="Details" text="Contact and profile information used inside your workspace." />
-            {canManage ? <ProfileForm member={selected} locations={locations} services={services} selectedLocationIds={selectedLocationIds} selectedServiceIds={selectedServiceIds} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
+            {canManage ? <ProfileForm member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
           </section> : null}
           {tab === "hours" ? <section className="staff-workspace__panel staff-workspace__panel--wide">
             <PanelHeading title="Working hours" text="A clear weekly schedule for when this person can be offered to customers." />
@@ -117,7 +122,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </section> : null}
           {tab === "services" ? <section className="staff-workspace__panel">
             <PanelHeading title="Services & locations" text="Control where this person can be booked and what they can deliver." />
-            {canManage ? <ProfileForm member={selected} locations={locations} services={services} selectedLocationIds={selectedLocationIds} selectedServiceIds={selectedServiceIds} assignmentsOnly canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
+            {canManage ? <ProfileForm member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} assignmentsOnly canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
           </section> : null}
           {tab === "time-off" ? <section className="staff-workspace__panel">
             <PanelHeading title="Time off" text="Block one day, a date range, or specific hours for leave, breaks, meetings, or other time off." />
@@ -184,15 +189,7 @@ function StaffPermissionsForm({ memberId, initial, workspacePermissionsAvailable
   </form>;
 }
 
-function ProfileForm({ member, locations, services, selectedLocationIds, selectedServiceIds, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager }: { member: StaffRow | null; locations: Location[]; services: ServiceRow[]; selectedLocationIds: Set<string>; selectedServiceIds: Set<string>; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean }) {
-  // A new bookable person starts enabled for the workspace's active services
-  // and locations. Managers can narrow this deliberately on the same form.
-  const effectiveLocationIds = member
-    ? selectedLocationIds
-    : new Set(locations.map((location) => location.id));
-  const effectiveServiceIds = member
-    ? selectedServiceIds
-    : new Set(services.map((service) => service.id));
+function ProfileForm({ member, selectedLocations, selectedServices, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager }: { member: StaffRow | null; selectedLocations: Selection[]; selectedServices: Selection[]; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean }) {
   return <form action={saveTeamMember} className="staff-profile-form">
     <input type="hidden" name="memberId" value={member?.id ?? ""} />
     {!assignmentsOnly ? <><div className="staff-profile-form__grid">
@@ -200,9 +197,8 @@ function ProfileForm({ member, locations, services, selectedLocationIds, selecte
       <label>Phone<input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label><label>Role<select name="role" defaultValue={member?.role ?? "staff"} disabled={!canAssignManager && member?.role === "manager"}>{!canAssignManager && member?.role === "manager" ? <option value="manager">Manager</option> : null}<option value="staff">Staff</option>{canAssignManager ? <option value="manager">Manager</option> : null}<option value="read-only">Read-only</option></select></label><fieldset className="staff-calendar-colour"><legend>Calendar colour</legend><div className="staff-calendar-colour__swatches">{staffCalendarColors.map((color) => <label key={color.value} title={color.label}><input type="radio" name="calendarColor" value={color.value} aria-label={color.label} defaultChecked={(member?.calendarColor ?? defaultStaffCalendarColor) === color.value} /><span style={{ backgroundColor: color.value }} aria-hidden="true" /></label>)}</div><small>Used for this person’s booking cards.</small></fieldset>
       {!compact ? <><label>Staff code<input name="staffCode" defaultValue={member?.staffCode ?? ""} /></label><label>Job title<input name="jobTitle" defaultValue={member?.jobTitle ?? ""} /></label><label>Specialty<input name="specialty" defaultValue={member?.specialty ?? ""} /></label><label>Work location<input name="workLocation" defaultValue={member?.workLocation ?? ""} /></label></> : null}
     </div><label>Internal notes<textarea name="internalNotes" rows={3} defaultValue={member?.internalNotes ?? ""} placeholder="Private operational notes — never customer-facing." /></label><label className="staff-status-toggle"><input type="checkbox" role="switch" name="isActive" defaultChecked={member?.isActive ?? true} /><span aria-hidden="true" /><b>Active and eligible for booking</b></label></> : null}
-    {!includeAssignments ? <><>{Array.from(effectiveLocationIds).map((locationId) => <input key={locationId} type="hidden" name="locationIds" value={locationId} />)}</><>{Array.from(effectiveServiceIds).map((serviceId) => <input key={serviceId} type="hidden" name="serviceIds" value={serviceId} />)}</></> : null}
-    {includeAssignments ? <><fieldset><legend>Locations this person can serve</legend>{locations.map((location) => <label className="staff-multi-toggle" key={location.id}><input type="checkbox" role="switch" name="locationIds" value={location.id} defaultChecked={effectiveLocationIds.has(location.id)} /><span aria-hidden="true" /><b>{location.name}</b></label>)}</fieldset>
-    <fieldset><legend>Services this person can deliver</legend>{services.map((service) => <label className="staff-multi-toggle" key={service.id}><input type="checkbox" role="switch" name="serviceIds" value={service.id} defaultChecked={effectiveServiceIds.has(service.id)} /><span aria-hidden="true" /><b>{service.title}</b></label>)}</fieldset></> : null}
+    {!includeAssignments ? <><>{selectedLocations.map((location) => <input key={location.id} type="hidden" name="locationIds" value={location.id} />)}</><>{selectedServices.map((service) => <input key={service.id} type="hidden" name="serviceIds" value={service.id} />)}</></> : null}
+    {includeAssignments ? member ? <><AsyncMultiSelect name="locationIds" label="Locations this person can serve" endpoint="/api/app/locations" initial={selectedLocations} /><AsyncMultiSelect name="serviceIds" label="Services this person can deliver" endpoint="/api/app/services" initial={selectedServices} /></> : <><input type="hidden" name="defaultAssignments" value="all" /><p className="staff-profile-form__assignment-note">New staff start bookable for all active locations and services. You can narrow this after creation.</p></> : null}
     <button type="submit">{member ? assignmentsOnly ? "Save services & locations" : "Save staff details" : "Create staff member"}</button>
   </form>;
 }

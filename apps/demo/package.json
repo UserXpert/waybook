@@ -7,6 +7,7 @@
     "dev": "WAYBOOK_NEXT_DIST_DIR=.next-dev next dev --port 3333",
     "build": "tsx ../../scripts/migrate-waybook.ts && next build",
     "start": "next start --port 3333",
+    "test": "tsx --test src/lib/waybook/*.test.ts",
     "e2e": "playwright test --config e2e/playwright.config.ts",
     "e2e:ui": "playwright test --config e2e/playwright.config.ts --ui",
     "e2e:db": "E2E_WITH_DB=1 playwright test --config e2e/playwright.config.ts"
@@ -22,7 +23,8 @@
     "next": "^15.5.27",
     "pg": "^8.23.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",

@@ -9,11 +9,8 @@ import { tenantDb } from "./database";
 type Service = { id: string; durationMinutes: number };
 type Location = { id: string; timezone: string };
 type LocationHours = { dayOfWeek: number; startTime: string; endTime: string };
-type ServiceResource = { id: string; isMutuallyExclusive: boolean };
-type ResourceBlock = { resourceId: string; startsAt: Date; endsAt: Date };
 
-async function resolvedLocation(tenant: TenantRecord, requestedId?: string) {
-  const db = tenantDb(tenant);
+async function resolvedLocation(tenant: TenantRecord, requestedId?: string, db = tenantDb(tenant)) {
   const rows = requestedId ? await db<Location[]>`SELECT id, timezone FROM locations WHERE tenant_id=${tenant.id} AND id=${requestedId} AND is_active=TRUE AND is_online_bookable=TRUE` : await db<Location[]>`SELECT id, timezone FROM locations WHERE tenant_id=${tenant.id} AND slug='primary' AND is_active=TRUE AND is_online_bookable=TRUE LIMIT 1`;
   if (!rows[0]) throw new Error("Location is unavailable.");
   return rows[0];
@@ -40,23 +37,14 @@ export function isSlotWithinLocationHours(start: Date, end: Date, hours: Locatio
 }
 
 /** Calculates tenant-scoped slots from persisted services, schedules, bookings, and active holds. */
-export async function availableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options?: { excludeBookingBlockId?: string; locationId?: string; slotInterval?: number; durationMinutes?: number }) {
-  const db = tenantDb(tenant);
-  const location = await resolvedLocation(tenant, options?.locationId);
+export async function availableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options?: { excludeBookingBlockId?: string; locationId?: string; slotInterval?: number; durationMinutes?: number }, db = tenantDb(tenant)) {
+  const location = await resolvedLocation(tenant, options?.locationId, db);
   const locationId = location.id;
   const locationHours = await db<LocationHours[]>`SELECT day_of_week AS "dayOfWeek", start_time AS "startTime", end_time AS "endTime" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${locationId}`;
   const closedDates = new Set((await db<{ localDate: string }[]>`SELECT local_date::text AS "localDate" FROM location_closed_dates WHERE tenant_id = ${tenant.id} AND location_id = ${locationId} AND local_date >= ${startsAt.toISOString().slice(0, 10)}::date AND local_date <= ${endsAt.toISOString().slice(0, 10)}::date`).map((row) => row.localDate));
   const [service] = await db<Service[]>`SELECT id, duration_minutes AS "durationMinutes" FROM services WHERE tenant_id = ${tenant.id} AND (slug = ${serviceSlug} OR id::text = ${serviceSlug}) AND is_active = true LIMIT 1`;
   if (!service) throw new Error("Service not found.");
   await db`UPDATE booking_blocks SET state = 'expired' WHERE tenant_id = ${tenant.id} AND state = 'held' AND expires_at <= now()`;
-  const resources = await db<ServiceResource[]>`SELECT r.id, r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r JOIN service_resources sr ON sr.resource_id=r.id AND sr.tenant_id=r.tenant_id JOIN resource_locations rl ON rl.resource_id=r.id AND rl.tenant_id=r.tenant_id WHERE r.tenant_id=${tenant.id} AND sr.service_id=${service.id} AND rl.location_id=${locationId} AND r.is_active=TRUE ORDER BY r.id`;
-  const resourceBlocks = resources.length ? await db<ResourceBlock[]>`SELECT b.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt" FROM booking_blocks b JOIN resources r ON r.id=b.resource_id AND r.tenant_id=b.tenant_id WHERE b.tenant_id=${tenant.id} AND b.resource_id=ANY(${resources.map((resource) => resource.id)}) AND r.is_mutually_exclusive=TRUE AND b.state IN ('held','confirmed') AND (${options?.excludeBookingBlockId ?? null}::uuid IS NULL OR b.id <> ${options?.excludeBookingBlockId ?? null}::uuid)` : [];
-  const availableResource = (slot: { startTime: string; endTime: string }) => {
-    if (!resources.length) return null;
-    const slotStart = new Date(slot.startTime);
-    const slotEnd = new Date(slot.endTime);
-    return resources.find((resource) => !resource.isMutuallyExclusive || !resourceBlocks.some((block) => block.resourceId === resource.id && block.startsAt < slotEnd && block.endsAt > slotStart))?.id ?? null;
-  };
   const members = await db<{ id: string }[]>`SELECT tm.id FROM team_members tm JOIN service_team_members stm ON stm.team_member_id = tm.id AND stm.tenant_id = tm.tenant_id JOIN team_member_locations tml ON tml.team_member_id=tm.id AND tml.tenant_id=tm.tenant_id AND tml.location_id=${locationId} JOIN service_locations sl ON sl.service_id=stm.service_id AND sl.tenant_id=stm.tenant_id AND sl.location_id=${locationId} WHERE stm.tenant_id = ${tenant.id} AND stm.service_id = ${service.id} AND tm.is_active = true ORDER BY tm.id`;
   const durationMinutes = options?.durationMinutes ?? service.durationMinutes;
   if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) throw new Error("Appointment duration is invalid.");
@@ -83,8 +71,10 @@ export async function availableSlots(tenant: TenantRecord, serviceSlug: string, 
       bufferAfter: 0,
     })
       .filter((slot) => !closedDates.has(localDateAndMinutes(new Date(slot.startTime), location.timezone).localDate) && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, location.timezone))
-      .map((slot) => ({ ...slot, resourceId: availableResource(slot) }))
-      .filter((slot) => !resources.length || Boolean(slot.resourceId));
+      // Resource allocation is deliberately post-booking. Staff time is the
+      // sole availability reservation, so a room/equipment conflict never
+      // hides an otherwise valid appointment slot.
+      .map((slot) => ({ ...slot, resourceId: null }));
     result.push({ teamMemberId: member.id, slots });
   }
   return result;
@@ -112,23 +102,11 @@ export async function createBookingHold(input: { tenant: TenantRecord; serviceId
     if (input.endsAt.getTime() - input.startsAt.getTime() !== service.durationMinutes * 60_000) {
       throw new Error("The selected appointment duration is invalid.");
     }
-    const [resource] = await transaction.unsafe<{ id: string }[]>(`
-      SELECT r.id FROM resources r
-      JOIN service_resources sr ON sr.resource_id=r.id AND sr.tenant_id=r.tenant_id
-      JOIN resource_locations rl ON rl.resource_id=r.id AND rl.tenant_id=r.tenant_id
-      WHERE r.tenant_id=$1 AND sr.service_id=$2 AND rl.location_id=$3 AND r.is_active=TRUE
-        AND (r.is_mutually_exclusive=FALSE OR NOT EXISTS (SELECT 1 FROM booking_blocks b WHERE b.tenant_id=r.tenant_id AND b.resource_id=r.id AND b.state IN ('held','confirmed') AND b.starts_at < $5 AND b.ends_at > $4))
-      ORDER BY r.id LIMIT 1
-    `, [input.tenant.id, service.id, locationId, input.startsAt, input.endsAt]);
-    const resourceRequired = await transaction.unsafe<{ exists: boolean }[]>(`
-      SELECT EXISTS(SELECT 1 FROM service_resources sr JOIN resources r ON r.id=sr.resource_id AND r.tenant_id=sr.tenant_id JOIN resource_locations rl ON rl.resource_id=r.id AND rl.tenant_id=r.tenant_id WHERE sr.tenant_id=$1 AND sr.service_id=$2 AND rl.location_id=$3 AND r.is_active=TRUE) AS exists
-    `, [input.tenant.id, service.id, locationId]);
-    if (resourceRequired[0]?.exists && !resource) throw new Error("The required resource is no longer available.");
     const [block] = await transaction.unsafe<{ id: string; expiresAt: Date }[]>(`
       INSERT INTO booking_blocks (tenant_id, team_member_id, resource_id, location_id, starts_at, ends_at, state, expires_at)
       VALUES ($1, $2, $3, $4, $5, $6, 'held', now() + interval '10 minutes')
       RETURNING id, expires_at AS "expiresAt"
-    `, [input.tenant.id, input.teamMemberId, resource?.id ?? null, locationId, input.startsAt, input.endsAt]);
+    `, [input.tenant.id, input.teamMemberId, null, locationId, input.startsAt, input.endsAt]);
     const [hold] = await transaction.unsafe<{ id: string }[]>(`
       INSERT INTO booking_holds (tenant_id, booking_block_id, service_id, location_id, expires_at, scheduled_starts_at, scheduled_ends_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
@@ -138,7 +116,7 @@ export async function createBookingHold(input: { tenant: TenantRecord; serviceId
   }));
 }
 
-type ConfirmedBooking = { id: string; startsAt: Date; endsAt: Date };
+type ConfirmedBooking = { id: string; bookingNumber: string; startsAt: Date; endsAt: Date };
 
 /** Confirms one valid hold atomically and queues a local confirmation email. */
 export async function confirmBookingFromHold(input: {
@@ -154,7 +132,7 @@ export async function confirmBookingFromHold(input: {
 
   return withSerializableRetry(async () => db.begin(async (transaction) => {
     const [existing] = await transaction.unsafe<ConfirmedBooking[]>(`
-      SELECT id, starts_at AS "startsAt", ends_at AS "endsAt"
+      SELECT id, booking_number AS "bookingNumber", starts_at AS "startsAt", ends_at AS "endsAt"
       FROM bookings WHERE tenant_id = $1 AND idempotency_key = $2
     `, [input.tenant.id, input.idempotencyKey]);
     if (existing) return { booking: existing, managementToken: null, idempotent: true };
@@ -184,7 +162,7 @@ export async function confirmBookingFromHold(input: {
     const [booking] = await transaction.unsafe<ConfirmedBooking[]>(`
       INSERT INTO bookings (tenant_id, booking_block_id, hold_id, service_id, location_id, team_member_id, resource_id, customer_id, starts_at, ends_at, booked_price_cents, status, idempotency_key)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'confirmed', $12)
-      RETURNING id, starts_at AS "startsAt", ends_at AS "endsAt"
+      RETURNING id, booking_number AS "bookingNumber", starts_at AS "startsAt", ends_at AS "endsAt"
     `, [input.tenant.id, hold.bookingBlockId, hold.id, hold.serviceId, hold.locationId, hold.teamMemberId, hold.resourceId, customer.id, hold.startsAt, hold.endsAt, service.priceCents, input.idempotencyKey]);
     const managementToken = randomBytes(32).toString("base64url");
     const tokenHash = createHash("sha256").update(managementToken).digest("hex");
@@ -194,7 +172,7 @@ export async function confirmBookingFromHold(input: {
     `, [input.tenant.id, booking.id, tokenHash]);
     await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.confirmed', $3::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
     await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.confirmed', 'booking', $2, $3::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
-    await transaction.unsafe("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::jsonb)", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, managementToken })]);
+    await transaction.unsafe("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::jsonb)", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, bookingNumber: booking.bookingNumber, managementToken })]);
     return { booking, managementToken, idempotent: false };
   }));
 }
