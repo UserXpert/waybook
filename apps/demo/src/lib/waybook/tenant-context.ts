@@ -2,6 +2,7 @@ import "server-only";
 
 import { headers } from "next/headers";
 import { requireIdentity } from "./auth";
+import { closeOverdueConfirmedBookings } from "./overdue-bookings";
 import { controlDb, findTenantByHostname, findTenantById, findTenantByRouteSlug, tenantDb, type TenantRecord } from "./database";
 
 export type TenantMembership = { tenantId: string; role: string };
@@ -40,6 +41,7 @@ export async function requireTenantWorkspace(): Promise<{ tenant: TenantRecord; 
     `;
     if (!membership) throw new Error("You do not have access to this tenant workspace.");
     await assertActiveStaffMembership(tenant, identity.id, membership);
+    await closeOverdueConfirmedBookings(tenant);
     return { tenant, membership, isControlView: false };
   }
   const memberships = await controlDb<TenantMembership[]>`
@@ -49,6 +51,7 @@ export async function requireTenantWorkspace(): Promise<{ tenant: TenantRecord; 
   const tenant = await findTenantById(memberships[0].tenantId);
   if (!tenant || tenant.lifecycleStatus !== "active") throw new Error("Tenant workspace is unavailable.");
   await assertActiveStaffMembership(tenant, identity.id, memberships[0]);
+  await closeOverdueConfirmedBookings(tenant);
   return { tenant, membership: memberships[0], isControlView: false };
 }
 

@@ -6,6 +6,36 @@ Waybook has one shared product codebase. Control decides which modules a busines
 
 Booking essentials is baseline: services, eligible staff, availability, public booking, holds, and confirmations. Independently controlled modules are Clients, Staff, Calendars, Resources, and Email notifications. Only platform administrators change feature state; each change creates immutable Control audit history. A disabled module is hidden **and** server-side denied; data is not deleted and reappears if re-enabled.
 
+## Interaction convention
+
+- A single independent on/off setting uses an accessible switch treatment.
+- Checkbox lists remain checkboxes when several choices may be selected (for
+  example, eligible staff, assigned locations, or assigned services).
+- Consent, acknowledgement, and destructive confirmation checkboxes retain
+  checkbox semantics.
+- Catalogue, issued-package, and gift-card data-table rows open their record
+  when clicked or keyboard-activated; names are display text, not isolated
+  links.
+
+## Commerce
+
+- **Database-backed / build-verified:** manager-only Apps → Products provides
+  a tenant-isolated retail catalogue. Products can be added, edited, searched
+  and deactivated; every mutation is audited, and deactivation preserves
+  historic financial records.
+- **Database-backed / build-verified:** manager-only Apps → Gift cards issues
+  a client-linked (or unlinked) card and shows its remaining balance and
+  append-only issue history. The full number is hashed, only its final four
+  characters are displayed, and a card may only be issued once. Redemption
+  remains unavailable until it can settle atomically within checkout;
+  memberships and saved-payment references remain later vertical slices.
+- **Database-backed / build-verified:** manager-only Apps → Packages defines a
+  priced, service-specific visit package and issues it to a client. The client
+  balance is calculated from immutable entitlement entries; schema guards
+  enforce the configured initial grant exactly once and prevent redemptions
+  beyond the remaining balance. Appointment-checkout redemption remains a
+  later atomic vertical slice.
+
 ## Product direction — Designed
 
 Waybook will be the **calm operating system for appointment businesses**. It
@@ -18,8 +48,10 @@ The reference model is deliberately combined:
   booking operations and mobile-friendly simplicity.
 - **Boulevard:** operational calendar, appointment lifecycle, rich drawer,
   gap-aware scheduling, waitlist and capacity reporting.
-- **Jane:** optional clinic-grade room/equipment and client-context patterns;
-  do not import clinical documentation or insurance scope into the shared core.
+- **Jane:** clinic-first room/equipment and client-context patterns, with
+  tenant-configurable patient/client and practitioner/staff terminology; do
+  not import regulated professional records, clinical documentation, or
+  insurance scope into the shared core.
 
 ### Product rules
 
@@ -52,24 +84,22 @@ The reference model is deliberately combined:
 #### Today Command Centre
 
 - **Database-backed / build-verified / browser-verified (local Nordic,
-  desktop and 390px mobile).** The tenant Overview is deliberately limited
-  to four operational widgets: three upcoming confirmed/arrived appointments,
-  a tenant-local daily staff booking-workload comparison, current-month
-  appointment outcomes, and current-month staff booked-value target progress.
-  The page links each widget to its canonical operational surface.
-- The Overview visual language is being refreshed in an original, calm
-  operations style: warm neutral surfaces, Waybook forest/lime/peach tokens,
-  clear metric hierarchy, and action-led cards. It is not a reproduction of
-  another product's branded assets or copy.
-- Staff workload bars compare today’s booked appointments with other active
-  staff. They do not claim to show utilisation or remaining availability.
-- Monthly outcomes count bookings, arrived, completed, and bookings with at
-  least one payment record. The last is not net paid revenue. Target progress
-  remains empty until an owner or manager has saved a real monthly staff
-  booked-value target; the dashboard never fabricates one.
-- It intentionally does not claim remaining capacity, staff currently working,
-  late arrivals, unfilled gaps, or predictive demand: their required semantic
-  data contracts are not yet present.
+  desktop and 390px mobile).** The Overview has a four-value revenue rail:
+  scheduled and delivered booked value, paid revenue (payment records less
+  refunds), and lost value from cancelled/no-show bookings. Booked value is
+  explicitly labelled as distinct from cash revenue.
+- Upcoming appointments are a 50-item, pointer-scrollable list with no visible
+  scrollbar. Every row opens the assigned staff member’s calendar at that
+  booking and day.
+- Monthly outcomes count all bookings, **Checked in** bookings, completed
+  bookings, and combined **Cancelled / no show** bookings.
+- A team target is the sum of current-month staff booked-value targets, with
+  each staff target rendered below as a contributing subtarget. It intentionally
+  excludes service targets to avoid double-counting the same booking.
+- Staff workload is today’s scheduled duration as a percentage of recurring
+  staff availability, after approved full- and partial-day time off is removed.
+  Cancelled and no-show bookings do not consume workload capacity. Location
+  closures and room capacity are not yet included in this denominator.
 
 #### Capacity Command
 
@@ -198,6 +228,16 @@ The shared server-rendered navigation uses a centered black primary bar for Over
 
 **Build-verified appearance preferences.** The signed-in account menu provides browser-local Light, Dark, and System colour modes plus an optional neutral, blue, violet, or rose control tint. The tint applies only to controls and active/focus treatment; booking, payment, and appointment-status meanings remain independent of it. Preferences persist across browser reloads and do not alter tenant records or another user's workspace.
 
+**Planned compact Apps popup — Designed (2026-11-08).** The existing Apps
+drawer will become a search-first compact menu: enabled apps are grouped as
+Operations, Commerce, Setup, and Insights and shown as balanced one-line
+icon/name rows rather than description-heavy vertical columns. It retains the
+server-derived role/feature visibility boundary, active route state, real
+search, keyboard/focus behaviour, Escape/outside dismissal, and working links.
+The layout is four compact desktop columns, two columns on tablet, and one
+scrollable column on mobile. It will not advertise unsupported app-management
+actions or keyboard shortcuts.
+
 ## Locations
 
 **Database-backed / build-verified / browser-verified (local Nordic).**
@@ -223,6 +263,17 @@ a setup display. Location editors also manage dated closures; they remove all
 public availability at that location on the selected local date. Migration
 `0007_location_closed_dates.sql` is applied locally to Nordic and Copenhagen.
 
+**Shared time-range control — Passed locally (2026-11-08).** The keyboard- and
+pointer-operable 30-minute rail is used for partial-day time off, location
+opening hours, recurring staff shifts, and the optional waitlist preference
+window. Migration `0040_location_hour_ranges.sql` permits ordered,
+non-overlapping split opening-hour ranges per weekday; the location action
+validates and persists each day's set atomically. Desktop and narrow-drawer
+checks covered the range rails, multiple recurring staff shifts, and the
+waitlist preference toggle. Appointment creation/rescheduling remains a
+server-computed start-slot choice with a service-derived end, rather than a
+free-form time range.
+
 ## Services
 
 **Status: Database-backed / browser-verified.**
@@ -230,6 +281,21 @@ public availability at that location on the selected local date. Migration
 `/app/services` lists persisted tenant services and supplies a right-side add/edit panel. Owner/manager updates duration, price, buffers, optional recommended return cadence, active state, and eligible employees atomically. The 1–730-day cadence is used only for the tenant-local due-back/overdue signal in Reports and client history; it does not message customers or affect availability.
 
 ## Resources
+
+### Planned decoupled resource assignment — Designed (2026-11-08)
+
+Staff booking and the staff calendar will remain independent of rooms, chairs,
+and equipment. A manager will assign a compatible resource after an
+appointment is made; the assignment must match the booking location and its
+service's compatible-resource list. Exclusive resources reject an overlapping
+assignment transactionally, while shared resources may overlap. The Calendar
+never turns staff time unavailable because of a resource: cards simply show an
+Assigned or Unassigned resource state. A reschedule or drag preserves an
+assignment when it remains valid, otherwise it releases or visibly marks it
+unassigned; it never silently drops that context. The appointment drawer and
+Resource Schedule become the authoritative places to make and inspect these
+assignments. A later service policy may require an assignment before check-in
+or completion, but it never prevents staff-time booking.
 
 **Database-backed / build-verified / browser-verified (local Nordic, desktop and
 390px mobile).** `/app/resources` is feature-gated and lets owners/managers
@@ -239,7 +305,10 @@ location assignments, and service assignments; create/update activity is
 audited. Migration `0011_resource_locations.sql` adds the explicit
 resource-to-location relationship. When a service is assigned an active
 Resource at the selected location, both manual and public booking allocate an
-eligible resource and persist it on booking and block. Public slot generation
+eligible resource and persist it on booking and block. Managers also have a
+database-backed daily **Resource Schedule** in Resources: every active room or
+resource lists its confirmed/checked-in occupancy and each item opens the exact
+calendar appointment. Public slot generation
 omits resource-conflicted times; the hold transaction rechecks allocation and
 the PostgreSQL exclusion constraint remains final protection. Local Nordic
 browser verification confirmed a public booking with a resource and showed an
@@ -249,6 +318,13 @@ conflict-protected transaction; local Nordic browser verification moved a
 resource-backed public booking from Monday 09:00 to Tuesday 11:00.
 
 ## Notifications
+
+**Database-backed / build-verified / browser-verified (local Nordic desktop).**
+The manager-only notification workspace reports queued, sent, and failed
+transactional-email records from the tenant outbox and opens the exact related
+appointment in Calendar for follow-up. It does not claim provider delivery,
+retries, reminders, campaigns, or arbitrary outbound messaging until those
+services have durable provider and audit contracts.
 
 **Database-backed / build-verified / browser-verified (local Nordic, desktop and
 390px mobile).** `/app/notifications` is feature-gated and provides a
@@ -265,18 +341,50 @@ build-verified but still needs a dedicated browser mutation proof.
 
 **Status: Database-backed / browser-verified.**
 
-`/app/customers` lists tenant-scoped persisted customers, booking counts, and
-booked value, with name/email/phone search. The list stays focused until an
-owner/manager chooses **Add client** or selects any client-table cell: both
-open the same modal, blank for creation or prefilled for the selected record.
-The selected-record modal also retains contact context and persisted
-service/staff/status history. Migration `0008` adds tenant-internal notes and
-comma-separated tags; the modal renders both from the tenant database (local
-Nordic browser-verified). The form save path writes and audits those fields,
-but a dedicated browser persistence proof remains.
-Nordic browser verification covers a public-booking client and an exact
-service-cadence return recommendation. Recurrence/risk signals, read-only-role
-testing, and Copenhagen verification remain.
+`/app/customers` is a tenant-scoped, searchable client directory with total,
+returning, and booked-ahead signals plus next appointment, visits, and booked
+value per client. Selecting a client opens a persistent operational record:
+overview metrics, upcoming appointments, a calendar handoff, service cadence
+return state, internal notes, service timeline, and an append-only payment /
+refund ledger. Add and edit remain manager/owner paths; the save action audits
+contact fields, notes, and tags. Client and financial figures are explicitly
+tenant-scoped and distinguish booked value from recorded payment value.
+Every non-cancelled service-history entry also has a manager-only **Book again**
+handoff that preselects the client and previous service in the live,
+conflict-checked appointment flow; staff still choose the actual available time
+before any booking is created.
+
+### Deferred client-finance work — TODO
+
+- **Wallet credit:** introduce a tenant-scoped, append-only client credit
+  ledger with reason, amount, currency, source, actor, and immutable audit
+  event. Do not derive wallet credit from booked value or payment records.
+- **Gift cards:** model issued value, redemption, expiry, transfer/void policy,
+  balance, and every redemption against an appointment or sale. Gift-card
+  balances must be ledger-derived and concurrency-safe.
+- **Memberships:** define product catalogues, client enrolments, service
+  eligibility, renewal/expiry, remaining entitlement, and redemption records
+  before exposing them in the client profile.
+- **Package redemption:** package definitions and client grants now exist;
+  append package redemptions only as part of an atomic appointment checkout,
+  then expose remaining visits in the client profile.
+- **Saved payment methods:** integrate through a payment processor and store
+  only processor tokens plus safe display metadata (brand, last four, expiry).
+  Never store card PAN, CVC, or raw payment credentials in Waybook.
+
+Nordic browser verification covers the directory and a client record with an
+upcoming appointment. Read-only-role testing, Copenhagen verification, and a
+dedicated browser proof of client persistence remain.
+
+### Workspace search
+
+**Database-backed / build-verified / browser-verified (local Nordic desktop).**
+The header search opens a dedicated, tenant-scoped results workspace rather
+than silently narrowing the Bookings table. It searches client contact details
+plus permitted appointment client, service, and staff fields. Client results
+open the existing client record; appointment results open the exact calendar
+drawer. Staff without manager access see only their own permitted appointments,
+and client results are withheld unless their role already has client access.
 
 ## Staff
 
@@ -288,7 +396,7 @@ The Work hours list uses the entire day row as its edit target, with a trailing 
 
 Manager and owner profiles also expose a persisted Permissions tab. It provides compact toggles for appointment-status changes, own/team appointment management, team-calendar visibility, own/team time-off management, and waitlist management. Migration `0016_staff_permissions.sql` stores the settings in each tenant database and permission changes are audited. Calendar, time-off, and waitlist mutation actions enforce those settings server-side for an active staff member explicitly linked to their signed-in identity; unlinked staff identities are denied by default. Payments and client-record edits remain manager-only.
 
-The permission matrix now also covers the existing operational modules that map to Mangomint's staff settings: client-record access and changes, business-report access, resource management, and service/location configuration. Migration `0017_staff_workspace_permissions.sql` persists these controls per tenant. Client and report access are denied without an explicit grant; resource, service, and location mutations are guarded server-side; and unavailable app-menu entries are hidden for the signed-in staff member. Sales, checkout/refunds, messaging, products, gift cards, packages, memberships, payroll, forms, campaigns, and flows are intentionally not presented as permissions because Waybook does not yet provide those modules. Tenant schemas that have not applied `0017` retain the first-cut permissions safely until their scheduled migration.
+The permission matrix now also covers the existing operational modules that map to Mangomint's staff settings: client-record access and changes, business-report access, resource management, service/location configuration, and manager-only Sales, Products, Gift cards, and Packages access. Migration `0017_staff_workspace_permissions.sql` persists the first group of controls per tenant; Commerce applications independently require the existing manager boundary. Client and report access are denied without an explicit grant; resource, service, and location mutations are guarded server-side; and unavailable app-menu entries are hidden for the signed-in staff member. Messaging, memberships, payroll, forms, campaigns, and flows are intentionally not presented as permissions because Waybook does not yet provide those modules. Tenant schemas that have not applied `0017` retain the first-cut permissions safely until their scheduled migration.
 
 **Build-verified lifecycle and authorization tightening.** The profile action
 menu provides owner-only temporary-password provisioning/reset and lifecycle
@@ -318,6 +426,18 @@ the active schedule grid. Detail/history and status mutations remain.
 ### Calendars
 
 **Status: Database-backed / browser-verified (Nordic).**
+
+### Staff-row Day timeline — Passed locally (2026-11-08)
+
+The Team Day board now uses staff rows with local time running left-to-right in
+30-minute columns, duration-spanning appointment cards, a pinned roster/time
+header, on-shift default with explicit Show all, and a 20-person keyset roster
+window. Empty-cell creation retains the Team Day context while pre-filling
+staff/date/time; the individual Staff Week remains the single-person planning
+surface. Desktop and 390px/mobile layouts, in-place staff filtering, creation
+flow, and persisted drag/drop are browser verified. A 500-staff local fixture
+rendered only the bounded 20-row roster window without browser errors, then
+was removed. This slice is passed locally.
 
 `/app/calendars` is Calendars-entitlement guarded and uses compact
 location/staff/service selectors. It renders a tenant-timezone week grid of
@@ -413,6 +533,24 @@ Calendar owners/managers can also append an immutable card, cash, bank-transfer,
 or other payment/refund entry from an appointment drawer. Local Nordic browser
 verification recorded a card payment and Reports subsequently showed its paid
 revenue separately from booked-service value.
+
+## Sales
+
+**Database-backed / build-verified / browser-verified (local Nordic desktop).**
+Managers can open **Apps → Sales** for an appointment-led checkout queue aligned
+to the operational sale list: location, status, and client/service search
+filters; open-balance, collected, and credit-due totals; and each appointment's
+payment state. Selecting a sale opens an in-page detail drawer with the client,
+service, assigned staff, totals, and its append-only payment/refund ledger.
+The drawer then hands off to that exact calendar appointment, where the
+existing manager-only payment/refund form appends immutable, tenant-scoped
+ledger entries and audit events. This deliberately reuses the single payment
+model—there is no parallel sales balance or mutable checkout record.
+
+The scope is intentionally appointment-led. Standalone retail checkout,
+products, invoices, cash-drawer reconciliation, gift-card/package/membership
+redemption, saved cards, and payment-provider capture each require their own
+tenant-safe data model and are not implied by this queue.
 
 ## Public booking
 

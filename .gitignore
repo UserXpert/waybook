@@ -3,6 +3,7 @@ dist/
 .turbo/
 .next/
 .next-dev/
+.next-dev-local/
 .env
 .env.local
 .env.*.local

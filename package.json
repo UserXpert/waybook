@@ -20,6 +20,9 @@
     "waybook:db:migrate": "tsx scripts/migrate-waybook.ts",
     "waybook:db:seed": "tsx scripts/seed-waybook.ts",
     "waybook:test:pooled": "tsx scripts/verify-waybook-pooled-availability.ts",
+    "waybook:test:booking-sales": "tsx scripts/verify-waybook-booking-sales.ts",
+    "waybook:test:booking-product-addons": "tsx scripts/verify-waybook-booking-product-addons.ts",
+    "waybook:test:booking-package-redemption": "tsx scripts/verify-waybook-booking-package-redemption.ts",
     "waybook:build": "npm --prefix apps/demo run build",
     "registry:build": "npx tsx scripts/build-registry.ts",
     "check:node-esm": "node scripts/check-node-esm.mjs"

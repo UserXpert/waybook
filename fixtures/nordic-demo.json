@@ -1,0 +1,850 @@
+{
+  "fixture": "waybook-nordic-demo-v1",
+  "timezone": "Europe/Copenhagen",
+  "locations": [
+    {
+      "key": "location-1",
+      "name": "Nordic Copenhagen",
+      "city": "Copenhagen"
+    },
+    {
+      "key": "location-2",
+      "name": "Nordic Frederiksberg",
+      "city": "Frederiksberg"
+    },
+    {
+      "key": "location-3",
+      "name": "Nordic Aarhus",
+      "city": "Aarhus"
+    },
+    {
+      "key": "location-4",
+      "name": "Nordic Odense",
+      "city": "Odense"
+    }
+  ],
+  "staff": [
+    {
+      "key": "staff-1",
+      "name": "Anna Larsen",
+      "email": "demo.staff.01@example.invalid",
+      "location": "location-1"
+    },
+    {
+      "key": "staff-2",
+      "name": "Noah Nielsen",
+      "email": "demo.staff.02@example.invalid",
+      "location": "location-2"
+    },
+    {
+      "key": "staff-3",
+      "name": "Freja Madsen",
+      "email": "demo.staff.03@example.invalid",
+      "location": "location-3"
+    },
+    {
+      "key": "staff-4",
+      "name": "Oscar Holm",
+      "email": "demo.staff.04@example.invalid",
+      "location": "location-4"
+    },
+    {
+      "key": "staff-5",
+      "name": "Ida Andersen",
+      "email": "demo.staff.05@example.invalid",
+      "location": "location-1"
+    },
+    {
+      "key": "staff-6",
+      "name": "Emil Jensen",
+      "email": "demo.staff.06@example.invalid",
+      "location": "location-2"
+    },
+    {
+      "key": "staff-7",
+      "name": "Clara Sørensen",
+      "email": "demo.staff.07@example.invalid",
+      "location": "location-3"
+    },
+    {
+      "key": "staff-8",
+      "name": "Oliver Dahl",
+      "email": "demo.staff.08@example.invalid",
+      "location": "location-4"
+    },
+    {
+      "key": "staff-9",
+      "name": "Ella Kristensen",
+      "email": "demo.staff.09@example.invalid",
+      "location": "location-1"
+    },
+    {
+      "key": "staff-10",
+      "name": "William Lund",
+      "email": "demo.staff.10@example.invalid",
+      "location": "location-2"
+    }
+  ],
+  "services": [
+    {
+      "key": "service-1",
+      "name": "Consultation",
+      "durationMinutes": 60,
+      "priceCents": 45000
+    },
+    {
+      "key": "service-2",
+      "name": "Recovery session",
+      "durationMinutes": 60,
+      "priceCents": 50000
+    },
+    {
+      "key": "service-3",
+      "name": "Deep tissue massage",
+      "durationMinutes": 60,
+      "priceCents": 55000
+    },
+    {
+      "key": "service-4",
+      "name": "Sports massage",
+      "durationMinutes": 60,
+      "priceCents": 60000
+    },
+    {
+      "key": "service-5",
+      "name": "Relaxation massage",
+      "durationMinutes": 60,
+      "priceCents": 65000
+    },
+    {
+      "key": "service-6",
+      "name": "Mobility assessment",
+      "durationMinutes": 60,
+      "priceCents": 70000
+    },
+    {
+      "key": "service-7",
+      "name": "Personal training",
+      "durationMinutes": 60,
+      "priceCents": 75000
+    },
+    {
+      "key": "service-8",
+      "name": "Stretch session",
+      "durationMinutes": 60,
+      "priceCents": 80000
+    },
+    {
+      "key": "service-9",
+      "name": "Wellness treatment",
+      "durationMinutes": 60,
+      "priceCents": 85000
+    },
+    {
+      "key": "service-10",
+      "name": "Follow-up session",
+      "durationMinutes": 60,
+      "priceCents": 90000
+    }
+  ],
+  "products": [
+    {
+      "key": "product-1",
+      "name": "Recovery balm",
+      "priceCents": 10000
+    },
+    {
+      "key": "product-2",
+      "name": "Massage oil",
+      "priceCents": 12500
+    },
+    {
+      "key": "product-3",
+      "name": "Foam roller",
+      "priceCents": 15000
+    },
+    {
+      "key": "product-4",
+      "name": "Stretch band",
+      "priceCents": 17500
+    },
+    {
+      "key": "product-5",
+      "name": "Hydration bottle",
+      "priceCents": 20000
+    },
+    {
+      "key": "product-6",
+      "name": "Massage ball",
+      "priceCents": 22500
+    },
+    {
+      "key": "product-7",
+      "name": "Wellness tea",
+      "priceCents": 25000
+    },
+    {
+      "key": "product-8",
+      "name": "Exercise mat",
+      "priceCents": 27500
+    },
+    {
+      "key": "product-9",
+      "name": "Hand cream",
+      "priceCents": 30000
+    },
+    {
+      "key": "product-10",
+      "name": "Gift set",
+      "priceCents": 32500
+    }
+  ],
+  "packages": [
+    {
+      "key": "package-1",
+      "name": "Consultation · 5 visits",
+      "service": "service-1",
+      "units": 5,
+      "priceCents": 190000
+    },
+    {
+      "key": "package-2",
+      "name": "Recovery session · 5 visits",
+      "service": "service-2",
+      "units": 5,
+      "priceCents": 210000
+    },
+    {
+      "key": "package-3",
+      "name": "Deep tissue massage · 5 visits",
+      "service": "service-3",
+      "units": 5,
+      "priceCents": 230000
+    },
+    {
+      "key": "package-4",
+      "name": "Sports massage · 5 visits",
+      "service": "service-4",
+      "units": 5,
+      "priceCents": 250000
+    },
+    {
+      "key": "package-5",
+      "name": "Relaxation massage · 5 visits",
+      "service": "service-5",
+      "units": 5,
+      "priceCents": 270000
+    }
+  ],
+  "giftCards": [
+    {
+      "key": "gift-card-1",
+      "lastFour": "9001",
+      "amountCents": 50000,
+      "customer": "customer-1"
+    },
+    {
+      "key": "gift-card-2",
+      "lastFour": "9002",
+      "amountCents": 60000,
+      "customer": "customer-2"
+    },
+    {
+      "key": "gift-card-3",
+      "lastFour": "9003",
+      "amountCents": 70000,
+      "customer": "customer-3"
+    },
+    {
+      "key": "gift-card-4",
+      "lastFour": "9004",
+      "amountCents": 80000,
+      "customer": "customer-4"
+    },
+    {
+      "key": "gift-card-5",
+      "lastFour": "9005",
+      "amountCents": 90000,
+      "customer": "customer-5"
+    }
+  ],
+  "customers": [
+    {
+      "key": "customer-1",
+      "name": "Maja Nielsen",
+      "email": "demo.client.01@example.invalid"
+    },
+    {
+      "key": "customer-2",
+      "name": "Lucas Hansen",
+      "email": "demo.client.02@example.invalid"
+    },
+    {
+      "key": "customer-3",
+      "name": "Alma Pedersen",
+      "email": "demo.client.03@example.invalid"
+    },
+    {
+      "key": "customer-4",
+      "name": "Aksel Sørensen",
+      "email": "demo.client.04@example.invalid"
+    },
+    {
+      "key": "customer-5",
+      "name": "Sofia Jensen",
+      "email": "demo.client.05@example.invalid"
+    },
+    {
+      "key": "customer-6",
+      "name": "Elias Larsen",
+      "email": "demo.client.06@example.invalid"
+    },
+    {
+      "key": "customer-7",
+      "name": "Laura Andersen",
+      "email": "demo.client.07@example.invalid"
+    },
+    {
+      "key": "customer-8",
+      "name": "Victor Møller",
+      "email": "demo.client.08@example.invalid"
+    },
+    {
+      "key": "customer-9",
+      "name": "Nora Holm",
+      "email": "demo.client.09@example.invalid"
+    },
+    {
+      "key": "customer-10",
+      "name": "Magnus Lund",
+      "email": "demo.client.10@example.invalid"
+    },
+    {
+      "key": "customer-11",
+      "name": "Astrid Dahl",
+      "email": "demo.client.11@example.invalid"
+    },
+    {
+      "key": "customer-12",
+      "name": "Anton Iversen",
+      "email": "demo.client.12@example.invalid"
+    },
+    {
+      "key": "customer-13",
+      "name": "Emma Kristensen",
+      "email": "demo.client.13@example.invalid"
+    },
+    {
+      "key": "customer-14",
+      "name": "Noah Knudsen",
+      "email": "demo.client.14@example.invalid"
+    },
+    {
+      "key": "customer-15",
+      "name": "Ida Berg",
+      "email": "demo.client.15@example.invalid"
+    }
+  ],
+  "bookings": [
+    {
+      "key": "booking-01",
+      "customer": "customer-1",
+      "staff": "staff-1",
+      "service": "service-1",
+      "location": "location-1",
+      "dayOffset": -5,
+      "hour": 9,
+      "status": "completed"
+    },
+    {
+      "key": "booking-02",
+      "customer": "customer-2",
+      "staff": "staff-2",
+      "service": "service-2",
+      "location": "location-2",
+      "dayOffset": -5,
+      "hour": 10,
+      "status": "completed"
+    },
+    {
+      "key": "booking-03",
+      "customer": "customer-3",
+      "staff": "staff-3",
+      "service": "service-3",
+      "location": "location-3",
+      "dayOffset": -5,
+      "hour": 11,
+      "status": "completed"
+    },
+    {
+      "key": "booking-04",
+      "customer": "customer-4",
+      "staff": "staff-4",
+      "service": "service-4",
+      "location": "location-4",
+      "dayOffset": -5,
+      "hour": 12,
+      "status": "completed"
+    },
+    {
+      "key": "booking-05",
+      "customer": "customer-5",
+      "staff": "staff-5",
+      "service": "service-5",
+      "location": "location-1",
+      "dayOffset": -5,
+      "hour": 13,
+      "status": "completed"
+    },
+    {
+      "key": "booking-06",
+      "customer": "customer-6",
+      "staff": "staff-6",
+      "service": "service-6",
+      "location": "location-2",
+      "dayOffset": -4,
+      "hour": 9,
+      "status": "completed"
+    },
+    {
+      "key": "booking-07",
+      "customer": "customer-7",
+      "staff": "staff-7",
+      "service": "service-7",
+      "location": "location-3",
+      "dayOffset": -4,
+      "hour": 10,
+      "status": "completed"
+    },
+    {
+      "key": "booking-08",
+      "customer": "customer-8",
+      "staff": "staff-8",
+      "service": "service-8",
+      "location": "location-4",
+      "dayOffset": -4,
+      "hour": 11,
+      "status": "completed"
+    },
+    {
+      "key": "booking-09",
+      "customer": "customer-9",
+      "staff": "staff-9",
+      "service": "service-9",
+      "location": "location-1",
+      "dayOffset": -4,
+      "hour": 12,
+      "status": "completed"
+    },
+    {
+      "key": "booking-10",
+      "customer": "customer-10",
+      "staff": "staff-10",
+      "service": "service-10",
+      "location": "location-2",
+      "dayOffset": -4,
+      "hour": 13,
+      "status": "completed"
+    },
+    {
+      "key": "booking-11",
+      "customer": "customer-11",
+      "staff": "staff-1",
+      "service": "service-1",
+      "location": "location-1",
+      "dayOffset": -3,
+      "hour": 9,
+      "status": "completed"
+    },
+    {
+      "key": "booking-12",
+      "customer": "customer-12",
+      "staff": "staff-2",
+      "service": "service-2",
+      "location": "location-2",
+      "dayOffset": -3,
+      "hour": 10,
+      "status": "completed"
+    },
+    {
+      "key": "booking-13",
+      "customer": "customer-13",
+      "staff": "staff-3",
+      "service": "service-3",
+      "location": "location-3",
+      "dayOffset": -3,
+      "hour": 11,
+      "status": "completed"
+    },
+    {
+      "key": "booking-14",
+      "customer": "customer-14",
+      "staff": "staff-4",
+      "service": "service-4",
+      "location": "location-4",
+      "dayOffset": -3,
+      "hour": 12,
+      "status": "completed"
+    },
+    {
+      "key": "booking-15",
+      "customer": "customer-15",
+      "staff": "staff-5",
+      "service": "service-5",
+      "location": "location-1",
+      "dayOffset": -3,
+      "hour": 13,
+      "status": "completed"
+    },
+    {
+      "key": "booking-16",
+      "customer": "customer-1",
+      "staff": "staff-6",
+      "service": "service-6",
+      "location": "location-2",
+      "dayOffset": -2,
+      "hour": 9,
+      "status": "completed"
+    },
+    {
+      "key": "booking-17",
+      "customer": "customer-2",
+      "staff": "staff-7",
+      "service": "service-7",
+      "location": "location-3",
+      "dayOffset": -2,
+      "hour": 10,
+      "status": "completed"
+    },
+    {
+      "key": "booking-18",
+      "customer": "customer-3",
+      "staff": "staff-8",
+      "service": "service-8",
+      "location": "location-4",
+      "dayOffset": -2,
+      "hour": 11,
+      "status": "completed"
+    },
+    {
+      "key": "booking-19",
+      "customer": "customer-4",
+      "staff": "staff-9",
+      "service": "service-9",
+      "location": "location-1",
+      "dayOffset": -2,
+      "hour": 12,
+      "status": "completed"
+    },
+    {
+      "key": "booking-20",
+      "customer": "customer-5",
+      "staff": "staff-10",
+      "service": "service-10",
+      "location": "location-2",
+      "dayOffset": -2,
+      "hour": 13,
+      "status": "completed"
+    },
+    {
+      "key": "booking-21",
+      "customer": "customer-6",
+      "staff": "staff-1",
+      "service": "service-1",
+      "location": "location-1",
+      "dayOffset": -1,
+      "hour": 9,
+      "status": "completed"
+    },
+    {
+      "key": "booking-22",
+      "customer": "customer-7",
+      "staff": "staff-2",
+      "service": "service-2",
+      "location": "location-2",
+      "dayOffset": -1,
+      "hour": 10,
+      "status": "completed"
+    },
+    {
+      "key": "booking-23",
+      "customer": "customer-8",
+      "staff": "staff-3",
+      "service": "service-3",
+      "location": "location-3",
+      "dayOffset": -1,
+      "hour": 11,
+      "status": "completed"
+    },
+    {
+      "key": "booking-24",
+      "customer": "customer-9",
+      "staff": "staff-4",
+      "service": "service-4",
+      "location": "location-4",
+      "dayOffset": -1,
+      "hour": 12,
+      "status": "completed"
+    },
+    {
+      "key": "booking-25",
+      "customer": "customer-10",
+      "staff": "staff-5",
+      "service": "service-5",
+      "location": "location-1",
+      "dayOffset": -1,
+      "hour": 13,
+      "status": "completed"
+    },
+    {
+      "key": "booking-26",
+      "customer": "customer-11",
+      "staff": "staff-6",
+      "service": "service-6",
+      "location": "location-2",
+      "dayOffset": 0,
+      "hour": 9,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-27",
+      "customer": "customer-12",
+      "staff": "staff-7",
+      "service": "service-7",
+      "location": "location-3",
+      "dayOffset": 0,
+      "hour": 10,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-28",
+      "customer": "customer-13",
+      "staff": "staff-8",
+      "service": "service-8",
+      "location": "location-4",
+      "dayOffset": 0,
+      "hour": 11,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-29",
+      "customer": "customer-14",
+      "staff": "staff-9",
+      "service": "service-9",
+      "location": "location-1",
+      "dayOffset": 0,
+      "hour": 12,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-30",
+      "customer": "customer-15",
+      "staff": "staff-10",
+      "service": "service-10",
+      "location": "location-2",
+      "dayOffset": 0,
+      "hour": 13,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-31",
+      "customer": "customer-1",
+      "staff": "staff-1",
+      "service": "service-1",
+      "location": "location-1",
+      "dayOffset": 1,
+      "hour": 9,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-32",
+      "customer": "customer-2",
+      "staff": "staff-2",
+      "service": "service-2",
+      "location": "location-2",
+      "dayOffset": 1,
+      "hour": 10,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-33",
+      "customer": "customer-3",
+      "staff": "staff-3",
+      "service": "service-3",
+      "location": "location-3",
+      "dayOffset": 1,
+      "hour": 11,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-34",
+      "customer": "customer-4",
+      "staff": "staff-4",
+      "service": "service-4",
+      "location": "location-4",
+      "dayOffset": 1,
+      "hour": 12,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-35",
+      "customer": "customer-5",
+      "staff": "staff-5",
+      "service": "service-5",
+      "location": "location-1",
+      "dayOffset": 1,
+      "hour": 13,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-36",
+      "customer": "customer-6",
+      "staff": "staff-6",
+      "service": "service-6",
+      "location": "location-2",
+      "dayOffset": 2,
+      "hour": 9,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-37",
+      "customer": "customer-7",
+      "staff": "staff-7",
+      "service": "service-7",
+      "location": "location-3",
+      "dayOffset": 2,
+      "hour": 10,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-38",
+      "customer": "customer-8",
+      "staff": "staff-8",
+      "service": "service-8",
+      "location": "location-4",
+      "dayOffset": 2,
+      "hour": 11,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-39",
+      "customer": "customer-9",
+      "staff": "staff-9",
+      "service": "service-9",
+      "location": "location-1",
+      "dayOffset": 2,
+      "hour": 12,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-40",
+      "customer": "customer-10",
+      "staff": "staff-10",
+      "service": "service-10",
+      "location": "location-2",
+      "dayOffset": 2,
+      "hour": 13,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-41",
+      "customer": "customer-11",
+      "staff": "staff-1",
+      "service": "service-1",
+      "location": "location-1",
+      "dayOffset": 3,
+      "hour": 9,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-42",
+      "customer": "customer-12",
+      "staff": "staff-2",
+      "service": "service-2",
+      "location": "location-2",
+      "dayOffset": 3,
+      "hour": 10,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-43",
+      "customer": "customer-13",
+      "staff": "staff-3",
+      "service": "service-3",
+      "location": "location-3",
+      "dayOffset": 3,
+      "hour": 11,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-44",
+      "customer": "customer-14",
+      "staff": "staff-4",
+      "service": "service-4",
+      "location": "location-4",
+      "dayOffset": 3,
+      "hour": 12,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-45",
+      "customer": "customer-15",
+      "staff": "staff-5",
+      "service": "service-5",
+      "location": "location-1",
+      "dayOffset": 3,
+      "hour": 13,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-46",
+      "customer": "customer-1",
+      "staff": "staff-6",
+      "service": "service-6",
+      "location": "location-2",
+      "dayOffset": 4,
+      "hour": 9,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-47",
+      "customer": "customer-2",
+      "staff": "staff-7",
+      "service": "service-7",
+      "location": "location-3",
+      "dayOffset": 4,
+      "hour": 10,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-48",
+      "customer": "customer-3",
+      "staff": "staff-8",
+      "service": "service-8",
+      "location": "location-4",
+      "dayOffset": 4,
+      "hour": 11,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-49",
+      "customer": "customer-4",
+      "staff": "staff-9",
+      "service": "service-9",
+      "location": "location-1",
+      "dayOffset": 4,
+      "hour": 12,
+      "status": "confirmed"
+    },
+    {
+      "key": "booking-50",
+      "customer": "customer-5",
+      "staff": "staff-10",
+      "service": "service-10",
+      "location": "location-2",
+      "dayOffset": 4,
+      "hour": 13,
+      "status": "confirmed"
+    }
+  ]
+}

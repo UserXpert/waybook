@@ -36,8 +36,36 @@ function revalidateCalendars() {
   revalidatePath("/app");
   revalidatePath("/app/calendars");
   revalidatePath("/app/bookings");
+  revalidatePath("/app/customers");
   revalidatePath("/app/reports");
+  revalidatePath("/app/sales");
   revalidatePath("/book");
+  revalidatePath("/app/resources");
+}
+
+/** Assigns a compatible resource after staff time has already been booked. */
+export async function assignBookingResource(formData: FormData) {
+  const bookingId = String(formData.get("bookingId") ?? "");
+  const resourceId = String(formData.get("resourceId") ?? "");
+  const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+  const identity = await requireIdentity();
+  await withSerializableRetry(() => db.begin(async (transaction) => {
+    if (!resourceId) {
+      const [released] = await transaction.unsafe<{ id: string }[]>(
+        "UPDATE booking_resource_assignments SET released_at=now(),release_reason='manual_unassign' WHERE tenant_id=$1 AND booking_id=$2 AND released_at IS NULL RETURNING id",
+        [tenant.id, booking.id],
+      );
+      if (released) await transaction.unsafe("INSERT INTO booking_events (tenant_id,booking_id,actor_identity_id,event_type,metadata) VALUES ($1,$2,$3,'resource.unassigned',$4::jsonb)", [tenant.id, booking.id, identity.id, JSON.stringify({ assignmentId: released.id })]);
+      return;
+    }
+    await transaction.unsafe(
+      "INSERT INTO booking_resource_assignments (tenant_id,booking_id,resource_id,assigned_by_identity_id) VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,booking_id) DO UPDATE SET resource_id=EXCLUDED.resource_id,assigned_by_identity_id=EXCLUDED.assigned_by_identity_id,assigned_at=now(),released_at=NULL,release_reason=NULL",
+      [tenant.id, booking.id, resourceId, identity.id],
+    );
+    await transaction.unsafe("INSERT INTO booking_events (tenant_id,booking_id,actor_identity_id,event_type,metadata) VALUES ($1,$2,$3,'resource.assigned',$4::jsonb)", [tenant.id, booking.id, identity.id, JSON.stringify({ resourceId })]);
+    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'resource.assigned','booking',$3,$4::jsonb)", [tenant.id, identity.id, booking.id, JSON.stringify({ resourceId })]);
+  }));
+  revalidateCalendars();
 }
 
 function localDateKey(date: Date, timezone: string) {
@@ -79,11 +107,11 @@ export async function getManualBookingAvailability(input: {
     !input.serviceId ||
     !/^\d{4}-\d{2}-\d{2}$/.test(input.date)
   ) {
-    return { slots: [], resources: [] };
+    return { slots: [] };
   }
   const { tenant, permissions } = await calendarPermissionContext();
   if (!permissions.isManager && !permissions.canManageOwnAppointments && !permissions.canManageTeamAppointments) {
-    return { slots: [], resources: [] };
+    return { slots: [] };
   }
   const db = tenantDb(tenant);
   const dayStart = fromZonedTime(`${input.date}T00:00:00`, tenant.timezone);
@@ -93,12 +121,6 @@ export async function getManualBookingAvailability(input: {
     new Date(dayStart.getTime() - 86_400_000),
     new Date(dayStart.getTime() + 172_800_000),
     { locationId: input.locationId, slotInterval: 30 },
-  );
-  const resources = await db.unsafe<
-    { id: string; name: string; resourceType: string; capacity: number }[]
-  >(
-    "SELECT r.id, r.name, r.resource_type AS \"resourceType\", r.capacity FROM resources r JOIN service_resources sr ON sr.resource_id = r.id AND sr.tenant_id = r.tenant_id JOIN resource_locations rl ON rl.resource_id = r.id AND rl.tenant_id = r.tenant_id WHERE r.tenant_id = $1 AND sr.service_id = $2 AND rl.location_id = $3 AND r.is_active = TRUE ORDER BY r.name",
-    [tenant.id, input.serviceId, input.locationId],
   );
   const visibleCandidates =
     permissions.isManager || permissions.canManageTeamAppointments
@@ -119,7 +141,55 @@ export async function getManualBookingAvailability(input: {
           resourceId: slot.resourceId ?? null,
         })),
     ),
-    resources,
+  };
+}
+
+/** Availability for an existing appointment's seven-day reschedule window.
+ * The same server-side availability contract is used again by the write action. */
+export async function getRescheduleBookingAvailability(input: {
+  bookingId: string;
+  startDate: string;
+}) {
+  if (!input.bookingId || !/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) return { slots: [] };
+  const { tenant, db, booking, permissions } = await editableBooking(input.bookingId);
+  if (!booking.teamMemberId || booking.status === "cancelled" || booking.status === "completed") return { slots: [] };
+  const today = localDateKey(new Date(), tenant.timezone);
+  if (input.startDate < today) return { slots: [] };
+  const durationMinutes = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
+  if (durationMinutes <= 0) return { slots: [] };
+  const locationHours = await db<{ dayOfWeek: number; startTime: string; endTime: string }[]>`
+    SELECT day_of_week AS "dayOfWeek", start_time AS "startTime", end_time AS "endTime"
+    FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${booking.locationId}
+  `;
+  const staff = await db<{ id: string }[]>`
+    SELECT tm.id FROM team_members tm
+    JOIN team_member_locations tml ON tml.tenant_id = tm.tenant_id AND tml.team_member_id = tm.id
+    WHERE tm.tenant_id = ${tenant.id} AND tm.is_active = TRUE AND tml.location_id = ${booking.locationId}
+  `;
+  const targets: CalendarMoveTarget[] = [];
+  for (let offset = 0; offset < 7; offset += 1) {
+    const localDate = new Date(`${input.startDate}T12:00:00Z`);
+    localDate.setUTCDate(localDate.getUTCDate() + offset);
+    const date = localDate.toISOString().slice(0, 10);
+    for (const hour of locationHours.filter((item) => item.dayOfWeek === localDate.getUTCDay())) {
+      const start = fromZonedTime(`${date}T${hour.startTime}`, tenant.timezone);
+      const end = fromZonedTime(`${date}T${hour.endTime}`, tenant.timezone);
+      for (let cursor = start.getTime(); cursor + durationMinutes * 60_000 <= end.getTime(); cursor += 30 * 60_000) {
+        const startsAt = new Date(cursor);
+        if (startsAt.getTime() < Date.now()) continue;
+        for (const member of staff) targets.push({ teamMemberId: member.id, startsAt, endsAt: new Date(cursor + durationMinutes * 60_000) });
+      }
+    }
+  }
+  const openTargets = await openCalendarMoveTargets({ tenant, db, booking, permissions }, targets);
+  const slotByTime = new Map<string, CalendarMoveTarget>();
+  for (const target of openTargets) {
+    const key = target.startsAt.toISOString();
+    const current = slotByTime.get(key);
+    if (!current || target.teamMemberId === booking.teamMemberId) slotByTime.set(key, target);
+  }
+  return {
+    slots: [...slotByTime.values()].map((target) => ({ teamMemberId: target.teamMemberId, startTime: target.startsAt.toISOString(), endTime: target.endsAt.toISOString() })),
   };
 }
 
@@ -306,10 +376,26 @@ export async function updateBookingDetails(formData: FormData) {
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
   if (!name || !email.includes("@")) throw new Error("Enter the customer name and a valid email.");
   const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+  const identity = await requireIdentity();
   await db.begin(async (transaction) => {
     const [customer] = await transaction.unsafe<{ id: string }[]>("SELECT customer_id AS id FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
     if (!customer) throw new Error("Booking is unavailable.");
     await transaction.unsafe("UPDATE customers SET name = $1, email = $2, phone = $3, updated_at = now() WHERE id = $4 AND tenant_id = $5", [name, email, phone, customer.id, tenant.id]);
+    if (formData.has("resourceId")) {
+      const resourceId = String(formData.get("resourceId") ?? "");
+      const [current] = await transaction.unsafe<{ resourceId: string }[]>("SELECT resource_id AS \"resourceId\" FROM booking_resource_assignments WHERE tenant_id=$1 AND booking_id=$2 AND released_at IS NULL FOR UPDATE", [tenant.id, booking.id]);
+      if ((current?.resourceId ?? "") !== resourceId) {
+        if (resourceId) {
+          await transaction.unsafe("INSERT INTO booking_resource_assignments (tenant_id,booking_id,resource_id,assigned_by_identity_id) VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,booking_id) DO UPDATE SET resource_id=EXCLUDED.resource_id,assigned_by_identity_id=EXCLUDED.assigned_by_identity_id,assigned_at=now(),released_at=NULL,release_reason=NULL", [tenant.id, booking.id, resourceId, identity.id]);
+        } else {
+          await transaction.unsafe("UPDATE booking_resource_assignments SET released_at=now(),release_reason='manual_unassign' WHERE tenant_id=$1 AND booking_id=$2 AND released_at IS NULL", [tenant.id, booking.id]);
+        }
+        const metadata = JSON.stringify({ resourceId: resourceId || null });
+        const action = resourceId ? "resource.assigned" : "resource.unassigned";
+        await transaction.unsafe("INSERT INTO booking_events (tenant_id,booking_id,actor_identity_id,event_type,metadata) VALUES ($1,$2,$3,$4,$5::jsonb)", [tenant.id, booking.id, identity.id, action, metadata]);
+        await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,$3,'booking',$4,$5::jsonb)", [tenant.id, identity.id, action, booking.id, metadata]);
+      }
+    }
     await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.edited', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
     await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.edited', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
   });
@@ -319,24 +405,23 @@ export async function updateBookingDetails(formData: FormData) {
 export async function rescheduleBooking(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   const localStartsAt = String(formData.get("startsAt") ?? "");
+  const teamMemberId = String(formData.get("teamMemberId") ?? "");
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(localStartsAt)) throw new Error("Choose a valid local appointment time.");
-  const { tenant, db, booking } = await editableBooking(bookingId);
-  if (!booking.teamMemberId || booking.status === "cancelled") throw new Error("Only an assigned active booking can be rescheduled.");
-  if (booking.status === "completed") throw new Error("Completed appointments cannot be rescheduled.");
-  const startsAt = fromZonedTime(localStartsAt, tenant.timezone);
-  const durationMinutes = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
-  if (durationMinutes <= 0) throw new Error("This appointment has an invalid duration.");
-  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
-  const candidates = await availableSlots(tenant, booking.serviceId, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { excludeBookingBlockId: booking.bookingBlockId, locationId: booking.locationId, slotInterval: 30, durationMinutes });
-  const availableSlot = candidates.find((candidate) => candidate.teamMemberId === booking.teamMemberId)?.slots.find((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime());
-  if (!availableSlot) throw new Error("That employee or required resource is not available at the selected time.");
+  const initial = await editableBooking(bookingId);
+  if (!initial.booking.teamMemberId || initial.booking.status === "cancelled") throw new Error("Only an assigned active booking can be rescheduled.");
+  if (initial.booking.status === "completed") throw new Error("Completed appointments cannot be rescheduled.");
+  const nextTeamMemberId = teamMemberId || initial.booking.teamMemberId;
+  const move = await checkCalendarMove({ bookingId, startsAt: localStartsAt, teamMemberId: nextTeamMemberId });
+  if (move.error || !move.context || !move.startsAt || !move.endsAt) throw new Error(move.error ?? "That appointment can no longer be moved.");
+  const { tenant, db, booking } = move.context;
+  const { startsAt, endsAt } = move;
   try {
     await withSerializableRetry(async () => db.begin(async (transaction) => {
-      const [block] = await transaction.unsafe<{ id: string }[]>("UPDATE booking_blocks SET starts_at = $1, ends_at = $2, resource_id = $3 WHERE id = $4 AND tenant_id = $5 AND state = 'confirmed' RETURNING id", [startsAt, endsAt, availableSlot.resourceId ?? null, booking.bookingBlockId, tenant.id]);
+      const [block] = await transaction.unsafe<{ id: string }[]>("UPDATE booking_blocks SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL WHERE id = $4 AND tenant_id = $5 AND state = 'confirmed' RETURNING id", [nextTeamMemberId, startsAt, endsAt, booking.bookingBlockId, tenant.id]);
       if (!block) throw new Error("Booking can no longer be rescheduled.");
-      await transaction.unsafe("UPDATE bookings SET starts_at = $1, ends_at = $2, resource_id = $3, updated_at = now() WHERE id = $4 AND tenant_id = $5", [startsAt, endsAt, availableSlot.resourceId ?? null, booking.id, tenant.id]);
-      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.rescheduled', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), resourceId: availableSlot.resourceId ?? null })]);
-      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.rescheduled', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), resourceId: availableSlot.resourceId ?? null })]);
+      await transaction.unsafe("UPDATE bookings SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL, updated_at = now() WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.id, tenant.id]);
+      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.rescheduled', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
+      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.rescheduled', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
     }));
   } catch (error) {
     if (error instanceof BookingConflictError) throw new Error("That time was just taken. Choose another time.");
@@ -391,7 +476,17 @@ export async function updateBookingStatus(formData: FormData) {
     );
     if (!current) throw new Error("Booking is unavailable.");
     // A repeated click or an in-flight duplicate cancellation is a safe no-op.
-    if (current.status === "cancelled") return;
+    if (current.status === "cancelled" && status === "cancelled") return;
+    if (["completed", "cancelled", "no_show"].includes(current.status)) {
+      throw new Error("This appointment has a final status and cannot be changed.");
+    }
+    const allowedTransitions: Record<string, string[]> = {
+      confirmed: ["arrived", "completed", "no_show", "cancelled"],
+      arrived: ["completed", "no_show", "cancelled"],
+    };
+    if (!allowedTransitions[current.status]?.includes(status)) {
+      throw new Error("That appointment status change is not allowed.");
+    }
 
     await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
     if (status === "cancelled") {
@@ -430,7 +525,7 @@ export async function recordPayment(_previousState: PaymentState, formData: Form
       throw new Error("Enter a valid positive amount, payment method, and optional note.");
     }
     const { tenant, db, booking } = await editableBooking(bookingId, "manager");
-    if (booking.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
+    if (booking.status === "cancelled" && kind !== "refund") throw new Error("Cancelled appointments cannot receive a payment record.");
     const identity = await requireIdentity();
     const amountCents = Math.round(amount * 100);
     await db.begin(async (transaction) => {
@@ -484,10 +579,6 @@ async function createManualBookingRecord(formData: FormData) {
   const candidates = await availableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
   const availableSlot = candidates.find((candidate) => candidate.teamMemberId === teamMemberId)?.slots.find((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime());
   if (!availableSlot) throw new Error("That staff member is not available at the selected time.");
-  // Resource availability is resolved together with the advertised slot. Do
-  // not trust a separately submitted resource id: it can be stale or refer to
-  // a different, occupied resource while the displayed slot is still valid.
-  const resolvedResourceId = availableSlot.resourceId ?? null;
   const identity = await requireIdentity();
   try {
     await withSerializableRetry(async () => db.begin(async (transaction) => {
@@ -501,12 +592,12 @@ async function createManualBookingRecord(formData: FormData) {
         INSERT INTO booking_blocks (tenant_id, team_member_id, resource_id, location_id, starts_at, ends_at, state)
         VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')
         RETURNING id
-      `, [tenant.id, teamMemberId, resolvedResourceId, locationId, startsAt, endsAt]);
+      `, [tenant.id, teamMemberId, null, locationId, startsAt, endsAt]);
       const [booking] = await transaction.unsafe<{ id: string }[]>(`
         INSERT INTO bookings (tenant_id, booking_block_id, service_id, location_id, team_member_id, resource_id, customer_id, starts_at, ends_at, booked_price_cents, status, source)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'confirmed', 'tenant')
         RETURNING id
-      `, [tenant.id, block.id, service.id, locationId, teamMemberId, resolvedResourceId, customer.id, startsAt, endsAt, service.priceCents]);
+      `, [tenant.id, block.id, service.id, locationId, teamMemberId, null, customer.id, startsAt, endsAt, service.priceCents]);
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, 'booking.created_by_tenant', $4::jsonb)", [tenant.id, booking.id, identity.id, JSON.stringify({ source: "tenant" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking.created_by_tenant', 'booking', $3, $4::jsonb)", [tenant.id, identity.id, booking.id, JSON.stringify({ source: "tenant" })]);
     }));

@@ -52,6 +52,12 @@ export function CalendarBookingDragDrop() {
   const [, startTransition] = useTransition();
 
   useEffect(() => {
+    if (!message) return;
+    const timeout = window.setTimeout(() => setMessage(null), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  useEffect(() => {
     const selector = ".tenant-dashboard-page .waybook-week-calendar";
     let dragPayload: DragPayload | null = null;
     // The normal calendar can be in "All services" mode. Its open cells are

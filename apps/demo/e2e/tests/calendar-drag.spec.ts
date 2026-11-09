@@ -48,7 +48,7 @@ test("completed appointments do not expose schedule-changing controls", async ({
   await page.goto(
     "/nordic/app/calendars?view=team&day=2026-11-06&booking=5ff3cac0-0ab4-4f4d-81d3-30e25f0a61c5",
   );
-  await expect(page.getByText("COMPLETED APPOINTMENT")).toBeVisible();
+  await expect(page.getByText("Current: Completed")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reschedule appointment" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cancel appointment" })).toHaveCount(0);
@@ -68,4 +68,23 @@ test("team day navigation skips location non-working days", async ({ page }) => 
   );
   await page.getByRole("link", { name: "Next day" }).click();
   await expect(page.getByRole("heading", { name: "Mon 9 Nov" })).toBeVisible();
+});
+
+test("team-day slot creation keeps the operational board in context", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("owner@nordic.local");
+  await page.getByLabel("Password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(/\/nordic\/app$/);
+
+  await page.goto("/nordic/app/calendars?view=team&day=2026-11-09");
+  const cell = page.getByRole("link", { name: /New appointment .* 2026-11-09/ }).first();
+  const href = await cell.getAttribute("href");
+  expect(href).toContain("view=team");
+  expect(href).toContain("createStaff=");
+
+  await cell.click();
+  await expect(page).toHaveURL(/view=team/);
+  await expect(page.locator(".team-day-calendar")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "New appointment" })).toBeVisible();
 });

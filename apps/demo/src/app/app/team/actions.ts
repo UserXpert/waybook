@@ -73,8 +73,8 @@ export async function saveTeamMember(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "staff");
   const memberId = String(formData.get("memberId") ?? "");
-  const serviceIds = formData.getAll("serviceIds").map(String).filter(Boolean);
-  const locationIds = formData.getAll("locationIds").map(String).filter(Boolean);
+  let serviceIds = formData.getAll("serviceIds").map(String).filter(Boolean);
+  let locationIds = formData.getAll("locationIds").map(String).filter(Boolean);
   const isActive = String(formData.get("isActive") ?? "") === "on";
   const phone = optionalText(formData, "phone", 80);
   const jobTitle = optionalText(formData, "jobTitle", 120);
@@ -96,6 +96,16 @@ export async function saveTeamMember(formData: FormData) {
   }
   if (!assignmentsOnly && !staffCalendarColorValues.has(calendarColor)) throw new Error("Choose one of the available calendar colours.");
   const db = tenantDb(tenant);
+  // Preserve the established new-staff default without sending an unbounded
+  // directory to the browser. Existing profiles always submit explicit IDs.
+  if (!memberId && String(formData.get("defaultAssignments") ?? "") === "all") {
+    const [services, locations] = await Promise.all([
+      db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id = ${tenant.id} AND is_active = TRUE`,
+      db<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id = ${tenant.id} AND is_active = TRUE`,
+    ]);
+    serviceIds = services.map((service) => service.id);
+    locationIds = locations.map((location) => location.id);
+  }
   const validServices = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id = ${tenant.id} AND id = ANY(${serviceIds})`;
   if (validServices.length !== serviceIds.length) throw new Error("A selected service is unavailable.");
   const validLocations = await db<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id = ${tenant.id} AND id = ANY(${locationIds}) AND is_active = TRUE`;

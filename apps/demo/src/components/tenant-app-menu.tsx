@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
-import { Bell, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, ClipboardList, ListPlus, MapPin, PackageOpen, PanelsTopLeft, Search, UsersRound, UserRound, X } from "lucide-react";
+import { Bell, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, ClipboardList, Gift, ListPlus, Mail, MapPin, PackageOpen, PanelsTopLeft, ReceiptText, Search, Target, UsersRound, UserRound, X, Globe2 } from "lucide-react";
 
 export type TenantAppLink = { id: string; href: string; label: string; description: string; group: "Operations" | "Manage" | "Tools" };
 
 const appIcons = {
-  bookings: ClipboardList, calendars: CalendarDays, waitlist: ListPlus, clients: UsersRound,
+  bookings: ClipboardList, sales: ReceiptText, products: PackageOpen, giftCards: Gift, packages: PackageOpen, calendars: CalendarDays, waitlist: ListPlus, clients: UsersRound,
   team: UserRound, services: BriefcaseBusiness, locations: MapPin, resources: PackageOpen,
-  notifications: Bell, reports: ChartNoAxesCombined,
+  notifications: Bell, emails: Mail, reports: ChartNoAxesCombined, targets: Target, onlineBooking: Globe2,
 } as const;
 
 export function TenantAppMenu({ links, active }: { links: TenantAppLink[]; active: string }) {

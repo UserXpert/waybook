@@ -50,18 +50,19 @@ async function main() {
       return hold;
     };
 
-    const first = await reserve();
-    const afterFirst = await request(`/api/public/availability?service=studio-session&start=${encodeURIComponent(shared.startTime)}&end=${encodeURIComponent(shared.endTime)}`);
-    assert.equal(afterFirst.response.status, 200);
-    assert.ok((afterFirst.body.availability as Availability[]).some((provider) => provider.slots.some((slot) => slot.startTime === shared.startTime && slot.endTime === shared.endTime)), "shared time disappeared after only one employee was held");
+    const eligibleCount = providers.filter((provider) => provider.slots.some((slot) => slot.startTime === shared.startTime && slot.endTime === shared.endTime)).length;
+    const heldProviders: Hold[] = [];
+    for (let index = 0; index < eligibleCount; index += 1) {
+      const hold = await reserve();
+      assert.ok(!heldProviders.some((prior) => prior.teamMember.id === hold.teamMember.id), "a hold reused an already-reserved staff member");
+      heldProviders.push(hold);
+      const afterHold = await request(`/api/public/availability?service=studio-session&start=${encodeURIComponent(shared.startTime)}&end=${encodeURIComponent(shared.endTime)}`);
+      assert.equal(afterHold.response.status, 200);
+      const stillAvailable = (afterHold.body.availability as Availability[]).some((provider) => provider.slots.some((slot) => slot.startTime === shared.startTime && slot.endTime === shared.endTime));
+      assert.equal(stillAvailable, index < eligibleCount - 1, "staff capacity did not change after the hold as expected");
+    }
 
-    const second = await reserve();
-    assert.notEqual(second.teamMember.id, first.teamMember.id, "the second hold was not assigned to the remaining employee");
-    const afterSecond = await request(`/api/public/availability?service=studio-session&start=${encodeURIComponent(shared.startTime)}&end=${encodeURIComponent(shared.endTime)}`);
-    assert.equal(afterSecond.response.status, 200);
-    assert.ok(!(afterSecond.body.availability as Availability[]).some((provider) => provider.slots.some((slot) => slot.startTime === shared.startTime && slot.endTime === shared.endTime)), "time remained visible after both eligible employees were held");
-
-    console.log(`Pooled availability passed: ${first.teamMember.name} held, ${second.teamMember.name} held, then the shared time disappeared.`);
+    console.log(`Pooled availability passed: ${eligibleCount} eligible staff were held, then the shared time disappeared.`);
   } finally {
     await cleanup(holdIds);
     await db.end();
