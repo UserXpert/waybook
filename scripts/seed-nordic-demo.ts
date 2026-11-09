@@ -10,7 +10,8 @@ const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL;
 const tenantUrl = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL;
 const giftSecret = process.env.WAYBOOK_GIFT_CARD_CODE_SECRET;
 const dryRun = process.argv[2] === "--dry-run";
-if ((!dryRun && process.argv[2] !== "--apply-nordic-demo") || !controlUrl || !tenantUrl || !giftSecret) throw new Error("Explicit --dry-run or --apply-nordic-demo, Control and Nordic database URLs, and WAYBOOK_GIFT_CARD_CODE_SECRET are required.");
+const onlyPackages = process.argv[2] === "--apply-nordic-packages";
+if ((!dryRun && !onlyPackages && process.argv[2] !== "--apply-nordic-demo") || !controlUrl || !tenantUrl || !giftSecret) throw new Error("Explicit --dry-run or --apply-nordic-demo, Control and Nordic database URLs, and WAYBOOK_GIFT_CARD_CODE_SECRET are required.");
 if (fixture.fixture !== "waybook-nordic-demo-v1" || fixture.locations.length !== 4 || fixture.staff.length !== 10 || fixture.services.length !== 10 || fixture.products.length !== 10 || fixture.packages.length !== 5 || fixture.giftCards.length !== 5 || fixture.bookings.length !== 50) throw new Error("Unexpected fixture shape or counts.");
 const ssl = (url: string) => url.includes("127.0.0.1") || url.includes("localhost") ? false : "require" as const;
 const control = postgres(controlUrl, { max: 1, ssl: ssl(controlUrl) });
@@ -23,6 +24,7 @@ async function main() {
   try { await db.begin(async tx => {
     const run = (query: string, args: unknown[]) => tx.unsafe(query, args as never[]);
     const ref = (key: string | undefined) => { if (!key) throw new Error("Missing fixture reference"); return id(tenantId,key); };
+    if (!onlyPackages) {
     for (const item of fixture.locations) {
       await run("INSERT INTO locations (id,tenant_id,slug,name,city,timezone) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING", [ref(item.key),tenantId,`demo-${item.key}`,`Demo · ${item.name}`,item.city,fixture.timezone]);
       for (let day=0;day<=6;day++) await run("INSERT INTO location_hours (tenant_id,location_id,day_of_week,start_time,end_time) VALUES ($1,$2,$3,'09:00','18:00') ON CONFLICT DO NOTHING",[tenantId,ref(item.key),day]);
@@ -39,16 +41,22 @@ async function main() {
     }
     for (const item of fixture.customers) await run("INSERT INTO customers (id,tenant_id,name,email) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING",[ref(item.key),tenantId,`Demo · ${item.name}`,item.email]);
     for (const item of fixture.products) await run("INSERT INTO commerce_catalog_items (id,tenant_id,kind,title,sku,price_cents,currency) VALUES ($1,$2,'product',$3,$4,$5,'DKK') ON CONFLICT (id) DO NOTHING",[ref(item.key),tenantId,`Demo · ${item.name}`,`DEMO-${item.key}`,item.priceCents]);
+    }
     for (const item of fixture.packages) {
       await run("INSERT INTO commerce_catalog_items (id,tenant_id,kind,title,sku,price_cents,currency) VALUES ($1,$2,'package',$3,$4,$5,'DKK') ON CONFLICT (id) DO NOTHING",[ref(item.key),tenantId,`Demo · ${item.name}`,`DEMO-${item.key}`,item.priceCents]);
       await run("INSERT INTO commerce_package_service_entitlements (tenant_id,catalog_item_id,service_id,included_units) VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,catalog_item_id,service_id) DO NOTHING",[tenantId,ref(item.key),ref(item.service),item.units]);
+      const service = fixture.services.find((entry) => entry.key === item.service);
+      if (!service) throw new Error(`Missing service for ${item.key}`);
+      const issued = await run("INSERT INTO commerce_packages (id,tenant_id,catalog_item_id,customer_id,status,title_snapshot,price_cents_snapshot,currency_snapshot,service_title_snapshot) VALUES ($1,$2,$3,$4,'active',$5,$6,'DKK',$7) ON CONFLICT (id) DO NOTHING RETURNING id",[id(tenantId,`${item.key}-issued`),tenantId,ref(item.key),ref(item.customer),`Demo · ${item.name}`,item.priceCents,`Demo · ${service.name}`]);
+      if (issued.length) await run("INSERT INTO commerce_entitlement_entries (tenant_id,package_id,service_id,kind,direction,units,reason) VALUES ($1,$2,$3,'grant','credit',$4,'Demo fixture')",[tenantId,id(tenantId,`${item.key}-issued`),ref(item.service),item.units]);
     }
+    if (!onlyPackages) {
     for (const item of fixture.giftCards) {
       // Keep demo card codes unguessable even though this fixture is committed.
       const secretPart = createHmac("sha256",giftSecret!).update(`${fixture.fixture}:${tenantId}:${item.key}`).digest("hex").slice(0,16).toUpperCase();
       const code = `DEMO-${secretPart}-${item.lastFour}`;
       const digest = createHmac("sha256",giftSecret!).update(code).digest("hex");
-      const inserted = await run("INSERT INTO commerce_gift_cards (id,tenant_id,issued_to_customer_id,code_hash,code_hash_version,code_last_four,currency,metadata) VALUES ($1,$2,$3,$4,2,$5,'DKK',$6::jsonb) ON CONFLICT (id) DO NOTHING RETURNING id",[ref(item.key),tenantId,ref(item.customer),digest,item.lastFour,JSON.stringify({notes:"Demo fixture: not a real purchase"})]);
+      const inserted = await run("INSERT INTO commerce_gift_cards (id,tenant_id,issued_to_customer_id,code_hash,code_hash_version,code_last_four,currency,metadata) VALUES ($1,$2,$3,$4,2,$5,'DKK',jsonb_build_object('notes',$6::text)) ON CONFLICT (id) DO NOTHING RETURNING id",[ref(item.key),tenantId,ref(item.customer),digest,item.lastFour,"Demo fixture: not a real purchase"]);
       if (inserted.length) await run("INSERT INTO commerce_gift_card_entries (tenant_id,gift_card_id,kind,direction,amount_cents,currency,reason) VALUES ($1,$2,'issue','credit',$3,'DKK','Demo fixture')",[tenantId,ref(item.key),item.amountCents]);
     }
     for (const item of fixture.bookings) {
@@ -61,8 +69,9 @@ async function main() {
       await run("INSERT INTO booking_blocks (id,tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES ($1,$2,$3,$4,$5,$6,'confirmed')",[id(tenantId,`${item.key}-block`),tenantId,ref(item.staff),ref(item.location),start,end]);
       await run("INSERT INTO bookings (id,tenant_id,booking_block_id,service_id,location_id,team_member_id,customer_id,starts_at,ends_at,status,source,booked_price_cents,idempotency_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'tenant',$11,$12)",[ref(item.key),tenantId,id(tenantId,`${item.key}-block`),ref(item.service),ref(item.location),ref(item.staff),ref(item.customer),start,end,item.status,service.priceCents,`${fixture.fixture}:${item.key}`]);
     }
+    }
     if (dryRun) throw new Error("DEMO_DRY_RUN_ROLLBACK");
   }); } catch (error) { if (!(dryRun && error instanceof Error && error.message === "DEMO_DRY_RUN_ROLLBACK")) throw error; }
-  console.log(`${dryRun ? "Validated (rolled back)" : "Imported"} ${fixture.fixture}: 4 locations, 10 staff, 10 services, 10 products, 5 package definitions, 5 gift cards, 15 clients and 50 bookings.`);
+  console.log(`${dryRun ? "Validated (rolled back)" : "Imported"} ${fixture.fixture}: 4 locations, 10 staff, 10 services, 10 products, 5 package definitions and client packages, 5 gift cards, 15 clients and 50 bookings.`);
 }
 main().finally(async () => { await db.end(); await control.end(); }).catch((error: unknown) => { console.error(error instanceof Error ? error.message : "Import failed"); process.exitCode=1; });

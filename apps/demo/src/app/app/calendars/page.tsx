@@ -244,8 +244,13 @@ export default async function CalendarsPage({
   const requestedLocation = requestedLocationId
     ? (await db<Location[]>`SELECT id,name FROM locations WHERE tenant_id=${tenant.id} AND id=${requestedLocationId} AND is_active=TRUE LIMIT 1`)[0]
     : undefined;
+  const bookingLocation = !requestedLocation && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId ?? "")
+    ? (await db<Location[]>`SELECT l.id,l.name FROM bookings b JOIN locations l ON l.id=b.location_id AND l.tenant_id=b.tenant_id WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId!} AND l.is_active=TRUE AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid) LIMIT 1`)[0]
+    : undefined;
+  const requestedDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : localDateKey(new Date(), tenant.timezone);
   const selectedLocation = requestedLocation
-    ?? (await db<Location[]>`SELECT id,name FROM locations WHERE tenant_id=${tenant.id} AND is_active=TRUE ORDER BY CASE WHEN slug='primary' THEN 0 ELSE 1 END,name LIMIT 1`)[0];
+    ?? bookingLocation
+    ?? (await db<Location[]>`SELECT l.id,l.name FROM locations l WHERE l.tenant_id=${tenant.id} AND l.is_active=TRUE ORDER BY CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.tenant_id=l.tenant_id AND b.location_id=l.id AND b.status <> 'cancelled' AND to_char(b.starts_at AT TIME ZONE ${tenant.timezone},'YYYY-MM-DD')=${requestedDay} AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid)) THEN 0 ELSE 1 END, CASE WHEN l.slug='primary' THEN 0 ELSE 1 END,l.name LIMIT 1`)[0];
   const locationWorkingDays = selectedLocation
     ? await db<{ dayOfWeek: number }[]>`SELECT day_of_week AS "dayOfWeek" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${selectedLocation.id} ORDER BY day_of_week`
     : [] as { dayOfWeek: number }[];
