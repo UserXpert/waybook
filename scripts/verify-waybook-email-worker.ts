@@ -8,6 +8,7 @@ import { queueDueReminders } from "../apps/demo/src/lib/waybook/email-reminders"
 import { queueRejectedEmail } from "../apps/demo/src/lib/waybook/email-retry";
 import { rotateTenantProviderKeys } from "../apps/demo/src/lib/waybook/provider-key-rotation";
 import { activeEmailCredential } from "../apps/demo/src/lib/waybook/email-provider-connection";
+import { suppressHistoricalEmails } from "../apps/demo/src/lib/waybook/email-outbox-queue";
 
 const url = process.env.WAYBOOK_EMAIL_QUEUE_TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.slice(1).startsWith("waybook_email_queue_test_")) throw new Error("Use a disposable waybook_email_queue_test_* database.");
@@ -67,6 +68,13 @@ async function main() { try {
   const [suppressed] = await db<{ status: string; result: string }[]>`SELECT status,delivery_result AS result FROM email_outbox WHERE id=${old.id}`;
   assert.deepEqual({ status: suppressed.status, result: suppressed.result }, { status: "failed", result: "superseded" });
   assert.equal(requests.length, 1, "old queued mail must not be sent on connection");
+  const oldRows = await db<{ id: string }[]>`INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload,created_at) SELECT ${tenant},${booking},'confirmation','client@example.invalid','{}'::jsonb,now()-interval '1 day' FROM generate_series(1,3) RETURNING id`;
+  await db`UPDATE email_outbox SET delivery_first_attempt_at=now() WHERE id=${oldRows[1].id}`;
+  await db`UPDATE email_outbox SET delivery_claim_token=${randomUUID()},delivery_claim_until=now()+interval '1 minute' WHERE id=${oldRows[2].id}`;
+  assert.equal(await suppressHistoricalEmails(db, tenant), 1, "only untouched historical mail is bulk-suppressed");
+  const protectedRows = await db<{ status: string }[]>`SELECT status FROM email_outbox WHERE id IN (${oldRows[1].id},${oldRows[2].id})`;
+  assert.ok(protectedRows.every((row) => row.status === "queued"), "attempted and claimed mail stays untouched");
+  await db`DELETE FROM email_outbox WHERE id IN (${oldRows[1].id},${oldRows[2].id})`;
   const [rotated] = await db<{ id: string }[]>`INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload) VALUES (${tenant},${booking},'confirmation','client@example.invalid','{}'::jsonb) RETURNING id`;
   await deliverOneEmail(db, tenant, resolve, fail);
   await db`UPDATE email_outbox SET delivery_next_attempt_at=now()-interval '1 second' WHERE id=${rotated.id}`;
@@ -129,6 +137,15 @@ async function main() { try {
   assert.equal((await activeEmailCredential(db, tenant, active.id, (id) => id === nextKey.id ? nextKey.key : undefined))?.apiKey, "replacement-key");
   const [rotatedConnection] = await db<{ verifiedAt: Date }[]>`SELECT verified_at AS "verifiedAt" FROM email_provider_connections WHERE id=${active.id}`;
   assert.equal(rotatedConnection.verifiedAt.getTime(), active.verifiedAt.getTime(), "rotation preserves sender verification");
+  await db.unsafe(`WITH generated AS (
+    INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
+    SELECT $1,'20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',now()+interval '10 hours',now()+interval '11 hours','released'
+    FROM generate_series(1,501) RETURNING id,tenant_id,team_member_id,location_id,starts_at,ends_at
+  ) INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents)
+    SELECT tenant_id,id,'30000000-0000-4000-8000-000000000001',team_member_id,location_id,'40000000-0000-4000-8000-000000000001',starts_at,ends_at,'confirmed',50000 FROM generated`, [tenant]);
+  assert.equal(await queueDueReminders(db, tenant), 500, "each sweep is bounded");
+  assert.ok(await queueDueReminders(db, tenant) >= 1, "later sweeps reach remaining appointments");
+  assert.equal(await queueDueReminders(db, tenant), 0, "completed reminder batches are not requeued");
   console.log("Email worker: fake-provider acceptance, exclusive claims, immutable retry and historic-backlog suppression passed.");
 } finally { await db.end(); } }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

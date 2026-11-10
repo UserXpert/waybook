@@ -5,6 +5,8 @@ import { deliverOneEmail } from "@/lib/waybook/email-delivery-worker";
 import { configuredProviderKeyring } from "@/lib/waybook/provider-secret-config";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { queueDueReminders } from "@/lib/waybook/email-reminders";
+import { suppressHistoricalEmails } from "@/lib/waybook/email-outbox-queue";
+import { drainEmailQueues } from "@/lib/waybook/email-sweep";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,24 +35,25 @@ export async function GET(request: NextRequest) {
   if (!start) return NextResponse.json({ processed: 0, failures: 0 });
   const tenants = await controlDb<TenantRecord[]>`SELECT id,slug,name,lifecycle_status AS "lifecycleStatus",database_env_key AS "databaseEnvKey",timezone FROM tenants WHERE lifecycle_status='active' ORDER BY (id < ${start}::uuid), id`;
   const deadline = Date.now() + 25_000;
-  let processed = 0, failures = 0, incomplete = false;
+  let failures = 0, incomplete = false;
+  const ready: TenantRecord[] = [];
   for (const tenant of tenants) {
     if (Date.now() >= deadline) { incomplete = true; break; }
     try {
       if (!await isFeatureEnabled(tenant.id, "email-notifications")) continue;
+      await suppressHistoricalEmails(tenantDb(tenant), tenant.id);
       await queueDueReminders(tenantDb(tenant), tenant.id);
-      for (let count = 0; count < 2 && Date.now() < deadline; count++) {
-        const result = await deliverOneEmail(tenantDb(tenant), tenant.id, keyring.resolve);
-        if (result !== "processed") break;
-        processed++;
-      }
-      await controlDb`INSERT INTO email_worker_heartbeats (tenant_id,last_success_at) VALUES (${tenant.id},now()) ON CONFLICT (tenant_id) DO UPDATE SET last_success_at=EXCLUDED.last_success_at`;
+      ready.push(tenant);
     } catch {
       failures++;
       // Database and provider errors may contain secrets or customer details.
       console.error("email_delivery_tenant_failed", { tenant: tenant.slug });
     }
   }
+  const drained = await drainEmailQueues({ tenants: ready, deadline, process: (tenant) => deliverOneEmail(tenantDb(tenant), tenant.id, keyring.resolve), completed: async (tenant) => { await controlDb`INSERT INTO email_worker_heartbeats (tenant_id,last_success_at) VALUES (${tenant.id},now()) ON CONFLICT (tenant_id) DO UPDATE SET last_success_at=EXCLUDED.last_success_at`; }, failed: (tenant) => console.error("email_delivery_tenant_failed", { tenant: tenant.slug }) });
+  const processed = drained.processed;
+  failures += drained.failures;
+  incomplete ||= drained.incomplete;
   console.info("email_delivery_run_completed", { processed, failures, incomplete });
   return NextResponse.json({ processed, failures, incomplete }, { status: failures || incomplete ? 503 : 200 });
 }
