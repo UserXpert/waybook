@@ -1,0 +1,31 @@
+name: Email delivery sweep
+
+on:
+  schedule:
+    - cron: '3-58/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+concurrency:
+  group: waybook-email-delivery
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    if: ${{ vars.WAYBOOK_EMAIL_SCHEDULER_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request an email delivery sweep
+        env:
+          CRON_SECRET: ${{ secrets.WAYBOOK_EMAIL_CRON_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$CRON_SECRET" || "$CRON_SECRET" == *$'\n'* || "$CRON_SECRET" == *$'\r'* ]]; then
+            echo 'Email scheduler secret is missing or invalid.' >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 45 \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            https://waybook-booking.vercel.app/api/cron/email-delivery

@@ -6357,6 +6357,8 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-detail__body section { border-top:1px solid #dedee2; padding-top:1rem; }
 .tenant-dashboard-page .email-detail__body h3 { margin:0 0 .5rem; font-size:.95rem; }
 .tenant-dashboard-page .email-detail__body p { color:#65656d; font-size:.83rem; line-height:1.5; }
+.tenant-dashboard-page .email-detail__body .email-detail__message { white-space:pre-wrap; overflow-wrap:anywhere; }
+.tenant-dashboard-page .email-detail__body section button { border:1px solid currentColor; border-radius:.45rem; padding:.55rem .8rem; background:transparent; color:inherit; font:inherit; font-size:.8rem; cursor:pointer; }
 .tenant-dashboard-page .email-detail__body > a { justify-self:start; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-detail__body dt,:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-detail__body p { color:#b6b6bc; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-detail__body dd,:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-detail__body h3 { color:#f2f2f3; }
@@ -6373,6 +6375,9 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-workspace__sidebar a:hover,.tenant-dashboard-page .email-workspace__sidebar a[aria-current="page"] { background:#e9e9ec; color:#171717; }
 .tenant-dashboard-page .email-workspace__sidebar a[aria-current="page"] { font-weight:750; }
 .tenant-dashboard-page .email-workspace__main { min-width:0; padding:1.5rem 1.75rem; }
+.tenant-dashboard-page .email-delivery-warning { display:flex; flex-wrap:wrap; gap:.4rem .8rem; margin-bottom:1.25rem; border:1px solid #dfc791; border-radius:.55rem; padding:.75rem .9rem; background:#fff8e8; color:#624714; font-size:.8rem; line-height:1.45; }
+.tenant-dashboard-page .email-delivery-warning a { color:inherit; font-weight:700; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-delivery-warning { border-color:#66512e; background:#302719; color:#f1dca6; }
 .tenant-dashboard-page .email-workspace__heading h1 { margin:0; color:#171717; font-size:1.5rem; letter-spacing:-.03em; }
 .tenant-dashboard-page .email-workspace__heading p { margin:.4rem 0 0; color:#707078; font-size:.82rem; }
 .tenant-dashboard-page .email-workspace .emails-search { margin:1.4rem 0 1rem; }
@@ -6404,6 +6409,19 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-template-preview strong { display:block; margin-top:1rem; font-size:.88rem; }
 .tenant-dashboard-page .email-template-preview div { margin-top:.65rem; white-space:pre-wrap; font-size:.85rem; line-height:1.6; }
 .tenant-dashboard-page .email-provider-settings { display:grid; gap:1.4rem; max-width:42rem; }
+.tenant-dashboard-page .email-reminder-settings { display:grid; justify-items:start; gap:1.3rem; max-width:38rem; margin-top:1.5rem; }
+.tenant-dashboard-page .email-reminder-settings .waybook-form-toggle { display:flex; align-items:center; gap:.75rem; }
+.tenant-dashboard-page .email-reminder-settings .waybook-form-toggle > span:last-child { display:grid; gap:.25rem; }
+.tenant-dashboard-page .email-reminder-settings small,.tenant-dashboard-page .email-reminder-settings p { color:#6c6c74; font-size:.8rem; line-height:1.5; }
+.tenant-dashboard-page .email-reminder-settings p { margin:0; }
+.tenant-dashboard-page .email-reminder-settings__lead { display:grid; gap:.4rem; color:#494951; font-size:.8rem; font-weight:700; }
+.tenant-dashboard-page .email-reminder-settings__lead > span { font-weight:400; }
+.tenant-dashboard-page .email-reminder-settings__lead input { width:8rem; max-width:100%; padding:.7rem; border:1px solid #d4d4d8; border-radius:.5rem; background:#fff; color:#202024; font:inherit; font-weight:400; }
+.tenant-dashboard-page .email-reminder-settings > button { border:1px solid #171717; border-radius:.45rem; padding:.65rem .9rem; background:#171717; color:#fff; font:inherit; font-size:.8rem; font-weight:700; cursor:pointer; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-reminder-settings :is(small,p,.email-reminder-settings__lead) { color:#b6b6bc; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-reminder-settings .waybook-form-toggle b { color:#f2f2f3; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-reminder-settings__lead input { background:#242427; border-color:#44444a; color:#f1f1f3; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-reminder-settings > button { background:#f2f2f3; border-color:#f2f2f3; color:#171717; }
 .tenant-dashboard-page .email-provider-settings > p,.tenant-dashboard-page .email-provider-current p { margin:.4rem 0; font-size:.85rem; line-height:1.5; }
 .tenant-dashboard-page .email-provider-current { border:1px solid #dedee3; border-radius:.65rem; padding:1rem; }
 .tenant-dashboard-page .email-provider-current h2 { margin:0; font-size:1rem; }

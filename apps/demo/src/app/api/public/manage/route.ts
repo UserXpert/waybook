@@ -5,6 +5,7 @@ import { isFeatureEnabled } from "@/lib/waybook/features";
 import { consumeBookingManagementAttempt } from "@/lib/waybook/booking-management-rate-limit";
 import { cancelManagedBooking, lookupManagedBooking, managedAvailability, rescheduleManagedBooking } from "@/lib/waybook/booking-management";
 import { hasMatchingRequestOrigin } from "@/lib/waybook/request-origin";
+import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
@@ -54,14 +55,15 @@ export async function POST(request: NextRequest) {
     }
     if (action === "cancel") {
       const result = await cancelManagedBooking(tenant, credentials);
-      if (result === "cancelled") return reply({ result });
-      if (result === "financial") return reply({ error: "Please contact the business to cancel this booking because it has payment or package activity." }, 409);
+      if (result.status === "cancelled") { promptEmailDelivery(tenant, result.outboxId); return reply({ result: result.status }); }
+      if (result.status === "financial") return reply({ error: "Please contact the business to cancel this booking because it has payment or package activity." }, 409);
       return reply({ error: "This booking cannot be cancelled online." }, 409);
     }
     const startsAt = new Date(typeof body.startsAt === "string" ? body.startsAt : "");
     if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() > Date.now() + 366 * 86_400_000) return reply({ error: "Choose a valid time." }, 400);
     const result = await rescheduleManagedBooking(tenant, credentials, startsAt);
-    return result === "rescheduled" ? reply({ result }) : reply({ error: "That time is no longer available. Please choose another." }, 409);
+    if (result.status === "rescheduled") { promptEmailDelivery(tenant, result.outboxId); return reply({ result: result.status }); }
+    return reply({ error: "That time is no longer available. Please choose another." }, 409);
   } catch (error) {
     if (error instanceof BookingConflictError) return reply({ error: "That time was just taken. Please choose another." }, 409);
     return reply({ error: "We couldn’t process your request. Please try again later." }, 503);

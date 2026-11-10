@@ -9,6 +9,7 @@ import { tenantDb } from "@/lib/waybook/database";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 import { canManageAppointment, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 
 async function editableCalendarTenant() {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -416,13 +417,17 @@ export async function rescheduleBooking(formData: FormData) {
   const { tenant, db, booking } = move.context;
   const { startsAt, endsAt } = move;
   try {
-    await withSerializableRetry(async () => db.begin(async (transaction) => {
+    const outboxId = await withSerializableRetry(async () => db.begin(async (transaction) => {
       const [block] = await transaction.unsafe<{ id: string }[]>("UPDATE booking_blocks SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL WHERE id = $4 AND tenant_id = $5 AND state = 'confirmed' RETURNING id", [nextTeamMemberId, startsAt, endsAt, booking.bookingBlockId, tenant.id]);
       if (!block) throw new Error("Booking can no longer be rescheduled.");
       await transaction.unsafe("UPDATE bookings SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL, updated_at = now() WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.id, tenant.id]);
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.rescheduled', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.rescheduled', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
+      if (!booking.customerEmail) return null;
+      const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload) VALUES ($1,$2,'confirmation',$3,$4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id, startsAt: startsAt.toISOString() })]);
+      return entry.id;
     }));
+    promptEmailDelivery(tenant, outboxId);
   } catch (error) {
     if (error instanceof BookingConflictError) throw new Error("That time was just taken. Choose another time.");
     throw error;
@@ -438,14 +443,18 @@ export async function moveBookingOnCalendar(input: { bookingId: string; startsAt
     const { tenant, db, booking } = checked.context;
     const { startsAt, endsAt } = checked;
     const resourceId = checked.resourceId ?? null;
-    await withSerializableRetry(async () => db.begin(async (transaction) => {
+    const outboxId = await withSerializableRetry(async () => db.begin(async (transaction) => {
       const [block] = await transaction.unsafe<{ id: string }[]>("UPDATE booking_blocks SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = $4 WHERE id = $5 AND tenant_id = $6 AND state = 'confirmed' RETURNING id", [input.teamMemberId, startsAt, endsAt, resourceId, booking.bookingBlockId, tenant.id]);
       if (!block) throw new Error("Booking can no longer be moved.");
       await transaction.unsafe("UPDATE bookings SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = $4, updated_at = now() WHERE id = $5 AND tenant_id = $6", [input.teamMemberId, startsAt, endsAt, resourceId, booking.id, tenant.id]);
       const metadata = JSON.stringify({ startsAt: startsAt.toISOString(), teamMemberId: input.teamMemberId, resourceId, source: "calendar_drag" });
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.rescheduled', $3::jsonb)", [tenant.id, booking.id, metadata]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.drag_moved', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, metadata]);
+      if (!booking.customerEmail) return null;
+      const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload) VALUES ($1,$2,'confirmation',$3,$4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id, startsAt: startsAt.toISOString() })]);
+      return entry.id;
     }));
+    promptEmailDelivery(tenant, outboxId);
     revalidateCalendars();
     return { error: null };
   } catch (error) {
@@ -462,7 +471,7 @@ export async function updateBookingStatus(formData: FormData) {
   if (!["arrived", "completed", "no_show", "cancelled"].includes(status)) throw new Error("Choose a valid appointment status.");
   const { tenant, db, booking } = await editableBooking(bookingId, status === "cancelled" ? "appointment" : "status");
   if (status === "cancelled" && booking.status === "completed") throw new Error("Completed appointments cannot be cancelled.");
-  await withSerializableRetry(() => db.begin(async (transaction) => {
+  const outboxId = await withSerializableRetry(() => db.begin(async (transaction) => {
     // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
     const [block] = await transaction.unsafe<{ state: string }[]>(
       "SELECT state FROM booking_blocks WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
@@ -476,7 +485,7 @@ export async function updateBookingStatus(formData: FormData) {
     );
     if (!current) throw new Error("Booking is unavailable.");
     // A repeated click or an in-flight duplicate cancellation is a safe no-op.
-    if (current.status === "cancelled" && status === "cancelled") return;
+    if (current.status === "cancelled" && status === "cancelled") return null;
     if (["completed", "cancelled", "no_show"].includes(current.status)) {
       throw new Error("This appointment has a final status and cannot be changed.");
     }
@@ -489,13 +498,17 @@ export async function updateBookingStatus(formData: FormData) {
     }
 
     await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
+    let cancellationOutboxId: string | null = null;
     if (status === "cancelled") {
       await transaction.unsafe("UPDATE booking_blocks SET state = 'cancelled' WHERE id = $1 AND tenant_id = $2", [booking.bookingBlockId, tenant.id]);
-      await transaction.unsafe("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'cancellation', $3, $4::jsonb)", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id })]);
+      const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'cancellation', $3, $4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id })]);
+      cancellationOutboxId = entry.id;
     }
-    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, $3, $4::jsonb)", [tenant.id, booking.id, `booking.${status}`, JSON.stringify({ previousStatus: current.status })]);
-    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking', $3, $4::jsonb)", [tenant.id, `booking.${status}`, booking.id, JSON.stringify({ previousStatus: current.status })]);
+    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, $3, $4::text::jsonb)", [tenant.id, booking.id, `booking.${status}`, JSON.stringify({ previousStatus: current.status })]);
+    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking', $3, $4::text::jsonb)", [tenant.id, `booking.${status}`, booking.id, JSON.stringify({ previousStatus: current.status })]);
+    return cancellationOutboxId;
   }));
+  promptEmailDelivery(tenant, outboxId);
   revalidateCalendars();
 }
 

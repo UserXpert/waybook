@@ -7,10 +7,13 @@ import { requireFeature } from "@/lib/waybook/features";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { configuredProviderKey } from "@/lib/waybook/provider-secret-config";
+import { configuredProviderKey, configuredProviderKeyring } from "@/lib/waybook/provider-secret-config";
 import { disconnectEmailConnection, replaceEmailConnection } from "@/lib/waybook/email-provider-connection";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { confirmEmailProviderTest, sendEmailProviderTest } from "@/lib/waybook/email-provider-verification";
+import { queueRejectedEmail } from "@/lib/waybook/email-retry";
+import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
+import { emailTemplateError } from "@/lib/waybook/email-template-render";
 
 export async function saveEmailTemplate(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -19,7 +22,7 @@ export async function saveEmailTemplate(formData: FormData) {
   const key = String(formData.get("template") ?? "");
   const subject = String(formData.get("subject") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
-  if (!["booking", "confirmation", "cancellation", "sale"].includes(key) || !subject || subject.length > 200 || !body || body.length > 10000) throw new Error("Enter a subject and message within the length limits.");
+  if (!["booking", "confirmation", "cancellation", "sale", "reminder"].includes(key) || emailTemplateError(subject, body)) throw new Error("Enter a valid template with supported placeholders.");
   const db = tenantDb(tenant);
   await db.begin(async (tx) => {
     await tx.unsafe(`INSERT INTO email_templates (tenant_id,template_key,subject,body) VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,template_key) DO UPDATE SET subject=EXCLUDED.subject,body=EXCLUDED.body,updated_at=now()`, [tenant.id,key,subject,body]);
@@ -30,6 +33,15 @@ export async function saveEmailTemplate(formData: FormData) {
   redirect(`${path}?view=templates&template=${key}&saved=1`);
 }
 
+export async function saveReminderSettings(formData: FormData) {
+  const { tenant, path } = await providerContext();
+  const leadHours = Number(formData.get("leadHours"));
+  if (!Number.isInteger(leadHours) || leadHours < 1 || leadHours > 168) throw new Error("Choose between 1 and 168 hours.");
+  await tenantDb(tenant)`INSERT INTO email_reminder_settings (tenant_id,enabled,lead_hours) VALUES (${tenant.id},${formData.get("enabled") === "on"},${leadHours}) ON CONFLICT (tenant_id) DO UPDATE SET enabled=EXCLUDED.enabled,lead_hours=EXCLUDED.lead_hours,updated_at=now()`;
+  revalidatePath("/app/emails");
+  redirect(`${path}?view=reminders&saved=1`);
+}
+
 async function providerContext() {
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "email-notifications");
@@ -37,6 +49,16 @@ async function providerContext() {
   const identity = await requireIdentity();
   const path = tenantPath(await currentTenantRouteSlug(tenant.slug), "/app/emails");
   return { tenant, identity, path };
+}
+
+export async function retryRejectedEmail(formData: FormData) {
+  const { tenant, path } = await providerContext();
+  const id = String(formData.get("emailId") ?? "");
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id)) throw new Error("Invalid email.");
+  const newId = await queueRejectedEmail(tenantDb(tenant), tenant.id, id);
+  if (newId) promptEmailDelivery(tenant, newId);
+  revalidatePath("/app/emails");
+  redirect(newId ? `${path}?email=${newId}` : `${path}?email=${id}`);
 }
 
 export async function saveEmailProvider(formData: FormData) {
@@ -64,11 +86,11 @@ export async function removeEmailProvider() {
 
 export async function sendProviderTest() {
   const { tenant, path } = await providerContext();
-  const key = configuredProviderKey();
-  if (!key) redirect(`${path}?view=connection&providerError=config`);
+  const keyring = configuredProviderKeyring();
+  if (!keyring) redirect(`${path}?view=connection&providerError=config`);
   let result: Awaited<ReturnType<typeof sendEmailProviderTest>>;
   try {
-    result = await sendEmailProviderTest(tenantDb(tenant), tenant.id, (id) => id === key.id ? key.key : undefined);
+    result = await sendEmailProviderTest(tenantDb(tenant), tenant.id, keyring.resolve);
   } catch {
     redirect(`${path}?view=connection&providerError=test`);
   }

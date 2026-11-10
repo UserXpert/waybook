@@ -58,18 +58,18 @@ export async function cancelManagedBooking(tenant: TenantRecord, credentials: Cr
     // Payment and package redemption writers lock this same booking row.
     const db = tx as unknown as Sql;
     const booking = await lockBooking(db, tenant, credentials);
-    if (!booking) return "not_found" as const;
-    if (booking.status === "cancelled") return "cancelled" as const;
-    if (!canChange(booking)) return "unavailable" as const;
+    if (!booking) return { status: "not_found" as const, outboxId: null };
+    if (booking.status === "cancelled") return { status: "cancelled" as const, outboxId: null };
+    if (!canChange(booking)) return { status: "unavailable" as const, outboxId: null };
     // Refunds and entitlement reversals require the business's existing sales workflow.
-    if (booking.hasFinancialActivity) return "financial" as const;
+    if (booking.hasFinancialActivity) return { status: "financial" as const, outboxId: null };
     await db`UPDATE bookings SET status='cancelled', updated_at=now() WHERE tenant_id=${tenant.id} AND id=${booking.id}`;
     await db`UPDATE booking_blocks SET state='cancelled' WHERE tenant_id=${tenant.id} AND id=${booking.bookingBlockId}`;
     const metadata = JSON.stringify({ source: "customer_management", previousStatus: booking.status });
     await db`INSERT INTO booking_events (tenant_id,booking_id,event_type,metadata) VALUES (${tenant.id},${booking.id},'booking.cancelled',${metadata}::text::jsonb)`;
     await db`INSERT INTO tenant_audit_events (tenant_id,action,target_type,target_id,metadata) VALUES (${tenant.id},'booking.cancelled','booking',${booking.id},${metadata}::text::jsonb)`;
-    await db`INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload) VALUES (${tenant.id},${booking.id},'cancellation',${booking.email},${JSON.stringify({ bookingId: booking.id })}::text::jsonb)`;
-    return "cancelled" as const;
+    const [outbox] = await db<{ id: string }[]>`INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload) VALUES (${tenant.id},${booking.id},'cancellation',${booking.email},${JSON.stringify({ bookingId: booking.id })}::text::jsonb) RETURNING id`;
+    return { status: "cancelled" as const, outboxId: outbox.id };
   }));
 }
 
@@ -79,18 +79,19 @@ export async function rescheduleManagedBooking(tenant: TenantRecord, credentials
     await tx.unsafe("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
     const db = tx as unknown as Sql;
     const booking = await lockBooking(db, tenant, credentials);
-    if (!booking) return "not_found" as const;
-    if (!canChange(booking) || startsAt.getTime() <= Date.now()) return "unavailable" as const;
+    if (!booking) return { status: "not_found" as const, outboxId: null };
+    if (!canChange(booking) || startsAt.getTime() <= Date.now()) return { status: "unavailable" as const, outboxId: null };
     const durationMinutes = (new Date(booking.endsAt).getTime() - new Date(booking.startsAt).getTime()) / 60_000;
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
     const providers = await availableSlots(tenant, booking.serviceId, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId: booking.locationId, excludeBookingBlockId: booking.bookingBlockId, durationMinutes }, db);
     const member = providers.find(provider => provider.slots.some(slot => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime()));
-    if (!member) return "unavailable" as const;
+    if (!member) return { status: "unavailable" as const, outboxId: null };
     await db`UPDATE booking_blocks SET team_member_id=${member.teamMemberId}, starts_at=${startsAt}, ends_at=${endsAt}, resource_id=NULL WHERE tenant_id=${tenant.id} AND id=${booking.bookingBlockId} AND state='confirmed'`;
     await db`UPDATE bookings SET team_member_id=${member.teamMemberId}, starts_at=${startsAt}, ends_at=${endsAt}, resource_id=NULL, updated_at=now() WHERE tenant_id=${tenant.id} AND id=${booking.id}`;
     const metadata = JSON.stringify({ source: "customer_management", startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: member.teamMemberId });
     await db`INSERT INTO booking_events (tenant_id,booking_id,event_type,metadata) VALUES (${tenant.id},${booking.id},'booking.rescheduled',${metadata}::text::jsonb)`;
     await db`INSERT INTO tenant_audit_events (tenant_id,action,target_type,target_id,metadata) VALUES (${tenant.id},'booking.rescheduled','booking',${booking.id},${metadata}::text::jsonb)`;
-    return "rescheduled" as const;
+    const [outbox] = await db<{ id: string }[]>`INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload) VALUES (${tenant.id},${booking.id},'confirmation',${booking.email},${JSON.stringify({ bookingId: booking.id, startsAt: startsAt.toISOString() })}::text::jsonb) RETURNING id`;
+    return { status: "rescheduled" as const, outboxId: outbox.id };
   }));
 }
