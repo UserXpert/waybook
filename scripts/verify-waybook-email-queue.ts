@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import postgres from "postgres";
+import { claimEmail, finishEmailAttempt, prepareEmailAttempt } from "../apps/demo/src/lib/waybook/email-outbox-queue";
+
+const url = process.env.WAYBOOK_EMAIL_QUEUE_TEST_DATABASE_URL;
+if (!url || !new URL(url).pathname.slice(1).startsWith("waybook_email_queue_test_")) throw new Error("Use a disposable waybook_email_queue_test_* database.");
+const db = postgres(url, { max: 3, ssl: false, onnotice: () => {} });
+const tenant = randomUUID();
+const snapshot = { provider: "resend" as const, connectionId: "example-connection", message: { from: "studio@example.invalid", to: "client@example.invalid", subject: "Booking", text: "Confirmed" } };
+async function main() { try {
+  await db`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload) VALUES (${tenant},'confirmation','client@example.invalid','{}'::jsonb)`;
+  const a = randomUUID(), b = randomUUID();
+  const claims = await Promise.all([claimEmail(db, tenant, a), claimEmail(db, tenant, b)]);
+  assert.equal(claims.filter(Boolean).length, 1, "only one worker should claim a message");
+  const winningToken = claims[0] ? a : b;
+  const claimed = claims.find(Boolean)!;
+  const prepared = await prepareEmailAttempt(db, tenant, claimed.id, winningToken, snapshot);
+  assert.ok(prepared);
+  assert.equal(await prepareEmailAttempt(db, tenant, claimed.id, winningToken, { ...snapshot, message: { ...snapshot.message, subject: "Changed" } }), null, "retry content must remain unchanged");
+  await db`UPDATE email_outbox SET delivery_claim_until=now()-interval '1 second' WHERE id=${claimed.id}`;
+  const replacement = randomUUID();
+  assert.equal((await claimEmail(db, tenant, replacement))?.id, claimed.id);
+  assert.equal(await finishEmailAttempt(db, tenant, claimed.id, winningToken, { kind: "accepted", providerId: "old" }), false, "stale workers cannot complete a new claim");
+  assert.ok(await prepareEmailAttempt(db, tenant, claimed.id, replacement, snapshot));
+  assert.equal(await finishEmailAttempt(db, tenant, claimed.id, replacement, { kind: "accepted", providerId: "provider-123" }), true);
+  const [record] = await db<{ status: string; count: number; providerId: string; firstAttemptAt: Date }[]>`SELECT status,delivery_attempt_count AS count,delivery_provider_id AS "providerId",delivery_first_attempt_at AS "firstAttemptAt" FROM email_outbox WHERE id=${claimed.id}`;
+  assert.equal(record.status, "sent"); assert.equal(record.count, 2); assert.equal(record.providerId, "provider-123");
+  assert.equal(record.firstAttemptAt.getTime(), prepared.firstAttemptAt.getTime());
+  assert.equal(await claimEmail(db, tenant, randomUUID()), null);
+  await db`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload) VALUES (${tenant},'cancellation','client@example.invalid','{}'::jsonb)`;
+  const retryToken = randomUUID();
+  const retryClaim = await claimEmail(db, tenant, retryToken); assert.ok(retryClaim);
+  assert.equal(await prepareEmailAttempt(db, randomUUID(), retryClaim.id, retryToken, snapshot), null, "another tenant cannot prepare this message");
+  assert.ok(await prepareEmailAttempt(db, tenant, retryClaim.id, retryToken, snapshot));
+  assert.equal(await finishEmailAttempt(db, tenant, retryClaim.id, retryToken, { kind: "retry", retryAfterSeconds: 120 }), true);
+  assert.equal(await claimEmail(db, tenant, randomUUID()), null, "retry must respect backoff");
+  await db`UPDATE email_outbox SET delivery_next_attempt_at=now()-interval '1 second' WHERE id=${retryClaim.id}`;
+  const reviewToken = randomUUID(); assert.ok(await claimEmail(db, tenant, reviewToken));
+  assert.ok(await prepareEmailAttempt(db, tenant, retryClaim.id, reviewToken, snapshot));
+  assert.equal(await finishEmailAttempt(db, tenant, retryClaim.id, reviewToken, { kind: "review" }), true);
+  const [review] = await db<{ status: string; result: string }[]>`SELECT status,delivery_result AS result FROM email_outbox WHERE id=${retryClaim.id}`;
+  assert.deepEqual({ status: review.status, result: review.result }, { status: "failed", result: "review" });
+  assert.equal(await claimEmail(db, tenant, randomUUID()), null, "ambiguous outcome requires review");
+  console.log("Email queue: exclusive claims, immutable retry snapshot, stale-worker fencing and single completion passed.");
+} finally {
+  await db`DELETE FROM email_outbox WHERE tenant_id=${tenant}`;
+  await db.end();
+} }
+main().catch((error) => { console.error(error); process.exitCode = 1; });
