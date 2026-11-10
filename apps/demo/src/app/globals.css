@@ -6399,6 +6399,11 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-template-editor textarea { resize:vertical; line-height:1.5; }
 .tenant-dashboard-page .email-template-editor > button { justify-self:start; border:1px solid #171717; border-radius:.45rem; padding:.65rem .9rem; background:#171717; color:#fff; font:inherit; font-size:.8rem; font-weight:700; cursor:pointer; }
 .tenant-dashboard-page .email-template-editor .email-template-editor__success { color:#23744d; }
+.tenant-dashboard-page .email-template-preview { min-width:0; border:1px solid #dedee3; border-radius:.65rem; padding:1rem; background:#fafafa; overflow-wrap:anywhere; }
+.tenant-dashboard-page .email-template-preview h3 { margin:0; font-size:.9rem; }
+.tenant-dashboard-page .email-template-preview strong { display:block; margin-top:1rem; font-size:.88rem; }
+.tenant-dashboard-page .email-template-preview div { margin-top:.65rem; white-space:pre-wrap; font-size:.85rem; line-height:1.6; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-template-preview { background:#202023; border-color:#414148; color:#f2f2f3; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace { border-color:#343438; background:#151516; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace__sidebar { border-color:#343438; background:#1c1c1f; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace__sidebar h2,:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace__heading h1,:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-template-editor h2 { color:#f2f2f3; }
