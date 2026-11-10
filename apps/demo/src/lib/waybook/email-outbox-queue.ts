@@ -4,6 +4,21 @@ import type { ResendMessage, ResendResult } from "./resend-delivery";
 export type EmailDeliverySnapshot = { provider: "resend"; connectionId: string; bookingStartsAt: string; message: ResendMessage };
 export type ClaimedEmail = { id: string; snapshot: EmailDeliverySnapshot | null; firstAttemptAt: Date | null; attemptCount: number };
 
+/** Clear unattempted mail from before the verified connection without blocking active claims. */
+export async function suppressHistoricalEmails(db: Sql, tenantId: string): Promise<number> {
+  const rows = await db.unsafe<{ id: string }[]>(`
+    UPDATE email_outbox SET status='failed',delivery_result='superseded',delivery_claim_token=NULL,delivery_claim_until=NULL
+    WHERE tenant_id=$1 AND id IN (
+      SELECT eo.id FROM email_outbox eo JOIN email_provider_connections pc
+        ON pc.tenant_id=eo.tenant_id AND pc.provider='resend' AND pc.revoked_at IS NULL AND pc.verified_at IS NOT NULL
+      WHERE eo.tenant_id=$1 AND eo.status='queued' AND eo.created_at<pc.created_at
+        AND eo.delivery_snapshot IS NULL AND eo.delivery_first_attempt_at IS NULL
+        AND (eo.delivery_claim_until IS NULL OR eo.delivery_claim_until<=now())
+      ORDER BY eo.created_at,eo.id FOR UPDATE OF eo SKIP LOCKED LIMIT 500
+    ) RETURNING id`, [tenantId]);
+  return rows.length;
+}
+
 /** Claim one tenant's message; expired claims can be recovered by another worker. */
 export async function claimEmail(db: Sql, tenantId: string, claimToken: string, outboxId?: string): Promise<ClaimedEmail | null> {
   const [row] = await db.unsafe<ClaimedEmail[]>(`
@@ -13,7 +28,7 @@ export async function claimEmail(db: Sql, tenantId: string, claimToken: string, 
         AND ($3::uuid IS NULL OR id=$3::uuid)
         AND (delivery_next_attempt_at IS NULL OR delivery_next_attempt_at<=now())
         AND (delivery_claim_until IS NULL OR delivery_claim_until<=now())
-      ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
+      ORDER BY CASE WHEN message_type='reminder' AND created_at>now()-interval '15 minutes' THEN 1 ELSE 0 END,created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
       AND tenant_id=$1
     RETURNING id,delivery_snapshot AS snapshot,delivery_first_attempt_at AS "firstAttemptAt",delivery_attempt_count AS "attemptCount"`, [tenantId, claimToken, outboxId ?? null]);
   return row ?? null;

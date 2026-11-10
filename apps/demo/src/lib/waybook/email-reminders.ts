@@ -11,6 +11,10 @@ export async function queueDueReminders(db: Sql, tenantId: string): Promise<numb
     JOIN email_provider_connections pc ON pc.tenant_id=b.tenant_id AND pc.provider='resend' AND pc.revoked_at IS NULL AND pc.verified_at IS NOT NULL
     WHERE b.tenant_id=$1 AND b.status='confirmed' AND b.starts_at>now()
       AND b.starts_at<=now()+(settings.lead_hours * interval '1 hour') AND c.email IS NOT NULL AND btrim(c.email)<>''
+      AND NOT EXISTS (SELECT 1 FROM email_outbox existing WHERE existing.tenant_id=b.tenant_id AND existing.booking_id=b.id
+        AND existing.message_type='reminder' AND NOT (existing.payload ? 'retryOf')
+        AND existing.payload->>'startsAt'=to_char(b.starts_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+    ORDER BY b.starts_at,b.id LIMIT 500
     ON CONFLICT DO NOTHING RETURNING id`, [tenantId]);
   return rows.length;
 }

@@ -79,6 +79,12 @@ async function main() { try {
   const [review] = await db<{ status: string; result: string }[]>`SELECT status,delivery_result AS result FROM email_outbox WHERE id=${retryClaim.id}`;
   assert.deepEqual({ status: review.status, result: review.result }, { status: "failed", result: "review" });
   assert.equal(await claimEmail(db, tenant, randomUUID()), null, "ambiguous outcome requires review");
+  const [reminder] = await db<{ id: string }[]>`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload,created_at) VALUES (${tenant},'reminder','client@example.invalid','{}'::jsonb,now()-interval '1 minute') RETURNING id`;
+  const [urgent] = await db<{ id: string }[]>`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload) VALUES (${tenant},'confirmation','client@example.invalid','{}'::jsonb) RETURNING id`;
+  assert.equal((await claimEmail(db, tenant, randomUUID()))?.id, urgent.id, "a new confirmation must not wait behind reminders");
+  await db`UPDATE email_outbox SET created_at=now()-interval '16 minutes' WHERE id=${reminder.id}`;
+  await db`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload) VALUES (${tenant},'confirmation','client@example.invalid','{}'::jsonb)`;
+  assert.equal((await claimEmail(db, tenant, randomUUID()))?.id, reminder.id, "older reminders must not starve behind new confirmations");
   console.log("Email connections and queue: encrypted tenant isolation, replacement, disconnect, claims and retry safeguards passed.");
 } finally {
   await db`DELETE FROM email_outbox WHERE tenant_id=${tenant}`;
