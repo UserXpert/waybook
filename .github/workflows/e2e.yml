@@ -37,10 +37,10 @@ jobs:
         run: |
           docker run -d --name waybook-e2e -e POSTGRES_USER=waybook -e POSTGRES_PASSWORD=waybook -p 5432:5432 postgres:15-alpine
           for i in $(seq 1 30); do
-            if docker exec waybook-e2e pg_isready -U waybook -q; then break; fi
+            if docker exec waybook-e2e pg_isready -h 127.0.0.1 -U waybook -q; then break; fi
             sleep 1
           done
-          docker exec waybook-e2e pg_isready -U waybook -q
+          docker exec waybook-e2e pg_isready -h 127.0.0.1 -U waybook -q
           for name in control nordic copenhagen; do docker exec waybook-e2e createdb -U waybook "waybook_e2e_$name"; done
           npm run waybook:db:migrate
           npm run waybook:db:seed
