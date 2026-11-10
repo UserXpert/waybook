@@ -10,6 +10,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { configuredProviderKey } from "@/lib/waybook/provider-secret-config";
 import { disconnectEmailConnection, replaceEmailConnection } from "@/lib/waybook/email-provider-connection";
 import { requireIdentity } from "@/lib/waybook/auth";
+import { confirmEmailProviderTest, sendEmailProviderTest } from "@/lib/waybook/email-provider-verification";
 
 export async function saveEmailTemplate(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -59,4 +60,26 @@ export async function removeEmailProvider() {
   await disconnectEmailConnection(tenantDb(tenant), tenant.id, identity.id);
   revalidatePath("/app/emails");
   redirect(`${path}?view=connection&providerRemoved=1`);
+}
+
+export async function sendProviderTest() {
+  const { tenant, path } = await providerContext();
+  const key = configuredProviderKey();
+  if (!key) redirect(`${path}?view=connection&providerError=config`);
+  let result: Awaited<ReturnType<typeof sendEmailProviderTest>>;
+  try {
+    result = await sendEmailProviderTest(tenantDb(tenant), tenant.id, (id) => id === key.id ? key.key : undefined);
+  } catch {
+    redirect(`${path}?view=connection&providerError=test`);
+  }
+  revalidatePath("/app/emails");
+  if (result === "accepted") redirect(`${path}?view=connection&testSent=1`);
+  redirect(`${path}?view=connection&providerError=${result}`);
+}
+
+export async function confirmProviderTest() {
+  const { tenant, identity, path } = await providerContext();
+  const confirmed = await confirmEmailProviderTest(tenantDb(tenant), tenant.id, identity.id);
+  revalidatePath("/app/emails");
+  redirect(`${path}?view=connection&${confirmed ? "providerVerified=1" : "providerError=confirm"}`);
 }

@@ -6,6 +6,12 @@ CREATE TABLE IF NOT EXISTS email_provider_connections (
   encrypted_secret JSONB NOT NULL CHECK (jsonb_typeof(encrypted_secret) = 'object'),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   verified_at TIMESTAMPTZ,
+  verification_attempt_id UUID,
+  verification_started_at TIMESTAMPTZ,
+  verification_claim_token UUID,
+  verification_claim_until TIMESTAMPTZ,
+  verification_accepted_at TIMESTAMPTZ,
+  verification_provider_id TEXT,
   revoked_at TIMESTAMPTZ
 );
 
