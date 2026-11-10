@@ -4,6 +4,7 @@ import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { consumeBookingManagementAttempt } from "@/lib/waybook/booking-management-rate-limit";
 import { cancelManagedBooking, lookupManagedBooking, managedAvailability, rescheduleManagedBooking } from "@/lib/waybook/booking-management";
+import { hasMatchingRequestOrigin } from "@/lib/waybook/request-origin";
 
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
@@ -12,7 +13,7 @@ const bookingReference = /^(?:[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}|[0-9a-f]{8}
 
 /** Credentials are sent in the request body, never the URL or browser storage. */
 export async function POST(request: NextRequest) {
-  if (request.headers.get("origin") !== request.nextUrl.origin || !request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return reply({ error: "Invalid request." }, 403);
+  if (!hasMatchingRequestOrigin(request.headers.get("origin"), request.headers.get("host"), request.nextUrl.protocol) || !request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return reply({ error: "Invalid request." }, 403);
   if (Number(request.headers.get("content-length") ?? 0) > 4096) return reply({ error: "Request is too large." }, 413);
   const reader = request.body?.getReader();
   if (!reader) return reply({ error: "Invalid request." }, 400);

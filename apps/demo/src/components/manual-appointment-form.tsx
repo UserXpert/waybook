@@ -1,5 +1,7 @@
 "use client";
 
+import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
+
 import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { createManualBooking, getManualBookingAvailability } from "@/app/app/calendars/actions";
 import { SearchPicker } from "@/components/calendar-selectors";
@@ -33,9 +35,9 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   const teamMemberId = member?.id ?? "";
   const serviceId = service?.id ?? "";
   const timeSlots = slots.filter((slot) => slot.teamMemberId === teamMemberId);
-  const locationSearchUrl = useCallback((query: string) => `/api/app/locations?q=${encodeURIComponent(query)}&limit=8`, []);
-  const serviceSearchUrl = useCallback((query: string) => `/api/app/services?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
-  const staffSearchUrl = useCallback((query: string) => `/api/app/staff?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
+  const locationSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/locations?q=${encodeURIComponent(query)}&limit=8`, []);
+  const serviceSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
+  const staffSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/staff?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
   useEffect(() => { setLocation(initialLocation); setMember(initialMember); setService(initialService); const safeDate = defaultDate < today ? today : defaultDate; setDate(safeDate); setDateWindowStart(safeDate); setTime(defaultTime ?? ""); }, [defaultDate, defaultTime, initialLocation, initialMember, initialService, today]);
   useEffect(() => { setClient({ name: customerName ?? "", email: customerEmail ?? "", phone: customerPhone ?? "" }); }, [customerEmail, customerName, customerPhone]);
   useEffect(() => { let cancelled = false; if (!locationId || !serviceId) { setSlots([]); setChecking(false); return; } setChecking(true); getManualBookingAvailability({ locationId, serviceId, date }).then((result) => { if (!cancelled) setSlots(result.slots); }).catch(() => { if (!cancelled) setSlots([]); }).finally(() => { if (!cancelled) setChecking(false); }); return () => { cancelled = true; }; }, [date, locationId, serviceId]);

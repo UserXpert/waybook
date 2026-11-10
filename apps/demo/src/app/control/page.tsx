@@ -15,7 +15,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
   const requestHeaders = await headers();
   const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3333";
   const identity = await requireIdentity();
-  if (!identity.isPlatformAdmin) redirect("/app");
+  if (!identity.isPlatformAdmin) redirect("/");
   const tenants = await controlDb<ControlTenant[]>`
     SELECT t.id, t.slug, t.name, t.plan, t.lifecycle_status AS "lifecycleStatus", t.database_env_key AS "databaseEnvKey", t.timezone, d.hostname,
       COALESCE(m.status, 'pending') AS "migrationStatus", COALESCE(b.status, 'unknown') AS "backupStatus"

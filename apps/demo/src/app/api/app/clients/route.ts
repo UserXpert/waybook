@@ -5,10 +5,11 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /** Tenant- and permission-scoped client lookup for operational selectors. */
 export async function GET(request: NextRequest) {
-  const { tenant, membership } = await requireTenantWorkspace();
+  const { tenant, membership } = await requireTenantWorkspace(request.headers);
   await requireFeature(tenant.id, "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership);
   if (!permissions.isManager && !permissions.canViewClients && !permissions.canManageClients) return NextResponse.json({ error: "You do not have permission to search clients." }, { status: 403 });
@@ -23,5 +24,5 @@ export async function GET(request: NextRequest) {
   );
   const hasMore = rows.length > limit;
   const items = rows.slice(0, limit);
-  return NextResponse.json({ items, nextCursor: hasMore ? items.at(-1)?.id ?? null : null });
+  return NextResponse.json({ items, nextCursor: hasMore ? items.at(-1)?.id ?? null : null }, { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -5,6 +5,7 @@ import { withSerializableRetry } from "@thebookingkit/server";
 import { createHash, randomBytes } from "node:crypto";
 import type { TenantRecord } from "./database";
 import { tenantDb } from "./database";
+import { isPublicBookingStartAllowed } from "./public-booking-rules";
 
 type Service = { id: string; durationMinutes: number };
 type Location = { id: string; timezone: string };
@@ -85,6 +86,7 @@ export async function createBookingHold(input: { tenant: TenantRecord; serviceId
   const db = tenantDb(input.tenant);
   const locationId = await resolvedLocationId(input.tenant, input.locationId);
   return withSerializableRetry(async () => db.begin(async (transaction) => {
+    if (!isPublicBookingStartAllowed(input.startsAt)) throw new Error("The selected appointment time is no longer available.");
     await transaction.unsafe("UPDATE booking_blocks SET state = 'expired' WHERE tenant_id = $1 AND state = 'held' AND expires_at <= now()", [input.tenant.id]);
     const [service] = await transaction.unsafe<Service[]>(`
       SELECT id, duration_minutes AS "durationMinutes"
@@ -124,6 +126,8 @@ export async function confirmBookingFromHold(input: {
   holdId: string;
   customer: { name: string; email: string; phone?: string | null };
   idempotencyKey: string;
+  policyAcknowledgement?: { policyVersion: string; policyUrl: string | null; policyText?: string };
+  verifiedEmbedSource?: string;
 }) {
   const db = tenantDb(input.tenant);
   const normalizedEmail = input.customer.email.trim().toLowerCase();
@@ -145,13 +149,13 @@ export async function confirmBookingFromHold(input: {
       FROM booking_holds h JOIN booking_blocks b ON b.id = h.booking_block_id
       WHERE h.id = $1 AND h.tenant_id = $2 FOR UPDATE OF h, b
     `, [input.holdId, input.tenant.id]);
-    if (!hold || hold.blockState !== "held" || hold.expiresAt <= new Date() || !hold.startsAt || !hold.endsAt) {
+    if (!hold || hold.blockState !== "held" || hold.expiresAt <= new Date() || !hold.startsAt || !hold.endsAt || !isPublicBookingStartAllowed(hold.startsAt)) {
       throw new Error("This hold is no longer available.");
     }
     const [customer] = await transaction.unsafe<{ id: string }[]>(`
       INSERT INTO customers (tenant_id, email, name, phone)
       VALUES ($1, $2, $3, $4)
-      ON CONFLICT (tenant_id, email) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone, updated_at = now()
+      ON CONFLICT (tenant_id, email) DO UPDATE SET email = customers.email
       RETURNING id
     `, [input.tenant.id, normalizedEmail, name, input.customer.phone?.trim() || null]);
     await transaction.unsafe("UPDATE booking_blocks SET state = 'confirmed', expires_at = NULL WHERE id = $1 AND tenant_id = $2", [hold.bookingBlockId, input.tenant.id]);
@@ -170,9 +174,11 @@ export async function confirmBookingFromHold(input: {
       INSERT INTO customer_management_tokens (tenant_id, booking_id, token_hash, action_scope, expires_at)
       VALUES ($1, $2, $3, 'view', now() + interval '30 days')
     `, [input.tenant.id, booking.id, tokenHash]);
-    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.confirmed', $3::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
-    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.confirmed', 'booking', $2, $3::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
-    await transaction.unsafe("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::jsonb)", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, bookingNumber: booking.bookingNumber, managementToken })]);
+    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.confirmed', $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
+    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.confirmed', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
+    if (input.policyAcknowledgement) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.policy_acknowledged', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify(input.policyAcknowledgement)]);
+    if (input.verifiedEmbedSource) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.embed_source_verified', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ source: input.verifiedEmbedSource })]);
+    await transaction.unsafe("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::text::jsonb)", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, bookingNumber: booking.bookingNumber, managementToken })]);
     return { booking, managementToken, idempotent: false };
   }));
 }

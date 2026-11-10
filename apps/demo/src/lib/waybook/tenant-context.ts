@@ -1,9 +1,10 @@
 import "server-only";
 
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { requireIdentity } from "./auth";
 import { closeOverdueConfirmedBookings } from "./overdue-bookings";
-import { controlDb, findTenantByHostname, findTenantById, findTenantByRouteSlug, tenantDb, type TenantRecord } from "./database";
+import { controlDb, findTenantByHostname, findTenantByRouteSlug, tenantDb, type TenantRecord } from "./database";
 
 export type TenantMembership = { tenantId: string; role: string };
 
@@ -23,15 +24,17 @@ async function assertActiveStaffMembership(tenant: TenantRecord, identityId: str
 
 /**
  * Resolves the route-selected workspace only after checking the signed-in
- * identity has a membership. Legacy routes retain their single-membership
- * fallback while the same-origin URLs are rolled out.
+ * identity has a membership. Missing route context fails closed, including
+ * for server actions, rather than guessing from a single membership.
  */
-export async function requireTenantWorkspace(): Promise<{ tenant: TenantRecord; membership: TenantMembership; isControlView: boolean }> {
+export async function requireTenantWorkspace(requestHeaders?: Headers): Promise<{ tenant: TenantRecord; membership: TenantMembership; isControlView: boolean }> {
   const identity = await requireIdentity();
-  const routeSlug = (await headers()).get("x-waybook-tenant-route");
+  const routeSlug = (requestHeaders ?? await headers()).get("x-waybook-tenant-route");
+  // A lost rewrite header must never select a different workspace.
+  if (!routeSlug) notFound();
   if (routeSlug) {
     const tenant = await findTenantByRouteSlug(routeSlug);
-    if (!tenant) throw new Error("Tenant workspace is unavailable.");
+    if (!tenant) notFound();
     if (identity.isPlatformAdmin) {
       return { tenant, membership: { tenantId: tenant.id, role: "read-only" }, isControlView: true };
     }
@@ -39,20 +42,12 @@ export async function requireTenantWorkspace(): Promise<{ tenant: TenantRecord; 
       SELECT tenant_id AS "tenantId", role FROM tenant_memberships
       WHERE identity_id = ${identity.id} AND tenant_id = ${tenant.id} LIMIT 1
     `;
-    if (!membership) throw new Error("You do not have access to this tenant workspace.");
+    if (!membership) notFound();
     await assertActiveStaffMembership(tenant, identity.id, membership);
     await closeOverdueConfirmedBookings(tenant);
     return { tenant, membership, isControlView: false };
   }
-  const memberships = await controlDb<TenantMembership[]>`
-    SELECT tenant_id AS "tenantId", role FROM tenant_memberships WHERE identity_id = ${identity.id} LIMIT 2
-  `;
-  if (memberships.length !== 1) throw new Error("Choose a tenant workspace.");
-  const tenant = await findTenantById(memberships[0].tenantId);
-  if (!tenant || tenant.lifecycleStatus !== "active") throw new Error("Tenant workspace is unavailable.");
-  await assertActiveStaffMembership(tenant, identity.id, memberships[0]);
-  await closeOverdueConfirmedBookings(tenant);
-  return { tenant, membership: memberships[0], isControlView: false };
+  notFound();
 }
 
 /** Resolves a tenant route for a public request; no browser-controlled DB key is accepted. */

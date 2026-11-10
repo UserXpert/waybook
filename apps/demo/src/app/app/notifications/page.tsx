@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -10,7 +11,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 export default async function NotificationsPage() {
   const { tenant, membership } = await requireTenantWorkspace();
   const permissions = await staffPermissionContext(tenant, membership);
-  if (!permissions.isManager) throw new Error("You do not have permission to view notifications.");
+  if (!permissions.isManager) notFound();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug); const db = tenantDb(tenant);
   const overdueArrivals = await db.unsafe<Array<{ id: string; customerName: string; serviceTitle: string; startsAt: Date; teamMemberId: string | null; locationId: string | null }>>(`SELECT b.id,c.name AS "customerName",s.title AS "serviceTitle",b.starts_at AS "startsAt",b.team_member_id AS "teamMemberId",b.location_id AS "locationId" FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id WHERE b.tenant_id=$1 AND b.status='arrived' AND b.ends_at <= now() ORDER BY b.ends_at DESC LIMIT 100`, [tenant.id]);
   const time = new Intl.DateTimeFormat('en-GB', { timeZone: tenant.timezone, dateStyle: 'medium', timeStyle: 'short' });

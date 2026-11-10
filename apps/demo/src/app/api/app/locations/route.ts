@@ -5,8 +5,9 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
-  const { tenant, membership } = await requireTenantWorkspace();
+  const { tenant, membership } = await requireTenantWorkspace(request.headers);
   await requireFeature(tenant.id, "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership);
   if (!permissions.isManager && !permissions.canManageServiceSettings && !permissions.canManageTeamAppointments && !permissions.canManageOwnAppointments) return NextResponse.json({ error: "You do not have permission to search locations." }, { status: 403 });
@@ -17,5 +18,5 @@ export async function GET(request: NextRequest) {
   const rows = await tenantDb(tenant).unsafe<{ id: string; name: string }[]>("SELECT l.id,l.name FROM locations l WHERE l.tenant_id=$1 AND l.is_active=TRUE AND ($2='' OR l.name ILIKE $3) AND ($4::uuid IS NULL OR (l.name,l.id) > (coalesce((SELECT name FROM locations WHERE tenant_id=$1 AND id=$4::uuid),''),$4::uuid)) ORDER BY l.name,l.id LIMIT $5", [tenant.id, query, `%${query}%`, cursor, limit + 1]);
   const hasMore = rows.length > limit;
   const items = rows.slice(0, limit);
-  return NextResponse.json({ items, nextCursor: hasMore ? items.at(-1)?.id ?? null : null });
+  return NextResponse.json({ items, nextCursor: hasMore ? items.at(-1)?.id ?? null : null }, { headers: { "Cache-Control": "private, no-store" } });
 }

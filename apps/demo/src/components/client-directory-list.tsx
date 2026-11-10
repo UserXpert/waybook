@@ -1,5 +1,7 @@
 "use client";
 
+import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
+
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -49,7 +51,7 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
       inFlightRef.current = true;
       setLoading(true);
       const params = new URLSearchParams({ q: query, cursor: nextCursor, limit: "50" });
-      void fetch(`/api/app/clients?${params}`)
+      void fetch(`${tenantApiPrefix()}/api/app/clients?${params}`)
         .then((response) => response.ok ? response.json() as Promise<{ items: Client[]; nextCursor: string | null }> : null)
         .then((data) => {
           if (!data) return;

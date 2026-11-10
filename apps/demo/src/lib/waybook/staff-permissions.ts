@@ -3,6 +3,7 @@ import "server-only";
 import { requireIdentity } from "./auth";
 import { tenantDb, type TenantRecord } from "./database";
 import type { TenantMembership } from "./tenant-context";
+import { enforceReadOnlyPermissions } from "./read-only-permissions";
 
 export type StaffPermissionContext = {
   isManager: boolean;
@@ -108,7 +109,7 @@ export async function staffPermissionContext(
   `;
   if (!staff) return { isManager: false, teamMemberId: null, ...denied };
   if (!await staffWorkspacePermissionsAvailable(tenant)) {
-    return { isManager: false, ...staff, ...deniedWorkspacePermissions };
+    return enforceReadOnlyPermissions(membership.role, { isManager: false, ...staff, ...deniedWorkspacePermissions });
   }
   const [workspace] = await db<ExtendedWorkspacePermissions[]>`
     SELECT can_view_clients AS "canViewClients",
@@ -120,7 +121,7 @@ export async function staffPermissionContext(
     WHERE tenant_id = ${tenant.id} AND team_member_id = ${staff.teamMemberId}
     LIMIT 1
   `;
-  return { isManager: false, ...staff, ...(workspace ?? deniedWorkspacePermissions) };
+  return enforceReadOnlyPermissions(membership.role, { isManager: false, ...staff, ...(workspace ?? deniedWorkspacePermissions) });
 }
 
 export function canManageAppointment(

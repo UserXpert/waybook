@@ -1,5 +1,7 @@
 "use client";
 
+import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
+
 import { useActionState, useEffect, useState } from "react";
 import { savePerformanceTarget } from "@/app/app/targets/actions";
 
@@ -11,7 +13,7 @@ export function PerformanceTargetForm({ defaultMonth }: { defaultMonth: string }
   const [query, setQuery] = useState('');
   const [scopes, setScopes] = useState<Scope[]>([]);
   const [state, formAction, pending] = useActionState(savePerformanceTarget, { error: null, success: null });
-  useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { const endpoint = scopeType === 'staff' ? '/api/app/staff' : '/api/app/services'; fetch(`${endpoint}?q=${encodeURIComponent(query)}&limit=20`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Scope[] }) => { if (!cancelled) setScopes(data.items); }).catch(() => { if (!cancelled) setScopes([]); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [query, scopeType]);
+  useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { const endpoint = scopeType === 'staff' ? '/api/app/staff' : '/api/app/services'; fetch(`${tenantApiPrefix()}${endpoint}?q=${encodeURIComponent(query)}&limit=20`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Scope[] }) => { if (!cancelled) setScopes(data.items); }).catch(() => { if (!cancelled) setScopes([]); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [query, scopeType]);
   return <form action={formAction} className="tenant-drawer-form">
     <label>Target applies to<select name="scopeType" value={scopeType} onChange={(event) => { setScopeType(event.target.value as 'staff' | 'service'); setQuery(''); }}><option value="staff">Staff member</option><option value="service">Service</option></select></label>
     <label>{scopeType === 'staff' ? 'Staff member' : 'Service'}<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${scopeType === 'staff' ? 'staff' : 'services'}`} aria-label={`Search target ${scopeType}`} autoComplete="off" /><select name="scopeId" required disabled={!scopes.length} key={scopeType}><option value="">Choose {scopeType === 'staff' ? 'staff' : 'service'}</option>{scopes.map((scope) => <option key={scope.id} value={scope.id}>{scope.name}</option>)}</select></label>

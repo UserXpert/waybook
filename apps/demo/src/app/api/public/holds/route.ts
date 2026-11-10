@@ -3,6 +3,8 @@ import { BookingConflictError } from "@thebookingkit/server";
 import { availableSlots, createBookingHold } from "@/lib/waybook/booking";
 import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
+import { publicServiceAllowed } from "@/lib/waybook/public-booking-eligibility";
+import { isPublicBookingStartAllowed } from "@/lib/waybook/public-booking-rules";
 
 export const runtime = "nodejs";
 
@@ -17,10 +19,11 @@ export async function POST(request: NextRequest) {
   const locationId = typeof body?.locationId === "string" ? body.locationId : undefined;
   const startsAt = new Date(typeof body?.startsAt === "string" ? body.startsAt : "");
   const endsAt = new Date(typeof body?.endsAt === "string" ? body.endsAt : "");
-  if (!serviceId || Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+  if (!serviceId || !isPublicBookingStartAllowed(startsAt) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
     return NextResponse.json({ error: "A valid service and ISO appointment interval are required." }, { status: 400 });
   }
   try {
+    if (!await publicServiceAllowed(tenant, serviceId)) return NextResponse.json({ error: "Service is unavailable." }, { status: 404 });
     const providers = await availableSlots(tenant, serviceId, new Date(startsAt.getTime() - 24 * 60 * 60_000), new Date(endsAt.getTime() + 24 * 60 * 60_000), { locationId });
     const eligibleMembers = providers
       .filter((provider) => provider.slots.some((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime()))
@@ -40,6 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "That appointment has just been taken." }, { status: 409 });
   } catch (error) {
     if (error instanceof BookingConflictError) return NextResponse.json({ error: "That appointment has just been taken." }, { status: 409 });
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not reserve that appointment." }, { status: 422 });
+    console.error("public_booking_hold_failed", { tenant: tenant.slug });
+    return NextResponse.json({ error: "Could not reserve that appointment." }, { status: 422 });
   }
 }
