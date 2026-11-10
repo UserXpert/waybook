@@ -11,7 +11,7 @@ type Send = typeof sendWithResend;
 
 /** Process one message. Scheduling, authorization, and key management remain the caller's responsibility. */
 export async function deliverOneEmail(db: Sql, tenantId: string, resolveKey: (id: string) => Buffer | undefined, send: Send = sendWithResend): Promise<"not_configured" | "empty" | "processed" | "lost_claim"> {
-  const [connection] = await db.unsafe<Array<{ id: string; sender: string; createdAt: Date }>>(`SELECT id,sender_email AS sender,created_at AS "createdAt" FROM email_provider_connections WHERE tenant_id=$1 AND provider='resend' AND revoked_at IS NULL`, [tenantId]);
+  const [connection] = await db.unsafe<Array<{ id: string; sender: string; createdAt: Date }>>(`SELECT id,sender_email AS sender,created_at AS "createdAt" FROM email_provider_connections WHERE tenant_id=$1 AND provider='resend' AND revoked_at IS NULL AND verified_at IS NOT NULL`, [tenantId]);
   if (!connection) return "not_configured";
   const token = randomUUID();
   const claim = await claimEmail(db, tenantId, token);

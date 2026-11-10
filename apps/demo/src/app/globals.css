@@ -6403,7 +6403,13 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-template-preview h3 { margin:0; font-size:.9rem; }
 .tenant-dashboard-page .email-template-preview strong { display:block; margin-top:1rem; font-size:.88rem; }
 .tenant-dashboard-page .email-template-preview div { margin-top:.65rem; white-space:pre-wrap; font-size:.85rem; line-height:1.6; }
+.tenant-dashboard-page .email-provider-settings { display:grid; gap:1.4rem; max-width:42rem; }
+.tenant-dashboard-page .email-provider-settings > p,.tenant-dashboard-page .email-provider-current p { margin:.4rem 0; font-size:.85rem; line-height:1.5; }
+.tenant-dashboard-page .email-provider-current { border:1px solid #dedee3; border-radius:.65rem; padding:1rem; }
+.tenant-dashboard-page .email-provider-current h2 { margin:0; font-size:1rem; }
+.tenant-dashboard-page .email-provider-current button { border:1px solid currentColor; border-radius:.45rem; padding:.55rem .8rem; background:transparent; color:inherit; font:inherit; font-size:.8rem; cursor:pointer; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-template-preview { background:#202023; border-color:#414148; color:#f2f2f3; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-provider-current { border-color:#414148; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace { border-color:#343438; background:#151516; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace__sidebar { border-color:#343438; background:#1c1c1f; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace__sidebar h2,:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-workspace__heading h1,:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-template-editor h2 { color:#f2f2f3; }
