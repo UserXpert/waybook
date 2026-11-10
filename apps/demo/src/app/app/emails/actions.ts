@@ -7,6 +7,9 @@ import { requireFeature } from "@/lib/waybook/features";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { configuredProviderKey } from "@/lib/waybook/provider-secret-config";
+import { disconnectEmailConnection, replaceEmailConnection } from "@/lib/waybook/email-provider-connection";
+import { requireIdentity } from "@/lib/waybook/auth";
 
 export async function saveEmailTemplate(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -24,4 +27,36 @@ export async function saveEmailTemplate(formData: FormData) {
   const path = tenantPath(await currentTenantRouteSlug(tenant.slug), "/app/emails");
   revalidatePath("/app/emails");
   redirect(`${path}?view=templates&template=${key}&saved=1`);
+}
+
+async function providerContext() {
+  const { tenant, membership } = await requireTenantWorkspace();
+  await requireFeature(tenant.id, "email-notifications");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to manage email settings.");
+  const identity = await requireIdentity();
+  const path = tenantPath(await currentTenantRouteSlug(tenant.slug), "/app/emails");
+  return { tenant, identity, path };
+}
+
+export async function saveEmailProvider(formData: FormData) {
+  const { tenant, identity, path } = await providerContext();
+  const key = configuredProviderKey();
+  if (!key) redirect(`${path}?view=connection&providerError=config`);
+  const sender = String(formData.get("senderEmail") ?? "").trim();
+  const apiKey = String(formData.get("apiKey") ?? "").trim();
+  if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(sender) || sender.length > 254 || !apiKey || /[\r\n]/.test(apiKey) || Buffer.byteLength(apiKey, "utf8") > 4096) redirect(`${path}?view=connection&providerError=invalid`);
+  try {
+    await replaceEmailConnection(tenantDb(tenant), tenant.id, sender, apiKey, key, identity.id);
+  } catch {
+    redirect(`${path}?view=connection&providerError=save`);
+  }
+  revalidatePath("/app/emails");
+  redirect(`${path}?view=connection&providerSaved=1`);
+}
+
+export async function removeEmailProvider() {
+  const { tenant, identity, path } = await providerContext();
+  await disconnectEmailConnection(tenantDb(tenant), tenant.id, identity.id);
+  revalidatePath("/app/emails");
+  redirect(`${path}?view=connection&providerRemoved=1`);
 }

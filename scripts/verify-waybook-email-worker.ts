@@ -16,6 +16,8 @@ async function main() { try {
   await db`DELETE FROM email_provider_connections WHERE tenant_id=${tenant}`;
   assert.equal(await deliverOneEmail(db, tenant, resolve), "not_configured");
   await replaceEmailConnection(db, tenant, "studio@example.invalid", "test-provider-key", key);
+  assert.equal(await deliverOneEmail(db, tenant, resolve), "not_configured", "unverified connections must not send");
+  await db`UPDATE email_provider_connections SET verified_at=now() WHERE tenant_id=${tenant} AND revoked_at IS NULL`;
   const [entry] = await db<{ id: string }[]>`INSERT INTO email_outbox (tenant_id,booking_id,message_type,recipient,payload) VALUES (${tenant},${booking},'confirmation','client@example.invalid','{}'::jsonb) RETURNING id`;
   const requests: Array<Parameters<typeof sendWithResend>[0]> = [];
   const accepted: typeof sendWithResend = async (input) => { requests.push(input); return { kind: "accepted", providerId: "test-provider-id" }; };
@@ -45,6 +47,7 @@ async function main() { try {
   await deliverOneEmail(db, tenant, resolve, fail);
   await db`UPDATE email_outbox SET delivery_next_attempt_at=now()-interval '1 second' WHERE id=${rotated.id}`;
   await replaceEmailConnection(db, tenant, "replacement@example.invalid", "replacement-key", key);
+  await db`UPDATE email_provider_connections SET verified_at=now() WHERE tenant_id=${tenant} AND revoked_at IS NULL`;
   await deliverOneEmail(db, tenant, resolve, accepted);
   const [needsReview] = await db<{ status: string; result: string }[]>`SELECT status,delivery_result AS result FROM email_outbox WHERE id=${rotated.id}`;
   assert.deepEqual({ status: needsReview.status, result: needsReview.result }, { status: "failed", result: "review" });

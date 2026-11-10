@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS email_provider_connections (
   sender_email TEXT NOT NULL,
   encrypted_secret JSONB NOT NULL CHECK (jsonb_typeof(encrypted_secret) = 'object'),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  verified_at TIMESTAMPTZ,
   revoked_at TIMESTAMPTZ
 );
 
