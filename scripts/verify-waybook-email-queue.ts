@@ -3,11 +3,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { claimEmail, finishEmailAttempt, prepareEmailAttempt } from "../apps/demo/src/lib/waybook/email-outbox-queue";
 import { activeEmailCredential, disconnectEmailConnection, replaceEmailConnection } from "../apps/demo/src/lib/waybook/email-provider-connection";
+import { confirmEmailProviderTest, sendEmailProviderTest } from "../apps/demo/src/lib/waybook/email-provider-verification";
 
 const url = process.env.WAYBOOK_EMAIL_QUEUE_TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.slice(1).startsWith("waybook_email_queue_test_")) throw new Error("Use a disposable waybook_email_queue_test_* database.");
 const db = postgres(url, { max: 3, ssl: false, onnotice: () => {} });
 const tenant = randomUUID();
+const verifyTenant = randomUUID();
 const snapshot = { provider: "resend" as const, connectionId: "example-connection", message: { from: "studio@example.invalid", to: "client@example.invalid", subject: "Booking", text: "Confirmed" } };
 async function main() { try {
   const key = { id: "test-key", key: randomBytes(32) };
@@ -27,6 +29,22 @@ async function main() { try {
   assert.equal(await disconnectEmailConnection(db, tenant), true);
   assert.equal((await Promise.all(replacements.map((connection) => activeEmailCredential(db, tenant, connection.id, resolveKey)))).filter(Boolean).length, 0);
   assert.equal(await disconnectEmailConnection(db, tenant), false);
+  await replaceEmailConnection(db, verifyTenant, "verify@example.invalid", "test-verification-key", key);
+  assert.equal(await confirmEmailProviderTest(db, verifyTenant, randomUUID()), false, "cannot confirm before a provider accepts a test");
+  let testRequests = 0;
+  const testSender: typeof import("../apps/demo/src/lib/waybook/resend-delivery").sendWithResend = async (input) => {
+    testRequests++;
+    assert.equal(input.message.from, "verify@example.invalid"); assert.equal(input.message.to, "verify@example.invalid");
+    assert.equal(input.apiKey, "test-verification-key");
+    return { kind: "accepted", providerId: "verification-id" };
+  };
+  const testResults = await Promise.all([sendEmailProviderTest(db, verifyTenant, resolveKey, testSender), sendEmailProviderTest(db, verifyTenant, resolveKey, testSender)]);
+  assert.equal(testResults.filter((value) => value === "accepted").length, 1);
+  assert.equal(testRequests, 1, "concurrent verification requests must not send twice");
+  const [beforeConfirm] = await db<{ verifiedAt: Date | null }[]>`SELECT verified_at AS "verifiedAt" FROM email_provider_connections WHERE tenant_id=${verifyTenant} AND revoked_at IS NULL`;
+  assert.equal(beforeConfirm.verifiedAt, null, "provider acceptance does not prove receipt");
+  assert.equal(await confirmEmailProviderTest(db, verifyTenant, randomUUID()), true);
+  assert.equal(await confirmEmailProviderTest(db, verifyTenant, randomUUID()), false);
   await db`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload) VALUES (${tenant},'confirmation','client@example.invalid','{}'::jsonb)`;
   const a = randomUUID(), b = randomUUID();
   const claims = await Promise.all([claimEmail(db, tenant, a), claimEmail(db, tenant, b)]);
@@ -64,6 +82,7 @@ async function main() { try {
 } finally {
   await db`DELETE FROM email_outbox WHERE tenant_id=${tenant}`;
   await db`DELETE FROM email_provider_connections WHERE tenant_id=${tenant}`;
+  await db`DELETE FROM email_provider_connections WHERE tenant_id=${verifyTenant}`;
   await db.end();
 } }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
