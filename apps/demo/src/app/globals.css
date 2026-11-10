@@ -33,7 +33,7 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-  --font: "Urbanist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
 }
 
@@ -6422,3 +6422,49 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-date-navigation span { font-size: .85rem; font-weight: 600; }
 .tenant-date-navigation button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 1px solid currentColor; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
 .tenant-date-navigation button:disabled { opacity: .35; cursor: default; }
+
+/* Readable text across the dashboard and customer booking journey. */
+.dashboard-four__header h1 { font-size: clamp(2rem, 3vw, 2.75rem); letter-spacing: -.045em; }
+.tenant-dashboard-page .waybook-data-card th,
+.tenant-dashboard-page .waybook-list-filter label,
+.tenant-dashboard-page .calendar-selectors label,
+.tenant-dashboard-page .calendar-search-picker > label,
+.tenant-dashboard-page .calendar-row-filter label,
+.tenant-dashboard-page .waybook-customer-form label,
+.tenant-dashboard-page .tenant-inline-form label,
+.tenant-dashboard-page .appointment-drawer__details dt,
+.tenant-dashboard-page .staff-workspace__directory > .waybook-list-filter label,
+.tenant-dashboard-page .staff-profile-form label,
+.tenant-dashboard-page .staff-hours-form label,
+.tenant-dashboard-page .staff-timeoff-form > label,
+.tenant-dashboard-page .waybook-team-form > label,
+.tenant-dashboard-page .tenant-drawer-form > label,
+.tenant-dashboard-page .tenant-drawer-form__grid > label,
+.tenant-dashboard-page .waybook-calendar-form > label,
+.tenant-dashboard-page .staff-profile-form legend,
+.tenant-dashboard-page .staff-hours-form legend,
+.tenant-dashboard-page .waybook-team-form legend,
+.tenant-dashboard-page .tenant-drawer-form legend,
+.tenant-dashboard-page .waybook-calendar-form legend { font-size: .8125rem; }
+.tenant-dashboard-page .dashboard-four__header p,
+.tenant-dashboard-page .dashboard-widget__title p,
+.tenant-dashboard-page .dashboard-widget__note,
+.tenant-dashboard-page .revenue-list small,
+.tenant-dashboard-page .revenue-list dt,
+.tenant-dashboard-page .appointment-status,
+.tenant-dashboard-page .waybook-calendar-legend,
+.tenant-dashboard-page .waybook-calendar-toolbar p,
+.tenant-dashboard-page .waybook-calendar-services small,
+.tenant-dashboard-page .waybook-customer-form small,
+.tenant-dashboard-page .tenant-drawer-form fieldset small,
+.tenant-dashboard-page .online-booking-settings__services small,
+.tenant-dashboard-page .waybook-form-toggle small { font-size: .8125rem; }
+.tenant-dashboard-page .waybook-week-calendar__time,
+.tenant-dashboard-page .team-day-calendar__time-header,
+.tenant-dashboard-page .waybook-week-calendar__day small,
+.tenant-dashboard-page .waybook-calendar-entry__service { font-size: .75rem; }
+.tenant-booking-header p, .tenant-booking-step { font-size: .8125rem; }
+.booking-step-progress > span { width: 1.5rem; height: 1.5rem; font-size: .75rem; }
+.tenant-dashboard-page td > .booking-copy-value { white-space: nowrap; }
+.tenant-booking-page .booking-manage-link { color: #52655a; font-size: .8125rem; }
+.tenant-booking-page[data-booking-theme="dark"] .booking-manage-link { color: #c9d4cd; }
