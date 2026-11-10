@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { claimEmail, finishEmailAttempt, prepareEmailAttempt } from "../apps/demo/src/lib/waybook/email-outbox-queue";
+import { activeEmailCredential, disconnectEmailConnection, replaceEmailConnection } from "../apps/demo/src/lib/waybook/email-provider-connection";
 
 const url = process.env.WAYBOOK_EMAIL_QUEUE_TEST_DATABASE_URL;
 if (!url || !new URL(url).pathname.slice(1).startsWith("waybook_email_queue_test_")) throw new Error("Use a disposable waybook_email_queue_test_* database.");
@@ -9,6 +10,23 @@ const db = postgres(url, { max: 3, ssl: false, onnotice: () => {} });
 const tenant = randomUUID();
 const snapshot = { provider: "resend" as const, connectionId: "example-connection", message: { from: "studio@example.invalid", to: "client@example.invalid", subject: "Booking", text: "Confirmed" } };
 async function main() { try {
+  const key = { id: "test-key", key: randomBytes(32) };
+  const first = await replaceEmailConnection(db, tenant, "studio@example.invalid", "first-provider-key", key);
+  const resolveKey = (id: string) => id === key.id ? key.key : undefined;
+  assert.equal((await activeEmailCredential(db, tenant, first.id, resolveKey))?.apiKey, "first-provider-key");
+  assert.equal(await activeEmailCredential(db, randomUUID(), first.id, resolveKey), null);
+  const [encrypted] = await db<{ value: string }[]>`SELECT encrypted_secret::text AS value FROM email_provider_connections WHERE id=${first.id}`;
+  assert.ok(!encrypted.value.includes("first-provider-key"), "credential must not be stored in plaintext");
+  const replacements = await Promise.all([
+    replaceEmailConnection(db, tenant, "one@example.invalid", "second-provider-key", key),
+    replaceEmailConnection(db, tenant, "two@example.invalid", "third-provider-key", key),
+  ]);
+  assert.equal(await activeEmailCredential(db, tenant, first.id, resolveKey), null, "replaced connections cannot send");
+  const active = (await Promise.all(replacements.map((connection) => activeEmailCredential(db, tenant, connection.id, resolveKey)))).filter(Boolean);
+  assert.equal(active.length, 1, "concurrent replacements must leave exactly one active connection");
+  assert.equal(await disconnectEmailConnection(db, tenant), true);
+  assert.equal((await Promise.all(replacements.map((connection) => activeEmailCredential(db, tenant, connection.id, resolveKey)))).filter(Boolean).length, 0);
+  assert.equal(await disconnectEmailConnection(db, tenant), false);
   await db`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload) VALUES (${tenant},'confirmation','client@example.invalid','{}'::jsonb)`;
   const a = randomUUID(), b = randomUUID();
   const claims = await Promise.all([claimEmail(db, tenant, a), claimEmail(db, tenant, b)]);
@@ -42,9 +60,10 @@ async function main() { try {
   const [review] = await db<{ status: string; result: string }[]>`SELECT status,delivery_result AS result FROM email_outbox WHERE id=${retryClaim.id}`;
   assert.deepEqual({ status: review.status, result: review.result }, { status: "failed", result: "review" });
   assert.equal(await claimEmail(db, tenant, randomUUID()), null, "ambiguous outcome requires review");
-  console.log("Email queue: exclusive claims, immutable retry snapshot, stale-worker fencing and single completion passed.");
+  console.log("Email connections and queue: encrypted tenant isolation, replacement, disconnect, claims and retry safeguards passed.");
 } finally {
   await db`DELETE FROM email_outbox WHERE tenant_id=${tenant}`;
+  await db`DELETE FROM email_provider_connections WHERE tenant_id=${tenant}`;
   await db.end();
 } }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
