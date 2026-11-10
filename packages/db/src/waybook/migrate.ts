@@ -18,16 +18,16 @@ export async function migrateWaybookDatabase(databaseUrl: string, kind: WaybookD
   // holding the lock, so concurrent deployments cannot apply it twice.
   try {
     await sql.begin(async (transaction) => {
-      await transaction`SELECT pg_advisory_xact_lock(hashtext('waybook_schema_migrations'))`;
-      await transaction`CREATE TABLE IF NOT EXISTS waybook_schema_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+      await transaction.unsafe("SELECT pg_advisory_xact_lock(hashtext('waybook_schema_migrations'))");
+      await transaction.unsafe("CREATE TABLE IF NOT EXISTS waybook_schema_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
     });
     const completed: string[] = [];
 
     for (const file of files) {
       const migration = readFileSync(join(migrationDirectory, file), "utf8");
       const applied = await sql.begin(async (transaction) => {
-        await transaction`SELECT pg_advisory_xact_lock(hashtext('waybook_schema_migrations'))`;
-        const existing = await transaction`SELECT 1 FROM waybook_schema_migrations WHERE name = ${file}`;
+        await transaction.unsafe("SELECT pg_advisory_xact_lock(hashtext('waybook_schema_migrations'))");
+        const existing = await transaction.unsafe("SELECT 1 FROM waybook_schema_migrations WHERE name = $1", [file]);
         if (existing.length) return false;
         await transaction.unsafe(migration);
         await transaction.unsafe("INSERT INTO waybook_schema_migrations (name) VALUES ($1)", [file]);
