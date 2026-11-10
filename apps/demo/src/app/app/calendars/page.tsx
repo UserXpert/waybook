@@ -9,6 +9,7 @@ import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { availableSlots } from "@/lib/waybook/booking";
+import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
 import { tenantDb } from "@/lib/waybook/database";
 import {
   currentTenantRouteSlug,
@@ -250,7 +251,7 @@ export default async function CalendarsPage({
   const requestedDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : localDateKey(new Date(), tenant.timezone);
   const selectedLocation = requestedLocation
     ?? bookingLocation
-    ?? (await db<Location[]>`SELECT l.id,l.name FROM locations l WHERE l.tenant_id=${tenant.id} AND l.is_active=TRUE ORDER BY CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.tenant_id=l.tenant_id AND b.location_id=l.id AND b.status <> 'cancelled' AND to_char(b.starts_at AT TIME ZONE ${tenant.timezone},'YYYY-MM-DD')=${requestedDay} AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid)) THEN 0 ELSE 1 END, CASE WHEN l.slug='primary' THEN 0 ELSE 1 END,l.name LIMIT 1`)[0];
+    ?? (await db<Location[]>`SELECT l.id,l.name FROM locations l WHERE l.tenant_id=${tenant.id} AND l.is_active=TRUE ORDER BY CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.tenant_id=l.tenant_id AND b.location_id=l.id AND b.status <> 'cancelled' AND b.starts_at >= (${requestedDay}::date::timestamp AT TIME ZONE ${tenant.timezone}) AND b.starts_at < ((${requestedDay}::date + 1)::timestamp AT TIME ZONE ${tenant.timezone}) AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid)) THEN 0 ELSE 1 END, CASE WHEN l.slug='primary' THEN 0 ELSE 1 END,l.name LIMIT 1`)[0];
   const locationWorkingDays = selectedLocation
     ? await db<{ dayOfWeek: number }[]>`SELECT day_of_week AS "dayOfWeek" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${selectedLocation.id} ORDER BY day_of_week`
     : [] as { dayOfWeek: number }[];
@@ -292,7 +293,8 @@ export default async function CalendarsPage({
         Customer[]
       >`SELECT id, name, email, phone FROM customers WHERE tenant_id = ${tenant.id} AND id = ${customerId} LIMIT 1`
     : [];
-  const tenantToday = localDateKey(new Date(), tenant.timezone);
+  const calendarNow = new Date();
+  const tenantToday = localDateKey(calendarNow, tenant.timezone);
   const hasSelectedEmployee = Boolean(
     effectiveEmployee && members.some((member) => member.id === effectiveEmployee),
   );
@@ -707,12 +709,12 @@ export default async function CalendarsPage({
                         ...Array.from({ length: teamRowCount }, (_, index) => {
                           const time = `${String(Math.floor((teamGridStart + index * 30) / 60)).padStart(2, "0")}:${String((teamGridStart + index * 30) % 60).padStart(2, "0")}`;
                           const slotKey = `${member.id}|${teamDay}T${time}`;
-                          const isBookable = bookableSlotKeys.has(slotKey);
+                          const isPastDate = isPastCalendarSlot(teamDay, time, tenant.timezone, calendarNow);
+                          const isBookable = !isPastDate && bookableSlotKeys.has(slotKey);
                           // Historical schedules remain visible, but never
                           // masquerade as a staff/service availability error.
                           // The slot engine correctly refuses starts in the
                           // past; represent that as a quiet, read-only cell.
-                          const isPastDate = teamDay < tenantToday;
                           const isAppointmentConflict = Boolean(
                             !isBookable &&
                               !isPastDate &&
@@ -919,8 +921,8 @@ export default async function CalendarsPage({
                         ...days.map((day, dayIndex) => {
                           const time = `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:${String((gridStart + index * 30) % 60).padStart(2, "0")}`;
                           const slotKey = `${selected?.id}|${day}T${time}`;
-                          const isBookable = bookableSlotKeys.has(slotKey);
-                          const isPastDate = day < tenantToday;
+                          const isPastDate = isPastCalendarSlot(day, time, tenant.timezone, calendarNow);
+                          const isBookable = !isPastDate && bookableSlotKeys.has(slotKey);
                           const isAppointmentConflict = Boolean(
                             !isBookable &&
                               !isPastDate &&
