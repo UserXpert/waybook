@@ -1,20 +1,21 @@
 import type { Sql } from "postgres";
 import type { ResendMessage, ResendResult } from "./resend-delivery";
 
-export type EmailDeliverySnapshot = { provider: "resend"; connectionId: string; message: ResendMessage };
+export type EmailDeliverySnapshot = { provider: "resend"; connectionId: string; bookingStartsAt: string; message: ResendMessage };
 export type ClaimedEmail = { id: string; snapshot: EmailDeliverySnapshot | null; firstAttemptAt: Date | null; attemptCount: number };
 
 /** Claim one tenant's message; expired claims can be recovered by another worker. */
-export async function claimEmail(db: Sql, tenantId: string, claimToken: string): Promise<ClaimedEmail | null> {
+export async function claimEmail(db: Sql, tenantId: string, claimToken: string, outboxId?: string): Promise<ClaimedEmail | null> {
   const [row] = await db.unsafe<ClaimedEmail[]>(`
     UPDATE email_outbox SET delivery_claim_token=$2, delivery_claim_until=now()+interval '2 minutes'
     WHERE id=(SELECT id FROM email_outbox
       WHERE tenant_id=$1 AND status='queued'
+        AND ($3::uuid IS NULL OR id=$3::uuid)
         AND (delivery_next_attempt_at IS NULL OR delivery_next_attempt_at<=now())
         AND (delivery_claim_until IS NULL OR delivery_claim_until<=now())
       ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1)
       AND tenant_id=$1
-    RETURNING id,delivery_snapshot AS snapshot,delivery_first_attempt_at AS "firstAttemptAt",delivery_attempt_count AS "attemptCount"`, [tenantId, claimToken]);
+    RETURNING id,delivery_snapshot AS snapshot,delivery_first_attempt_at AS "firstAttemptAt",delivery_attempt_count AS "attemptCount"`, [tenantId, claimToken, outboxId ?? null]);
   return row ?? null;
 }
 

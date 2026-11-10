@@ -13,6 +13,16 @@ export function unknownEmailPlaceholders(template: string): string[] {
   return [...new Set([...template.matchAll(placeholder)].map((match) => match[1].trim()).filter((key) => !allowed.has(key)))];
 }
 
+export function emailTemplateError(subject: string, body: string): string | null {
+  if (!subject.trim() || subject.length > 200 || /[\r\n]/.test(subject)) return "Enter a single-line subject of up to 200 characters.";
+  if (!body.trim() || body.length > 10000) return "Enter a message of up to 10,000 characters.";
+  const unknown = [...new Set([...unknownEmailPlaceholders(subject), ...unknownEmailPlaceholders(body)])];
+  if (unknown.length) return `Unsupported placeholders: ${unknown.map((key) => `{{${key}}}`).join(", ")}.`;
+  const remainder = `${subject}\n${body}`.replace(placeholder, "");
+  if (remainder.includes("{{") || remainder.includes("}}")) return "Check that each placeholder has matching braces.";
+  return null;
+}
+
 /** Substitute once: inserted customer data is never interpreted as template syntax. */
 export function substituteEmailPlaceholders(template: string, values: BookingEmailValues): string {
   return template.replace(placeholder, (match, raw: string) => {

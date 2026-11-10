@@ -6,6 +6,7 @@ import { tenantDb } from "@/lib/waybook/database";
 import { requiresPolicyAgreement } from "@/lib/waybook/booking-policy";
 import { verifyEmbedSource } from "@/lib/waybook/embed-token";
 import { isCurrentBookingPolicy } from "@/lib/waybook/booking-policy-revision";
+import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
     if (requiresPolicyAgreement(page) && body?.acceptedPolicy !== true) return NextResponse.json({ error: "Accept the current booking policy before confirming." }, { status: 400 });
     if (embedSource && (!embedToken || !embedOrigins.includes(embedSource) || !verifyEmbedSource(tenant.id, embedSource, embedToken))) return NextResponse.json({ error: "This embedded booking session has expired. Please reopen it from the website." }, { status: 400 });
     const result = await confirmBookingFromHold({ tenant, holdId, idempotencyKey, customer: { name, email, phone }, policyAcknowledgement: policyVersion && (policyUrl || policyText) ? { policyVersion, policyUrl, policyText: policyText || undefined } : undefined, verifiedEmbedSource: embedSource || undefined });
+    promptEmailDelivery(tenant, result.outboxId);
     return NextResponse.json({ booking: result.booking, managementToken: result.managementToken, idempotent: result.idempotent }, { status: result.idempotent ? 200 : 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "This hold is no longer available.") return NextResponse.json({ error: error.message }, { status: 409 });

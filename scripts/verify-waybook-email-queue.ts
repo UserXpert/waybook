@@ -10,7 +10,7 @@ if (!url || !new URL(url).pathname.slice(1).startsWith("waybook_email_queue_test
 const db = postgres(url, { max: 3, ssl: false, onnotice: () => {} });
 const tenant = randomUUID();
 const verifyTenant = randomUUID();
-const snapshot = { provider: "resend" as const, connectionId: "example-connection", message: { from: "studio@example.invalid", to: "client@example.invalid", subject: "Booking", text: "Confirmed" } };
+const snapshot = { provider: "resend" as const, connectionId: "example-connection", bookingStartsAt: "2030-01-01T10:00:00.000Z", message: { from: "studio@example.invalid", to: "client@example.invalid", subject: "Booking", text: "Confirmed" } };
 async function main() { try {
   const key = { id: "test-key", key: randomBytes(32) };
   const first = await replaceEmailConnection(db, tenant, "studio@example.invalid", "first-provider-key", key);
@@ -46,6 +46,7 @@ async function main() { try {
   assert.equal(await confirmEmailProviderTest(db, verifyTenant, randomUUID()), true);
   assert.equal(await confirmEmailProviderTest(db, verifyTenant, randomUUID()), false);
   await db`INSERT INTO email_outbox (tenant_id,message_type,recipient,payload) VALUES (${tenant},'confirmation','client@example.invalid','{}'::jsonb)`;
+  assert.equal(await claimEmail(db, tenant, randomUUID(), randomUUID()), null, "a targeted prompt must not claim another message");
   const a = randomUUID(), b = randomUUID();
   const claims = await Promise.all([claimEmail(db, tenant, a), claimEmail(db, tenant, b)]);
   assert.equal(claims.filter(Boolean).length, 1, "only one worker should claim a message");
