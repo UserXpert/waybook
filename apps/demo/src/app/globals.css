@@ -5591,8 +5591,8 @@ body {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .72);
 }
 .tenant-dashboard-page .waybook-calendar-legend i.is-unavailable {
-  background-color: #f8f8fa;
-  background-image: repeating-linear-gradient(135deg, rgba(63, 63, 70, .08) 0 1px, transparent 1px 7px);
+  background-color: #fafafb;
+  background-image: repeating-linear-gradient(135deg, rgba(63, 63, 70, .08) 0 1px, transparent 1px 11px);
   border: 1px solid #d4d4d8;
 }
 .tenant-dashboard-page .waybook-calendar-legend i.is-past {
@@ -5602,7 +5602,7 @@ body {
 .tenant-dashboard-page .waybook-week-calendar__cell.is-actionable,
 .tenant-dashboard-page .team-day-calendar__cell.is-actionable {
   background: #fff;
-  box-shadow: inset 0 0 0 1px rgba(39, 39, 42, .08);
+  box-shadow: none;
 }
 .tenant-dashboard-page .waybook-week-calendar__cell.is-actionable:hover,
 .tenant-dashboard-page .waybook-week-calendar__cell.is-actionable:focus-visible,
@@ -5615,9 +5615,9 @@ body {
 .tenant-dashboard-page .team-day-calendar__cell.is-unavailable {
   /* Disabled capacity must never read as the same white surface as a live
      booking target. This deliberately wins over legacy calendar treatments. */
-  background-color: #e9e9ed !important;
-  background-image: repeating-linear-gradient(135deg, rgba(63, 63, 70, .18) 0 1px, transparent 1px 7px) !important;
-  box-shadow: inset 0 0 0 1px rgba(63, 63, 70, .08);
+  background-color: #fafafb !important;
+  background-image: repeating-linear-gradient(135deg, rgba(63, 63, 70, .08) 0 1px, transparent 1px 11px) !important;
+  box-shadow: none;
 }
 .tenant-dashboard-page .waybook-week-calendar__cell.is-past,
 .tenant-dashboard-page .team-day-calendar__cell.is-past {
@@ -5674,7 +5674,7 @@ body {
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-week-calendar__cell.is-actionable,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .team-day-calendar__cell.is-actionable {
   background: #121212;
-  box-shadow: inset 0 0 0 1px #303036;
+  box-shadow: none;
 }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-week-calendar__cell.is-actionable:hover,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-week-calendar__cell.is-actionable:focus-visible,
@@ -5685,8 +5685,8 @@ body {
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-week-calendar__cell.is-unavailable,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .team-day-calendar__cell.is-unavailable {
   background-color: #202025 !important;
-  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, .14) 0 1px, transparent 1px 7px) !important;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .09);
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, .075) 0 1px, transparent 1px 11px) !important;
+  box-shadow: none;
 }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-week-calendar__cell.is-past,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .team-day-calendar__cell.is-past {
@@ -6422,3 +6422,5 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-date-navigation span { font-size: .85rem; font-weight: 600; }
 .tenant-date-navigation button { display: grid; place-items: center; width: 2rem; height: 2rem; padding: 0; border: 1px solid currentColor; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
 .tenant-date-navigation button:disabled { opacity: .35; cursor: default; }
+.tenant-dashboard-page .team-day-calendar__staff strong,
+.tenant-dashboard-page .waybook-week-calendar__entry.is-booking > strong { font-weight: 400; }
