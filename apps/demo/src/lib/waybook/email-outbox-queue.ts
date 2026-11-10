@@ -29,6 +29,15 @@ export async function prepareEmailAttempt(db: Sql, tenantId: string, id: string,
   return row ?? null;
 }
 
+/** A malformed or superseded message must not be retried forever. */
+export async function failUnpreparedEmail(db: Sql, tenantId: string, id: string, claimToken: string, reason: "invalid_message" | "superseded"): Promise<boolean> {
+  const [row] = await db.unsafe<{ id: string }[]>(`UPDATE email_outbox SET status='failed',delivery_result=$4,
+    delivery_claim_token=NULL,delivery_claim_until=NULL
+    WHERE tenant_id=$1 AND id=$2 AND status='queued' AND delivery_claim_token=$3 AND delivery_snapshot IS NULL
+    RETURNING id`, [tenantId, id, claimToken, reason]);
+  return Boolean(row);
+}
+
 /** Only the current claimant may complete a message. Accepted is not delivered. */
 export async function finishEmailAttempt(db: Sql, tenantId: string, id: string, claimToken: string, result: ResendResult): Promise<boolean> {
   const status = result.kind === "accepted" ? "sent" : result.kind === "retry" ? "queued" : "failed";

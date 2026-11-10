@@ -8,6 +8,7 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { tenantDateKey, weekStartForLocalDate } from "@/lib/waybook/today-command-centre";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { emailTemplates } from "@/lib/waybook/email-templates";
 
 type Email = { id: string; messageType: string; recipient: string; status: string; createdAt: Date; bookingId: string | null; customerName: string | null; serviceTitle: string | null; startsAt: Date | null; teamMemberId: string | null; locationId: string | null };
 const validId = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
@@ -24,12 +25,7 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
   const db = tenantDb(tenant);
   const status = ["all", "queued", "sent", "failed"].includes(params.status ?? "") ? params.status! : "all";
   const query = (params.q ?? "").trim().slice(0, 100);
-  const templates = [
-    { key: "booking", name: "Booking notification", description: "For a new booking request", subject: "New booking at {{business_name}}", body: "Hello {{customer_name}},\n\nWe received your booking request for {{service_name}} on {{appointment_date}}.\n\n{{business_name}}" },
-    { key: "confirmation", name: "Booking confirmation", description: "For a confirmed appointment", subject: "Your booking is confirmed", body: "Hello {{customer_name}},\n\nYour {{service_name}} appointment is confirmed for {{appointment_date}}.\n\nBooking number: {{booking_number}}\n\n{{business_name}}" },
-    { key: "cancellation", name: "Cancellation", description: "For a cancelled appointment", subject: "Your booking has been cancelled", body: "Hello {{customer_name}},\n\nYour {{service_name}} appointment on {{appointment_date}} has been cancelled.\n\n{{business_name}}" },
-    { key: "sale", name: "Sale notification", description: "For a completed sale", subject: "Thank you for your purchase", body: "Hello {{customer_name}},\n\nThank you for your purchase from {{business_name}}.\n\n{{business_name}}" },
-  ];
+  const templates = emailTemplates;
   const templateView = params.view === "templates";
   const activeTemplate = templates.find((item) => item.key === params.template) ?? templates[0];
   const [savedTemplate] = templateView ? await db.unsafe<{ subject: string; body: string }[]>("SELECT subject,body FROM email_templates WHERE tenant_id=$1 AND template_key=$2", [tenant.id, activeTemplate.key]) : [];
