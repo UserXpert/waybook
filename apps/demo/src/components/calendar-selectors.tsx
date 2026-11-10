@@ -1,5 +1,7 @@
 "use client";
 
+import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
+
 import { type KeyboardEvent, useCallback, useEffect, useId, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -134,13 +136,13 @@ export function CalendarSelectors({ location, members, services, week, teamMode 
   const rosterSearch = searchParams.get("staff") ?? "";
   const selectedEmployee = members.find((item) => item.id === selectedEmployeeId);
   const selectedService = services.find((item) => item.id === selectedServiceId);
-  const locationSearchUrl = useCallback((query: string) => `/api/app/locations?q=${encodeURIComponent(query)}&limit=8`, []);
+  const locationSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/locations?q=${encodeURIComponent(query)}&limit=8`, []);
   const staffSearchUrl = useCallback((query: string) => {
     const params = new URLSearchParams({ locationId: location.id, q: query, limit: "8" });
     if (selectedServiceId) params.set("serviceId", selectedServiceId);
-    return `/api/app/staff?${params.toString()}`;
+    return `${tenantApiPrefix()}/api/app/staff?${params.toString()}`;
   }, [location.id, selectedServiceId]);
-  const serviceSearchUrl = useCallback((query: string) => `/api/app/services?${new URLSearchParams({ locationId: location.id, q: query, limit: "8" }).toString()}`, [location.id]);
+  const serviceSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId: location.id, q: query, limit: "8" }).toString()}`, [location.id]);
   const go = (nextLocationId: string, nextEmployeeId: string, nextServiceId: string, nextRosterSearch = "") => {
     const params = new URLSearchParams({ location: nextLocationId, employee: nextEmployeeId, week });
     if (selectedDay) params.set("day", selectedDay);

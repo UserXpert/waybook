@@ -19,8 +19,17 @@ export async function GET(request: NextRequest) {
   let updated = 0;
   const failures: string[] = [];
   for (const tenant of tenants) {
-    try { updated += await closeOverdueConfirmedBookings(tenant, 1000); }
-    catch { failures.push(tenant.slug); }
+    try {
+      const count = await closeOverdueConfirmedBookings(tenant, 1000);
+      updated += count;
+      if (count === 1000) console.warn("overdue_booking_sweep_limit_reached", { tenant: tenant.slug, limit: 1000 });
+    }
+    catch {
+      failures.push(tenant.slug);
+      // Avoid logging database error objects, which may contain connection details.
+      console.error("overdue_booking_sweep_failed", { tenant: tenant.slug });
+    }
   }
+  console.info("overdue_booking_sweep_completed", { tenants: tenants.length, updated, failures: failures.length });
   return NextResponse.json({ updated, failures }, { status: failures.length ? 500 : 200 });
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
+
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
@@ -17,7 +19,7 @@ export function ClientPicker({ name, label = "Client", required = false, initial
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(`/api/app/clients?q=${encodeURIComponent(query)}&limit=20`, { signal: controller.signal });
+        const response = await fetch(`${tenantApiPrefix()}/api/app/clients?q=${encodeURIComponent(query)}&limit=20`, { signal: controller.signal });
         if (!response.ok) return;
         const data = await response.json() as { items: Client[]; nextCursor: string | null };
         setItems(data.items);
@@ -30,7 +32,7 @@ export function ClientPicker({ name, label = "Client", required = false, initial
     if (!nextCursor || isLoadingMore) return;
     setIsLoadingMore(true);
     try {
-      const response = await fetch(`/api/app/clients?q=${encodeURIComponent(query)}&limit=20&cursor=${encodeURIComponent(nextCursor)}`);
+      const response = await fetch(`${tenantApiPrefix()}/api/app/clients?q=${encodeURIComponent(query)}&limit=20&cursor=${encodeURIComponent(nextCursor)}`);
       if (!response.ok) return;
       const data = await response.json() as { items: Client[]; nextCursor: string | null };
       setItems((current) => [...current, ...data.items.filter((item) => !current.some((existing) => existing.id === item.id))]);

@@ -1,5 +1,7 @@
 "use client";
 
+import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
+
 import { useEffect, useState } from "react";
 
 type Item = { id: string; name: string };
@@ -17,7 +19,7 @@ export function AsyncMultiSelect({ name, label, endpoint, initial = [], single =
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function load(url: string): Promise<Result> {
-    const response = await fetch(url);
+    const response = await fetch(`${tenantApiPrefix()}${url}`);
     if (!response.ok) throw new Error("Search failed");
     return response.json();
   }

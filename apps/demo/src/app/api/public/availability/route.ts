@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { availableSlots } from "@/lib/waybook/booking";
 import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
+import { publicServiceAllowed } from "@/lib/waybook/public-booking-eligibility";
+import { isPublicAvailabilityRangeAllowed, isPublicSlotInRange } from "@/lib/waybook/public-booking-rules";
 
 export const runtime = "nodejs";
 
@@ -21,10 +23,14 @@ export async function GET(request: NextRequest) {
   if (!service || !start || !end) return invalid("service, start, and end are required.");
   const startsAt = new Date(start);
   const endsAt = new Date(end);
-  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return invalid("Use valid ISO timestamps for the time range.");
+  if (!isPublicAvailabilityRangeAllowed(startsAt, endsAt)) return invalid("Choose a valid date range.");
   try {
-    return NextResponse.json({ tenant: { name: tenant.name, timezone: tenant.timezone }, availability: await availableSlots(tenant, service, startsAt, endsAt, { locationId }) });
+    if (!await publicServiceAllowed(tenant, service)) return invalid("Service is unavailable.", 404);
+    const availability = await availableSlots(tenant, service, startsAt, endsAt, { locationId });
+    const now = Date.now();
+    return NextResponse.json({ tenant: { name: tenant.name, timezone: tenant.timezone }, availability: availability.map((provider) => ({ ...provider, slots: provider.slots.filter((slot) => isPublicSlotInRange(slot, startsAt, endsAt, now)) })) });
   } catch (error) {
-    return invalid(error instanceof Error ? error.message : "Could not calculate availability.", 422);
+    console.error("public_booking_availability_failed", { tenant: tenant.slug });
+    return invalid("Could not calculate availability.", 422);
   }
 }
