@@ -30,7 +30,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const rawCursor = (after ?? "").trim();
   const cursor = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(rawCursor) ? rawCursor : null;
   const customerRowSql = "SELECT c.id,c.name,c.email,c.phone,c.internal_notes AS \"internalNotes\",c.tags,c.created_at AS \"createdAt\",count(b.id)::int AS \"bookingCount\",coalesce(sum(b.booked_price_cents) FILTER (WHERE b.status <> 'cancelled'),0)::int AS \"bookedValueCents\",max(b.starts_at) FILTER (WHERE b.status NOT IN ('cancelled','no_show') AND b.starts_at < now()) AS \"lastBookingAt\",min(b.starts_at) FILTER (WHERE b.status IN ('confirmed','arrived') AND b.starts_at >= now()) AS \"nextBookingAt\" FROM customers c LEFT JOIN bookings b ON b.customer_id=c.id AND b.tenant_id=c.tenant_id";
-  const directoryRows = await db.unsafe<CustomerRow[]>(customerRowSql + " WHERE c.tenant_id=$1 AND ($2='' OR c.name ILIKE $3 OR c.email ILIKE $3 OR coalesce(c.phone,'') ILIKE $3) AND ($4::uuid IS NULL OR (c.name,c.id) > (coalesce((SELECT name FROM customers WHERE tenant_id=$1 AND id=$4::uuid),''),$4::uuid)) GROUP BY c.id ORDER BY c.name,c.id LIMIT 51", [tenant.id, search, pattern, cursor]);
+  // Pick the page before aggregating bookings, so history for every other
+  // customer is not read just to render the first 50 results.
+  const directoryRows = await db.unsafe<CustomerRow[]>(`WITH page AS MATERIALIZED (
+    SELECT id FROM customers WHERE tenant_id=$1 AND ($2='' OR name ILIKE $3 OR email ILIKE $3 OR coalesce(phone,'') ILIKE $3)
+      AND ($4::uuid IS NULL OR (name,id) > (coalesce((SELECT name FROM customers WHERE tenant_id=$1 AND id=$4::uuid),''),$4::uuid))
+    ORDER BY name,id LIMIT 51
+  ) ${customerRowSql} JOIN page ON page.id=c.id WHERE c.tenant_id=$1 GROUP BY c.id ORDER BY c.name,c.id`, [tenant.id, search, pattern, cursor]);
   const hasMore = directoryRows.length > 50;
   const customers = directoryRows.slice(0, 50);
   const selectedFromDirectory = customers.find((customer) => customer.id === customerId) ?? null;

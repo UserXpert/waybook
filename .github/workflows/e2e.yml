@@ -8,8 +8,12 @@ on:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      WAYBOOK_CONTROL_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_control
+      WAYBOOK_NORDIC_STUDIO_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_nordic
+      WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_copenhagen
 
     steps:
       - uses: actions/checkout@v7
@@ -29,7 +33,20 @@ jobs:
       - name: Build packages
         run: npx turbo build
 
-      - name: Run E2E tests
+      - name: Start isolated Waybook databases
+        run: |
+          docker run -d --name waybook-e2e -e POSTGRES_USER=waybook -e POSTGRES_PASSWORD=waybook -p 5432:5432 postgres:15-alpine
+          for i in $(seq 1 30); do
+            if docker exec waybook-e2e pg_isready -h 127.0.0.1 -U waybook -q; then break; fi
+            sleep 1
+          done
+          docker exec waybook-e2e pg_isready -h 127.0.0.1 -U waybook -q
+          for name in control nordic copenhagen; do docker exec waybook-e2e createdb -U waybook "waybook_e2e_$name"; done
+          npm run waybook:db:migrate
+          npm run waybook:db:seed
+          node --import tsx scripts/seed-waybook-e2e.mts
+
+      - name: Run Waybook E2E tests
         run: npm run e2e
         working-directory: apps/demo
 

@@ -14,9 +14,11 @@ export interface SerializableRetryOptions {
 /**
  * Postgres SQLSTATE codes we handle:
  * - 40001: serialization_failure (SERIALIZABLE transaction contention)
+ * - 40P01: deadlock_detected (PostgreSQL has rolled back the transaction)
  * - 23P01: exclusion_violation (EXCLUDE constraint — slot already taken)
  */
 const SERIALIZATION_FAILURE = "40001";
+const DEADLOCK_DETECTED = "40P01";
 const EXCLUSION_VIOLATION = "23P01";
 
 /**
@@ -37,8 +39,9 @@ function getPostgresErrorCode(error: unknown, depth = 0): string | undefined {
 /**
  * Wraps a database operation in serialization retry logic.
  *
- * If the operation fails with SQLSTATE 40001 (serialization_failure),
- * retries up to `maxRetries` times with jittered exponential backoff.
+ * If PostgreSQL aborts the transaction with SQLSTATE 40001
+ * (serialization_failure) or 40P01 (deadlock_detected), retries up to
+ * `maxRetries` times with jittered exponential backoff.
  *
  * If the operation fails with SQLSTATE 23P01 (exclusion_violation),
  * immediately throws a `BookingConflictError` (no retry — the slot is taken).
@@ -71,16 +74,16 @@ export async function withSerializableRetry<T>(
         throw new BookingConflictError();
       }
 
-      // Serialization failure — retry with backoff
-      if (code === SERIALIZATION_FAILURE && attempt < maxRetries) {
+      // Both failures abort the transaction and can be retried safely.
+      if ((code === SERIALIZATION_FAILURE || code === DEADLOCK_DETECTED) && attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt);
         const jitter = Math.random() * delay;
         await new Promise((resolve) => setTimeout(resolve, delay + jitter));
         continue;
       }
 
-      // All retries exhausted for serialization failure
-      if (code === SERIALIZATION_FAILURE) {
+      // All retries exhausted for a transaction conflict.
+      if (code === SERIALIZATION_FAILURE || code === DEADLOCK_DETECTED) {
         throw new SerializationRetryExhaustedError(maxRetries);
       }
 

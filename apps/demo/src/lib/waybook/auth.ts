@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -23,7 +24,7 @@ function passwordMatches(password: string, stored: string) {
   return actual.length === expected.length && timingSafeEqual(Buffer.from(actual, "hex"), Buffer.from(expected, "hex"));
 }
 
-export async function currentIdentity(): Promise<Identity | null> {
+export const currentIdentity = cache(async (): Promise<Identity | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const rows = await controlDb<Identity[]>`
@@ -33,7 +34,7 @@ export async function currentIdentity(): Promise<Identity | null> {
     LIMIT 1
   `;
   return rows[0] ?? null;
-}
+});
 
 export async function signIn(email: string, password: string) {
   const rows = await controlDb<Array<Identity & { passwordHash: string }>>`

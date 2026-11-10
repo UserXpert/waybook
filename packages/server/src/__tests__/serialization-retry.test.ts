@@ -54,6 +54,19 @@ describe("withSerializableRetry", () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
+  it("retries a deadlock and reports a subsequent booking conflict", async () => {
+    const fn = vi.fn().mockRejectedValueOnce(makePostgresError("40P01"))
+      .mockRejectedValueOnce(makePostgresError("23P01"));
+    await expect(withSerializableRetry(fn, { baseDelayMs: 1 })).rejects.toThrow(BookingConflictError);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("bounds retries when a deadlock persists", async () => {
+    const fn = vi.fn().mockRejectedValue(makePostgresError("40P01"));
+    await expect(withSerializableRetry(fn, { maxRetries: 2, baseDelayMs: 1 })).rejects.toThrow(SerializationRetryExhaustedError);
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
+
   it("rethrows unknown errors without retrying", async () => {
     const fn = vi.fn().mockRejectedValue(new Error("connection refused"));
 

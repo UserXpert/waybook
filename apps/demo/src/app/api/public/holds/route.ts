@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "That appointment has just been taken." }, { status: 409 });
   } catch (error) {
     if (error instanceof BookingConflictError) return NextResponse.json({ error: "That appointment has just been taken." }, { status: 409 });
-    console.error("public_booking_hold_failed", { tenant: tenant.slug });
+    console.error("public_booking_hold_failed", { tenant: tenant.slug, name: error instanceof Error ? error.name : "unknown", code: typeof error === "object" && error !== null && "code" in error ? String(error.code) : undefined });
     return NextResponse.json({ error: "Could not reserve that appointment." }, { status: 422 });
   }
 }
