@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { requireIdentity } from "./auth";
 import { tenantDb, type TenantRecord } from "./database";
 import type { TenantMembership } from "./tenant-context";
@@ -78,7 +80,7 @@ export async function staffWorkspacePermissionsAvailable(tenant: TenantRecord) {
 
 /** Resolves a signed-in staff member to their tenant profile through the
  * explicit identity link. Never infer this from an email address. */
-export async function staffPermissionContext(
+export const staffPermissionContext = cache(async function staffPermissionContext(
   tenant: TenantRecord,
   membership: TenantMembership,
 ): Promise<StaffPermissionContext> {
@@ -122,7 +124,7 @@ export async function staffPermissionContext(
     LIMIT 1
   `;
   return enforceReadOnlyPermissions(membership.role, { isManager: false, ...staff, ...(workspace ?? deniedWorkspacePermissions) });
-}
+});
 
 export function canManageAppointment(
   context: StaffPermissionContext,

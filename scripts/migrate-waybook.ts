@@ -1,13 +1,10 @@
 import { migrateWaybookDatabase } from "../packages/db/src/waybook/migrate.ts";
-
-const local = (name: string) => `postgresql://waybook@127.0.0.1:5440/${name}`;
-const targets = [
-  { label: "Control", kind: "control" as const, url: process.env.WAYBOOK_CONTROL_DATABASE_URL ?? local("waybook_control") },
-  { label: "Nordic Studio", kind: "tenant" as const, url: process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL ?? local("waybook_nordic_studio") },
-  { label: "Copenhagen Physio", kind: "tenant" as const, url: process.env.WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL ?? local("waybook_copenhagen_physio") },
-];
+import { migrationTargets } from "./waybook-migration-targets.ts";
 
 async function main() {
+  const args = process.argv.slice(2);
+  if (args.some((arg) => arg !== "--local") || args.length > 1) throw new Error("Usage: npm run waybook:db:migrate [-- --local]");
+  const targets = migrationTargets(process.env, args.includes("--local"));
   for (const target of targets) {
     const completed = await migrateWaybookDatabase(target.url, target.kind);
     console.log(`${target.label}: ${completed.length === 0 ? "already current" : completed.join(", ")}`);

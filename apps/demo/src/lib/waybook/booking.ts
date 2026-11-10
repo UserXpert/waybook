@@ -39,28 +39,56 @@ export function isSlotWithinLocationHours(start: Date, end: Date, hours: Locatio
 
 /** Calculates tenant-scoped slots from persisted services, schedules, bookings, and active holds. */
 export async function availableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options?: { excludeBookingBlockId?: string; locationId?: string; slotInterval?: number; durationMinutes?: number }, db = tenantDb(tenant)) {
-  const location = await resolvedLocation(tenant, options?.locationId, db);
+  const [location, [service]] = await Promise.all([
+    resolvedLocation(tenant, options?.locationId, db),
+    db<Service[]>`SELECT id, duration_minutes AS "durationMinutes" FROM services WHERE tenant_id = ${tenant.id} AND (slug = ${serviceSlug} OR id::text = ${serviceSlug}) AND is_active = true LIMIT 1`,
+  ]);
   const locationId = location.id;
-  const locationHours = await db<LocationHours[]>`SELECT day_of_week AS "dayOfWeek", start_time AS "startTime", end_time AS "endTime" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${locationId}`;
-  const closedDates = new Set((await db<{ localDate: string }[]>`SELECT local_date::text AS "localDate" FROM location_closed_dates WHERE tenant_id = ${tenant.id} AND location_id = ${locationId} AND local_date >= ${startsAt.toISOString().slice(0, 10)}::date AND local_date <= ${endsAt.toISOString().slice(0, 10)}::date`).map((row) => row.localDate));
-  const [service] = await db<Service[]>`SELECT id, duration_minutes AS "durationMinutes" FROM services WHERE tenant_id = ${tenant.id} AND (slug = ${serviceSlug} OR id::text = ${serviceSlug}) AND is_active = true LIMIT 1`;
   if (!service) throw new Error("Service not found.");
-  await db`UPDATE booking_blocks SET state = 'expired' WHERE tenant_id = ${tenant.id} AND state = 'held' AND expires_at <= now()`;
-  const members = await db<{ id: string }[]>`SELECT tm.id FROM team_members tm JOIN service_team_members stm ON stm.team_member_id = tm.id AND stm.tenant_id = tm.tenant_id JOIN team_member_locations tml ON tml.team_member_id=tm.id AND tml.tenant_id=tm.tenant_id AND tml.location_id=${locationId} JOIN service_locations sl ON sl.service_id=stm.service_id AND sl.tenant_id=stm.tenant_id AND sl.location_id=${locationId} WHERE stm.tenant_id = ${tenant.id} AND stm.service_id = ${service.id} AND tm.is_active = true ORDER BY tm.id`;
+  // Local dates can fall on either side of the corresponding UTC dates.
+  // The same conservative margin also covers overnight recurrence windows.
+  const occupiedStart = new Date(startsAt.getTime() - 48 * 60 * 60 * 1000);
+  const occupiedEnd = new Date(endsAt.getTime() + 48 * 60 * 60 * 1000);
+  const [locationHours, closedDateRows, , members] = await Promise.all([
+    db<LocationHours[]>`SELECT day_of_week AS "dayOfWeek", start_time AS "startTime", end_time AS "endTime" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${locationId}`,
+    db<{ localDate: string }[]>`SELECT local_date::text AS "localDate" FROM location_closed_dates WHERE tenant_id = ${tenant.id} AND location_id = ${locationId} AND local_date >= ${occupiedStart.toISOString().slice(0, 10)}::date AND local_date <= ${occupiedEnd.toISOString().slice(0, 10)}::date`,
+    db`UPDATE booking_blocks SET state = 'expired' WHERE tenant_id = ${tenant.id} AND state = 'held' AND expires_at <= now()`,
+    db<{ id: string }[]>`SELECT tm.id FROM team_members tm JOIN service_team_members stm ON stm.team_member_id = tm.id AND stm.tenant_id = tm.tenant_id JOIN team_member_locations tml ON tml.team_member_id=tm.id AND tml.tenant_id=tm.tenant_id AND tml.location_id=${locationId} JOIN service_locations sl ON sl.service_id=stm.service_id AND sl.tenant_id=stm.tenant_id AND sl.location_id=${locationId} WHERE stm.tenant_id = ${tenant.id} AND stm.service_id = ${service.id} AND tm.is_active = true ORDER BY tm.id`,
+  ]);
+  const closedDates = new Set(closedDateRows.map((row) => row.localDate));
   const durationMinutes = options?.durationMinutes ?? service.durationMinutes;
   if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) throw new Error("Appointment duration is invalid.");
+  if (!members.length) return [];
+  const memberIds = members.map((member) => member.id);
+  // Fetch each schedule component once per service, rather than serially once
+  // per member. Keep tenant and member scoping explicit for every query.
+  const [allRules, allOverrides, allOccupied] = await Promise.all([
+    db<Array<AvailabilityRuleInput & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", rrule, start_time AS "startTime", end_time AS "endTime", timezone, valid_from AS "validFrom", valid_until AS "validUntil" FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[])`,
+    db<Array<AvailabilityOverrideInput & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", (local_date::timestamp AT TIME ZONE 'UTC') AS date, start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[]) AND local_date >= ${occupiedStart.toISOString().slice(0, 10)}::date AND local_date <= ${occupiedEnd.toISOString().slice(0, 10)}::date`,
+    db<Array<BookingInput & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", starts_at AS "startsAt", ends_at AS "endsAt", 'confirmed' AS status FROM booking_blocks WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[]) AND state IN ('held', 'confirmed') AND ends_at > ${occupiedStart} AND starts_at < ${occupiedEnd} AND (${options?.excludeBookingBlockId ?? null}::uuid IS NULL OR id <> ${options?.excludeBookingBlockId ?? null}::uuid)`,
+  ]);
+  const byMember = <T extends { teamMemberId: string }>(rows: T[]) => {
+    const groups = new Map<string, T[]>();
+    for (const row of rows) {
+      const group = groups.get(row.teamMemberId) ?? [];
+      group.push(row);
+      groups.set(row.teamMemberId, group);
+    }
+    return groups;
+  };
+  const rulesByMember = byMember(allRules), overridesByMember = byMember(allOverrides), occupiedByMember = byMember(allOccupied);
   const result = [];
   for (const member of members) {
-    const rules = await db<AvailabilityRuleInput[]>`SELECT rrule, start_time AS "startTime", end_time AS "endTime", timezone, valid_from AS "validFrom", valid_until AS "validUntil" FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id}`;
+    const rules = rulesByMember.get(member.id) ?? [];
     // `local_date` is a calendar date, not an instant. Construct midnight UTC explicitly so
     // core compares its UTC date components to the provider-local slot date consistently.
-    const overrides = await db<AvailabilityOverrideInput[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date, start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id}`;
+    const overrides = overridesByMember.get(member.id) ?? [];
     // Waybook reserves exactly the customer-facing appointment interval. Setup
     // or cleanup must never make a neighbouring customer slot disappear.
     // Blocks are the actual capacity reservation. Reading them directly keeps
     // active holds out of the advertised calendar, rather than discovering
     // the conflict only when PostgreSQL rejects the final write.
-    const occupied = await db<BookingInput[]>`SELECT starts_at AS "startsAt", ends_at AS "endsAt", 'confirmed' AS status FROM booking_blocks WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id} AND state IN ('held', 'confirmed') AND (${options?.excludeBookingBlockId ?? null}::uuid IS NULL OR id <> ${options?.excludeBookingBlockId ?? null}::uuid)`;
+    const occupied = occupiedByMember.get(member.id) ?? [];
     // Waybook intentionally has no setup/cleanup buffer concept. The booked
     // interval is the entire capacity reservation: 08:00–09:00 and 10:00–11:00
     // may sit beside a 09:00–10:00 appointment, while 08:30–09:30 correctly
@@ -71,7 +99,9 @@ export async function availableSlots(tenant: TenantRecord, serviceSlug: string, 
       bufferBefore: 0,
       bufferAfter: 0,
     })
-      .filter((slot) => !closedDates.has(localDateAndMinutes(new Date(slot.startTime), location.timezone).localDate) && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, location.timezone))
+      // An extra-hours override can add windows outside the recurrence range.
+      // Never expose them without the corresponding range's occupied blocks.
+      .filter((slot) => new Date(slot.startTime) >= startsAt && new Date(slot.endTime) <= endsAt && !closedDates.has(localDateAndMinutes(new Date(slot.startTime), location.timezone).localDate) && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, location.timezone))
       // Resource allocation is deliberately post-booking. Staff time is the
       // sole availability reservation, so a room/equipment conflict never
       // hides an otherwise valid appointment slot.
@@ -86,6 +116,10 @@ export async function createBookingHold(input: { tenant: TenantRecord; serviceId
   const db = tenantDb(input.tenant);
   const locationId = await resolvedLocationId(input.tenant, input.locationId);
   return withSerializableRetry(async () => db.begin(async (transaction) => {
+    // Concurrent inserts for one staff member can deadlock inside PostgreSQL's
+    // exclusion constraint. Serialize only these short hold transactions; the
+    // constraint remains authoritative for reschedules and other writers.
+    await transaction.unsafe("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`booking-hold:${input.tenant.id}:${input.teamMemberId}`]);
     if (!isPublicBookingStartAllowed(input.startsAt)) throw new Error("The selected appointment time is no longer available.");
     await transaction.unsafe("UPDATE booking_blocks SET state = 'expired' WHERE tenant_id = $1 AND state = 'held' AND expires_at <= now()", [input.tenant.id]);
     const [service] = await transaction.unsafe<Service[]>(`

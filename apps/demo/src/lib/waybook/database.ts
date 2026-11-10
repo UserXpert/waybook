@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createWaybookSql } from "@thebookingkit/db";
+import { workspaceHostname, workspaceMembershipQuery } from "./workspace-lookup-query";
 
 const localUrl = (name: string) => `postgresql://waybook@127.0.0.1:5440/${name}`;
 const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL ?? localUrl("waybook_control");
@@ -69,6 +70,16 @@ export async function findTenantByRouteSlug(routeSlug: string): Promise<TenantRe
     LIMIT 1
   `;
   return rows[0] ?? null;
+}
+
+/** Resolve an active workspace and its membership together without trusting the route slug. */
+export async function findTenantMembershipByRouteSlug(routeSlug: string, identityId: string): Promise<{ tenant: TenantRecord; membership: { tenantId: string; role: string } } | null> {
+  const hostname = workspaceHostname(routeSlug);
+  if (!hostname) return null;
+  const [row] = await controlDb.unsafe<Array<TenantRecord & { membershipTenantId: string; membershipRole: string }>>(workspaceMembershipQuery, [identityId, hostname]);
+  if (!row) return null;
+  const { membershipTenantId, membershipRole, ...tenant } = row;
+  return { tenant, membership: { tenantId: membershipTenantId, role: membershipRole } };
 }
 
 export async function findTenantRouteSlug(tenantId: string, fallback: string): Promise<string> {

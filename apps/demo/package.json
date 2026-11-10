@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "WAYBOOK_NEXT_DIST_DIR=.next-dev next dev --port 3333",
-    "build": "tsx ../../scripts/migrate-waybook.ts && next build",
+    "prebuild": "npm run build --workspace=@thebookingkit/core && npm run build --workspace=@thebookingkit/db && npm run build --workspace=@thebookingkit/server",
+    "build": "next build",
     "start": "next start --port 3333",
     "test": "tsx --test src/lib/waybook/*.test.ts",
-    "e2e": "playwright test --config e2e/playwright.config.ts",
-    "e2e:ui": "playwright test --config e2e/playwright.config.ts --ui",
+    "e2e": "playwright test --config e2e/waybook.config.ts",
+    "e2e:ui": "playwright test --config e2e/waybook.config.ts --ui",
+    "e2e:legacy": "playwright test --config e2e/playwright.config.ts",
     "e2e:db": "E2E_WITH_DB=1 playwright test --config e2e/playwright.config.ts"
   },
   "dependencies": {
