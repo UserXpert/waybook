@@ -30,8 +30,9 @@ export function BookingManagementDialog({ tenantSlug, timezone, open, onClose, o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
+  const availabilityRequest = useRef(0);
   useEffect(() => { const element = dialog.current; if (!element) return; if (open && !element.open) element.showModal(); else if (!open && element.open) element.close(); }, [open, mounted]);
-  const close = () => { setStage("lookup"); setBookingId(""); setEmail(""); setBooking(null); setSlots([]); setError(""); setResult(""); onClose(); };
+  const close = () => { availabilityRequest.current++; setBusy(false); setStage("lookup"); setBookingId(""); setEmail(""); setBooking(null); setSlots([]); setError(""); setResult(""); onClose(); };
   const request = async (action: string, fields: Record<string, string> = {}) => {
     setBusy(true); setError("");
     try {
@@ -44,11 +45,19 @@ export function BookingManagementDialog({ tenantSlug, timezone, open, onClose, o
   };
   const lookup = async () => { const data = await request("lookup"); if (data) { setBooking(data.booking); setStage("booking"); } };
   const loadTimes = async (day: string) => {
+    const requestId = ++availabilityRequest.current;
     setDate(day); setSlots([]); setSelected(null);
     const start = fromZonedTime(`${day}T00:00:00`, timezone);
     const end = fromZonedTime(`${day}T23:59:59.999`, timezone);
-    const data = await request("availability", { start: new Date(start.getTime() - 86_400_000).toISOString(), end: new Date(end.getTime() + 86_400_000).toISOString() });
-    if (data) { const unique = new Map<string, Slot>(); for (const provider of data.availability as Provider[]) for (const slot of provider.slots) if (dateKey(new Date(slot.startTime), timezone) === day && new Date(slot.startTime).getTime() > Date.now()) unique.set(slot.startTime, slot); setSlots([...unique.values()].sort((a, b) => a.startTime.localeCompare(b.startTime))); }
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/${tenantSlug}/api/public/manage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "availability", bookingId, email, start: new Date(start.getTime() - 86_400_000).toISOString(), end: new Date(end.getTime() + 86_400_000).toISOString() }) });
+      const data = await response.json();
+      if (requestId !== availabilityRequest.current) return;
+      if (!response.ok) { setError(data.error || "Please try again."); return; }
+      const unique = new Map<string, Slot>(); for (const provider of data.availability as Provider[]) for (const slot of provider.slots) if (dateKey(new Date(slot.startTime), timezone) === day && new Date(slot.startTime).getTime() > Date.now()) unique.set(slot.startTime, slot); setSlots([...unique.values()].sort((a, b) => a.startTime.localeCompare(b.startTime)));
+    } catch { if (requestId === availabilityRequest.current) setError("We couldn’t connect. Please try again."); }
+    finally { if (requestId === availabilityRequest.current) setBusy(false); }
   };
   const formatted = (value: string) => new Intl.DateTimeFormat("en-GB", { dateStyle: "full", timeStyle: "short", timeZone: timezone }).format(new Date(value));
   const submitAction = async (action: "cancel" | "reschedule") => { const data = await request(action, action === "reschedule" && selected ? { startsAt: selected.startTime } : {}); if (data) { onBookingChanged?.(bookingId); setResult(action === "cancel" ? "Your booking has been cancelled." : "Your booking has been rescheduled."); setStage("done"); } };

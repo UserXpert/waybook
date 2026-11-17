@@ -67,3 +67,39 @@ test("tenant owner can sign in but cannot access another workspace", async ({ pa
   expect(own.status()).toBe(200);
   expect(other.status()).toBe(404);
 });
+
+test("changing the reschedule day ignores an older availability response", async ({ page }) => {
+  let firstAvailabilityStarted!: () => void;
+  const firstAvailability = new Promise<void>(resolve => { firstAvailabilityStarted = resolve; });
+  let requests = 0;
+  await page.route("**/nordic/api/public/manage", async route => {
+    const body = route.request().postDataJSON();
+    if (body.action === "lookup") {
+      await route.fulfill({ json: { booking: { service: "Studio session", location: "Preview location", startsAt: new Date(Date.now() + 86400000).toISOString(), endsAt: new Date(Date.now() + 90000000).toISOString(), status: "confirmed", canChange: true, canCancel: true } } });
+      return;
+    }
+    if (body.action === "availability") {
+      const current = ++requests;
+      if (current === 1) { firstAvailabilityStarted(); await new Promise(resolve => setTimeout(resolve, 1500)); }
+      const day = current === 1 ? localDayAfter(0) : localDayAfter(2);
+      const hour = current === 1 ? "09:00" : "14:00";
+      const { fromZonedTime } = await import("date-fns-tz");
+      const startTime = fromZonedTime(`${day}T${hour}:00`, "Europe/Copenhagen").toISOString();
+      await route.fulfill({ json: { availability: [{ slots: [{ startTime, endTime: new Date(new Date(startTime).getTime() + 3600000).toISOString() }] }] } });
+      return;
+    }
+    await route.abort();
+  });
+  await page.goto("/nordic/book");
+  await page.getByRole("button", { name: "Manage booking" }).click();
+  await page.getByLabel("Booking number").fill("TEST123");
+  await page.getByLabel("Email address").fill("preview@example.invalid");
+  await page.getByRole("button", { name: "Find booking" }).click();
+  await page.getByRole("button", { name: "Reschedule booking" }).click();
+  await firstAvailability;
+  await page.getByLabel("Day").fill(localDayAfter(2));
+  await expect(page.getByRole("button", { name: "14:00", exact: true })).toBeVisible();
+  await page.waitForTimeout(1800);
+  await expect(page.getByRole("button", { name: "14:00", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "09:00", exact: true })).toHaveCount(0);
+});

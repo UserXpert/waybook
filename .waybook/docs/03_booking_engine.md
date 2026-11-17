@@ -29,6 +29,11 @@ and after it. Browser proof of a staff-created partial block remains open.
 
 The browser does not select an employee ID. When a customer selects a time, the hold endpoint recalculates eligible employees for that exact interval and assigns one who is actually free. If a concurrent PostgreSQL conflict occurs, the endpoint falls through to another candidate.
 
+Customer rescheduling guards against out-of-order availability responses: only
+the latest requested day may update the visible slots or its loading/error
+state. A focused browser regression deliberately delayed the earlier response
+and passed on desktop and 390px mobile on 18 November 2026.
+
 Location-aware booking: public availability accepts a tenant-scoped location,
 validates that both the service and an eligible active employee are assigned
 there, and carries the location through the hold, booking block, and confirmed
