@@ -56,3 +56,13 @@ reconciled or reviewed. This branch is not yet approved for deployment.
 An additional disposable-database check verified encrypted email connections,
 tenant isolation, replacement/disconnect, queue claims, retry safeguards and
 fake-provider worker behavior. This does not establish real email delivery.
+
+### Hosted configuration recheck — 18 November 2026
+
+A read-only Vercel inspection shows the latest production deployment is READY
+at merged commit `edebaff9d688ffd3f6825332706792d66fbb6782`. The three Waybook
+database URL entries target production, preview and development together.
+Therefore, an automatically created branch preview must be treated as using
+production credentials unless isolated, branch-specific database targets are
+configured and independently verified. The review branch has not been pushed.
+No environment values were retrieved or changed.
