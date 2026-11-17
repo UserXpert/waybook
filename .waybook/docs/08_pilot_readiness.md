@@ -33,6 +33,21 @@ Until a delivery method has been configured and verified, tell pilot businesses 
 
 ## Release reconciliation — 18 November 2026
 
+### GitHub tracking and isolated preview
+
+The release review branch `codex/pilot-release-reconcile` is pushed. A separate
+seeded Neon resource and branch-specific Vercel environment variables isolate
+its preview database connections from the production defaults. Deployment
+`782042e` is READY and its public booking route returned HTTP 200 with synthetic
+preview content; the hosted desktop/mobile walkthrough remains open. The
+production deployment and migrations were not changed. Earlier notes below
+describing this branch as unpushed or its preview as sharing production
+database variables are historical snapshots, not its current configuration.
+
+The pilot work is tracked in GitHub epic `UserXpert/waybook#2` and its linked
+task issues; other backlog areas have their own linked epics. A closed local
+task does not by itself establish hosted pilot readiness.
+
 The first clinic pilot is planned for Denmark. Booking confirmations and
 cancellations use the business's manual process until automatic delivery is
 configured and verified. The process must still be exercised with a pilot.

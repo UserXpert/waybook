@@ -16,6 +16,7 @@ static dashboard or a client production environment.
 3. Update the relevant topic document after a meaningful implementation, verification, or scope change. Update this manifest only for a milestone, current-status, or cross-cutting decision change.
 4. Do not duplicate detailed acceptance criteria or historical evidence across files. Link to the owning document instead.
 5. Every outcome must be labelled accurately: **Designed**, **Mock**, **Database-backed**, **Tested**, and/or **Browser-verified**. UI alone is never proof of a working feature.
+6. Track Waybook work in GitHub epics and linked task issues at `UserXpert/waybook`. Update the relevant issue and epic checklist as work progresses; close a task only when its stated acceptance scope is verified. Label local-only evidence clearly and keep hosted/pilot gates open until independently verified.
 
 This protocol deliberately does **not** require reading every document for a small feature.
 
