@@ -48,6 +48,17 @@ The pilot work is tracked in GitHub epic `UserXpert/waybook#2` and its linked
 task issues; other backlog areas have their own linked epics. A closed local
 task does not by itself establish hosted pilot readiness.
 
+On 18 November, the isolated hosted preview was exercised on desktop and at
+390px. Synthetic bookings at two preview locations were created, found and
+rescheduled; both were subsequently cancelled through the public management
+flow. With the Vercel trusted-authentication header, JavaScript-enabled owner
+sign-in produced a client-side Next.js flight-data error on both viewport
+sizes. The same test account reached the owner dashboard when the form was
+submitted without JavaScript. Calendar verification and a complete
+desktop/mobile cancellation walkthrough remain open in GitHub issue #10;
+the sign-in investigation is tracked in #42. The cause and whether it also
+affects ordinary Vercel-authenticated browsers are not yet established.
+
 The first clinic pilot is planned for Denmark. Booking confirmations and
 cancellations use the business's manual process until automatic delivery is
 configured and verified. The process must still be exercised with a pilot.
