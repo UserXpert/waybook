@@ -4,7 +4,7 @@ import { cache } from "react";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { controlDb } from "./database";
+import { controlDb, findTenantById, findTenantRouteSlug } from "./database";
 
 const SESSION_COOKIE = "waybook_session";
 
@@ -42,11 +42,18 @@ export async function signIn(email: string, password: string) {
     FROM identities WHERE email = ${email.toLowerCase().trim()} LIMIT 1
   `;
   const identity = rows[0];
-  if (!identity || !passwordMatches(password, identity.passwordHash)) return false;
+  if (!identity || !passwordMatches(password, identity.passwordHash)) return null;
   const token = randomBytes(32).toString("base64url");
   await controlDb`INSERT INTO sessions (identity_id, token_hash, expires_at) VALUES (${identity.id}, ${hash(token)}, now() + interval '12 hours')`;
   (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 12 });
-  return true;
+  return { id: identity.id, email: identity.email, displayName: identity.displayName, isPlatformAdmin: identity.isPlatformAdmin };
+}
+
+export async function identityLandingPath(identity: Identity) {
+  if (identity.isPlatformAdmin) return "/control";
+  const [membership] = await controlDb<{ tenantId: string }[]>`SELECT tenant_id AS "tenantId" FROM tenant_memberships WHERE identity_id = ${identity.id} LIMIT 2`;
+  const tenant = membership ? await findTenantById(membership.tenantId) : null;
+  return tenant ? `/${await findTenantRouteSlug(tenant.id, tenant.slug)}/app` : "/login";
 }
 
 export async function signOut() {
