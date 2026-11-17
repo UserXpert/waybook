@@ -30,3 +30,25 @@ All five gates must pass. Record the deployment, date, operator and evidence for
 ## Interim booking communications
 
 Until a delivery method has been configured and verified, tell pilot businesses that Waybook does not send confirmation or cancellation emails. The customer must save the booking number and appointment details displayed after booking. Staff should review new and changed appointments in the calendar or booking list, and manually communicate confirmation or changes through the business's existing approved channel when needed. The Emails screen is an outbox of queued records, not proof of delivery. Do not promise automatic reminders or email confirmations during onboarding. This is a temporary operating procedure, not a completed delivery integration.
+
+## Release reconciliation — 18 November 2026
+
+The first clinic pilot is planned for Denmark. Booking confirmations and
+cancellations use the business's manual process until automatic delivery is
+configured and verified. The process must still be exercised with a pilot.
+
+This review branch combines released booking reliability with the email branch,
+the compact Apps menu, and staff photo/profile fixes. A local production build,
+37 app unit tests and 395 server tests passed. On disposable local databases,
+desktop and mobile booking, rescheduling, cancellation, cross-tenant client
+access, staff-photo upload and oversized-file rejection, Apps navigation,
+role-specific menu visibility and staff/read-only sign-in landing were checked.
+The email/booking integration passed with delivery disabled and a fake provider.
+The staff-photo permission helper is unit-tested; direct forged server-action
+and audit-rollback tests still need reliable end-to-end coverage.
+
+Hosted tenant migration state, the 0045–0048 and 0051 migration plan and backup,
+recovery, hosted permissions and booking walkthrough, and Danish privacy/legal
+review remain release gates. No live sender or automatic email delivery has
+been verified. Remaining work in the original mixed checkout has not all been
+reconciled or reviewed. This branch is not yet approved for deployment.
