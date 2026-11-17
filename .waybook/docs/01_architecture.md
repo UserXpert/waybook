@@ -91,6 +91,14 @@ Must not be adopted as-is: Booking Kit organisation scoping/auth/schema, signed 
 - Production Next build passed.
 - Production Control opened a Copenhagen workspace link at `waybook-booking.vercel.app/copenhagen/app`.
 - Local platform-admin browser verification opened Copenhagen through its route-derived read-only Control view; the Services mutation entry point was absent.
+
+On 18 November, the isolated hosted preview also returned 200 to a synthetic
+Nordic owner for Nordic client and staff APIs and 404 for Copenhagen and
+unscoped client APIs. A synthetic Nordic read-only membership without extra
+view grants received 403 for Nordic client/staff APIs, 404 for Copenhagen and
+unscoped clients, and no staff-photo upload control. These checks used a
+server-side form sign-in with JavaScript disabled; forged mutations and audit
+rollback remain open in GitHub issue #9, and normal preview sign-in in #42.
 - Retired Copenhagen host returned Vercel `404 DEPLOYMENT_NOT_FOUND` after alias removal.
 
 ## Remaining architecture proof
