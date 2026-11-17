@@ -66,3 +66,17 @@ Therefore, an automatically created branch preview must be treated as using
 production credentials unless isolated, branch-specific database targets are
 configured and independently verified. The review branch has not been pushed.
 No environment values were retrieved or changed.
+
+### Demo calendar batch — 18 November 2026
+
+The configured hosted Nordic Studio database received 24 confirmed synthetic
+appointments dated 18 November 2026 through 15 January 2027. Their booking
+idempotency keys start `waybook-demo-calendar-20261118:`, their customer names
+start `DEMO · Calendar client`, and their email addresses use `example.invalid`.
+They are assigned only to existing `Demo ·` staff and four `Demo ·` locations.
+A read-only verification counted 24 bookings, 24 synthetic customers, four
+locations and zero associated outbox entries. They reserve demo staff slots and
+contribute to operational reports; treat them as test data. The deployed app's
+sensitive database URL cannot be read from Vercel, so this does not independently
+prove the configured local URL and hosted deployment point to the same database.
+The deployed calendar itself was not checked because it required sign-in.
