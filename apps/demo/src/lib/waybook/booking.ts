@@ -173,7 +173,7 @@ export async function confirmBookingFromHold(input: {
       SELECT id, booking_number AS "bookingNumber", starts_at AS "startsAt", ends_at AS "endsAt"
       FROM bookings WHERE tenant_id = $1 AND idempotency_key = $2
     `, [input.tenant.id, input.idempotencyKey]);
-    if (existing) return { booking: existing, managementToken: null, idempotent: true };
+    if (existing) return { booking: existing, managementToken: null, idempotent: true, outboxId: null };
 
     const [hold] = await transaction.unsafe<{
       id: string; bookingBlockId: string; serviceId: string; locationId: string; expiresAt: Date; startsAt: Date; endsAt: Date; teamMemberId: string | null; resourceId: string | null; blockState: string;
@@ -212,7 +212,7 @@ export async function confirmBookingFromHold(input: {
     await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.confirmed', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
     if (input.policyAcknowledgement) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.policy_acknowledged', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify(input.policyAcknowledgement)]);
     if (input.verifiedEmbedSource) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.embed_source_verified', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ source: input.verifiedEmbedSource })]);
-    await transaction.unsafe("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::text::jsonb)", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, bookingNumber: booking.bookingNumber, managementToken })]);
-    return { booking, managementToken, idempotent: false };
+    const [outbox] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::text::jsonb) RETURNING id", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, bookingNumber: booking.bookingNumber, startsAt: new Date(booking.startsAt).toISOString() })]);
+    return { booking, managementToken, idempotent: false, outboxId: outbox.id };
   }));
 }

@@ -1,0 +1,14 @@
+\set ON_ERROR_STOP on
+INSERT INTO tenant_settings (tenant_id,name,timezone,currency) VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','Test Studio','Europe/Copenhagen','DKK');
+INSERT INTO locations (id,tenant_id,slug,name) VALUES ('10000000-0000-4000-8000-000000000001','459cd62f-caa8-406d-9b15-58c69feb95ec','primary','Test Location');
+INSERT INTO location_hours SELECT '459cd62f-caa8-406d-9b15-58c69feb95ec','10000000-0000-4000-8000-000000000001', n, '00:00','23:59' FROM generate_series(0,6) n;
+INSERT INTO team_members (id,tenant_id,role,name,email) VALUES ('20000000-0000-4000-8000-000000000001','459cd62f-caa8-406d-9b15-58c69feb95ec','owner','Test Staff','staff@example.invalid');
+INSERT INTO services (id,tenant_id,slug,title,duration_minutes,price_cents) VALUES ('30000000-0000-4000-8000-000000000001','459cd62f-caa8-406d-9b15-58c69feb95ec','test','Test Service',60,50000);
+INSERT INTO service_team_members VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001');
+INSERT INTO team_member_locations VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001');
+INSERT INTO service_locations VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001');
+INSERT INTO availability_rules (tenant_id,team_member_id,rrule,start_time,end_time,timezone) VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','20000000-0000-4000-8000-000000000001','FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU','08:00','18:00','Europe/Copenhagen');
+INSERT INTO customers (id,tenant_id,email,name) VALUES ('40000000-0000-4000-8000-000000000001','459cd62f-caa8-406d-9b15-58c69feb95ec','customer@example.invalid','Test Customer');
+INSERT INTO booking_blocks (id,tenant_id,team_member_id,location_id,starts_at,ends_at,state) SELECT ('50000000-0000-4000-8000-00000000000'||n)::uuid,'459cd62f-caa8-406d-9b15-58c69feb95ec','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',date_trunc('day',now()+interval '7 days') + (n+8)*interval '1 hour',date_trunc('day',now()+interval '7 days')+(n+9)*interval '1 hour','confirmed' FROM generate_series(1,3) n;
+INSERT INTO bookings (id,tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents) SELECT ('60000000-0000-4000-8000-00000000000'||n)::uuid,bb.tenant_id,bb.id,'30000000-0000-4000-8000-000000000001',bb.team_member_id,bb.location_id,'40000000-0000-4000-8000-000000000001',bb.starts_at,bb.ends_at,'confirmed',50000 FROM generate_series(1,3) n JOIN booking_blocks bb ON bb.id=('50000000-0000-4000-8000-00000000000'||n)::uuid;
+INSERT INTO payment_records (tenant_id,booking_id,kind,amount_cents,method) VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','60000000-0000-4000-8000-000000000003','payment',5000,'cash');

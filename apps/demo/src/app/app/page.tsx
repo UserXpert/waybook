@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import type React from "react";
 import { ArrowRight, CalendarPlus, ChartNoAxesCombined, CircleDollarSign, Target, UsersRound } from "lucide-react";
 import { fromZonedTime } from "date-fns-tz";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
+import { isFeatureEnabled } from "@/lib/waybook/features";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -30,7 +32,12 @@ export default async function TenantAppPage() {
   const { tenant, membership, isControlView } = await requireTenantWorkspace();
   const greeting = dashboardGreetings[Math.floor(Math.random() * dashboardGreetings.length)]!;
   const permissions = await staffPermissionContext(tenant, membership);
-  if (!permissions.isManager) throw new Error("You do not have permission to view the workspace overview.");
+  if (!permissions.isManager) {
+    const slug = await currentTenantRouteSlug(tenant.slug);
+    if (permissions.teamMemberId && await isFeatureEnabled(tenant.id, "calendars")) redirect(tenantPath(slug, "/app/calendars"));
+    if (permissions.teamMemberId && await isFeatureEnabled(tenant.id, "team")) redirect(tenantPath(slug, "/app/team"));
+    return <main className="waybook-data-page tenant-dashboard-page"><TenantDashboardNav tenantId={tenant.id} tenantSlug={slug} tenantName={tenant.name} active="overview" /><section className="waybook-data-card"><h1>Workspace access</h1><p>No workspace page is available for your account. Ask a manager to check your access.</p></section></main>;
+  }
   const db = tenantDb(tenant); const now = new Date(); const today = tenantDayBounds(now, tenant.timezone); const currentMonth = monthBounds(now, tenant.timezone); const previousMonth = monthBounds(new Date(currentMonth.start.getTime() - 1), tenant.timezone); const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const [[settings], upcoming, staff, availabilityRules, overrides, scheduledStaff, [metrics], [previousMetrics], [revenueRow], targetItems] = await Promise.all([
     db<{ name: string }[]>`SELECT name FROM tenant_settings WHERE tenant_id = ${tenant.id}`,

@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
+import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { hashPassword, requireIdentity } from "@/lib/waybook/auth";
 import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -63,6 +65,26 @@ function localDatesInRange(start: string, end: string) {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dates;
+}
+
+export async function saveStaffPhoto(formData: FormData) {
+  const { tenant, membership } = await requireTenantWorkspace();
+  await requireFeature(tenant.id, "team");
+  const memberId = String(formData.get("memberId") ?? "");
+  const permissions = await staffPermissionContext(tenant, membership);
+  if (!canEditStaffPhoto(membership.role, permissions.teamMemberId, memberId)) throw new Error("You do not have permission to change this photo.");
+  const db = await validStaffMember(tenant, memberId);
+  const photo = formData.get("photo");
+  const removing = formData.get("removePhoto") === "on";
+  if (!removing && (!(photo instanceof File) || photo.size === 0)) throw new Error("Choose a photo to upload.");
+  const photoDataUrl = await cataloguePhotoFromForm(formData, null);
+  const actor = await requireIdentity();
+  await db.begin(async (tx) => {
+    const [updated] = await tx.unsafe<{ id: string }[]>("UPDATE team_members SET photo_data_url = $1, updated_at = now() WHERE tenant_id = $2 AND id = $3 RETURNING id", [photoDataUrl, tenant.id, memberId]);
+    if (!updated) throw new Error("Staff member is unavailable.");
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'staff.photo_updated', 'team_member', $3, $4::jsonb)", [tenant.id, actor.id, memberId, JSON.stringify({ removed: removing })]);
+  });
+  revalidateStaff();
 }
 
 export async function saveTeamMember(formData: FormData) {
