@@ -48,16 +48,21 @@ The pilot work is tracked in GitHub epic `UserXpert/waybook#2` and its linked
 task issues; other backlog areas have their own linked epics. A closed local
 task does not by itself establish hosted pilot readiness.
 
-On 18 November, the isolated hosted preview was exercised on desktop and at
-390px. Synthetic bookings at two preview locations were created, found and
-rescheduled; both were subsequently cancelled through the public management
-flow. With the Vercel trusted-authentication header, JavaScript-enabled owner
-sign-in produced a client-side Next.js flight-data error on both viewport
-sizes. The same test account reached the owner dashboard when the form was
-submitted without JavaScript. Calendar verification and a complete
-desktop/mobile cancellation walkthrough remain open in GitHub issue #10;
-the sign-in investigation is tracked in #42. The cause and whether it also
-affects ordinary Vercel-authenticated browsers are not yet established.
+On 18 November, isolated hosted preview commit `b278b3f` passed the synthetic
+booking walkthrough on desktop and at 390px across two locations. Each booking
+was created, found, rescheduled to the selected date and time, found in the
+correct staff calendar, cancelled and removed from the calendar. Read-only
+queries verified matching booking/block times and cancelled states. The
+walkthrough found and fixed a stale reschedule-availability response race; a
+deliberately out-of-order browser regression passed at both viewport sizes.
+GitHub issue #10 is complete for this isolated preview walkthrough.
+
+With the Vercel trusted-authentication header, JavaScript-enabled owner sign-in
+produced a client-side Next.js flight-data error. The calendar walkthrough used
+the synthetic owner's form with JavaScript disabled to establish a session,
+then inspected the calendar with JavaScript enabled. Normal sign-in remains
+open in #42; its cause and whether it affects ordinary Vercel-authenticated
+browsers are not yet established. Production release checks remain open.
 
 The first clinic pilot is planned for Denmark. Booking confirmations and
 cancellations use the business's manual process until automatic delivery is
