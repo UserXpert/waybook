@@ -52,3 +52,7 @@ recovery, hosted permissions and booking walkthrough, and Danish privacy/legal
 review remain release gates. No live sender or automatic email delivery has
 been verified. Remaining work in the original mixed checkout has not all been
 reconciled or reviewed. This branch is not yet approved for deployment.
+
+An additional disposable-database check verified encrypted email connections,
+tenant isolation, replacement/disconnect, queue claims, retry safeguards and
+fake-provider worker behavior. This does not establish real email delivery.
