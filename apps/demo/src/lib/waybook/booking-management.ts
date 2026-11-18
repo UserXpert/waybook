@@ -3,9 +3,10 @@ import "server-only";
 import { withSerializableRetry } from "@thebookingkit/server";
 import { availableSlots } from "./booking";
 import { tenantDb, type TenantRecord } from "./database";
+import { refundGiftCardOnCancellation } from "./gift-card-cancellation";
 
 type Sql = ReturnType<typeof tenantDb>;
-type Booking = { id: string; bookingBlockId: string; serviceId: string; serviceTitle: string; locationId: string; locationName: string; startsAt: Date; endsAt: Date; status: string; email: string; hasFinancialActivity: boolean };
+type Booking = { id: string; bookingBlockId: string; serviceId: string; serviceTitle: string; locationId: string; locationName: string; startsAt: Date; endsAt: Date; status: string; email: string; hasFinancialActivity: boolean; hasGiftCardTender: boolean };
 export type Credentials = { bookingId: string; email: string };
 
 /** No details are returned unless both credentials match inside the resolved tenant. */
@@ -14,8 +15,9 @@ async function findBooking(db: Sql, tenantId: string, credentials: Credentials):
     SELECT b.id, b.booking_block_id AS "bookingBlockId", b.service_id AS "serviceId",
       s.title AS "serviceTitle", b.location_id AS "locationId", l.name AS "locationName",
       b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, c.email,
-      (EXISTS (SELECT 1 FROM payment_records pr WHERE pr.tenant_id=b.tenant_id AND pr.booking_id=b.id)
-       OR EXISTS (SELECT 1 FROM commerce_sales cs JOIN commerce_sale_transactions st ON st.sale_id=cs.id AND st.tenant_id=cs.tenant_id WHERE cs.tenant_id=b.tenant_id AND cs.booking_id=b.id)
+      EXISTS (SELECT 1 FROM payment_records gp WHERE gp.tenant_id=b.tenant_id AND gp.booking_id=b.id AND gp.method='gift_card' AND gp.kind='payment') AS "hasGiftCardTender",
+      (EXISTS (SELECT 1 FROM payment_records pr WHERE pr.tenant_id=b.tenant_id AND pr.booking_id=b.id AND pr.method<>'gift_card')
+       OR EXISTS (SELECT 1 FROM commerce_sales cs JOIN commerce_sale_transactions st ON st.sale_id=cs.id AND st.tenant_id=cs.tenant_id WHERE cs.tenant_id=b.tenant_id AND cs.booking_id=b.id AND st.method<>'gift_card')
        OR EXISTS (SELECT 1 FROM commerce_entitlement_entries ce WHERE ce.tenant_id=b.tenant_id AND ce.booking_id=b.id)) AS "hasFinancialActivity"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
     JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
@@ -32,7 +34,7 @@ function canChange(booking: Booking) {
 export async function lookupManagedBooking(tenant: TenantRecord, credentials: Credentials) {
   const booking = await findBooking(tenantDb(tenant), tenant.id, credentials);
   if (!booking) return null;
-  return { service: booking.serviceTitle, location: booking.locationName, startsAt: booking.startsAt, endsAt: booking.endsAt, status: booking.status, canChange: canChange(booking), canCancel: canChange(booking) && !booking.hasFinancialActivity };
+  return { service: booking.serviceTitle, location: booking.locationName, startsAt: booking.startsAt, endsAt: booking.endsAt, status: booking.status, canChange: canChange(booking), canCancel: canChange(booking) && !booking.hasFinancialActivity, hasGiftCardTender: booking.hasGiftCardTender };
 }
 
 export async function managedAvailability(tenant: TenantRecord, credentials: Credentials, start: Date, end: Date) {
@@ -64,6 +66,7 @@ export async function cancelManagedBooking(tenant: TenantRecord, credentials: Cr
     // Refunds and entitlement reversals require the business's existing sales workflow.
     if (booking.hasFinancialActivity) return { status: "financial" as const, outboxId: null };
     await db`UPDATE bookings SET status='cancelled', updated_at=now() WHERE tenant_id=${tenant.id} AND id=${booking.id}`;
+    await refundGiftCardOnCancellation(db, tenant.id, booking.id, null);
     await db`UPDATE booking_blocks SET state='cancelled' WHERE tenant_id=${tenant.id} AND id=${booking.bookingBlockId}`;
     const metadata = JSON.stringify({ source: "customer_management", previousStatus: booking.status });
     await db`INSERT INTO booking_events (tenant_id,booking_id,event_type,metadata) VALUES (${tenant.id},${booking.id},'booking.cancelled',${metadata}::text::jsonb)`;

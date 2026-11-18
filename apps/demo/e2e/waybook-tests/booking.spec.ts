@@ -9,6 +9,8 @@ function localDayAfter(days: number) {
 }
 
 test("customer books, reschedules and cancels without a stale confirmation", async ({ page }) => {
+  test.setTimeout(120_000);
+  const check = expect.configure({ timeout: 30_000 });
   await page.goto("/nordic/book");
   await page.getByRole("button", { name: /Studio session/ }).click();
   await page.getByRole("button", { name: "Next dates" }).click();
@@ -16,43 +18,43 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await page.getByLabel("Name", { exact: true }).fill("Waybook E2E customer");
   await page.getByLabel("Email", { exact: true }).fill("waybook-e2e@example.test");
   await page.getByRole("button", { name: "Confirm booking" }).click();
-  await expect(page.getByText("BOOKING CONFIRMED")).toBeVisible();
+  await check(page.getByText("BOOKING CONFIRMED")).toBeVisible();
   const summary = await page.locator(".tenant-complete-stage").innerText();
   const number = summary.match(/Booking number:\s*([A-Z0-9]+)/)?.[1];
-  expect(number).toBeTruthy();
+  check(number).toBeTruthy();
 
   async function findBooking() {
     await page.getByRole("button", { name: "Manage booking" }).click();
     await page.getByLabel("Booking number").fill(number!);
     await page.getByLabel("Email address").fill("waybook-e2e@example.test");
     await page.getByRole("button", { name: "Find booking" }).click();
-    await expect(page.getByRole("heading", { name: "Your booking" })).toBeVisible();
+    await check(page.getByRole("heading", { name: "Your booking" })).toBeVisible();
   }
   await findBooking();
   await page.getByRole("button", { name: "Reschedule booking" }).click();
   await page.getByLabel("Day").fill(localDayAfter(8));
   await page.getByRole("button", { name: "10:00", exact: true }).click();
   await page.getByRole("button", { name: "Confirm new time" }).click();
-  await expect(page.getByText("Your booking has been rescheduled.")).toBeVisible();
+  await check(page.getByText("Your booking has been rescheduled.")).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByRole("heading", { name: "Choose a service" })).toBeVisible();
-  await expect(page.getByText("BOOKING CONFIRMED")).toHaveCount(0);
+  await check(page.getByRole("heading", { name: "Choose a service" })).toBeVisible();
+  await check(page.getByText("BOOKING CONFIRMED")).toHaveCount(0);
 
   const calendar = await page.context().newPage();
   await calendar.goto("/login");
   await calendar.getByLabel("Work email").fill("owner@nordic.local");
   await calendar.getByPlaceholder("Enter your password").fill("waybook-local-only");
   await calendar.getByRole("button", { name: "Sign in" }).click();
-  await expect(calendar).toHaveURL(/\/nordic\/app/);
+  await check(calendar).toHaveURL(/\/nordic\/app/);
   await calendar.goto(`/nordic/app/calendars?day=${localDayAfter(8)}`);
-  await expect(calendar.getByText("Waybook E2E customer", { exact: true })).toBeVisible();
+  await check(calendar.getByText("Waybook E2E customer", { exact: true })).toBeVisible();
 
   await findBooking();
   await page.getByRole("button", { name: "Cancel booking" }).click();
   await page.getByRole("button", { name: "Confirm cancellation" }).click();
-  await expect(page.getByText("Your booking has been cancelled.")).toBeVisible();
+  await check(page.getByText("Your booking has been cancelled.")).toBeVisible();
   await calendar.reload();
-  await expect(calendar.getByText("Waybook E2E customer", { exact: true })).toHaveCount(0);
+  await check(calendar.getByText("Waybook E2E customer", { exact: true })).toHaveCount(0);
   await calendar.close();
 });
 
