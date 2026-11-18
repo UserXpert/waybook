@@ -31,6 +31,11 @@ All five gates must pass. Record the deployment, date, operator and evidence for
 
 Until a delivery method has been configured and verified, tell pilot businesses that Waybook does not send confirmation or cancellation emails. The customer must save the booking number and appointment details displayed after booking. Staff should review new and changed appointments in the calendar or booking list, and manually communicate confirmation or changes through the business's existing approved channel when needed. The Emails screen is an outbox of queued records, not proof of delivery. Do not promise automatic reminders or email confirmations during onboarding. This is a temporary operating procedure, not a completed delivery integration.
 
+On 18 November, the isolated preview's overdue-booking endpoint returned 401
+without its cron secret. This verifies unauthorized access is rejected; it
+does not establish scheduled execution, successful processing or production
+monitoring. Those checks remain open in GitHub issue #12.
+
 ## Release reconciliation — 18 November 2026
 
 ### GitHub tracking and isolated preview
