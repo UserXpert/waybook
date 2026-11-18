@@ -241,6 +241,19 @@ Each step reuses this schema rather than adding new finance tables. A later
 migration is warranted only if a discovered provider or legal requirement
 changes an invariant, not merely to expose another screen.
 
+## Delivered: appointment-sale detail
+
+**Database-backed / tested / browser-verified (isolated hosted preview).** On
+18 November 2026, preview commit `fd9bb55` displayed a synthetic appointment's
+service, product snapshot, payment and refund entries, and tenant-scoped
+appointment activity with recorded actor names. The appointment link opened
+the matching calendar drawer, and a read-only member was redirected away from
+Sales. Desktop and 390px mobile were checked. Database checks rejected an
+excess refund, excess payment, payment-record edit, and reopening a cancelled
+appointment. Product tender remains a separate unfinished checkout slice and
+is labelled accordingly. This does not establish production deployment or
+payment-provider operation.
+
 ## Delivered: product catalogue and manual retail checkout
 
 **Database-backed / build-verified / browser-verified (local Nordic).** Apps
