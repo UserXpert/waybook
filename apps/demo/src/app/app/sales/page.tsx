@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
+import { GiftCardTenderForm } from "@/components/gift-card-tender-form";
 import { controlDb, tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
@@ -13,6 +14,7 @@ type SaleRow = {
   id: string;
   bookingId: string;
   customerId: string;
+  currency: string;
   startsAt: Date;
   status: string;
   bookedPriceCents: number;
@@ -25,6 +27,7 @@ type SaleRow = {
   locationId: string | null;
   locationName: string | null;
   packageRedeemed: boolean;
+  giftCardRedeemed: boolean;
 };
 type Location = { id: string; name: string };
 type Product = { id: string; title: string; priceCents: number; currency: string };
@@ -47,6 +50,8 @@ function activityLabel(eventType: string) {
     "booking.no_show": "Marked as no-show",
     "payment.payment": "Payment recorded",
     "payment.refund": "Refund recorded",
+    "payment.gift_card": "Gift card redeemed",
+    "payment.gift_card_refund": "Gift card refunded",
   };
   return labels[eventType] ?? eventType.replaceAll(/[._]/g, " ");
 }
@@ -74,11 +79,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const [locations, rows, products] = await Promise.all([
     db<Location[]>`SELECT id, name FROM locations WHERE tenant_id = ${tenant.id} AND is_active = TRUE ORDER BY CASE WHEN slug = 'primary' THEN 0 ELSE 1 END, name`,
     db<SaleRow[]>`
-      SELECT cs.id, b.id AS "bookingId", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents",
+      SELECT cs.id, cs.currency, b.id AS "bookingId", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
         count(pr.id)::int AS "paymentCount", c.name AS "customerName", s.title AS "serviceTitle",
         b.team_member_id AS "teamMemberId", tm.name AS "teamMemberName", b.location_id AS "locationId", l.name AS "locationName"
         ,exists(SELECT 1 FROM commerce_entitlement_entries ce WHERE ce.tenant_id=cs.tenant_id AND ce.booking_id=b.id AND ce.kind='redeem' AND ce.package_id IS NOT NULL) AS "packageRedeemed"
+        ,exists(SELECT 1 FROM payment_records gp WHERE gp.tenant_id=cs.tenant_id AND gp.booking_id=b.id AND gp.method='gift_card' AND gp.kind='payment') AS "giftCardRedeemed"
       FROM commerce_sales cs
       JOIN bookings b ON b.id = cs.booking_id AND b.tenant_id = cs.tenant_id
       JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
@@ -182,6 +188,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <section><h3>Service and products</h3><dl className="sale-detail__totals"><div><dt>Booked service</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>{saleLines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{money(line.unitPriceCents * line.quantity - line.discountCents)}</dd></div>)}<div><dt>Products not yet payable</dt><dd>{money(productTotalCents)}</dd></div><div><dt>Payments received</dt><dd>{money(selectedSale.paidCents)}</dd></div><div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}><dt>{balance < 0 ? "Credit due" : balance === 0 ? "Service balance" : "Service outstanding"}</dt><dd>{money(Math.abs(balance))}</dd></div></dl></section>
             <section><h3>Products</h3>{canAddProducts ? <form action={addProductToAppointmentSale} className="tenant-drawer-form"><input type="hidden" name="saleId" value={selectedSale.id} /><div className="tenant-drawer-form__grid"><label>Product<select name="productId" required><option value="" disabled>Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" min={1} max={99} defaultValue={1} required /></label></div><p className="tenant-drawer-note">Products are priced snapshots. They can be added only before the appointment reaches a terminal status; tendering remains a later checkout step.</p><button type="submit">Add product</button></form> : <p className="tenant-drawer-note">Products can be added only to confirmed or arrived appointments with an active product catalogue. Completed, cancelled, and no-show appointments are read-only.</p>}</section>
             <section><h3>Package</h3>{selectedSale.packageRedeemed ? <p className="tenant-drawer-note">A package visit has been redeemed for this appointment. The debit is immutable; cancellation/reversal needs its dedicated lifecycle.</p> : ["confirmed", "arrived"].includes(selectedSale.status) && selectedSale.paidCents === 0 && eligiblePackages.length ? <form action={redeemPackageForAppointmentSale} className="tenant-drawer-form"><input type="hidden" name="saleId" value={selectedSale.id} /><label>Eligible client package<select name="packageId" required defaultValue=""><option value="" disabled>Select package</option>{eligiblePackages.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.remainingUnits} visit{item.remainingUnits === 1 ? "" : "s"} remaining{item.expiresAt ? ` · expires ${new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.expiresAt)}` : ""}</option>)}</select></label><p className="tenant-drawer-note">Redeems one matching visit and settles this service appointment. Package and payment tender cannot be mixed yet.</p><button type="submit">Redeem package visit</button></form> : <p className="tenant-drawer-note">No eligible package can be redeemed. Redemptions require a confirmed or arrived appointment, no payment entries, and a matching active client package with visits remaining.</p>}</section>
+            <section><h3>Gift card</h3>{selectedSale.giftCardRedeemed ? <p className="tenant-drawer-note">A gift card has been used for this appointment. Any cancellation refund returns to that card.</p> : selectedSale.currency !== "DKK" ? <p className="tenant-drawer-note">Gift-card tender is currently available for DKK appointments.</p> : !selectedSale.packageRedeemed && ["confirmed", "arrived"].includes(selectedSale.status) && balance > 0 ? <GiftCardTenderForm saleId={selectedSale.id} balanceCents={balance} /> : <p className="tenant-drawer-note">Gift cards can be used for an active appointment with a service balance and no package redemption.</p>}</section>
             <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}{item.notes ? ` · ${item.notes}` : ""}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="tenant-drawer-note">No payment entries have been recorded for this appointment.</p>}</section>
             <section><h3>Appointment activity</h3>{activity.length ? <><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="tenant-drawer-note">Showing the 100 most recent events.</p> : null}</> : <p className="tenant-drawer-note">No appointment activity has been recorded.</p>}</section>
             <section><h3>Sale details</h3><p className="sale-detail__note">Payment and refund entries are permanent. Refunds cannot exceed the amount collected. Completed, cancelled, and no-show appointments cannot be reopened.</p></section>

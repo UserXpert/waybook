@@ -1,6 +1,5 @@
 "use server";
 
-import { createHash, createHmac } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireIdentity } from "@/lib/waybook/auth";
@@ -10,22 +9,16 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
+import { giftCardCodeHashes, normaliseGiftCardCode } from "@/lib/waybook/gift-card-code";
 
 const amountFrom = (value: FormDataEntryValue | null) => Math.round(Number(String(value ?? "").replace(",", ".")) * 100);
-const normaliseCode = (value: string) => value.trim().toUpperCase().replace(/\s+/g, "");
-function giftCardCodeHash(code: string) {
-  const secret = process.env.WAYBOOK_GIFT_CARD_CODE_SECRET;
-  if (secret) return createHmac("sha256", secret).update(code).digest("hex");
-  if (process.env.NODE_ENV !== "production") return createHmac("sha256", "waybook-local-development-gift-card-secret").update(code).digest("hex");
-  throw new Error("Gift cards require WAYBOOK_GIFT_CARD_CODE_SECRET in production.");
-}
 
 export async function issueGiftCard(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "booking-essentials");
   if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to issue gift cards.");
 
-  const code = normaliseCode(String(formData.get("code") ?? ""));
+  const code = normaliseGiftCardCode(String(formData.get("code") ?? ""));
   const ownerId = String(formData.get("ownerId") ?? "") || null;
   const amountCents = amountFrom(formData.get("amountDkk"));
   const notes = String(formData.get("notes") ?? "").trim() || null;
@@ -46,8 +39,7 @@ export async function issueGiftCard(formData: FormData) {
       }
       const [settings] = await transaction.unsafe<{ currency: string }[]>("SELECT currency FROM tenant_settings WHERE tenant_id=$1", [tenant.id]);
       if (!settings) throw new Error("Tenant settings are unavailable.");
-      const hash = giftCardCodeHash(code);
-      const legacyHash = createHash("sha256").update(code).digest("hex");
+      const [hash, legacyHash] = giftCardCodeHashes(code);
       const [existing] = await transaction.unsafe<{ id: string }[]>("SELECT id FROM commerce_gift_cards WHERE tenant_id=$1 AND code_hash IN ($2,$3) LIMIT 1", [tenant.id, hash, legacyHash]);
       if (existing) throw new Error("That gift-card number already exists in this workspace.");
       const [card] = await transaction.unsafe<{ id: string }[]>("INSERT INTO commerce_gift_cards (tenant_id,issued_to_customer_id,code_hash,code_hash_version,code_last_four,currency) VALUES ($1,$2,$3,2,$4,$5) RETURNING id", [tenant.id, ownerId, hash, lastFour, settings.currency]);

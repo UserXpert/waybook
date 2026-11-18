@@ -8,6 +8,7 @@ import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { giftCardCodeHashes, normaliseGiftCardCode } from "@/lib/waybook/gift-card-code";
 
 const quantityFrom = (value: FormDataEntryValue | null) => Number.parseInt(String(value ?? ""), 10);
 
@@ -83,6 +84,43 @@ export async function redeemPackageForAppointmentSale(formData: FormData) {
     await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'appointment_sale.package_redeemed','commerce_sale',$3,$4::jsonb)", [tenant.id, identity.id, sale.id, JSON.stringify({ bookingId: sale.bookingId, packageId: clientPackage.id, entitlementEntryId: entry.id })]);
   });
   revalidatePath("/app/sales"); revalidatePath("/app/bookings"); revalidatePath("/app/calendars"); revalidatePath("/app/packages");
+  const tenantSlug = await currentTenantRouteSlug(tenant.slug);
+  redirect(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`);
+}
+
+export type GiftCardTenderState = { error: string | null };
+
+export async function redeemGiftCardForAppointmentSale(_previous: GiftCardTenderState, formData: FormData): Promise<GiftCardTenderState> {
+  const { tenant, membership } = await requireTenantWorkspace();
+  await requireFeature(tenant.id, "booking-essentials");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to redeem gift cards.");
+  const saleId = String(formData.get("saleId") ?? "");
+  const code = normaliseGiftCardCode(String(formData.get("cardCode") ?? ""));
+  const amount = String(formData.get("amountDkk") ?? "").trim();
+  if (!saleId || !/^[A-Z0-9-]{8,40}$/.test(code) || !/^\d+(?:[.,]\d{1,2})?$/.test(amount)) return { error: "Enter a valid gift-card number and amount." };
+  const amountCents = Math.round(Number(amount.replace(",", ".")) * 100);
+  if (!Number.isSafeInteger(amountCents) || amountCents < 1 || amountCents > 10_000_000) return { error: "Enter a valid gift-card amount." };
+  const hashes = giftCardCodeHashes(code);
+  const identity = await requireIdentity();
+  const db = tenantDb(tenant);
+  try { await db.begin(async transaction => {
+    const [sale] = await transaction.unsafe<{ id: string; bookingId: string; customerId: string; status: string; bookingStatus: string; currency: string }[]>(
+      "SELECT cs.id,cs.booking_id AS \"bookingId\",cs.customer_id AS \"customerId\",cs.status,b.status AS \"bookingStatus\",cs.currency FROM commerce_sales cs JOIN bookings b ON b.id=cs.booking_id AND b.tenant_id=cs.tenant_id WHERE cs.id=$1 AND cs.tenant_id=$2 FOR UPDATE OF cs,b", [saleId, tenant.id],
+    );
+    if (!sale || sale.status !== "open" || sale.currency !== "DKK" || !["confirmed", "arrived"].includes(sale.bookingStatus)) throw new Error("Gift cards can only be used for an active DKK appointment with an open sale.");
+    const [card] = await transaction.unsafe<{ id: string; ownerId: string | null; currency: string }[]>(
+      "SELECT id,issued_to_customer_id AS \"ownerId\",currency FROM commerce_gift_cards WHERE tenant_id=$1 AND code_hash IN ($2,$3) AND status='active' AND (expires_at IS NULL OR expires_at>now()) FOR UPDATE", [tenant.id, ...hashes],
+    );
+    if (!card || card.currency !== sale.currency || (card.ownerId && card.ownerId !== sale.customerId)) throw new Error("That gift card is unavailable for this appointment.");
+    const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO commerce_gift_card_entries (tenant_id,gift_card_id,sale_id,booking_id,kind,direction,amount_cents,currency,reason,recorded_by_identity_id) VALUES ($1,$2,$3,$4,'redeem','debit',$5,$6,'Appointment gift-card redemption',$7) RETURNING id", [tenant.id, card.id, sale.id, sale.bookingId, amountCents, sale.currency, identity.id]);
+    const [saleTransaction] = await transaction.unsafe<{ id: string }[]>("INSERT INTO commerce_sale_transactions (tenant_id,sale_id,kind,method,amount_cents,currency,recorded_by_identity_id) VALUES ($1,$2,'payment','gift_card',$3,$4,$5) RETURNING id", [tenant.id, sale.id, amountCents, sale.currency, identity.id]);
+    await transaction.unsafe("INSERT INTO payment_records (tenant_id,booking_id,kind,amount_cents,method,recorded_by_identity_id,gift_card_entry_id,gift_card_sale_transaction_id) VALUES ($1,$2,'payment',$3,'gift_card',$4,$5,$6)", [tenant.id, sale.bookingId, amountCents, identity.id, entry.id, saleTransaction.id]);
+    await transaction.unsafe("INSERT INTO booking_events (tenant_id,booking_id,actor_identity_id,event_type,metadata) VALUES ($1,$2,$3,'payment.gift_card',$4::jsonb)", [tenant.id, sale.bookingId, identity.id, JSON.stringify({ amountCents })]);
+    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'appointment_sale.gift_card_redeemed','commerce_sale',$3,$4::jsonb)", [tenant.id, identity.id, sale.id, JSON.stringify({ bookingId: sale.bookingId, giftCardId: card.id, amountCents })]);
+  }); } catch {
+    return { error: "The gift card could not be used. Check the card, its owner and balance, and the appointment amount." };
+  }
+  revalidatePath("/app/sales"); revalidatePath("/app/bookings"); revalidatePath("/app/calendars"); revalidatePath("/app/gift-cards");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   redirect(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`);
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
 import { fromZonedTime } from "date-fns-tz";
 import { BookingConflictError, withSerializableRetry } from "@thebookingkit/server";
 import { requireIdentity } from "@/lib/waybook/auth";
@@ -470,6 +471,7 @@ export async function updateBookingStatus(formData: FormData) {
   const status = String(formData.get("status") ?? "");
   if (!["arrived", "completed", "no_show", "cancelled"].includes(status)) throw new Error("Choose a valid appointment status.");
   const { tenant, db, booking } = await editableBooking(bookingId, status === "cancelled" ? "appointment" : "status");
+  const actor = status === "cancelled" ? await requireIdentity() : null;
   if (status === "cancelled" && booking.status === "completed") throw new Error("Completed appointments cannot be cancelled.");
   const outboxId = await withSerializableRetry(() => db.begin(async (transaction) => {
     // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
@@ -500,6 +502,7 @@ export async function updateBookingStatus(formData: FormData) {
     await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
     let cancellationOutboxId: string | null = null;
     if (status === "cancelled") {
+      await refundGiftCardOnCancellation(transaction as unknown as ReturnType<typeof tenantDb>, tenant.id, booking.id, actor?.id ?? null);
       await transaction.unsafe("UPDATE booking_blocks SET state = 'cancelled' WHERE id = $1 AND tenant_id = $2", [booking.bookingBlockId, tenant.id]);
       const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'cancellation', $3, $4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id })]);
       cancellationOutboxId = entry.id;

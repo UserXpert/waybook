@@ -35,7 +35,7 @@ export function CancelAppointmentForm({ bookingId, cancelAppointment }: Props) {
       <button type="submit" disabled={isPending}>
         {isPending ? "Cancelling…" : "Cancel appointment"}
       </button>
-      <small>Updates this booking’s status to Cancelled, releases the time, and retains its history and audit record.</small>
+      <small>Updates this booking’s status to Cancelled, releases the time, and retains its history and audit record. Any gift-card payment is returned to the original card.</small>
       {error ? <p className="appointment-drawer__form-error" role="alert">{error}</p> : null}
     </form>
   );
