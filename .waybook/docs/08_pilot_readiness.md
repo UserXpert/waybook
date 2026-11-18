@@ -60,11 +60,12 @@ GitHub issue #10 is complete for this isolated preview walkthrough.
 With the Vercel trusted-authentication header, JavaScript-enabled owner sign-in
 produced a client-side Next.js flight-data error. The calendar walkthrough used
 the synthetic owner's form with JavaScript disabled to establish a session,
-then inspected the calendar with JavaScript enabled. Normal sign-in remains
-open in #42; its cause and whether it affects ordinary Vercel-authenticated
-browsers are not yet established. A direct-to-workspace redirect did not fix
-the trusted-header failure and was reverted. Production release checks remain
-open.
+then inspected the calendar with JavaScript enabled. Later, normal
+JavaScript-enabled owner sign-in passed on desktop and mobile in Chrome
+authenticated directly to Vercel. The trusted-header automation failure remains
+open in #42; its exact cause is not established. A direct-to-workspace
+redirect did not fix that failure and was reverted. Production release checks
+remain open.
 
 The first clinic pilot is planned for Denmark. Booking confirmations and
 cancellations use the business's manual process until automatic delivery is
