@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { tenantDb } from "@/lib/waybook/database";
+import { controlDb, tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -31,6 +31,8 @@ type Product = { id: string; title: string; priceCents: number; currency: string
 type SaleLine = { id: string; title: string; unitPriceCents: number; quantity: number; discountCents: number };
 type PaymentItem = { id: string; kind: "payment" | "refund"; amountCents: number; method: string; notes: string | null; recordedAt: Date };
 type EligiblePackage = { id: string; title: string; remainingUnits: number; expiresAt: Date | null };
+type BookingActivity = { id: string; eventType: string; actorIdentityId: string | null; createdAt: Date };
+type ActivityActor = { id: string; displayName: string };
 
 const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
 
@@ -92,6 +94,18 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     SELECT id,title_snapshot AS title,unit_price_cents AS "unitPriceCents",quantity,discount_cents AS "discountCents"
     FROM commerce_sale_lines WHERE tenant_id=${tenant.id} AND sale_id=${selectedSale.id} AND line_kind='product' ORDER BY created_at
   ` : [];
+  const activity = selectedSale ? await db<BookingActivity[]>`
+    SELECT id, event_type AS "eventType", actor_identity_id AS "actorIdentityId", created_at AS "createdAt"
+    FROM booking_events WHERE tenant_id=${tenant.id} AND booking_id=${selectedSale.bookingId}
+    ORDER BY created_at DESC, id DESC LIMIT 100
+  ` : [];
+  const actorIds = [...new Set(activity.flatMap((event) => event.actorIdentityId ? [event.actorIdentityId] : []))];
+  const actors = actorIds.length ? await controlDb<ActivityActor[]>`
+    SELECT i.id, i.display_name AS "displayName" FROM identities i
+    JOIN tenant_memberships m ON m.identity_id=i.id AND m.tenant_id=${tenant.id}
+    WHERE i.id = ANY(${actorIds}::uuid[])
+  ` : [];
+  const actorNames = new Map(actors.map((actor) => [actor.id, actor.displayName]));
   const eligiblePackages = selectedSale && !selectedSale.packageRedeemed ? await db<EligiblePackage[]>`
     SELECT cp.id,cp.title_snapshot AS title,cp.expires_at AS "expiresAt",
       coalesce(sum(CASE WHEN ce.direction='credit' THEN ce.units ELSE -ce.units END),0)::int AS "remainingUnits"
@@ -154,7 +168,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <section><h3>Products</h3>{canAddProducts ? <form action={addProductToAppointmentSale} className="tenant-drawer-form"><input type="hidden" name="saleId" value={selectedSale.id} /><div className="tenant-drawer-form__grid"><label>Product<select name="productId" required><option value="" disabled>Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" min={1} max={99} defaultValue={1} required /></label></div><p className="tenant-drawer-note">Products are priced snapshots. They can be added only before the appointment reaches a terminal status; tendering remains a later checkout step.</p><button type="submit">Add product</button></form> : <p className="tenant-drawer-note">Products can be added only to confirmed or arrived appointments with an active product catalogue. Completed, cancelled, and no-show appointments are read-only.</p>}</section>
             <section><h3>Package</h3>{selectedSale.packageRedeemed ? <p className="tenant-drawer-note">A package visit has been redeemed for this appointment. The debit is immutable; cancellation/reversal needs its dedicated lifecycle.</p> : ["confirmed", "arrived"].includes(selectedSale.status) && selectedSale.paidCents === 0 && eligiblePackages.length ? <form action={redeemPackageForAppointmentSale} className="tenant-drawer-form"><input type="hidden" name="saleId" value={selectedSale.id} /><label>Eligible client package<select name="packageId" required defaultValue=""><option value="" disabled>Select package</option>{eligiblePackages.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.remainingUnits} visit{item.remainingUnits === 1 ? "" : "s"} remaining{item.expiresAt ? ` · expires ${new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.expiresAt)}` : ""}</option>)}</select></label><p className="tenant-drawer-note">Redeems one matching visit and settles this service appointment. Package and payment tender cannot be mixed yet.</p><button type="submit">Redeem package visit</button></form> : <p className="tenant-drawer-note">No eligible package can be redeemed. Redemptions require a confirmed or arrived appointment, no payment entries, and a matching active client package with visits remaining.</p>}</section>
             <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}{item.notes ? ` · ${item.notes}` : ""}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="tenant-drawer-note">No payment entries have been recorded for this appointment.</p>}</section>
-            <section><h3>Sale details</h3><p className="sale-detail__note">This sale is generated from the appointment. Open it to collect payment, issue a refund, or manage the booking; all changes stay in the immutable ledger.</p></section>
+            <section><h3>Appointment activity</h3>{activity.length ? <><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{event.eventType.replaceAll(/[._]/g, " ")}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="tenant-drawer-note">Showing the 100 most recent events.</p> : null}</> : <p className="tenant-drawer-note">No appointment activity has been recorded.</p>}</section>
+            <section><h3>Sale details</h3><p className="sale-detail__note">Payment and refund entries are permanent. Refunds cannot exceed the amount collected. Completed, cancelled, and no-show appointments cannot be reopened.</p></section>
             {appointmentHref ? <Link className="waybook-primary-link sale-detail__action" href={appointmentHref}>Open appointment</Link> : null}
           </div>
         </aside>
