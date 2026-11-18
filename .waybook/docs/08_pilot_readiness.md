@@ -77,6 +77,9 @@ remain open.
 The first clinic pilot is planned for Denmark. Booking confirmations and
 cancellations use the business's manual process until automatic delivery is
 configured and verified. The process must still be exercised with a pilot.
+The preliminary data map and outstanding privacy decisions are in
+`10_denmark_privacy_review.md`; operations-only booking information may still
+be health data and requires assessment before a clinic pilot.
 
 This review branch combines released booking reliability with the email branch,
 the compact Apps menu, and staff photo/profile fixes. A local production build,
