@@ -216,9 +216,8 @@ time it is added; the manager action writes both a booking event and a tenant
 audit event in the same transaction. The local rollback-only verifier proved
 the immutable snapshot and terminal-state rejection on 2026-11-07. The Nordic
 Sales drawer exposed the active-product picker on desktop and at 375 px without
-overflow. Add-ons remain untendered until the following package/gift-card and
-appointment settlement slices define one atomic payment path; the established
-appointment payment ledger is deliberately not widened here.
+overflow. Product add-ons remain untendered; the later gift-card slice applies
+to the service balance only and does not settle product lines.
 
 ## Delivery order
 
@@ -231,8 +230,8 @@ not an unlimited commitment to keep adding commerce features.
 2. Product add-ons and package redemption are delivered locally. Package
    redemption debits one matching active client visit only for a confirmed or
    arrived, otherwise-unpaid appointment; terminal appointments, duplicate
-   redemption, and mixed payment tender are rejected. Gift-card tender remains
-   the next bounded atomic appointment-sale flow.
+   redemption, and mixed package/payment tender are rejected. Gift-card tender
+   for the appointment service is now delivered on the isolated preview.
 3. Complete appointment-sale detail and focused booking-commerce QA.
 4. Defer wallet, memberships, processor integration, and other P2 work until
    the pilot-release gate is reviewed.
@@ -253,6 +252,35 @@ excess refund, excess payment, payment-record edit, and reopening a cancelled
 appointment. Product tender remains a separate unfinished checkout slice and
 is labelled accordingly. This does not establish production deployment or
 payment-provider operation.
+
+## Delivered: appointment gift-card tender
+
+**Database-backed / tested / browser-verified (isolated hosted preview).**
+Migration `0052_booking_gift_card_tender.sql` pairs the gift-card ledger debit,
+appointment payment and booking-sale transaction at commit, with the
+appointment ledger remaining the reporting source. An owner or manager can
+enter a card number and an amount for an active DKK appointment. Named cards
+may only be used by their named customer; an unassigned card requires its
+number. One gift card may be used per appointment. Package and gift-card
+tender cannot be mixed, while a remaining service balance may use other tender.
+
+Cancelling an appointment restores its gift-card amount to the same card in
+the cancellation transaction. If that card was expired or voided, it is
+reactivated and its expiry cleared; this decision was confirmed by the user on
+18 November 2026. Customer cancellation remains unavailable when non-gift
+payment or package activity also requires manual handling. Ordinary refunds
+cannot return gift-card value as cash or another tender.
+
+On 18 November, desktop and 390px mobile hosted-preview checks redeemed and
+cancelled synthetic appointments and verified the original card balance and
+matching payment/refund records. Disposable-database checks covered ownership,
+currency, tenant isolation, unpaired or mismatched ledger writes, duplicate
+redemption/cancellation, balance, concurrent redemption and cancellation,
+read-only forged-action denial, and rollback on a forced audit failure. The
+production build, 37 app tests, 395 server tests, ordinary booking lifecycle,
+and focused gift-card browser tests passed. Migration `0052` was applied to
+the isolated preview tenants only; production backup, migration, and release
+checks remain open.
 
 ## Delivered: product catalogue and manual retail checkout
 
