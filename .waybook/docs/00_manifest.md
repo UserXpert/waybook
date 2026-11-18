@@ -73,6 +73,11 @@ data, compliance, retention, access, and integration decision. It is a future
 optional premium EHR add-on for clinics, never a prerequisite or hidden mode
 of the core appointment product.
 
+This product boundary does not by itself make booking data non-health data:
+an appointment or service may reveal information about a person's health.
+Classification, the applicable legal bases and safeguards for the actual pilot
+must be reviewed before launch; see `10_denmark_privacy_review.md`.
+
 ## Working-product standard
 
 - Functional work follows: persisted data → server authorization → read/mutation path → focused test → desktop/mobile browser verification.
