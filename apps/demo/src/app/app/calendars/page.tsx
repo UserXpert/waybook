@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
+import { CalendarActiveFilters } from "@/components/calendar-active-filters";
 import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
 import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
@@ -713,6 +714,14 @@ export default async function CalendarsPage({
                           <CalendarSelectors location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} fixedView="month" />
                         </div>
                       </details>
+                      <CalendarActiveFilters
+                        location={{ name: selectedLocation.name, isExplicit: Boolean(requestedLocation) }}
+                        staff={hasSelectedEmployee && selected ? { name: selected.name, id: selected.id } : undefined}
+                        service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
+                        rosterSearch={staffSearch || undefined}
+                        excludesOffShift={showOffShift === "0"}
+                        dayFallback={teamDay}
+                      />
                       <div className="calendar-view-toggle" aria-label="Calendar range">
                         {hasSelectedEmployee ? <Link href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: teamDay, monthDay: undefined })}>Week</Link> : <Link href={href({ view: "team", employee: "", day: teamDay, monthDay: undefined })}>Day</Link>}
                         <Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-current="page">Month</Link>
@@ -773,6 +782,13 @@ export default async function CalendarsPage({
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
                         </div>
                       </details>
+                      <CalendarActiveFilters
+                        location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
+                        service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
+                        rosterSearch={staffSearch || undefined}
+                        excludesOffShift={showOffShift === "0"}
+                        dayFallback={teamDay}
+                      />
                       <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: "team", employee: "", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "month", employee: "", day: teamDay })}>Month</Link></div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
@@ -959,6 +975,14 @@ export default async function CalendarsPage({
                           />
                         </div>
                       </details>
+                      <CalendarActiveFilters
+                        location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
+                        staff={selected ? { name: selected.name, id: selected.id } : undefined}
+                        service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
+                        rosterSearch={staffSearch || undefined}
+                        excludesOffShift={showOffShift === "0"}
+                        dayFallback={teamDay}
+                      />
                       <div className="calendar-view-toggle" aria-label="Calendar range">
                         <Link href={href({ view: "staff", day: undefined })} aria-current="page">Week</Link>
                         <Link href={href({ view: "month", day: teamDay })}>Month</Link>
