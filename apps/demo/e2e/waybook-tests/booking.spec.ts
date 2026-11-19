@@ -87,7 +87,7 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await check(page).toHaveURL(/\/nordic\/app/);
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await page.locator(".calendar-date-picker > button").click();
-  await page.getByLabel("Calendar date").fill(monthDay);
+  await page.getByRole("textbox", { name: "Calendar date", exact: true }).fill(monthDay);
   await check(page).toHaveURL(new RegExp(`day=${monthDay}`));
 
   const day = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
@@ -109,8 +109,8 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await page.getByLabel("Previous month").click();
   await page.getByText("Filters", { exact: true }).click();
-  await page.getByLabel("Staff").fill("E2E roster 21");
-  await page.getByRole("option", { name: "E2E roster 21" }).click();
+  await page.getByLabel("Staff").fill("Z E2E roster 21");
+  await page.getByRole("option", { name: "Z E2E roster 21" }).click();
   await check(page).toHaveURL(/employee=/);
   const scopedDay = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
   await check(scopedDay).toContainText("1 booking");

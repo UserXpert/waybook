@@ -31,7 +31,9 @@ for (const raw of targets) {
         const [service] = await tx<{ id: string; durationMinutes: number }[]>`SELECT id,duration_minutes AS "durationMinutes" FROM services WHERE tenant_id=${settings.tenantId} ORDER BY created_at LIMIT 1`;
         let outsideMemberId = member.id;
         for (let index = 1; index <= 21; index += 1) {
-          const name = `E2E roster ${String(index).padStart(2, "0")}`;
+          // Keep the fixture staff after the normal seed names: /app/team has a
+          // bounded alphabetical first page that existing photo tests exercise.
+          const name = `Z E2E roster ${String(index).padStart(2, "0")}`;
           const email = `e2e-roster-${index}@example.test`;
           const [existingMember] = await tx<{ id: string }[]>`SELECT id FROM team_members WHERE tenant_id=${settings.tenantId} AND email=${email} LIMIT 1`;
           const memberId = existingMember?.id ?? (await tx<{ id: string }[]>`INSERT INTO team_members (tenant_id,role,name,email) VALUES (${settings.tenantId},'staff',${name},${email}) RETURNING id`)[0].id;
