@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
+import { CalendarDatePicker } from "@/components/calendar-date-picker";
 import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
 import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
@@ -109,6 +110,16 @@ function weekStartFor(dateKey: string) {
   return addDays(dateKey, -((date.getUTCDay() + 6) % 7));
 }
 
+function monthStartFor(dateKey: string) {
+  return `${dateKey.slice(0, 7)}-01`;
+}
+
+function addMonths(dateKey: string, months: number) {
+  const date = new Date(`${monthStartFor(dateKey)}T12:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString().slice(0, 10);
+}
+
 function localMinutes(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
@@ -212,6 +223,7 @@ export default async function CalendarsPage({
     before?: string;
     createStaff?: string;
     showOffShift?: string;
+    monthDay?: string;
   }>;
 }) {
   const {
@@ -229,6 +241,7 @@ export default async function CalendarsPage({
     before,
     createStaff,
     showOffShift,
+    monthDay,
   } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -295,20 +308,26 @@ export default async function CalendarsPage({
     : [];
   const calendarNow = new Date();
   const tenantToday = localDateKey(calendarNow, tenant.timezone);
+  // A selected staff member can sit outside the bounded roster window. The
+  // direct lookup above is authoritative for their own calendar scope.
   const hasSelectedEmployee = Boolean(
-    effectiveEmployee && members.some((member) => member.id === effectiveEmployee),
+    effectiveEmployee && selected?.id === effectiveEmployee,
   );
   // Team has one operational Day board. An individual can deliberately switch
   // between their own Day and Week board without changing staff scope.
-  const staffDayView = hasSelectedEmployee && view === "day";
-  const teamView = !hasSelectedEmployee || staffDayView;
-  const calendarView = staffDayView ? "day" : teamView ? "team" : "staff";
+  const monthlyView = view === "month";
+  const staffDayView = !monthlyView && hasSelectedEmployee && view === "day";
+  const teamView = !monthlyView && (!hasSelectedEmployee || staffDayView);
+  const calendarView = monthlyView ? "month" : staffDayView ? "day" : teamView ? "team" : "staff";
   const teamDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday;
   // A team-day deep link can carry a day without a week. Query the week that
   // contains that day so the grid and booking data can never drift apart.
   const currentWeek = /^\d{4}-\d{2}-\d{2}$/.test(week ?? "")
     ? weekStartFor(week!)
     : weekStartFor(teamView ? teamDay : tenantToday);
+  const currentMonth = monthStartFor(
+    /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday,
+  );
   const days = Array.from({ length: 7 }, (_, index) =>
     addDays(currentWeek, index),
   );
@@ -325,8 +344,8 @@ export default async function CalendarsPage({
     : null;
   // The operational Day board asks only for its selected local day. The
   // individual planning surface deliberately keeps its week-sized range.
-  const visibleRangeStart = teamView ? teamDay : currentWeek;
-  const visibleRangeEnd = addDays(visibleRangeStart, teamView ? 1 : 7);
+  const visibleRangeStart = monthlyView ? currentMonth : teamView ? teamDay : currentWeek;
+  const visibleRangeEnd = monthlyView ? addMonths(currentMonth, 1) : addDays(visibleRangeStart, teamView ? 1 : 7);
   const rangeStart = fromZonedTime(`${visibleRangeStart}T00:00:00`, tenant.timezone);
   const rangeEnd = fromZonedTime(`${visibleRangeEnd}T00:00:00`, tenant.timezone);
   const [services, calendarServices, bookings, teamBookings] =
@@ -353,7 +372,7 @@ export default async function CalendarsPage({
         ]);
   const selectedBooking =
     bookingId && selectedLocation
-      ? ((teamView ? teamBookings : bookings).find(
+        ? (((teamView || monthlyView) ? teamBookings : bookings).find(
           (booking) => booking.id === bookingId,
         ) ??
         (
@@ -371,6 +390,38 @@ export default async function CalendarsPage({
         )[0] ??
         null)
       : null;
+  // Month totals must not inherit the bounded staff roster used by the day
+  // board. Query the selected location directly so every permitted staff
+  // member and booking in the visible month contributes to the count.
+  const monthScopedBookings = monthlyView && selectedLocation
+    ? await db<TeamBooking[]>`
+      SELECT b.id, b.booking_number AS "bookingNumber", b.booking_block_id AS "bookingBlockId", b.service_id AS "serviceId", b.team_member_id AS "teamMemberId", b.location_id AS "locationId", NULL::uuid AS "resourceId", NULL::text AS "resourceName", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle", tm.name AS "teamMemberName", tm.calendar_color AS "teamMemberColor"
+      FROM bookings b
+      JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
+      JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
+      JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
+      JOIN team_member_locations tml ON tml.team_member_id=tm.id AND tml.tenant_id=tm.tenant_id AND tml.location_id=${selectedLocation.id}
+      WHERE b.tenant_id=${tenant.id} AND b.location_id=${selectedLocation.id}
+        AND b.starts_at >= ${rangeStart} AND b.starts_at < ${rangeEnd} AND b.status <> 'cancelled'
+        AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid)
+        AND (${!hasSelectedEmployee} OR b.team_member_id=${selected?.id ?? null}::uuid)
+        AND (${staffSearch}='' OR tm.name ILIKE ${`%${staffSearch}%`} OR tm.email ILIKE ${`%${staffSearch}%`})
+      ORDER BY b.starts_at ASC, b.id ASC
+    `
+    : [];
+  const monthCalendarServices = monthlyView && selectedLocation
+    ? await db<Service[]>`
+      SELECT DISTINCT s.id, s.title, s.duration_minutes AS "durationMinutes"
+      FROM services s
+      JOIN service_locations sl ON sl.service_id=s.id AND sl.tenant_id=s.tenant_id AND sl.location_id=${selectedLocation.id}
+      JOIN service_team_members stm ON stm.service_id=s.id AND stm.tenant_id=s.tenant_id
+      JOIN team_member_locations tml ON tml.team_member_id=stm.team_member_id AND tml.tenant_id=stm.tenant_id AND tml.location_id=${selectedLocation.id}
+      WHERE s.tenant_id=${tenant.id} AND s.is_active=TRUE
+        AND (${canViewTeam} OR stm.team_member_id=${restrictedEmployeeId || null}::uuid)
+        AND (${!hasSelectedEmployee} OR stm.team_member_id=${selected?.id ?? null}::uuid)
+      ORDER BY s.title
+    `
+    : calendarServices;
   const eligibleResources = selectedBooking ? await db<ResourceChoice[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive"
     FROM resources r
@@ -379,19 +430,21 @@ export default async function CalendarsPage({
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [];
   const selectedBookingMember = selectedBooking
-    ? members.find((member) => member.id === selectedBooking.teamMemberId) ?? null
+    ? members.find((member) => member.id === selectedBooking.teamMemberId)
+      ?? (await db<Member[]>`SELECT id,name,email,calendar_color AS "calendarColor" FROM team_members WHERE tenant_id=${tenant.id} AND id=${selectedBooking.teamMemberId} LIMIT 1`)[0]
+      ?? null
     : null;
-  const selectableServices = teamView && !staffDayView ? calendarServices : services;
+  const selectableServices = monthlyView ? monthCalendarServices : teamView && !staffDayView ? calendarServices : services;
   const selectedService = service
     ? selectableServices.find((item) => item.id === service)
     : undefined;
   const manualService = selectedService ?? services[0] ?? calendarServices[0];
   // "All services" is an availability union. Each actionable calendar cell
   // carries the compatible service into the create drawer below.
-  const availabilityServices = selectedService
+  const availabilityServices = monthlyView ? [] : selectedService
     ? [selectedService]
     : teamView && !staffDayView
-      ? calendarServices
+    ? calendarServices
       : services;
   const visibleServiceDurations = Array.from(
     new Set(availabilityServices.map((item) => item.durationMinutes)),
@@ -510,7 +563,7 @@ export default async function CalendarsPage({
     service?: string;
     week?: string;
     day?: string;
-    view?: "staff" | "team" | "day";
+    view?: "staff" | "team" | "day" | "month";
     booking?: string;
     create?: string;
     customer?: string;
@@ -518,12 +571,16 @@ export default async function CalendarsPage({
     after?: string;
     before?: string;
     createStaff?: string;
+    monthDay?: string;
   }) => {
     const nextView = next.view ?? calendarView;
     // Team navigation must deliberately omit employee. Carrying the fallback
     // selected person here turns a Day link into that person's Week view.
-    const nextEmployee =
-      next.employee ?? (nextView === "team" ? "" : (selected?.id ?? ""));
+    const nextEmployee = next.employee ?? (
+      nextView === "team" || (monthlyView && !hasSelectedEmployee)
+        ? ""
+        : (selected?.id ?? "")
+    );
     const params = new URLSearchParams({
       location: next.location ?? selectedLocation?.id ?? "",
       service: next.service ?? service ?? "",
@@ -533,6 +590,7 @@ export default async function CalendarsPage({
     params.set("view", nextView);
     if (next.day ?? (teamView ? teamDay : undefined))
       params.set("day", next.day ?? teamDay);
+    if (next.monthDay) params.set("monthDay", next.monthDay);
     if (next.booking) params.set("booking", next.booking);
     if (next.create) params.set("create", next.create);
     if (next.customer ?? selectedCustomer?.id)
@@ -587,6 +645,20 @@ export default async function CalendarsPage({
     gridRow: visibleTeamMembers.findIndex((member) => member.id === booking.teamMemberId) + 2,
     borderLeftColor: booking.teamMemberColor,
   });
+  const selectedMonthDay = monthlyView && /^\d{4}-\d{2}-\d{2}$/.test(monthDay ?? "") && monthDay! >= currentMonth && monthDay! < addMonths(currentMonth, 1)
+    ? monthDay!
+    : undefined;
+  const monthlyBookings = monthScopedBookings.filter(
+    (booking) => !selectedService || booking.serviceId === selectedService.id,
+  );
+  const monthBookingsByDay = new Map<string, TeamBooking[]>();
+  for (const booking of monthlyBookings) {
+    const bookingDay = localDateKey(booking.startsAt, tenant.timezone);
+    monthBookingsByDay.set(bookingDay, [...(monthBookingsByDay.get(bookingDay) ?? []), booking]);
+  }
+  const monthFirstWeekday = (new Date(`${currentMonth}T12:00:00Z`).getUTCDay() + 6) % 7;
+  const monthDayCount = new Date(Date.UTC(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)), 0)).getUTCDate();
+  const monthDays = Array.from({ length: monthDayCount }, (_, index) => addDays(currentMonth, index));
 
   return (
     <main className="waybook-data-page tenant-dashboard-page">
@@ -621,7 +693,54 @@ export default async function CalendarsPage({
         <>
           {selected ? (
             <>
-              {teamView ? (
+              {monthlyView ? (
+                <section className="waybook-data-card waybook-month-calendar">
+                  <div className="waybook-calendar-toolbar">
+                    <div>
+                      <p>MONTHLY SCHEDULE</p>
+                      <h2>{new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))}</h2>
+                      <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : "All staff"} · {tenant.timezone}</span>
+                    </div>
+                    <div className="waybook-calendar-toolbar__actions">
+                      <details className="calendar-filter-panel">
+                        <summary>Filters</summary>
+                        <div className="calendar-filter-panel__content">
+                          <CalendarSelectors location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} teamMode={!hasSelectedEmployee} fixedView="month" />
+                        </div>
+                      </details>
+                      <div className="calendar-view-toggle" aria-label="Calendar range">
+                        <Link href={href({ view: "day", day: currentMonth, monthDay: undefined })}>Day</Link>
+                        <Link href={href({ view: "staff", day: undefined, monthDay: undefined })}>Week</Link>
+                        <Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-current="page">Month</Link>
+                      </div>
+                      <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
+                        <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month">←</Link>
+                        <CalendarDatePicker date={currentMonth} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} />
+                        <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month">→</Link>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="waybook-month-calendar__layout">
+                    <div className="waybook-month-calendar__grid" aria-label={`Bookings for ${currentMonth.slice(0, 7)}`}>
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => <div key={label} className="waybook-month-calendar__weekday">{label}</div>)}
+                      {Array.from({ length: monthFirstWeekday }, (_, index) => <div className="waybook-month-calendar__blank" aria-hidden="true" key={`blank-${index}`} />)}
+                      {monthDays.map((date) => {
+                        const dayBookings = monthBookingsByDay.get(date) ?? [];
+                        const label = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
+                        return <Link key={date} href={href({ view: "month", day: currentMonth, monthDay: date })} className={`waybook-month-calendar__day${selectedMonthDay === date ? " is-selected" : ""}`} aria-current={selectedMonthDay === date ? "date" : undefined} aria-describedby={`month-preview-${date}`}>
+                          <span className="waybook-month-calendar__date">{date.slice(-2).replace(/^0/, "")}</span>
+                          <strong>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}</strong>
+                          <span className="waybook-month-calendar__preview" id={`month-preview-${date}`} role="tooltip"><b>{label}</b>{dayBookings.length ? dayBookings.slice(0, 3).map((booking) => <span key={booking.id}>{clock.format(booking.startsAt)} · {booking.customerName}</span>) : <span>No bookings</span>}{dayBookings.length > 3 ? <span>+{dayBookings.length - 3} more</span> : null}</span>
+                        </Link>;
+                      })}
+                    </div>
+                    {selectedMonthDay ? <aside className="waybook-month-calendar__drawer" aria-label={`Bookings for ${selectedMonthDay}`}>
+                      <header><div><p>DAY DETAILS</p><h3>{new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${selectedMonthDay}T12:00:00Z`))}</h3></div><Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-label="Close day details">×</Link></header>
+                      {(monthBookingsByDay.get(selectedMonthDay) ?? []).length ? <ol>{(monthBookingsByDay.get(selectedMonthDay) ?? []).map((booking) => <li key={booking.id}><Link href={href({ view: "month", day: currentMonth, monthDay: selectedMonthDay, booking: booking.id })}><strong>{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)}</strong><span>{booking.customerName} · {booking.serviceTitle}</span><small>{booking.teamMemberName}</small></Link></li>)}</ol> : <p>No bookings on this day.</p>}
+                    </aside> : null}
+                  </div>
+                </section>
+              ) : teamView ? (
                 <section className="waybook-data-card waybook-week-calendar team-day-calendar">
                   <div className="waybook-calendar-toolbar">
                     <div>
@@ -663,9 +782,7 @@ export default async function CalendarsPage({
                         >
                           ←
                         </Link>
-                        <span className="waybook-calendar-toolbar__date">
-                          {teamNavigationLabel}
-                        </span>
+                        <CalendarDatePicker date={teamDay} label={teamNavigationLabel} />
                         <Link
                           href={href({
                             view: staffDayView ? "day" : "team",
@@ -854,9 +971,7 @@ export default async function CalendarsPage({
                         >
                           ←
                         </Link>
-                        <span className="waybook-calendar-toolbar__date">
-                          {staffNavigationLabel}
-                        </span>
+                        <CalendarDatePicker date={currentWeek} label={staffNavigationLabel} />
                         <Link
                           href={href({
                             view: "staff",
