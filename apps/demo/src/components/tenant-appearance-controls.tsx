@@ -49,7 +49,9 @@ export function TenantAppearanceControls() {
   const chooseTint = (next: TintChoice) => { setTint(next); localStorage.setItem("waybook.tint", next); applyAppearance(theme, next); };
 
   return <section className="tenant-appearance" aria-label="Appearance preferences">
+    <h3>Colour mode</h3>
     <div className="tenant-appearance__themes" role="group" aria-label="Colour mode">{themeChoices.map(({ id, label, Icon }) => <button key={id} type="button" aria-pressed={theme === id} onClick={() => chooseTheme(id)}><Icon aria-hidden="true" />{label}</button>)}</div>
+    <h3>Accent tint</h3>
     <div className="tenant-appearance__tints" role="group" aria-label="Accent tint">{tintChoices.map(({ id, label }) => <button key={id} type="button" aria-label={label} title={label} aria-pressed={tint === id} onClick={() => chooseTint(id)}><i aria-hidden="true" /><span className="sr-only">{label}</span></button>)}</div>
   </section>;
 }

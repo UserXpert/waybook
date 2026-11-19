@@ -20,9 +20,12 @@ function parse(value: BookingPage | string | null | undefined): BookingPage { if
 export default async function OnlineBookingPage() {
   const { tenant, membership } = await requireTenantWorkspace(); await requireFeature(tenant.id, "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership); if (!permissions.isManager && !permissions.canManageServiceSettings) throw new Error("You do not have permission to manage online booking.");
-  const [settings] = await tenantDb(tenant)<{ bookingPage: BookingPage | string | null; currency: string }[]>`SELECT currency, booking_page AS "bookingPage" FROM tenant_settings WHERE tenant_id=${tenant.id}`;
-  const services = await tenantDb(tenant)<Service[]>`SELECT id,title,duration_minutes AS "durationMinutes",price_cents AS "priceCents",is_active AS "isActive" FROM services WHERE tenant_id=${tenant.id} ORDER BY title`;
-  const locations = await tenantDb(tenant)<{ id: string; name: string; locationType: string; isOnlineBookable: boolean }[]>`SELECT id,name,location_type AS "locationType",is_online_bookable AS "isOnlineBookable" FROM locations WHERE tenant_id=${tenant.id} AND is_active=TRUE ORDER BY name`;
+  const db = tenantDb(tenant);
+  const [[settings], services, locations] = await Promise.all([
+    db<{ bookingPage: BookingPage | string | null; currency: string }[]>`SELECT currency, booking_page AS "bookingPage" FROM tenant_settings WHERE tenant_id=${tenant.id}`,
+    db<Service[]>`SELECT id,title,duration_minutes AS "durationMinutes",price_cents AS "priceCents",is_active AS "isActive" FROM services WHERE tenant_id=${tenant.id} ORDER BY title`,
+    db<{ id: string; name: string; locationType: string; isOnlineBookable: boolean }[]>`SELECT id,name,location_type AS "locationType",is_online_bookable AS "isOnlineBookable" FROM locations WHERE tenant_id=${tenant.id} AND is_active=TRUE ORDER BY name`,
+  ]);
   const page = parse(settings?.bookingPage); const selected = new Set(page.visibleServiceIds ?? services.filter((item) => item.isActive).map((item) => item.id));
   const slug = await currentTenantRouteSlug(tenant.slug); const publicUrl = tenantPath(slug, "/book"); const requestHeaders = await headers(); const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"); const protocol = requestHeaders.get("x-forwarded-proto") ?? "http"; const absolutePublicUrl = host ? `${protocol}://${host}${publicUrl}` : publicUrl; const scriptUrl = host ? `${protocol}://${host}/${slug}/api/public/embed` : `/${slug}/api/public/embed`;
   return <main className="waybook-data-page tenant-dashboard-page online-booking-page">

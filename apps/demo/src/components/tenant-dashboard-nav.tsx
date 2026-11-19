@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { BarChart3, CalendarDays, LayoutDashboard, UsersRound } from "lucide-react";
 import { logout } from "@/app/actions";
-import { isFeatureEnabled } from "@/lib/waybook/features";
+import { tenantFeatures } from "@/lib/waybook/features";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { tenantDb } from "@/lib/waybook/database";
 import { TenantAppMenu, type TenantAppLink } from "@/components/tenant-app-menu";
 import { TenantUserMenu } from "@/components/tenant-user-menu";
 import { TenantNavTools } from "@/components/tenant-nav-tools";
@@ -16,7 +17,7 @@ type TenantDashboardNavProps = {
   tenantId: string;
   tenantSlug?: string;
   tenantName: string;
-  active: "overview" | "bookings" | "sales" | "products" | "giftCards" | "packages" | "search" | "reports" | "services" | "clients" | "team" | "calendars" | "locations" | "waitlist" | "resources" | "notifications" | "emails" | "onlineBooking";
+  active: "overview" | "bookings" | "sales" | "products" | "giftCards" | "packages" | "search" | "reports" | "services" | "clients" | "team" | "calendars" | "locations" | "waitlist" | "resources" | "notifications" | "emails" | "onlineBooking" | "settings";
 };
 
 const primaryLinks = [
@@ -29,15 +30,17 @@ const primaryLinks = [
 export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, active }: TenantDashboardNavProps) {
   const resolvedTenantSlug = tenantSlug ?? await currentTenantRouteSlug("");
   const { tenant, membership } = await requireTenantWorkspace();
-  const [identity, clientsEnabled, teamEnabled, calendarsEnabled, resourcesEnabled, notificationsEnabled] = await Promise.all([
+  const permissionAndReview = staffPermissionContext(tenant, membership).then(async (permissions) => {
+    const [review] = permissions.isManager ? await tenantDb(tenant)<{ pending: boolean }[]>`SELECT EXISTS (SELECT 1 FROM bookings WHERE tenant_id=${tenant.id} AND status='arrived' AND ends_at <= now()) AS pending` : [];
+    return { permissions, review };
+  });
+  const [identity, features, { permissions, review }] = await Promise.all([
     requireIdentity(),
-    isFeatureEnabled(tenantId, "clients"),
-    isFeatureEnabled(tenantId, "team"),
-    isFeatureEnabled(tenantId, "calendars"),
-    isFeatureEnabled(tenantId, "resources"),
-    isFeatureEnabled(tenantId, "email-notifications"),
+    tenantFeatures(tenantId),
+    permissionAndReview,
   ]);
-  const permissions = await staffPermissionContext(tenant, membership);
+  const enabled = new Set(features.filter((feature) => feature.isEnabled).map((feature) => feature.featureKey));
+  const clientsEnabled = enabled.has("clients"), teamEnabled = enabled.has("team"), calendarsEnabled = enabled.has("calendars"), resourcesEnabled = enabled.has("resources"), notificationsEnabled = enabled.has("email-notifications");
   const canUse = {
     overview: permissions.isManager,
     clients: clientsEnabled && (permissions.isManager || permissions.canViewClients || permissions.canManageClients),
@@ -82,6 +85,6 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     <div className="tenant-dashboard-nav__workspace"><span>WAYBOOK</span><strong>{tenantName}</strong></div>
     <nav aria-label="Primary navigation">{primary.map((link) => <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined}><link.Icon aria-hidden="true" />{link.label}</Link>)}</nav>
     <TenantAppMenu links={appLinks} active={active} />
-    <div className="tenant-nav-account-actions"><TenantNavTools searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} /><TenantUserMenu displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : "Staff member"} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={canUse.serviceSettings ? toHref("/app/services") : undefined} onSignOut={logout} /></div>
+    <div className="tenant-nav-account-actions"><TenantNavTools searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : "Staff member"} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
   </header></>;
 }

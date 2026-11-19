@@ -25,7 +25,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="shortcut icon" href="/favicon.ico" />
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var theme=localStorage.getItem("waybook.theme");var tint=localStorage.getItem("waybook.tint");var resolved=theme==="dark"||theme!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.waybookTheme=resolved;document.documentElement.dataset.waybookTint=["blue","violet","rose"].includes(tint||"")?tint:"neutral";}catch(e){}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var theme=localStorage.getItem("waybook.theme");var tint=localStorage.getItem("waybook.tint");var resolved=theme==="dark"||theme!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.waybookTheme=resolved;document.documentElement.dataset.waybookTint=["blue","violet","rose","teal","coral","amber"].includes(tint||"")?tint:"neutral";}catch(e){}})();` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
