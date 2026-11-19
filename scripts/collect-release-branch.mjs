@@ -25,7 +25,10 @@ export function evaluatePullRequest(pull, checks, repository) {
   if (pull.base?.ref !== "main") return { eligible: false, reason: "base-not-main" };
   if (!sameRepository(pull, repository)) return { eligible: false, reason: "not-same-repository" };
   if (!labelNames(pull).has("release-ready")) return { eligible: false, reason: "missing-release-ready-label" };
-  const byName = new Map(checks.map((check) => [check.name, check.conclusion ?? check.status]));
+  // GitHub's REST check-runs endpoint returns lowercase conclusion values
+  // (for example, "success"), while older fixtures and some callers use
+  // uppercase values. Compare the semantic value rather than its casing.
+  const byName = new Map(checks.map((check) => [check.name, String(check.conclusion ?? check.status ?? "").toUpperCase()]));
   const missing = REQUIRED_CHECKS.filter((name) => byName.get(name) !== "SUCCESS");
   if (missing.length) return { eligible: false, reason: "required-check-not-success", missing };
   return { eligible: true, sha: pull.head.sha };
