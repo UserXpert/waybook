@@ -3,8 +3,18 @@
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+type CalendarScope = {
+  location?: string;
+  employee?: string;
+  service?: string;
+  staff?: string;
+  after?: string;
+  before?: string;
+  showOffShift?: string;
+};
+
 /** A compact date control that preserves the current calendar scope and filters. */
-export function CalendarDatePicker({ date, label }: { date: string; label: string }) {
+export function CalendarDatePicker({ date, label, scope }: { date: string; label: string; scope: CalendarScope }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -17,6 +27,9 @@ export function CalendarDatePicker({ date, label }: { date: string; label: strin
     params.delete("monthDay");
     params.delete("booking");
     params.delete("create");
+    for (const [key, value] of Object.entries(scope)) {
+      if (value) params.set(key, value);
+    }
     setOpen(false);
     router.push(`${pathname}?${params.toString()}`);
   };

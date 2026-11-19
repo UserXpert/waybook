@@ -78,6 +78,26 @@ test("tenant owner can sign in but cannot access another workspace", async ({ pa
   expect(other.status()).toBe(404);
 });
 
+test("calendar date picker keeps an implicitly selected location", async ({ page }) => {
+  const check = expect.configure({ timeout: 30_000 });
+  const chosenDate = localDayAfter(26);
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await check(page).toHaveURL(/\/nordic\/app/);
+  await page.goto("/nordic/app/calendars?view=month");
+  expect(new URL(page.url()).searchParams.has("location")).toBe(false);
+  const context = page.locator(".waybook-month-calendar .waybook-calendar-toolbar > div").first().locator("span");
+  const initiallySelectedLocation = await context.innerText();
+
+  await page.locator(".calendar-date-picker > button").click();
+  await page.getByRole("dialog", { name: "Choose calendar date" }).getByLabel("Calendar date", { exact: true }).fill(chosenDate);
+  await check(page).toHaveURL(new RegExp(`day=${chosenDate}`));
+  expect(new URL(page.url()).searchParams.has("location")).toBe(true);
+  await check(context).toHaveText(initiallySelectedLocation);
+});
+
 test("monthly calendar keeps all-staff scope and shows every booking for a day", async ({ page }) => {
   const check = expect.configure({ timeout: 30_000 });
   const monthDay = localDayAfter(10);

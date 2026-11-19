@@ -318,6 +318,15 @@ export default async function CalendarsPage({
   const monthlyView = view === "month";
   const staffDayView = !monthlyView && hasSelectedEmployee && view === "day";
   const teamView = !monthlyView && (!hasSelectedEmployee || staffDayView);
+  const calendarDatePickerScope = {
+    location: selectedLocation?.id,
+    employee: hasSelectedEmployee ? selected?.id : undefined,
+    service: service || undefined,
+    staff: staffSearch || undefined,
+    after: staffAfter ?? undefined,
+    before: staffBefore ?? undefined,
+    showOffShift: showOffShift === "1" ? "1" : undefined,
+  };
   const calendarView = monthlyView ? "month" : staffDayView ? "day" : teamView ? "team" : "staff";
   const teamDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday;
   // A team-day deep link can carry a day without a week. Query the week that
@@ -715,7 +724,7 @@ export default async function CalendarsPage({
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
                         <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month">←</Link>
-                        <CalendarDatePicker date={currentMonth} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} />
+                        <CalendarDatePicker date={currentMonth} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} scope={calendarDatePickerScope} />
                         <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month">→</Link>
                       </div>
                     </div>
@@ -782,7 +791,7 @@ export default async function CalendarsPage({
                         >
                           ←
                         </Link>
-                        <CalendarDatePicker date={teamDay} label={teamNavigationLabel} />
+                        <CalendarDatePicker date={teamDay} label={teamNavigationLabel} scope={calendarDatePickerScope} />
                         <Link
                           href={href({
                             view: staffDayView ? "day" : "team",
@@ -971,7 +980,7 @@ export default async function CalendarsPage({
                         >
                           ←
                         </Link>
-                        <CalendarDatePicker date={currentWeek} label={staffNavigationLabel} />
+                        <CalendarDatePicker date={currentWeek} label={staffNavigationLabel} scope={calendarDatePickerScope} />
                         <Link
                           href={href({
                             view: "staff",
