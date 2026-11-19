@@ -1,5 +1,5 @@
 /**
- * Internal shared helpers for @thebookingkit/d1.
+ * Internal shared helpers for @waybook/d1.
  *
  * This module is NOT part of the public API. It exists solely to deduplicate
  * logic shared between booking-helpers.ts and resource-helpers.ts.

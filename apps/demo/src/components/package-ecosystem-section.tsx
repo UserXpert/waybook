@@ -78,7 +78,7 @@ const upcoming = await db
   .where(eq(bookings.status, "confirmed"));`,
     },
     {
-      name: "@thebookingkit/d1",
+      name: "@waybook/d1",
       version: "0.2.0",
       env: "edge",
       envLabel: "Cloudflare D1 / Edge",
@@ -91,7 +91,7 @@ const upcoming = await db
         "D1BookingLock",
         "weeklyScheduleToRules",
       ],
-      snippet: `import { insertBookingIfFree } from "@thebookingkit/d1";
+      snippet: `import { insertBookingIfFree } from "@waybook/d1";
 
 // Overlap check + INSERT in one atomic statement,
 // so concurrent requests cannot double-book
@@ -99,7 +99,7 @@ const { inserted } = await insertBookingIfFree(db, booking);
 if (!inserted) throw new BookingConflictError();`,
     },
     {
-      name: "@thebookingkit/cli",
+      name: "@waybook/cli",
       version: "0.2.0",
       env: "cli",
       envLabel: "CLI Tool",

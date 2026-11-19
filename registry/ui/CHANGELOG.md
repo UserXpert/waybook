@@ -1,4 +1,4 @@
-# @thebookingkit/ui
+# @waybook/ui
 
 ## 0.3.0
 
@@ -26,7 +26,7 @@
   - New `initiateDeposit` / `refundDeposit` orchestration helpers.
   - New workflow triggers `deposit_collected` and `deposit_refunded`; new job names `PROCESS_DEPOSIT_REFUND` and `RETRY_DEPOSIT_CHARGE`.
 
-  **Registry components (`@thebookingkit/ui`)**
+  **Registry components (`@waybook/ui`)**
 
   - `PaymentGate` accepts a `mode` prop (`"prepayment" | "deposit" | "no_show_hold"`) and a `totalPriceCents` prop to display the remaining balance for deposits.
   - `PaymentHistory` adds a payment-type filter, a deposit-revenue summary card, and a per-type CSS hook. The `paymentType` union includes `"deposit"`.

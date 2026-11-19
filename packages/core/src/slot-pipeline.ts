@@ -52,7 +52,7 @@ import type {
  *
  * This list is the single source of truth for slot occupancy across all three
  * backends — the in-memory slot engine, the PostgreSQL `EXCLUDE USING gist`
- * constraints, and `D1_INACTIVE_STATUSES` in `@thebookingkit/d1`. Changing it
+ * constraints, and `D1_INACTIVE_STATUSES` in `@waybook/d1`. Changing it
  * requires changing all three together, or a booking accepted by one will be
  * rejected by another.
  */

@@ -16,9 +16,9 @@
   **Compatibility**
   
   - `stripe` peer range widened from `^17.0.0` to `>=17.0.0 <24.0.0` (still optional). `StripeLike` now accepts a real Stripe client from either end of the range without a cast; this is enforced by a type test.
-  - `@waybook/core` and `@thebookingkit/d1` accept `date-fns` `^3.6.0 || ^4.0.0`, so projects on date-fns 4 no longer bundle a second copy. Slot output is identical under both.
-  - `@thebookingkit/db` requires `drizzle-orm` `^0.45.4` (was `^0.39.0`): 0.45.2 fixes an SQL-injection advisory for improperly escaped identifiers. If your app pins its own drizzle-orm, upgrade it too.
-  - `@thebookingkit/cli` uses commander 15 and requires Node ≥ 22.12 (Node 20 is end-of-life).
+  - `@waybook/core` and `@waybook/d1` accept `date-fns` `^3.6.0 || ^4.0.0`, so projects on date-fns 4 no longer bundle a second copy. Slot output is identical under both.
+  - `@waybook/db` requires `drizzle-orm` `^0.45.4` (was `^0.39.0`): 0.45.2 fixes an SQL-injection advisory for improperly escaped identifiers. If your app pins its own drizzle-orm, upgrade it too.
+  - `@waybook/cli` uses commander 15 and requires Node ≥ 22.12 (Node 20 is end-of-life).
   
   **Tooling** — built with TypeScript 7 (emitted JavaScript is byte-identical to 5.9), tested with Vitest 5, and CI now runs build, plain-Node loading, typecheck, unit tests and lint for every published package.
 
@@ -101,7 +101,7 @@
   - New `initiateDeposit` / `refundDeposit` orchestration helpers.
   - New workflow triggers `deposit_collected` and `deposit_refunded`; new job names `PROCESS_DEPOSIT_REFUND` and `RETRY_DEPOSIT_CHARGE`.
 
-  **Registry components (`@thebookingkit/ui`)**
+  **Registry components (`@waybook/ui`)**
 
   - `PaymentGate` accepts a `mode` prop (`"prepayment" | "deposit" | "no_show_hold"`) and a `totalPriceCents` prop to display the remaining balance for deposits.
   - `PaymentHistory` adds a payment-type filter, a deposit-revenue summary card, and a per-type CSS hook. The `paymentType` union includes `"deposit"`.

@@ -11,12 +11,12 @@ The Booking Kit is a general-purpose scheduling primitive. The same core APIs po
 
 ## 1. Barber Shop — Multi-Location with Walk-Ins
 
-A barber shop with multiple locations and individual barber schedules. Each barber has their own weekly availability stored as simple JSON in Cloudflare D1. The `@thebookingkit/d1` adapter converts these into the RRULE-based rules that `@waybook/core` expects.
+A barber shop with multiple locations and individual barber schedules. Each barber has their own weekly availability stored as simple JSON in Cloudflare D1. The `@waybook/d1` adapter converts these into the RRULE-based rules that `@waybook/core` expects.
 
-**Stack:** TanStack Start (or Next.js), Cloudflare D1 (or Postgres), `@waybook/core`, `@thebookingkit/d1`, Drizzle ORM.
+**Stack:** TanStack Start (or Next.js), Cloudflare D1 (or Postgres), `@waybook/core`, `@waybook/d1`, Drizzle ORM.
 
 ```typescript
-import { toWeeklyAvailabilityRules } from '@thebookingkit/d1';
+import { toWeeklyAvailabilityRules } from '@waybook/d1';
 import { getAvailableSlots } from '@waybook/core';
 
 // Each barber stores their schedule as a simple JSON object in D1.

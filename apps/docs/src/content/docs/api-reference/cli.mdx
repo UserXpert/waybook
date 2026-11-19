@@ -1,6 +1,6 @@
 ---
 title: "CLI Reference"
-description: "Complete reference for the @thebookingkit/cli command-line tool — scaffold configs, add components, run migrations, and check your setup."
+description: "Complete reference for the @waybook/cli command-line tool — scaffold configs, add components, run migrations, and check your setup."
 ---
 
 The Booking Kit CLI scaffolds project files, manages copy-paste UI components from the registry, and provides health-check utilities.
@@ -264,12 +264,12 @@ npx thebookingkit migrate
 This command is a guided wrapper. It prints the Drizzle commands needed to apply your schema:
 
 ```
-Migration support requires @thebookingkit/db.
+Migration support requires @waybook/db.
 Run: npx drizzle-kit push
 Or:  npx drizzle-kit migrate
 ```
 
-For custom migrations (extensions, exclusion constraints, audit triggers), use `runCustomMigrations` from `@thebookingkit/db` directly.
+For custom migrations (extensions, exclusion constraints, audit triggers), use `runCustomMigrations` from `@waybook/db` directly.
 
 ---
 

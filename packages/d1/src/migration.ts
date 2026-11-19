@@ -6,7 +6,7 @@
  *
  * ## Background
  *
- * Before `@thebookingkit/d1` was introduced, `forza-barber-v2` stored booking
+ * Before `@waybook/d1` was introduced, `forza-barber-v2` stored booking
  * times as local ISO strings without a Z suffix (e.g. "2026-03-09T14:00:00").
  * These values round-trip correctly when parsed with `new Date(raw)` on
  * servers/workers where the system timezone is UTC, but silently produce wrong

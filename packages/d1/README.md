@@ -1,8 +1,8 @@
-# @thebookingkit/d1
+# @waybook/d1
 
 Cloudflare D1/SQLite adapter for building booking systems on the edge.
 
-[![npm version](https://img.shields.io/npm/v/@thebookingkit/d1)](https://www.npmjs.com/package/@thebookingkit/d1)
+[![npm version](https://img.shields.io/npm/v/@waybook/d1)](https://www.npmjs.com/package/@waybook/d1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
@@ -11,7 +11,7 @@ Part of [The Booking Kit](https://docs.thebookingkit.dev) — The Headless Booki
 ## Install
 
 ```bash
-npm install @thebookingkit/d1
+npm install @waybook/d1
 ```
 
 ## Quick Start
@@ -22,7 +22,7 @@ import {
   d1BookingRowsToInputs,
   encodeD1Date,
   insertBookingIfFree,
-} from "@thebookingkit/d1";
+} from "@waybook/d1";
 import { getAvailableSlots } from "@waybook/core";
 
 // Query bookings for a day — returns aligned bounds + dateRange

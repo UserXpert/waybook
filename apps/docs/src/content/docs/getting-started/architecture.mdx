@@ -11,7 +11,7 @@ The Booking Kit is organized into three layers that can be used independently or
 ┌───────────────────────────────────────────────────┐
 │                  Your Application                  │
 ├─────────────────────────┬─────────────────────────┤
-│   @thebookingkit/ui     │      API Routes         │
+│   @waybook/ui     │      API Routes         │
 │   31 React components   │      (your code)        │
 │   Copy-paste, you own   │                         │
 ├─────────────────────────┤                         │
@@ -20,7 +20,7 @@ The Booking Kit is organized into three layers that can be used independently or
 │   scheduling math,      │                         │
 │   business logic        │                         │
 ├─────────────────────────┼─────────────────────────┤
-│   @thebookingkit/db     │   Adapter Interfaces    │
+│   @waybook/db     │   Adapter Interfaces    │
 │   Drizzle schema,       │   Auth · Email · Jobs   │
 │   26 tables, Postgres   │   Calendar · Payment    │
 └─────────────────────────┴─────────────────────────┘
@@ -41,7 +41,7 @@ Pure TypeScript with zero framework dependencies. Contains:
 - **Auth middleware** — Provider ownership and customer access assertions
 - **Adapter interfaces** — TypeScript interfaces for external services
 
-### 2. Data layer (`@thebookingkit/db`)
+### 2. Data layer (`@waybook/db`)
 
 Drizzle ORM schema with 26 PostgreSQL tables:
 
@@ -50,7 +50,7 @@ Drizzle ORM schema with 26 PostgreSQL tables:
 - `EXCLUDE USING gist` constraint for database-level double-booking prevention
 - `SERIALIZABLE` transactions with automatic retry (`withSerializableRetry()`)
 
-### 3. UI layer (`@thebookingkit/ui`)
+### 3. UI layer (`@waybook/ui`)
 
 31 React components following the shadcn/ui convention:
 

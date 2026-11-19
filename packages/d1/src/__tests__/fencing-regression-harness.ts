@@ -4,7 +4,7 @@
  * Contains two things:
  *
  * 1. `LegacyD1BookingLock` — a faithful port of the pre-fencing-token release
- *    semantics that shipped in @thebookingkit/d1 <= 0.3.1. Its fidelity is not
+ *    semantics that shipped in @waybook/d1 <= 0.3.1. Its fidelity is not
  *    assumed: it is asserted against the real shipped source (via a git
  *    worktree) whenever that source is available.
  *

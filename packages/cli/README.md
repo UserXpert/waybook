@@ -1,8 +1,8 @@
-# @thebookingkit/cli
+# @waybook/cli
 
 CLI for scaffolding UI components and managing migrations in Booking Kit projects.
 
-[![npm version](https://img.shields.io/npm/v/@thebookingkit/cli)](https://www.npmjs.com/package/@thebookingkit/cli)
+[![npm version](https://img.shields.io/npm/v/@waybook/cli)](https://www.npmjs.com/package/@waybook/cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
@@ -11,9 +11,9 @@ Part of [The Booking Kit](https://docs.thebookingkit.dev) — The Headless Booki
 ## Install
 
 ```bash
-npm install -g @thebookingkit/cli
+npm install -g @waybook/cli
 # or run directly
-npx @thebookingkit/cli
+npx @waybook/cli
 ```
 
 ## Quick Start

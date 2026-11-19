@@ -85,7 +85,7 @@ import { withSerializableRetry } from "@waybook/server";
 import { isSlotAvailable, BookingConflictError } from "@waybook/core";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings, availabilityRules, availabilityOverrides } from "@thebookingkit/db";
+import { bookings, availabilityRules, availabilityOverrides } from "@waybook/db";
 
 async function createBookingWithPrevention(
   providerId: string,

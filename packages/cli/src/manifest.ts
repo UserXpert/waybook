@@ -14,7 +14,7 @@
 export interface ManifestEntry {
   /** Component name */
   name: string;
-  /** Version of @thebookingkit/cli when this component was added */
+  /** Version of @waybook/cli when this component was added */
   version: string;
   /** File path where the component was installed */
   installedPath: string;

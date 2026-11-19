@@ -6,9 +6,9 @@
     [
       "@waybook/core",
       "@waybook/db",
-      "@thebookingkit/d1",
+      "@waybook/d1",
       "@waybook/server",
-      "@thebookingkit/cli"
+      "@waybook/cli"
     ]
   ],
   "linked": [],

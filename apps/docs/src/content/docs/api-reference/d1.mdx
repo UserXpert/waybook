@@ -1,19 +1,19 @@
 ---
-title: "D1 Reference (@thebookingkit/d1)"
-description: "Complete API reference for @thebookingkit/d1 — Cloudflare D1 / SQLite adapter providing atomic double-booking prevention, date encoding, advisory locks, schedule helpers, query utilities, and migration tools."
+title: "D1 Reference (@waybook/d1)"
+description: "Complete API reference for @waybook/d1 — Cloudflare D1 / SQLite adapter providing atomic double-booking prevention, date encoding, advisory locks, schedule helpers, query utilities, and migration tools."
 ---
 
-`@thebookingkit/d1` bridges Cloudflare D1's text-based date storage with `@waybook/core`'s UTC `Date` object expectations. It also provides double-booking prevention for SQLite, which lacks Postgres's `EXCLUDE USING gist` constraint — an atomic overlap-guarded insert, an optional schema-level unique index, and an advisory lock.
+`@waybook/d1` bridges Cloudflare D1's text-based date storage with `@waybook/core`'s UTC `Date` object expectations. It also provides double-booking prevention for SQLite, which lacks Postgres's `EXCLUDE USING gist` constraint — an atomic overlap-guarded insert, an optional schema-level unique index, and an advisory lock.
 
 ```bash
-npm install @thebookingkit/d1
+npm install @waybook/d1
 ```
 
 ---
 
 ## The Core Problem
 
-SQLite stores dates as `TEXT`. String-range queries (`>=`, `<=`) only produce correct results when every stored value uses the same lexicographic format. `@thebookingkit/d1` enforces a single canonical format — **UTC-Z** (`"YYYY-MM-DDTHH:mm:ss.sssZ"`) — for all date columns.
+SQLite stores dates as `TEXT`. String-range queries (`>=`, `<=`) only produce correct results when every stored value uses the same lexicographic format. `@waybook/d1` enforces a single canonical format — **UTC-Z** (`"YYYY-MM-DDTHH:mm:ss.sssZ"`) — for all date columns.
 
 ---
 
@@ -22,7 +22,7 @@ SQLite stores dates as `TEXT`. String-range queries (`>=`, `<=`) only produce co
 The canonical date codec. All methods are pure functions with no side effects. Use `D1DateCodec` on every date value that crosses the D1 boundary.
 
 ```typescript
-import { D1DateCodec } from "@thebookingkit/d1";
+import { D1DateCodec } from "@waybook/d1";
 ```
 
 ### `D1DateCodec.encode()`
@@ -134,7 +134,7 @@ D1DateCodec.isLegacyFormat("2026-03-09T14:00:00.000Z"); // false
 ## Codec Errors
 
 ```typescript
-import { D1DateDecodeError, D1DateEncodeError } from "@thebookingkit/d1";
+import { D1DateDecodeError, D1DateEncodeError } from "@waybook/d1";
 ```
 
 | Error class | Code | When thrown |
@@ -160,7 +160,7 @@ import {
   d1DayQuery,
   d1LocalDayQuery,
   localToday,
-} from "@thebookingkit/d1";
+} from "@waybook/d1";
 ```
 
 ### `d1BookingRowsToInputs()`
@@ -335,7 +335,7 @@ Postgres solves this with `EXCLUDE USING gist`. D1 has no range-exclusion constr
 :::
 
 ```typescript
-import type { GuardDb } from "@thebookingkit/d1";
+import type { GuardDb } from "@waybook/d1";
 
 // Raw D1 binding (Workers)
 const db: GuardDb = {
@@ -355,7 +355,7 @@ The same object satisfies `LockDb`, so one adapter serves both the guard and `D1
 Inserts a booking only if the slot is still free, atomically. Needs no lock and no retry loop.
 
 ```typescript
-import { insertBookingIfFree } from "@thebookingkit/d1";
+import { insertBookingIfFree } from "@waybook/d1";
 
 const { inserted } = await insertBookingIfFree(db, {
   id:            crypto.randomUUID(),
@@ -483,7 +483,7 @@ This guards the **resource only**. It does not check the provider, so a provider
 It also enforces **one booking per resource at a time**, matching Postgres. A resource's `capacity` is the party size it seats, not a number of concurrent bookings.
 
 ```typescript
-import { insertResourceBookingIfFree } from "@thebookingkit/d1";
+import { insertResourceBookingIfFree } from "@waybook/d1";
 
 const { inserted } = await insertResourceBookingIfFree(db, {
   id:             crypto.randomUUID(),
@@ -515,7 +515,7 @@ if (res.meta.changes === 0) throw new BookingConflictError();
 **Opt-in** schema-level backstop. Creates partial unique indexes so a provider — and a resource — cannot hold two *active* bookings starting at the same instant, enforced by SQLite itself. This catches any code path that bypasses the guard, including manual SQL.
 
 ```typescript
-import { BOOKINGS_UNIQUE_SLOT_DDL } from "@thebookingkit/d1";
+import { BOOKINGS_UNIQUE_SLOT_DDL } from "@waybook/d1";
 await db.exec(BOOKINGS_UNIQUE_SLOT_DDL); // two statements — exec, not run
 ```
 
@@ -551,7 +551,7 @@ CREATE TABLE IF NOT EXISTS booking_locks (
 );
 ```
 
-The DDL constant `BOOKING_LOCKS_DDL` is also exported from `@thebookingkit/d1` for programmatic use.
+The DDL constant `BOOKING_LOCKS_DDL` is also exported from `@waybook/d1` for programmatic use.
 
 **Upgrading an existing table.** The `holder` column carries the fencing token. Tables created before it existed are upgraded automatically on first use; set `autoMigrate: false` to forbid runtime DDL and apply `BOOKING_LOCKS_HOLDER_MIGRATION_SQL` yourself instead.
 
@@ -570,7 +570,7 @@ A lease can still expire while its holder is mid-callback. That is detected: `wi
 ### `D1BookingLock`
 
 ```typescript
-import { D1BookingLock } from "@thebookingkit/d1";
+import { D1BookingLock } from "@waybook/d1";
 
 const lock = new D1BookingLock(rawDb, {
   tableName:     "booking_locks", // default
@@ -650,7 +650,7 @@ await lock.withLock(key, async (handle) => {
 Factory function alternative to `new D1BookingLock()`:
 
 ```typescript
-import { createD1BookingLock } from "@thebookingkit/d1";
+import { createD1BookingLock } from "@waybook/d1";
 
 const lock = createD1BookingLock(db, { lockTtlMs: 15_000 });
 ```
@@ -660,7 +660,7 @@ const lock = createD1BookingLock(db, { lockTtlMs: 15_000 });
 Thrown when the lock cannot be acquired after all retry attempts.
 
 ```typescript
-import { LockAcquisitionError } from "@thebookingkit/d1";
+import { LockAcquisitionError } from "@waybook/d1";
 
 try {
   await lock.withLock(key, fn);
@@ -729,7 +729,7 @@ import {
   type WeeklySchedule,
   type DaySchedule,
   type DayOfWeek,
-} from "@thebookingkit/d1";
+} from "@waybook/d1";
 ```
 
 ### `weeklyScheduleToRules()`
@@ -788,7 +788,7 @@ import {
   type D1ResourceRow,
   type D1ResourceAvailabilityRuleRow,
   type D1ResourceAvailabilityOverrideRow,
-} from "@thebookingkit/d1";
+} from "@waybook/d1";
 ```
 
 These functions follow the same patterns as their booking counterparts. `D1ResourceBookingLock` uses the same advisory lock table with a resource-scoped key (e.g. `"resource:${resourceId}:${dateStr}"`).
@@ -806,7 +806,7 @@ import {
   buildMigrationSql,
   type MigrationColumn,
   type TableMigrationPlan,
-} from "@thebookingkit/d1";
+} from "@waybook/d1";
 ```
 
 ### `findLegacyRows()`
@@ -862,7 +862,7 @@ import {
   CUSTOMER_DDL,
   WALK_IN_DDL,
   ALL_DDL,       // All of the above concatenated
-} from "@thebookingkit/d1";
+} from "@waybook/d1";
 
 // Apply all tables in one migration:
 await db.exec(ALL_DDL);
@@ -883,7 +883,7 @@ import {
   weeklyScheduleToRules,
   encodeD1Date,
   localToday,
-} from "@thebookingkit/d1";
+} from "@waybook/d1";
 import { getAvailableSlots, isSlotAvailable } from "@waybook/core";
 import { BookingConflictError } from "@waybook/server";
 

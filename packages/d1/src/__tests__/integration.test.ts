@@ -1,5 +1,5 @@
 /**
- * Integration tests — exercises the full @thebookingkit/d1 + @waybook/core pipeline.
+ * Integration tests — exercises the full @waybook/d1 + @waybook/core pipeline.
  *
  * These tests simulate the complete flow:
  *   Raw D1 rows → d1BookingRowsToInputs → getAvailableSlots / isSlotAvailable

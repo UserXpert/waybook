@@ -107,7 +107,7 @@ interface SmsAdapter {
 
 While The Booking Kit is built for PostgreSQL, it provides specialized adapters for other database environments.
 
-### Cloudflare D1 / SQLite (`@thebookingkit/d1`)
+### Cloudflare D1 / SQLite (`@waybook/d1`)
 
 Cloudflare D1 requires special handling for date storage and concurrency. This package provides:
 
@@ -117,7 +117,7 @@ Cloudflare D1 requires special handling for date storage and concurrency. This p
 - **Schedule Adapters**: Utilities to intersect personal and location schedules into RRULE windows.
 
 ```typescript
-import { insertBookingIfFree } from "@thebookingkit/d1";
+import { insertBookingIfFree } from "@waybook/d1";
 
 // The overlap check and the INSERT are one atomic statement — no lock required
 const { inserted } = await insertBookingIfFree(db, {

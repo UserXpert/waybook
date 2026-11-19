@@ -78,7 +78,7 @@
  *
  * @example
  * ```ts
- * import { insertBookingIfFree } from "@thebookingkit/d1";
+ * import { insertBookingIfFree } from "@waybook/d1";
  *
  * const result = await insertBookingIfFree(db, {
  *   id: crypto.randomUUID(),

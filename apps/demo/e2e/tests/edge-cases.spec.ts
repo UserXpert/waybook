@@ -170,8 +170,8 @@ test.describe("Edge Cases & Confidence Tests", () => {
       await expect(section).toContainText("@waybook/core");
       await expect(section).toContainText("@waybook/server");
       await expect(section).toContainText("@waybook/db");
-      await expect(section).toContainText("@thebookingkit/d1");
-      await expect(section).toContainText("@thebookingkit/cli");
+      await expect(section).toContainText("@waybook/d1");
+      await expect(section).toContainText("@waybook/cli");
     });
   });
 
