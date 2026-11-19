@@ -70,7 +70,8 @@ test("staff can change their own photo and read-only members cannot", async ({ p
     const [staff] = await control`INSERT INTO identities (email,password_hash,display_name) VALUES (${staffEmail},${owner.password_hash},'Test staff') RETURNING id`;
     const [readOnly] = await control`INSERT INTO identities (email,password_hash,display_name) VALUES (${readOnlyEmail},${owner.password_hash},'Test read only') RETURNING id`;
     await control`INSERT INTO tenant_memberships (tenant_id,identity_id,role) VALUES (${workspace.id},${staff.id},'staff'),(${workspace.id},${readOnly.id},'read-only')`;
-    await tenant`INSERT INTO team_members (tenant_id,identity_id,role,name,email) VALUES (${workspace.id},${staff.id},'staff','Test staff',${staffEmail}),(${workspace.id},${readOnly.id},'read-only','Test read only',${readOnlyEmail}) RETURNING id,identity_id`;
+    const [staffMember] = await tenant`INSERT INTO team_members (tenant_id,identity_id,role,name,email) VALUES (${workspace.id},${staff.id},'staff','Test staff',${staffEmail}) RETURNING id`;
+    await tenant`INSERT INTO team_members (tenant_id,identity_id,role,name,email) VALUES (${workspace.id},${readOnly.id},'read-only','Test read only',${readOnlyEmail})`;
     await page.goto('/login');
     await page.getByLabel('Work email').fill(staffEmail);
     await page.getByPlaceholder('Enter your password').fill('waybook-local-only');
@@ -84,6 +85,14 @@ test("staff can change their own photo and read-only members cannot", async ({ p
     await button.click();
     await (await chooserPromise).setFiles({ name: 'synthetic.png', mimeType: 'image/png', buffer: image });
     await expect(button.locator('img')).toHaveAttribute('src', /^data:image\/png;base64,/);
+    const [beforeDowngradedUpload] = await tenant<{ photoDataUrl: string | null; auditCount: number }[]>`SELECT tm.photo_data_url AS "photoDataUrl",(SELECT count(*)::int FROM tenant_audit_events WHERE tenant_id=${workspace.id} AND action='staff.photo_updated' AND target_type='team_member' AND target_id=${staffMember.id}) AS "auditCount" FROM team_members tm WHERE tm.tenant_id=${workspace.id} AND tm.id=${staffMember.id}`;
+    await control`UPDATE tenant_memberships SET role='read-only' WHERE tenant_id=${workspace.id} AND identity_id=${staff.id}`;
+    const deniedChooser = page.waitForEvent('filechooser');
+    await button.click();
+    await (await deniedChooser).setFiles({ name: 'forged-after-downgrade.png', mimeType: 'image/png', buffer: image });
+    await expect(page.locator('.staff-photo-upload__error')).toContainText('Could not upload photo');
+    const [afterDowngradedUpload] = await tenant<{ photoDataUrl: string | null; auditCount: number }[]>`SELECT tm.photo_data_url AS "photoDataUrl",(SELECT count(*)::int FROM tenant_audit_events WHERE tenant_id=${workspace.id} AND action='staff.photo_updated' AND target_type='team_member' AND target_id=${staffMember.id}) AS "auditCount" FROM team_members tm WHERE tm.tenant_id=${workspace.id} AND tm.id=${staffMember.id}`;
+    expect(afterDowngradedUpload).toEqual(beforeDowngradedUpload);
     await expect(page.getByRole('link', { name: /Sofie Andersen/ })).toHaveCount(0);
     await page.getByRole('button', { name: 'Apps', exact: true }).click();
     await expect(page.getByRole('dialog').getByRole('link', { name: 'Sales', exact: true })).toHaveCount(0);
