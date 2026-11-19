@@ -6373,6 +6373,20 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-drawer-header-actions > button:not(:disabled):is(:hover,:focus-visible) { border-color:#fff; background:#d8d8db; color:#111; outline:2px solid #7a7a80; outline-offset:2px; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-drawer-header-actions > button:disabled { border-color:#45454b; background:#29292d; color:#aaaab2; }
 
+/* UI audit: keep client search usable and modal/drawer actions legible at every
+   supported width without changing the calendar's independently-owned chrome. */
+.tenant-dashboard-page .client-list-actions .waybook-list-filter label { min-width: 15rem; }
+.tenant-dashboard-page .client-list-actions .waybook-list-filter input { width: 100%; min-width: 0; }
+.tenant-dashboard-page .client-form-modal__scrim { background: rgba(0,0,0,.58) !important; backdrop-filter: blur(3px); }
+@media (min-width:681px) { .tenant-dashboard-page .client-form-modal .waybook-customer-form button { justify-self: end; min-width: 8.25rem; } }
+@media (max-width:680px) { .tenant-dashboard-page .client-list-actions .waybook-list-filter label { width:100%; min-width:0; } }
+@media (max-width:480px) {
+  .tenant-dashboard-page :is(.resource-editor-drawer,.product-editor-drawer) > header { gap:.35rem; padding:.95rem; }
+  .tenant-dashboard-page :is(.resource-editor-drawer,.product-editor-drawer) > header h2 { font-size:1.45rem; }
+  .tenant-dashboard-page :is(.resource-editor-drawer,.product-editor-drawer) .tenant-drawer-header-actions { gap:.3rem; }
+  .tenant-dashboard-page :is(.resource-editor-drawer,.product-editor-drawer) .tenant-drawer-header-actions > button { padding-inline:.5rem; font-size:.68rem; }
+}
+
 /* Assignment search and selected values share one interaction in both themes. */
 .tenant-dashboard-page .tenant-drawer > header > div:first-child { min-width:0; }
 .tenant-dashboard-page .tenant-drawer > header > .tenant-drawer-close { flex:0 0 2.35rem; }
