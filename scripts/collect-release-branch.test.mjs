@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REQUIRED_CHECKS, collect, evaluatePullRequest, fetchedHeadDecision, flattenPaginatedPages, isFullSha, mergeAttemptDecision, planCollection, releaseBranchDecision } from "./collect-release-branch.mjs";
+import { releaseValidationDecision } from "./validate-release-inputs.mjs";
 
 const repository = "UserXpert/waybook";
 const checks = REQUIRED_CHECKS.map((name) => ({ name, conclusion: "SUCCESS" }));
@@ -47,6 +48,15 @@ test("accepts only full SHAs and flattens every gh pagination page", () => {
   assert.equal(isFullSha("a".repeat(39)), false);
   assert.deepEqual(flattenPaginatedPages([[{ number: 1 }], [{ number: 2 }]]), [{ number: 1 }, { number: 2 }]);
   assert.throws(() => flattenPaginatedPages([{ number: 1 }]), /slurp paginated/);
+});
+
+test("rejects a release validation run when main advanced after collection", () => {
+  const releaseSha = "a".repeat(40);
+  const baseSha = "b".repeat(40);
+  const valid = { releaseSha, baseSha, dispatchSha: releaseSha, checkedOutSha: releaseSha, originMainSha: baseSha, baseIsAncestor: true };
+  assert.deepEqual(releaseValidationDecision(valid), { valid: true });
+  assert.deepEqual(releaseValidationDecision({ ...valid, originMainSha: "c".repeat(40) }), { valid: false, reason: "main-advanced" });
+  assert.deepEqual(releaseValidationDecision({ ...valid, releaseSha: "invalid" }), { valid: false, reason: "invalid-release-sha" });
 });
 
 const command = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
