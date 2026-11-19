@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
+import { CalendarDatePicker } from "@/components/calendar-date-picker";
 import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
 import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
@@ -307,8 +308,10 @@ export default async function CalendarsPage({
     : [];
   const calendarNow = new Date();
   const tenantToday = localDateKey(calendarNow, tenant.timezone);
+  // A selected staff member can sit outside the bounded roster window. The
+  // direct lookup above is authoritative for their own calendar scope.
   const hasSelectedEmployee = Boolean(
-    effectiveEmployee && members.some((member) => member.id === effectiveEmployee),
+    effectiveEmployee && selected?.id === effectiveEmployee,
   );
   // Team has one operational Day board. An individual can deliberately switch
   // between their own Day and Week board without changing staff scope.
@@ -392,14 +395,12 @@ export default async function CalendarsPage({
   // member and booking in the visible month contributes to the count.
   const monthScopedBookings = monthlyView && selectedLocation
     ? await db<TeamBooking[]>`
-      SELECT b.id, b.booking_number AS "bookingNumber", b.booking_block_id AS "bookingBlockId", b.service_id AS "serviceId", b.team_member_id AS "teamMemberId", b.location_id AS "locationId", bra.resource_id AS "resourceId", r.name AS "resourceName", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle", tm.name AS "teamMemberName", tm.calendar_color AS "teamMemberColor"
+      SELECT b.id, b.booking_number AS "bookingNumber", b.booking_block_id AS "bookingBlockId", b.service_id AS "serviceId", b.team_member_id AS "teamMemberId", b.location_id AS "locationId", NULL::uuid AS "resourceId", NULL::text AS "resourceName", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle", tm.name AS "teamMemberName", tm.calendar_color AS "teamMemberColor"
       FROM bookings b
       JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
       JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
       JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
       JOIN team_member_locations tml ON tml.team_member_id=tm.id AND tml.tenant_id=tm.tenant_id AND tml.location_id=${selectedLocation.id}
-      LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
-      LEFT JOIN resources r ON r.id=bra.resource_id AND r.tenant_id=b.tenant_id
       WHERE b.tenant_id=${tenant.id} AND b.location_id=${selectedLocation.id}
         AND b.starts_at >= ${rangeStart} AND b.starts_at < ${rangeEnd} AND b.status <> 'cancelled'
         AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid)
@@ -711,7 +712,7 @@ export default async function CalendarsPage({
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
                         <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month">←</Link>
-                        <span className="waybook-calendar-toolbar__date">{new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))}</span>
+                        <CalendarDatePicker date={currentMonth} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} />
                         <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month">→</Link>
                       </div>
                     </div>
@@ -778,9 +779,7 @@ export default async function CalendarsPage({
                         >
                           ←
                         </Link>
-                        <span className="waybook-calendar-toolbar__date">
-                          {teamNavigationLabel}
-                        </span>
+                        <CalendarDatePicker date={teamDay} label={teamNavigationLabel} />
                         <Link
                           href={href({
                             view: staffDayView ? "day" : "team",
@@ -969,9 +968,7 @@ export default async function CalendarsPage({
                         >
                           ←
                         </Link>
-                        <span className="waybook-calendar-toolbar__date">
-                          {staffNavigationLabel}
-                        </span>
+                        <CalendarDatePicker date={currentWeek} label={staffNavigationLabel} />
                         <Link
                           href={href({
                             view: "staff",

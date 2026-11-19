@@ -28,7 +28,17 @@ for (const raw of targets) {
         const [location] = await tx<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id=${settings.tenantId} AND slug='primary' LIMIT 1`;
         const [member] = await tx<{ id: string }[]>`SELECT id FROM team_members WHERE tenant_id=${settings.tenantId} ORDER BY created_at LIMIT 1`;
         const [service] = await tx<{ id: string; durationMinutes: number }[]>`SELECT id,duration_minutes AS "durationMinutes" FROM services WHERE tenant_id=${settings.tenantId} ORDER BY created_at LIMIT 1`;
-        for (const hour of [13, 14]) {
+        let outsideMemberId = member.id;
+        for (let index = 1; index <= 21; index += 1) {
+          const name = `E2E roster ${String(index).padStart(2, "0")}`;
+          const email = `e2e-roster-${index}@example.test`;
+          const [existingMember] = await tx<{ id: string }[]>`SELECT id FROM team_members WHERE tenant_id=${settings.tenantId} AND email=${email} LIMIT 1`;
+          const memberId = existingMember?.id ?? (await tx<{ id: string }[]>`INSERT INTO team_members (tenant_id,role,name,email) VALUES (${settings.tenantId},'staff',${name},${email}) RETURNING id`)[0].id;
+          await tx`INSERT INTO team_member_locations (tenant_id,team_member_id,location_id) VALUES (${settings.tenantId},${memberId},${location.id}) ON CONFLICT DO NOTHING`;
+          await tx`INSERT INTO service_team_members (tenant_id,service_id,team_member_id) VALUES (${settings.tenantId},${service.id},${memberId}) ON CONFLICT DO NOTHING`;
+          if (index === 21) outsideMemberId = memberId;
+        }
+        for (const { hour, memberId } of [{ hour: 13, memberId: member.id }, { hour: 14, memberId: member.id }, { hour: 15, memberId: outsideMemberId }]) {
           const key = `e2e-month-calendar-${hour}`;
           const [existing] = await tx<{ id: string }[]>`SELECT id FROM bookings WHERE tenant_id=${settings.tenantId} AND idempotency_key=${key} LIMIT 1`;
           if (existing) continue;
@@ -36,8 +46,8 @@ for (const raw of targets) {
           const [customer] = await tx<{ id: string }[]>`SELECT id FROM customers WHERE tenant_id=${settings.tenantId} AND email=${email} LIMIT 1`;
           const customerId = customer?.id ?? (await tx<{ id: string }[]>`INSERT INTO customers (tenant_id,name,email) VALUES (${settings.tenantId},${`Monthly calendar ${hour}`},${email}) RETURNING id`)[0].id;
           const [slot] = await tx<{ startsAt: Date; endsAt: Date }[]>`SELECT (((now() AT TIME ZONE ${settings.timezone})::date + 10 + ${`${hour}:00`}::time) AT TIME ZONE ${settings.timezone}) AS "startsAt", ((((now() AT TIME ZONE ${settings.timezone})::date + 10 + ${`${hour}:00`}::time) AT TIME ZONE ${settings.timezone}) + ${service.durationMinutes} * interval '1 minute') AS "endsAt"`;
-          const [block] = await tx<{ id: string }[]>`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES (${settings.tenantId},${member.id},${location.id},${slot.startsAt},${slot.endsAt},'confirmed') RETURNING id`;
-          await tx`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,idempotency_key,booked_price_cents) VALUES (${settings.tenantId},${block.id},${service.id},${member.id},${location.id},${customerId},${slot.startsAt},${slot.endsAt},'confirmed','tenant',${key},0)`;
+          const [block] = await tx<{ id: string }[]>`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES (${settings.tenantId},${memberId},${location.id},${slot.startsAt},${slot.endsAt},'confirmed') RETURNING id`;
+          await tx`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,idempotency_key,booked_price_cents) VALUES (${settings.tenantId},${block.id},${service.id},${memberId},${location.id},${customerId},${slot.startsAt},${slot.endsAt},'confirmed','tenant',${key},0)`;
         }
       }
     });
