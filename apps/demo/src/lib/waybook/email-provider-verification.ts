@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Sql } from "postgres";
 import { activeEmailCredential } from "./email-provider-connection";
 import { sendWithResend } from "./resend-delivery";
+import { emailVerificationRecipient } from "./email-test-recipient";
 
 type Send = typeof sendWithResend;
 type Claimed = { id: string; attemptId: string; startedAt: Date; sender: string };
@@ -25,8 +26,12 @@ export async function sendEmailProviderTest(db: Sql, tenantId: string, resolveKe
   try {
     const credential = await activeEmailCredential(db, tenantId, row.id, resolveKey);
     if (!credential || credential.senderEmail !== row.sender) result = { kind: "review" };
-    else result = await send({ apiKey: credential.apiKey, idempotencyKey: `waybook-verification/${row.attemptId}`, firstAttemptAt: row.startedAt,
-      message: { from: row.sender, to: row.sender, subject: "Waybook email connection test", text: "This is a test of your Waybook email connection. If you received it, return to Waybook and confirm receipt." } });
+    else {
+      const recipient = emailVerificationRecipient(row.sender, process.env);
+      const suffix = recipient === row.sender ? "" : `/${createHash("sha256").update(recipient).digest("hex").slice(0, 16)}`;
+      result = await send({ apiKey: credential.apiKey, idempotencyKey: `waybook-verification/${row.attemptId}${suffix}`, firstAttemptAt: row.startedAt,
+        message: { from: row.sender, to: recipient, subject: "Waybook email connection test", text: "This is a test of your Waybook email connection. If you received it, return to Waybook and confirm receipt." } });
+    }
   } catch { result = { kind: "review" }; }
   const [updated] = await db.unsafe<{ id: string }[]>(`UPDATE email_provider_connections SET verification_claim_token=NULL,verification_claim_until=NULL,
       verification_accepted_at=CASE WHEN $4='accepted' THEN now() ELSE verification_accepted_at END,
