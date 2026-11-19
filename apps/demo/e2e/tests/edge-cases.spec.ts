@@ -169,7 +169,7 @@ test.describe("Edge Cases & Confidence Tests", () => {
       const section = page.locator("#packages");
       await expect(section).toContainText("@thebookingkit/core");
       await expect(section).toContainText("@thebookingkit/server");
-      await expect(section).toContainText("@thebookingkit/db");
+      await expect(section).toContainText("@waybook/db");
       await expect(section).toContainText("@thebookingkit/d1");
       await expect(section).toContainText("@thebookingkit/cli");
     });

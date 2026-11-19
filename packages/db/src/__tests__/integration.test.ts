@@ -1,5 +1,5 @@
 /**
- * Integration tests for @thebookingkit/db
+ * Integration tests for @waybook/db
  *
  * These tests run against a real PostgreSQL 15 database. They require the
  * DATABASE_URL environment variable to be set and the schema to be pushed via
@@ -112,7 +112,7 @@ async function cleanUp() {
 // Suite: guard for missing DATABASE_URL
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!hasDb)("@thebookingkit/db — integration tests", () => {
+describe.skipIf(!hasDb)("@waybook/db — integration tests", () => {
   // -------------------------------------------------------------------------
   // beforeAll — create DB connection
   // -------------------------------------------------------------------------

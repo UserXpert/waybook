@@ -1,5 +1,5 @@
 /**
- * Static analysis tests for known QA issues in the @thebookingkit/db package.
+ * Static analysis tests for known QA issues in the @waybook/db package.
  *
  * These tests do NOT require a live database. They inspect Drizzle schema
  * objects programmatically and read raw SQL migration files to verify that

@@ -47,7 +47,7 @@
     "rrule": "^2.8.0"
   },
   "devDependencies": {
-    "@thebookingkit/db": "*",
+    "@waybook/db": "*",
     "@types/node": "^24.19.2",
     "fast-check": "^4.10.2",
     "typescript": "~7.0.2",

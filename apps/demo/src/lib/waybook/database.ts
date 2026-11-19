@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createWaybookSql } from "@thebookingkit/db";
+import { createWaybookSql } from "@waybook/db";
 import { workspaceHostname, workspaceMembershipQuery } from "./workspace-lookup-query";
 
 const localUrl = (name: string) => `postgresql://waybook@127.0.0.1:5440/${name}`;

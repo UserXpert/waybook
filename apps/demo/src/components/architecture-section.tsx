@@ -121,7 +121,7 @@ export function ArchitectureSection() {
 
           <div className="arch-layer arch-layer-db">
             <div className="arch-layer-label">Layer 3</div>
-            <div className="arch-layer-name">@thebookingkit/db</div>
+            <div className="arch-layer-name">@waybook/db</div>
             <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
               Drizzle ORM schema for PostgreSQL 15+. EXCLUDE USING gist prevents double-bookings
               at the database level. SERIALIZABLE transactions with retry.

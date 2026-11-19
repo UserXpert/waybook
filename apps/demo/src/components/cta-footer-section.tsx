@@ -49,7 +49,7 @@ export function CTAFooterSection() {
             </p>
           </div>
           <div>
-            <CopyCommand command="npm install @thebookingkit/core @thebookingkit/server @thebookingkit/db" label="Full Stack" />
+            <CopyCommand command="npm install @thebookingkit/core @thebookingkit/server @waybook/db" label="Full Stack" />
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
               Engine + server adapters + database schema for complete booking system
             </p>
