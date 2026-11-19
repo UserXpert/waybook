@@ -68,6 +68,7 @@ test("password reset revokes an active staff session and accepts only the replac
     await staffPage.getByPlaceholder("Enter your password").fill(oldPassword);
     await staffPage.getByRole("button", { name: "Sign in" }).click();
     await expect(staffPage.getByRole("alert").filter({ hasText: "Invalid email or password." })).toBeVisible();
+    await staffPage.getByLabel("Work email").fill(email);
     await staffPage.getByPlaceholder("Enter your password").fill(replacementPassword);
     await staffPage.getByRole("button", { name: "Sign in" }).click();
     await expect(staffPage).toHaveURL(/\/nordic\/app\/calendars/);
