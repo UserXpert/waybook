@@ -14,6 +14,7 @@ import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { availableSlots } from "@/lib/waybook/booking";
 import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
+import { calendarGridBounds } from "@/lib/waybook/calendar-grid-bounds";
 import { tenantDb } from "@/lib/waybook/database";
 import {
   currentTenantRouteSlug,
@@ -189,25 +190,6 @@ function mergeSlots(slots: Slot[]): ScheduleEntry[] {
       else ranges.push({ ...slot });
       return ranges;
     }, []);
-}
-
-function calendarGridBounds(intervals: ScheduleEntry[], timezone: string) {
-  // A historical closed day has no availability intervals, but it still needs
-  // a useful schedule canvas. Keep the normal operating-day range visible.
-  if (!intervals.length) return { start: 9 * 60, end: 17 * 60, rowCount: 16 };
-
-  const earliest = Math.min(
-    ...intervals.map((entry) =>
-      localMinutes(new Date(entry.startTime), timezone),
-    ),
-  );
-  const latest = Math.max(
-    ...intervals.map((entry) => localMinutes(new Date(entry.endTime), timezone)),
-  );
-  const start = Math.max(0, Math.floor(earliest / 60) * 60);
-  const end = Math.min(24 * 60, Math.max(start + 60, Math.ceil(latest / 60) * 60));
-
-  return { start, end, rowCount: Math.max(2, (end - start) / 30) };
 }
 
 export default async function CalendarsPage({
