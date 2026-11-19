@@ -23,6 +23,20 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   const number = summary.match(/Booking number:\s*([A-Z0-9]+)/)?.[1];
   check(number).toBeTruthy();
 
+  // Management credentials are tenant scoped. A valid Nordic reference must
+  // remain usable in Nordic, but cannot reveal the same booking through a
+  // different public tenant route.
+  const managementRequest = {
+    headers: { Origin: new URL(page.url()).origin },
+    data: { action: "lookup", bookingId: number!, email: "waybook-e2e@example.test" },
+  };
+  const ownLookup = await page.request.post("/nordic/api/public/manage", managementRequest);
+  expect(ownLookup.status()).toBe(200);
+  expect(await ownLookup.json()).toMatchObject({ booking: { service: "Studio session" } });
+  const crossTenantLookup = await page.request.post("/copenhagen/api/public/manage", managementRequest);
+  expect(crossTenantLookup.status()).toBe(404);
+  expect(await crossTenantLookup.json()).toEqual({ error: "We couldn’t find a booking with those details." });
+
   async function findBooking() {
     await page.getByRole("button", { name: "Manage booking" }).click();
     await page.getByLabel("Booking number").fill(number!);
