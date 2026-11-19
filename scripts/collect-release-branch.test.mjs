@@ -13,6 +13,9 @@ const pull = (overrides = {}) => ({ number: 1, draft: false, base: { ref: "main"
 
 test("requires the label, same repository, exact main base and successful checks", () => {
   assert.deepEqual(evaluatePullRequest(pull(), checks, repository), { eligible: true, sha: "a".repeat(40) });
+  const restChecks = REQUIRED_CHECKS.map((name) => ({ name, status: "completed", conclusion: "success" }));
+  assert.deepEqual(evaluatePullRequest(pull(), restChecks, repository), { eligible: true, sha: "a".repeat(40) });
+  assert.deepEqual(evaluatePullRequest(pull(), [...restChecks.slice(0, -1), { name: "migration-history", status: "completed", conclusion: "failure" }], repository), { eligible: false, reason: "required-check-not-success", missing: ["migration-history"] });
   assert.equal(evaluatePullRequest(pull({ labels: [] }), checks, repository).reason, "missing-release-ready-label");
   assert.equal(evaluatePullRequest(pull({ head: { sha: "a".repeat(40), ref: "fork", repo: { full_name: "other/fork" } } }), checks, repository).reason, "not-same-repository");
   assert.deepEqual(evaluatePullRequest(pull(), checks.slice(0, -1), repository), { eligible: false, reason: "required-check-not-success", missing: ["migration-history"] });
