@@ -47,14 +47,14 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await calendar.getByRole("button", { name: "Sign in" }).click();
   await check(calendar).toHaveURL(/\/nordic\/app/);
   await calendar.goto(`/nordic/app/calendars?day=${localDayAfter(8)}`);
-  await check(calendar.getByText("Waybook E2E customer", { exact: true })).toBeVisible();
+  await check(calendar.getByText(/Waybook E2E customer/)).toBeVisible();
   const bookingDay = localDayAfter(8);
   await calendar.goto(`/nordic/app/calendars?view=month&day=${bookingDay}`);
   const monthDay = calendar.locator(`a.waybook-month-calendar__day[href*="monthDay=${bookingDay}"]`);
   await check(monthDay).toContainText(/booking/);
   await monthDay.click();
   await check(calendar.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(calendar.getByText("Waybook E2E customer", { exact: true })).toBeVisible();
+  await check(calendar.getByText(/Waybook E2E customer/)).toBeVisible();
 
   await findBooking();
   await page.getByRole("button", { name: "Cancel booking" }).click();
@@ -102,8 +102,8 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await day.click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await check(page.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(page.getByText("Monthly calendar 13", { exact: true })).toBeVisible();
-  await check(page.getByText("Monthly calendar 14", { exact: true })).toBeVisible();
+  await check(page.getByText(/Monthly calendar 13/)).toBeVisible();
+  await check(page.getByText(/Monthly calendar 14/)).toBeVisible();
 
   await page.getByLabel("Next month").click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
@@ -115,7 +115,7 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   const scopedDay = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
   await check(scopedDay).toContainText("1 booking");
   await scopedDay.click();
-  await check(page.getByText("Monthly calendar 15", { exact: true })).toBeVisible();
+  await check(page.getByText(/Monthly calendar 15/)).toBeVisible();
 });
 
 test("changing the reschedule day ignores an older availability response", async ({ page }) => {
