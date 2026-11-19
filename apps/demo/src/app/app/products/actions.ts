@@ -9,6 +9,7 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
+import { withSuccessToast } from "@/lib/waybook/toast";
 
 export async function saveProduct(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -66,5 +67,5 @@ export async function saveProduct(formData: FormData) {
   revalidatePath("/app/products");
   revalidatePath("/app/sales");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/products")}?product=${productId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/products")}?product=${productId}`, "Product saved."));
 }

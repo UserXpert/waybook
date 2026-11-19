@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { saveStaffWorkingHours } from "@/app/app/team/actions";
+import { showSuccessToast } from "@/lib/waybook/toast";
 import { OperationalTimeRange } from "@/components/operational-time-range";
 import "./staff-hours-editor.css";
 
@@ -109,6 +110,7 @@ export function StaffHoursEditor({ memberId, initialSchedule }: { memberId: stri
       await saveStaffWorkingHours(formData);
       closeEditor(false);
       setSaved(true);
+      showSuccessToast("Working hours saved.");
     } catch {
       setSaveError("Could not save working hours. Please try again.");
     } finally {

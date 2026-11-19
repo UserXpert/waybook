@@ -8,6 +8,7 @@ import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { withSuccessToast } from "@/lib/waybook/toast";
 
 const quantityFrom = (value: FormDataEntryValue | null) => Number.parseInt(String(value ?? ""), 10);
 
@@ -37,7 +38,7 @@ export async function createRetailCheckout(formData: FormData) {
     return [sale.id] as const;
   });
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/sales/retail")}?sale=${saleId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales/retail")}?sale=${saleId}`, "Retail checkout created."));
 }
 
 export async function addProductToRetailCheckout(formData: FormData) {
@@ -56,7 +57,7 @@ export async function addProductToRetailCheckout(formData: FormData) {
   });
   revalidatePath("/app/sales/retail");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/sales/retail")}?sale=${saleId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales/retail")}?sale=${saleId}`, "Product added to checkout."));
 }
 
 /** Records one exact manual tender and closes the draft atomically. Refunds are
@@ -80,5 +81,5 @@ export async function closeRetailCheckout(formData: FormData) {
   revalidatePath("/app/sales/retail");
   revalidatePath("/app/sales");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/sales/retail")}?sale=${saleId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales/retail")}?sale=${saleId}`, "Payment collected."));
 }

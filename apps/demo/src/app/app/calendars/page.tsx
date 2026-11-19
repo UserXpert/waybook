@@ -8,8 +8,7 @@ import { CalendarActiveFilters } from "@/components/calendar-active-filters";
 import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
 import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
-import { AppointmentDrawerActions } from "@/components/appointment-drawer-actions";
-import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
+import { CalendarAppointmentDrawer } from "@/components/calendar-appointment-drawer";
 import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { availableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
@@ -25,11 +24,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import {
-  cancelAppointment,
   getRescheduleBookingAvailability,
-  rescheduleBooking,
-  updateBookingDetails,
-  updateBookingStatus,
 } from "./actions";
 
 type Member = {
@@ -1178,74 +1173,22 @@ export default async function CalendarsPage({
           ) : null}
         </>
       )}
-      {selectedBooking && selectedBookingMember ? (
-        <div className="tenant-drawer-layer" role="presentation">
-          <Link
-            className="tenant-drawer-scrim"
-            aria-hidden="true"
-            tabIndex={-1}
-            href={href({})}
-          />
-          <aside
-            className="tenant-drawer appointment-drawer manual-appointment-drawer"
-            aria-label={`Appointment with ${selectedBooking.customerName}`}
-          >
-            <header>
-              <div>
-                <p>APPOINTMENT</p>
-                <h2>{selectedBooking.customerName}</h2>
-              </div>
-              <div className="appointment-drawer__header-actions">
-                <Link
-                  className="tenant-drawer-close"
-                  aria-label="Close appointment"
-                  href={href({})}
-                >
-                  ×
-                </Link>
-              </div>
-            </header>
-            <div className="appointment-drawer__body">
-              <section className="appointment-drawer__details">
-                <dl>
-                  <div className="appointment-drawer__detail--status"><dt>Status</dt><dd>{selectedBooking.status.replace("_", " ")}</dd></div>
-                  <div className="appointment-drawer__detail--date"><dt>Date</dt><dd>{calendarDate.format(selectedBooking.startsAt)}</dd></div>
-                  <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock.format(selectedBooking.startsAt)}–{clock.format(selectedBooking.endsAt)}</dd></div>
-                  <div><dt>Service</dt><dd>{selectedBooking.serviceTitle}</dd></div>
-                  <div><dt>Staff</dt><dd>{selectedBookingMember.name}</dd></div>
-                  <div><dt>Booking number</dt><dd>{selectedBooking.bookingNumber}</dd></div>
-                </dl>
-              </section>
-              {canManage ? (
-                <>
-                  <AppointmentDrawerActions
-                    key={selectedBooking.id}
-                    bookingId={selectedBooking.id}
-                    customerName={selectedBooking.customerName}
-                    customerEmail={selectedBooking.customerEmail}
-                    customerPhone={selectedBooking.customerPhone}
-                    status={selectedBooking.status}
-                    timezone={tenant.timezone}
-                    days={rescheduleDays}
-                    slots={rescheduleSlots}
-                    saveDetails={updateBookingDetails}
-                    reschedule={rescheduleBooking}
-                    updateStatus={updateBookingStatus}
-                    resourceId={selectedBooking.resourceId}
-                    resources={eligibleResources}
-                  />
-                  {selectedBooking.status !== "cancelled" && selectedBooking.status !== "completed" ? <CancelAppointmentForm bookingId={selectedBooking.id} cancelAppointment={cancelAppointment} /> : null}
-                </>
-              ) : (
-                <p className="tenant-drawer-note">
-                  Read-only access: appointment changes require an owner or
-                  manager.
-                </p>
-              )}
-            </div>
-          </aside>
-        </div>
-      ) : null}
+      <CalendarAppointmentDrawer
+        timezone={tenant.timezone}
+        summaries={[...bookings, ...teamBookings, ...monthScopedBookings].map((item) => ({
+          id: item.id, bookingNumber: item.bookingNumber, customerName: item.customerName,
+          serviceTitle: item.serviceTitle, teamMemberName: "teamMemberName" in item && typeof item.teamMemberName === "string" ? item.teamMemberName : members.find((member) => member.id === item.teamMemberId)?.name ?? "",
+          startsAt: item.startsAt.toISOString(), endsAt: item.endsAt.toISOString(), status: item.status,
+        }))}
+        initialDetail={selectedBooking && selectedBookingMember ? {
+          id: selectedBooking.id, bookingNumber: selectedBooking.bookingNumber, serviceId: selectedBooking.serviceId,
+          locationId: selectedBooking.locationId ?? "", resourceId: selectedBooking.resourceId,
+          startsAt: selectedBooking.startsAt.toISOString(), endsAt: selectedBooking.endsAt.toISOString(), status: selectedBooking.status,
+          customerName: selectedBooking.customerName, customerEmail: selectedBooking.customerEmail, customerPhone: selectedBooking.customerPhone,
+          serviceTitle: selectedBooking.serviceTitle, teamMemberName: selectedBookingMember.name,
+          canManage, resources: eligibleResources, days: rescheduleDays, slots: rescheduleSlots, timezone: tenant.timezone,
+        } : null}
+      />
       {requestedAppointment && (requestedCreateMember ?? selected) && services.length && canManage ? (
         <div className="tenant-drawer-layer" role="presentation">
           <Link

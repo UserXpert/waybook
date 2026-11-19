@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { OperationalTimeRange } from "@/components/operational-time-range";
+import { showSuccessToast } from "@/lib/waybook/toast";
 
 type Props = {
   memberId: string;
@@ -58,7 +59,10 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
     setRangeAnchor(null);
   }
 
-  return <form action={action} className="staff-timeoff-form">
+  const save = async (formData: FormData) => { await action(formData); showSuccessToast(initial ? "Time off updated." : "Time off saved."); };
+  const remove = deleteAction ? async (formData: FormData) => { await deleteAction(formData); showSuccessToast("Time off removed."); } : undefined;
+
+  return <form action={save} className="staff-timeoff-form">
     <input type="hidden" name="memberId" value={memberId} />
     {initial ? <input type="hidden" name="overrideId" value={initial.id} /> : null}
     <input type="hidden" name="localDate" value={startDate} />
@@ -101,7 +105,7 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
     <label>Reason <span className="staff-timeoff-form__optional">Optional</span><input name="reason" defaultValue={initial?.reason ?? ""} placeholder="Holiday, leave, break, meeting" /></label>
     <div className="staff-timeoff-form__actions">
       <button type="submit">{initial ? "Save changes" : "Save time off"}</button>
-      {initial && deleteAction ? <button className="staff-timeoff-form__remove" type="submit" formAction={deleteAction} onClick={(event) => { if (!window.confirm("Remove this time-off entry? This cannot be undone.")) event.preventDefault(); }}><Trash2 aria-hidden="true" />Remove time off</button> : null}
+      {initial && remove ? <button className="staff-timeoff-form__remove" type="submit" formAction={remove} onClick={(event) => { if (!window.confirm("Remove this time-off entry? This cannot be undone.")) event.preventDefault(); }}><Trash2 aria-hidden="true" />Remove time off</button> : null}
     </div>
   </form>;
 }

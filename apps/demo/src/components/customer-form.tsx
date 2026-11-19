@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { saveCustomerForm } from "@/app/app/customers/actions";
+import { showSuccessToast } from "@/lib/waybook/toast";
 
 type Customer = { id?: string; name?: string; email?: string; phone?: string | null; tags?: string[]; internalNotes?: string | null };
 
 export function CustomerForm({ customer }: { customer?: Customer | null }) {
   const [state, formAction, pending] = useActionState(saveCustomerForm, { error: null, success: null });
+  useEffect(() => {
+    if (state.success) showSuccessToast(state.success);
+  }, [state]);
   return <form action={formAction} className="waybook-customer-form">
     <input type="hidden" name="customerId" value={customer?.id ?? ""} />
     <label>Name<input name="name" defaultValue={customer?.name ?? ""} required /></label>

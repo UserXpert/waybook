@@ -8,6 +8,7 @@ import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { withSuccessToast } from "@/lib/waybook/toast";
 import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { giftCardCodeHashes, normaliseGiftCardCode } from "@/lib/waybook/gift-card-code";
 
@@ -54,7 +55,7 @@ export async function issueGiftCard(formData: FormData) {
   revalidatePath("/app/gift-cards");
   revalidatePath("/app/customers");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/gift-cards")}?card=${cardId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/gift-cards")}?card=${cardId}`, "Gift card created."));
 }
 
 export async function updateGiftCardDetails(formData: FormData) {
@@ -92,5 +93,5 @@ export async function updateGiftCardDetails(formData: FormData) {
   revalidatePath("/app/gift-cards");
   revalidatePath("/app/customers");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/gift-cards")}?card=${cardId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/gift-cards")}?card=${cardId}`, "Gift card saved."));
 }
