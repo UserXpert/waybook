@@ -50,10 +50,10 @@ jobs:
 
       - name: Run Waybook E2E tests
         run: |
-          docker run --rm --network host --ipc=host \\
-            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/apps/demo" \\
-            -e CI -e WAYBOOK_CONTROL_DATABASE_URL -e WAYBOOK_NORDIC_STUDIO_DATABASE_URL \\
-            -e WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL -e WAYBOOK_GIFT_CARD_CODE_SECRET \\
+          docker run --rm --network host --ipc=host \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/apps/demo" \
+            -e CI -e WAYBOOK_CONTROL_DATABASE_URL -e WAYBOOK_NORDIC_STUDIO_DATABASE_URL \
+            -e WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL -e WAYBOOK_GIFT_CARD_CODE_SECRET \
             mcr.microsoft.com/playwright:v1.59.1-noble npm run e2e
 
       - name: Upload Playwright report
