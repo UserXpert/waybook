@@ -1,0 +1,1 @@
+Temporary marker for Git preview verification, issue #50.
