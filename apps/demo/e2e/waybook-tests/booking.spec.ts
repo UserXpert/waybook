@@ -33,9 +33,12 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   const ownLookup = await page.request.post("/nordic/api/public/manage", managementRequest);
   expect(ownLookup.status()).toBe(200);
   expect(await ownLookup.json()).toMatchObject({ booking: { service: "Studio session" } });
-  const otherPublicBookingPage = await page.request.get("/copenhagen-physio/book");
+  // The Control domain registry assigns the same-origin route `copenhagen`
+  // to the Copenhagen Physio tenant (`copenhagen.localhost`).  Its product
+  // slug is deliberately not trusted as a path prefix.
+  const otherPublicBookingPage = await page.request.get("/copenhagen/book");
   expect(otherPublicBookingPage.status()).toBe(200);
-  const crossTenantLookup = await page.request.post("/copenhagen-physio/api/public/manage", managementRequest);
+  const crossTenantLookup = await page.request.post("/copenhagen/api/public/manage", managementRequest);
   expect(crossTenantLookup.status()).toBe(404);
   expect(await crossTenantLookup.json()).toEqual({ error: "We couldn’t find a booking with those details." });
 
