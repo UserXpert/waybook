@@ -6,8 +6,8 @@ Waybook's source code, databases and browser settings are separate. A successful
 
 1. Run `npm run waybook:release:check` from the designated checkout. It reports uncommitted files, compares local HEAD with GitHub main and the live Vercel commit, and checks which checkout owns port 3333. It requires GitHub network access, authenticated Vercel CLI access and `lsof`; an unavailable check is a failure, not a match. For an in-progress feature branch, a mismatch is expected until release.
 2. Identify the active checkout and server (`git rev-parse --show-toplevel`, `git status --short --branch`, and the process listening on the development port). Use `/Users/amit/Documents/Waybook` as the designated checkout on this Mac; a task worktree based on current GitHub main is also acceptable. Preserve the older checkout until its remaining differences are reviewed.
-3. Fetch GitHub `main`, compare its commit with the live Vercel deployment, and record any uncommitted files or other checkouts. Preserve user work; do not reset or discard it.
-4. Start a task branch from current `main`. Reconcile any intended changes from another checkout with a three-way merge and review overlapping production changes. Exclude generated caches, credentials and local databases.
+3. Check the normal checkout and relevant worktrees for uncommitted changes and unpushed commits. Fetch GitHub `main`, compare its commit with the live Vercel deployment, and record differences. Review intended source changes; preserve them in coherent commits and push to an appropriate branch before beginning a new task. Reconcile overlapping work against current `main` with a three-way comparison. Preserve uncertain or unfinished work separately and report what still needs review. Never reset or discard user work, and do not blindly stage or push generated caches, credentials or local databases.
+4. For a new task, start a branch from current GitHub `main` without the `codex/` prefix. When continuing an existing task, reuse its appropriate existing branch. Never push directly to `main`; use the review and release steps below.
 
 ## Changes and review
 
