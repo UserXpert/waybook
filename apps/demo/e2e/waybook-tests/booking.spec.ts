@@ -128,6 +128,10 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await dayView.click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await check(page.locator(".team-day-calendar")).toBeVisible();
+  await page.getByRole("link", { name: "Week", exact: true }).click();
+  await check(page.locator(".waybook-week-calendar")).toBeVisible();
+  await page.getByRole("link", { name: "Month", exact: true }).click();
+  await check(page.locator(".waybook-month-calendar")).toBeVisible();
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await day.click();
   const monthlyDrawer = page.locator(".waybook-month-calendar__drawer");

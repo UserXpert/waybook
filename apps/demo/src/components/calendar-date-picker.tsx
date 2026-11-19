@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type CalendarScope = { location?: string; employee?: string; service?: string; staff?: string; after?: string; before?: string; showOffShift?: string };
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -49,10 +50,10 @@ export function CalendarDatePicker({ date, label, scope }: { date: string; label
     {open ? <span className="calendar-date-picker__popover" role="dialog" aria-label="Choose calendar date">
       <span className="calendar-date-picker__heading"><strong>Select date</strong><span className="calendar-date-picker__selected" aria-label={`Selected date ${selectedLabel}`}>{selectedLabel}</span></span>
       <span className="calendar-date-picker__navigation">
-        <button type="button" aria-label="Previous picker month" onClick={() => moveMonth(-1)}>‹</button>
+        <button type="button" aria-label="Previous picker month" onClick={() => moveMonth(-1)}><ChevronLeft size={17} aria-hidden="true" /></button>
         <label><span className="calendar-date-picker__sr-only">Month</span><select aria-label="Month" value={month} onChange={(event) => setVisibleMonth(new Date(Date.UTC(year, Number(event.target.value), 1, 12)))}>{months.map((name, index) => <option value={index} key={name}>{name}</option>)}</select></label>
         <label><span className="calendar-date-picker__sr-only">Year</span><select aria-label="Year" value={year} onChange={(event) => setVisibleMonth(new Date(Date.UTC(Number(event.target.value), month, 1, 12)))}>{Array.from({ length: 201 }, (_, index) => selected.getUTCFullYear() - 100 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-        <button type="button" aria-label="Next picker month" onClick={() => moveMonth(1)}>›</button>
+        <button type="button" aria-label="Next picker month" onClick={() => moveMonth(1)}><ChevronRight size={17} aria-hidden="true" /></button>
       </span>
       <span className="calendar-date-picker__weekdays" aria-hidden="true">{weekdays.map((day) => <span key={day}>{day}</span>)}</span>
       <span className="calendar-date-picker__grid">{Array.from({ length: firstWeekday }, (_, index) => <span key={`empty-${index}`} />)}{Array.from({ length: dayCount }, (_, index) => { const value = keyOf(new Date(Date.UTC(year, month, index + 1, 12))); const text = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(parseDate(value)); return <button type="button" key={value} aria-label={text} aria-pressed={value === date} className={value === date ? "is-selected" : ""} onClick={() => choose(value)}>{index + 1}</button>; })}</span>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
@@ -719,13 +720,13 @@ export default async function CalendarsPage({
                       </details>
                       <div className="calendar-view-toggle" aria-label="Calendar range">
                         <Link href={href({ view: "day", day: currentMonth, monthDay: undefined })}>Day</Link>
-                        <Link href={href({ view: "staff", day: undefined, monthDay: undefined })}>Week</Link>
+                        <Link href={href({ view: "staff", employee: selected?.id, day: undefined, monthDay: undefined })}>Week</Link>
                         <Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-current="page">Month</Link>
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
-                        <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month">←</Link>
+                        <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month"><ChevronLeft size={17} aria-hidden="true" /></Link>
                         <CalendarDatePicker date={teamDay} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} scope={calendarDatePickerScope} />
-                        <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month">→</Link>
+                        <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month"><ChevronRight size={17} aria-hidden="true" /></Link>
                       </div>
                     </div>
                   </div>
@@ -779,7 +780,7 @@ export default async function CalendarsPage({
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
                         </div>
                       </details>
-                      {staffDayView ? <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: "day", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "staff", day: undefined })}>Week</Link></div> : null}
+                      <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: staffDayView ? "day" : "team", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: undefined })}>Week</Link><Link href={href({ view: "month", employee: staffDayView ? selected?.id : "", day: teamDay })}>Month</Link></div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
                           href={href({
@@ -789,7 +790,7 @@ export default async function CalendarsPage({
                           })}
                           aria-label="Previous day"
                         >
-                          ←
+                          <ChevronLeft size={17} aria-hidden="true" />
                         </Link>
                         <CalendarDatePicker date={teamDay} label={teamNavigationLabel} scope={calendarDatePickerScope} />
                         <Link
@@ -800,7 +801,7 @@ export default async function CalendarsPage({
                           })}
                           aria-label="Next day"
                         >
-                          →
+                          <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </div>
                       {canManage && (staffDayView ? services : calendarServices).length && !isHistoricalTeamDay ? (
@@ -968,6 +969,7 @@ export default async function CalendarsPage({
                       <div className="calendar-view-toggle" aria-label="Calendar range">
                         <Link href={href({ view: "day", day: tenantToday })}>Day</Link>
                         <Link href={href({ view: "staff", day: undefined })} aria-current="page">Week</Link>
+                        <Link href={href({ view: "month", day: currentWeek })}>Month</Link>
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
@@ -978,7 +980,7 @@ export default async function CalendarsPage({
                           })}
                           aria-label="Previous week"
                         >
-                          ←
+                          <ChevronLeft size={17} aria-hidden="true" />
                         </Link>
                         <CalendarDatePicker date={currentWeek} label={staffNavigationLabel} scope={calendarDatePickerScope} />
                         <Link
@@ -989,7 +991,7 @@ export default async function CalendarsPage({
                           })}
                           aria-label="Next week"
                         >
-                          →
+                          <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </div>
                       {canManage && services.length && hasCurrentOrFutureWeekDay ? (

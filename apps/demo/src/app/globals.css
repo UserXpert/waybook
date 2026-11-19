@@ -6773,3 +6773,22 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .calendar-date-picker__grid button { width: min(2.15rem, 100%); height: auto; aspect-ratio: 1; }
 /* Allow the picker to extend past a short calendar without clipping its dates. */
 .tenant-dashboard-page .waybook-data-card:has(.calendar-date-picker__popover) { overflow: visible; }
+/* Consistent segmented controls for calendar view and date navigation. */
+.tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav { border: 1px solid #d4d4d8; border-radius: .5rem; background: #fff; }
+.tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav > a { width: 2.25rem; min-height: 2.25rem; border: 0; color: #52525b; }
+.tenant-dashboard-page .waybook-calendar-date-nav > a:first-child { border-radius: .45rem 0 0 .45rem; }
+.tenant-dashboard-page .waybook-calendar-date-nav > a:last-child { border-left: 1px solid #d4d4d8; border-radius: 0 .45rem .45rem 0; }
+.tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker { border-left: 1px solid #d4d4d8; }
+.tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker > button { min-height: 2.25rem; }
+.tenant-dashboard-page .calendar-date-picker__navigation > button { border: 1px solid #dedee2; background: #fafafa; color: #52525b; }
+.tenant-dashboard-page .calendar-date-picker__navigation > button svg,.tenant-dashboard-page .waybook-calendar-date-nav > a svg { display: block; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav { border-color: #4a4a51; background: #1d1d1f; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-date-nav > a:last-child,:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker { border-color: #4a4a51; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-date-picker__navigation > button { border-color: #505058; background: #29292d; color: #f4f4f5; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav > a { color: #ededf0; }
+@media (max-width: 760px) {
+  .tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav { flex: 0 0 auto; }
+  .tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker { flex: 1 1 auto; }
+  .tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker > button { width: 100%; }
+  .tenant-dashboard-page .calendar-date-picker__popover { width: min(19rem, calc(100vw - 6rem)); }
+}
