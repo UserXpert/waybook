@@ -23,12 +23,13 @@ export function DrawerHeaderSubmitActions() {
         form.id = id;
         if (header.querySelector<HTMLButtonElement>(`button[data-drawer-header-submit][form="${id}"]`)) return;
         const close = header.querySelector<HTMLElement>(":scope > .tenant-drawer-close");
-        const actions = header.querySelector<HTMLElement>(".tenant-drawer-header-actions") ?? (() => {
+        const actions = header.querySelector<HTMLElement>(".tenant-drawer-header-actions, .appointment-drawer__header-actions") ?? (() => {
           const element = document.createElement("div");
           element.className = "tenant-drawer-header-actions";
           header.insertBefore(element, close);
           return element;
         })();
+        actions.classList.add("tenant-drawer-header-actions");
         if (close && actions.nextElementSibling !== close) header.insertBefore(actions, close);
         submit.dataset.drawerHeaderSubmit = "true";
         submit.setAttribute("form", id);
