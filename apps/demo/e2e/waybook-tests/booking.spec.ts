@@ -53,8 +53,9 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   const monthDay = calendar.locator(`a.waybook-month-calendar__day[href*="monthDay=${bookingDay}"]`);
   await check(monthDay).toContainText(/booking/);
   await monthDay.click();
+  const bookingDrawer = calendar.locator(".waybook-month-calendar__drawer");
   await check(calendar.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(calendar.getByText(/Waybook E2E customer/)).toBeVisible();
+  await check(bookingDrawer.getByText(/Waybook E2E customer/)).toBeVisible();
 
   await findBooking();
   await page.getByRole("button", { name: "Cancel booking" }).click();
@@ -100,10 +101,11 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await check(page.locator(".team-day-calendar")).toBeVisible();
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await day.click();
+  const monthlyDrawer = page.locator(".waybook-month-calendar__drawer");
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await check(page.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(page.getByText(/Monthly calendar 13/)).toBeVisible();
-  await check(page.getByText(/Monthly calendar 14/)).toBeVisible();
+  await check(monthlyDrawer.getByText(/Monthly calendar 13/)).toBeVisible();
+  await check(monthlyDrawer.getByText(/Monthly calendar 14/)).toBeVisible();
 
   await page.getByLabel("Next month").click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
@@ -115,7 +117,7 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   const scopedDay = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
   await check(scopedDay).toContainText("1 booking");
   await scopedDay.click();
-  await check(page.getByText(/Monthly calendar 15/)).toBeVisible();
+  await check(monthlyDrawer.getByText(/Monthly calendar 15/)).toBeVisible();
 });
 
 test("changing the reschedule day ignores an older availability response", async ({ page }) => {
