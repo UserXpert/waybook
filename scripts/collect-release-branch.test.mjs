@@ -4,21 +4,40 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REQUIRED_CHECKS, collect, evaluatePullRequest, fetchedHeadDecision, flattenPaginatedPages, isFullSha, mergeAttemptDecision, planCollection, releaseBranchDecision } from "./collect-release-branch.mjs";
+import { REQUIRED_CHECKS, checkRunsFromResponse, collect, evaluatePullRequest, fetchedHeadDecision, flattenPaginatedPages, isFullSha, mergeAttemptDecision, planCollection, releaseBranchDecision } from "./collect-release-branch.mjs";
 import { releaseValidationDecision } from "./validate-release-inputs.mjs";
 
 const repository = "UserXpert/waybook";
-const checks = REQUIRED_CHECKS.map((name) => ({ name, conclusion: "SUCCESS" }));
+const checks = REQUIRED_CHECKS.map((name) => ({ name, status: "completed", conclusion: "SUCCESS", app: { slug: "github-actions" } }));
 const pull = (overrides = {}) => ({ number: 1, draft: false, base: { ref: "main" }, labels: [{ name: "release-ready" }], head: { sha: "a".repeat(40), ref: "feature/a", repo: { full_name: repository } }, ...overrides });
 
 test("requires the label, same repository, exact main base and successful checks", () => {
   assert.deepEqual(evaluatePullRequest(pull(), checks, repository), { eligible: true, sha: "a".repeat(40) });
-  const restChecks = REQUIRED_CHECKS.map((name) => ({ name, status: "completed", conclusion: "success" }));
+  const restChecks = REQUIRED_CHECKS.map((name) => ({ name, status: "completed", conclusion: "success", app: { slug: "github-actions" } }));
   assert.deepEqual(evaluatePullRequest(pull(), restChecks, repository), { eligible: true, sha: "a".repeat(40) });
-  assert.deepEqual(evaluatePullRequest(pull(), [...restChecks.slice(0, -1), { name: "migration-history", status: "completed", conclusion: "failure" }], repository), { eligible: false, reason: "required-check-not-success", missing: ["migration-history"] });
+  assert.deepEqual(evaluatePullRequest(pull(), [...restChecks.slice(0, -1), { name: "migration-history", status: "completed", conclusion: "failure", app: { slug: "github-actions" } }], repository), { eligible: false, reason: "required-check-not-success", missing: ["migration-history"] });
   assert.equal(evaluatePullRequest(pull({ labels: [] }), checks, repository).reason, "missing-release-ready-label");
   assert.equal(evaluatePullRequest(pull({ head: { sha: "a".repeat(40), ref: "fork", repo: { full_name: "other/fork" } } }), checks, repository).reason, "not-same-repository");
   assert.deepEqual(evaluatePullRequest(pull(), checks.slice(0, -1), repository), { eligible: false, reason: "required-check-not-success", missing: ["migration-history"] });
+});
+
+test("fails closed on ambiguous, pending, or untrusted required checks", () => {
+  const e2e = checks.find((check) => check.name === "e2e");
+  for (const duplicate of [
+    [{ ...e2e, conclusion: "failure" }, { ...e2e }],
+    [{ ...e2e }, { ...e2e, conclusion: "failure" }],
+  ]) {
+    const candidate = [...checks.filter((check) => check.name !== "e2e"), ...duplicate];
+    assert.deepEqual(evaluatePullRequest(pull(), candidate, repository), { eligible: false, reason: "required-check-not-success", missing: ["e2e"] });
+  }
+  assert.deepEqual(evaluatePullRequest(pull(), checks.map((check) => check.name === "e2e" ? { ...check, status: "in_progress", conclusion: null } : check), repository), { eligible: false, reason: "required-check-not-success", missing: ["e2e"] });
+  assert.deepEqual(evaluatePullRequest(pull(), checks.map((check) => check.name === "e2e" ? { ...check, app: { slug: "untrusted-check-app" } } : check), repository), { eligible: false, reason: "required-check-not-success", missing: ["e2e"] });
+});
+
+test("rejects truncated check-runs pages", () => {
+  assert.deepEqual(checkRunsFromResponse({ total_count: checks.length, check_runs: checks }), checks);
+  assert.throws(() => checkRunsFromResponse({ total_count: 101, check_runs: Array.from({ length: 100 }, () => checks[0]) }), /incomplete/);
+  assert.throws(() => checkRunsFromResponse({ total_count: 1, check_runs: [] }), /incomplete/);
 });
 
 test("plans duplicate and missing-check cases deterministically", () => {
