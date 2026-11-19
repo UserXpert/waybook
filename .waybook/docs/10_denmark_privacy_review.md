@@ -18,6 +18,36 @@ As of 2026-11-19, Waybook's operating and contracting legal entity has not been 
 
 The schema demonstrates possible storage, not that every feature is enabled or every field is populated in the pilot. Complete an inventory of actual flows, recipients, integrations and copies before signing off.
 
+## Current technical-flow inventory — not a retention or compliance decision
+
+The following is a source review of the maintained application at the time of
+this document. It is intended to make the outstanding operational questions
+testable; it is not an assertion that a field is appropriate to collect, that a
+flow is enabled for every tenant, or that any legal obligation is met.
+
+| Flow | Observed collection, storage or presentation path | Operational gap still requiring a decision or verification |
+| --- | --- | --- |
+| Public booking | The maintained public booking form collects name, email and optional phone, plus a versioned policy acknowledgement when configured. It does not expose a free-text note or file input in that flow. | Confirm the approved booking fields and service naming for the actual pilot; a service or appointment can still reveal health information. |
+| Client records | Manager-authorized client forms collect contact details, tags and an `internal_notes` value. The client drawer displays those notes to authorized workspace users; the audit event records the changed field names rather than the note body. | Set permitted note content, access, retention, correction and deletion procedures. A UI label or warning would not technically prevent sensitive content. |
+| Waitlist and staff-entered operational context | A manager can store a bounded waitlist note (1,000 characters); payment and gift-card forms accept bounded internal notes (500 characters). These notes are displayed in relevant staff-facing lists and records. | Decide whether each free-text field is needed for the pilot, define the operational guidance and establish retention/deletion behaviour before real data use. |
+| Staff profiles | Staff details include contact fields, role/profile data and internal notes; staff photos are separately validated and access-controlled. | Verify actual users, access lifecycle, photo deletion and backup expiry. |
+| Email delivery | The outbox can persist a rendered delivery snapshot containing recipient, sender, subject and message text once delivery is attempted. | Determine provider terms, delivery retention, retry visibility and removal from application, provider and backup copies. |
+| Tenant-facing reporting | Client names, services and selected payment notes can appear in staff-facing reports and sales/client records. | Define role visibility, reporting retention, export handling and the supported correction/deletion process. |
+
+### Source-review boundaries
+
+- This review found no tenant self-service personal-data export or deletion
+  route in the maintained application pages and public API directories. That is
+  a gap to resolve, not proof that a separate administrative process does not
+  exist.
+- The current operational boundary excludes clinical records, but ordinary
+  free-text fields remain capable of receiving sensitive information. Do not
+  represent wording, character limits or the operations-only scope as a
+  technical sensitive-data prevention control.
+- Backups, provider copies, runtime logs and support material are outside the
+  application schema review. Their actual retention and deletion behaviour must
+  be verified from the deployed providers and agreed operating procedures.
+
 ## Decisions and evidence required before pilot
 
 - Identify Waybook's contracting entity and the pilot clinic; determine controller and processor roles for each purpose, document processing instructions and execute applicable agreements. Roles depend on actual purposes and activities ([Datatilsynet](https://www.datatilsynet.dk/regler-og-vejledning/grundlaeggende-begreber/rollefordeling-dataansvarlig-og-databehandler)).
