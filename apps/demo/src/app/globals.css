@@ -4124,10 +4124,11 @@ body {
 .tenant-dashboard-page .calendar-filter-panel > summary::after { content: "+"; margin-left: .4rem; color: #737373; font-size: 1rem; font-weight: 500; }
 .tenant-dashboard-page .calendar-filter-panel[open] > summary { border-color: #171717; background: #f4f4f4; }
 .tenant-dashboard-page .calendar-filter-panel[open] > summary::after { content: "−"; }
-.tenant-dashboard-page .calendar-active-filters { display: inline-flex; max-width: min(28rem, 100%); flex-wrap: wrap; align-items: center; gap: .35rem; }
-.tenant-dashboard-page .calendar-active-filters__chip { display: inline-flex; min-width: 0; height: 2.25rem; align-items: center; gap: .25rem; border: 1px solid #d4d4d8; border-radius: .42rem; padding: 0 .25rem 0 .55rem; background: #f8f8f8; color: #3f3f46; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+.tenant-dashboard-page .calendar-active-filters { display: inline-flex; max-width: 100%; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.tenant-dashboard-page .waybook-calendar-toolbar__actions > .calendar-active-filters { flex-basis: 100%; justify-content: flex-end; order: 2; }
+.tenant-dashboard-page .calendar-active-filters__chip { display: inline-flex; min-width: 0; height: 1.7rem; align-items: center; gap: .12rem; border: 1px solid #dedee2; border-radius: .32rem; padding: 0 .12rem 0 .42rem; background: #fafafa; color: #606068; font-size: .64rem; font-weight: 500; white-space: nowrap; }
 .tenant-dashboard-page .calendar-active-filters__chip > span { overflow: hidden; text-overflow: ellipsis; }
-.tenant-dashboard-page .calendar-active-filters__chip button { display: grid; width: 1.55rem; height: 1.55rem; place-items: center; border: 0; border-radius: .3rem; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+.tenant-dashboard-page .calendar-active-filters__chip button { display: grid; width: 1.4rem; height: 1.4rem; place-items: center; border: 0; border-radius: .25rem; padding: 0; background: transparent; color: inherit; cursor: pointer; }
 .tenant-dashboard-page .calendar-active-filters__chip button:hover,.tenant-dashboard-page .calendar-active-filters__chip button:focus-visible { background: #e4e4e7; color: #171717; outline: 0; }
 .tenant-dashboard-page .calendar-filter-panel__content {
   position: absolute;
@@ -4168,6 +4169,7 @@ body {
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-filter-panel__content { border-color: #3a3a3f; background: #202023; box-shadow: 0 .75rem 1.75rem rgba(0, 0, 0, .45); }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-filter-panel__content .calendar-row-filter__toggle { color: #d4d4d8; }
 @media (max-width: 760px) {
+  .tenant-dashboard-page .waybook-calendar-toolbar__actions > .calendar-active-filters { justify-content: flex-start; }
   .tenant-dashboard-page .calendar-filter-panel[open] { flex-basis: 100%; }
   .tenant-dashboard-page .calendar-filter-panel__content { position: static; width: 100%; margin-top: .5rem; box-shadow: none; }
   .tenant-dashboard-page .calendar-filter-panel__content .calendar-row-filter { align-items: stretch; flex-direction: column; }
