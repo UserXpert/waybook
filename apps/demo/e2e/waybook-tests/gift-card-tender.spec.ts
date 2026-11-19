@@ -34,7 +34,7 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
 
     await page.goto("/login");
     await page.getByLabel("Work email").fill("owner@nordic.local");
-    await page.getByPlaceholder("Enter your password").fill("local-preview-test-only");
+    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/nordic\/app/, { timeout: 30_000 });
     await page.goto(`/nordic/app/sales?sale=${fixture.sale.id}`);
@@ -55,7 +55,7 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
       try {
         const readPage = await readContext.newPage();
         await readPage.goto("/login"); await readPage.getByLabel("Work email").fill(readEmail);
-        await readPage.getByPlaceholder("Enter your password").fill("local-preview-test-only");
+        await readPage.getByPlaceholder("Enter your password").fill("waybook-local-only");
         await readPage.getByRole("button", { name: "Sign in" }).click();
         await expect(readPage).toHaveURL(/\/nordic\/app/, { timeout: 30_000 });
         console.log("Read-only test account signed in");
