@@ -5437,6 +5437,45 @@ body {
   backdrop-filter: none !important;
 }
 
+/* The product wordmark and the workspace name are a single, baseline-aligned
+   header unit. The supplied brand assets have dedicated light and dark marks. */
+.tenant-dashboard-page .tenant-dashboard-nav__workspace {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  min-width: 0;
+}
+.tenant-dashboard-page .tenant-dashboard-nav__brand {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 1.25rem;
+}
+.tenant-dashboard-page .tenant-dashboard-nav__logo {
+  display: block;
+  width: 4.8rem;
+  height: auto;
+  /* The arrow in the supplied mark rises above the lettering; compensate for
+     that extra optical height so the wordmark sits on the workspace baseline. */
+  transform: translateY(-.24rem);
+}
+.tenant-dashboard-page .tenant-dashboard-nav__logo--light { display: none; }
+.tenant-dashboard-page .tenant-dashboard-nav__logo--dark { display: block; }
+.tenant-dashboard-page .tenant-dashboard-nav__workspace strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The dashboard navigation is intentionally a dark surface in both modes, so
+   its white brand asset remains legible when the surrounding page changes. */
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-dashboard-nav__logo--light { display: none; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-dashboard-nav__logo--dark { display: block; }
+@media (max-width: 760px) {
+  .tenant-dashboard-page .tenant-dashboard-nav__workspace { gap: .45rem; }
+  .tenant-dashboard-page .tenant-dashboard-nav__logo { width: 4.35rem; }
+}
+
 /* Calendar controls have a deliberately compact mobile composition. The
    original sidebar-era rules turned the selectors into tall flex columns and
    left the account trigger outside the header grid. */
