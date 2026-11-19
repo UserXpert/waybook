@@ -306,9 +306,9 @@ export async function saveStaffWorkingHours(formData: FormData) {
   }
   const db = await validStaffMember(tenant, memberId);
   await db.begin(async (tx) => {
-    await tx`DELETE FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
-    for (const entry of schedule) await tx`INSERT INTO availability_rules (tenant_id, team_member_id, rrule, start_time, end_time, timezone) VALUES (${tenant.id}, ${memberId}, ${`FREQ=WEEKLY;BYDAY=${entry.day}`}, ${entry.startTime}, ${entry.endTime}, ${tenant.timezone})`;
-    await tx`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.updated"}, 'team_member', ${memberId}, ${JSON.stringify({ schedule })}::jsonb)`;
+    await tx.unsafe("DELETE FROM availability_rules WHERE tenant_id = $1 AND team_member_id = $2", [tenant.id, memberId]);
+    for (const entry of schedule) await tx.unsafe("INSERT INTO availability_rules (tenant_id, team_member_id, rrule, start_time, end_time, timezone) VALUES ($1, $2, $3, $4, $5, $6)", [tenant.id, memberId, `FREQ=WEEKLY;BYDAY=${entry.day}`, entry.startTime, entry.endTime, tenant.timezone]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'team_member', $3, $4::jsonb)", [tenant.id, "staff.availability.updated", memberId, JSON.stringify({ schedule })]);
   });
   revalidateStaff();
 }
