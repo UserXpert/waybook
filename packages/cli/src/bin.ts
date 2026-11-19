@@ -38,7 +38,6 @@ import { generateThebookingkitConfig, generateEnvTemplate } from "./config.js";
 
 const MANIFEST_FILE = ".thebookingkit-manifest.json";
 const DEFAULT_COMPONENTS_DIR = "src/components/thebookingkit";
-const REGISTRY_BASE_URL = "https://docs.thebookingkit.dev/registry";
 
 const program = new Command();
 
@@ -314,14 +313,14 @@ program
   .description("Add one or more Booking Kit components to your project")
   .option("-d, --dir <path>", "Components directory", DEFAULT_COMPONENTS_DIR)
   .option("-f, --force", "Overwrite existing files", false)
-  .option("--registry <url>", "Registry URL", REGISTRY_BASE_URL)
+  .option("--registry <url>", "Optional HTTPS registry URL when local source is unavailable")
   .option("--dry-run", "Show what would be written without writing any files", false)
   .action(async (componentNames: string[], options) => {
     const isDryRun: boolean = options.dryRun as boolean;
 
     // Validate registry URL — only https:// is permitted.
-    const registryUrl: string = options.registry as string;
-    if (!registryUrl.startsWith("https://")) {
+    const registryUrl = options.registry as string | undefined;
+    if (registryUrl && !registryUrl.startsWith("https://")) {
       console.error(
         `Invalid --registry URL "${registryUrl}": only https:// URLs are permitted.`,
       );
@@ -635,12 +634,12 @@ program
   .argument("[components...]", "Component name(s) to update (defaults to all installed)")
   .description("Re-fetch component source from the registry")
   .option("-f, --force", "Overwrite even locally modified components", false)
-  .option("--registry <url>", "Registry URL", REGISTRY_BASE_URL)
+  .option("--registry <url>", "Optional HTTPS registry URL when local source is unavailable")
   .option("--dry-run", "Show what would be updated without writing files", false)
   .action(async (componentArgs: string[], options) => {
     const isDryRun: boolean = options.dryRun as boolean;
-    const registryUrl: string = options.registry as string;
-    if (!registryUrl.startsWith("https://")) {
+    const registryUrl = options.registry as string | undefined;
+    if (registryUrl && !registryUrl.startsWith("https://")) {
       console.error(
         `Invalid --registry URL "${registryUrl}": only https:// URLs are permitted.`,
       );
@@ -876,9 +875,8 @@ program
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch a component's source file from the local registry (development) or
- * the remote registry URL (production). A 10-second network timeout is applied
- * via `AbortSignal.timeout`.
+ * Fetch a component from the workspace registry or an explicitly configured
+ * remote registry. Remote requests use a 10-second timeout.
  *
  * @param sourcePath - Relative path within the registry (e.g., "components/foo.tsx")
  * @param registryBaseUrl - Base URL of the remote component registry
@@ -886,7 +884,7 @@ program
  */
 async function fetchComponentSource(
   sourcePath: string,
-  registryBaseUrl: string,
+  registryBaseUrl: string | undefined,
 ): Promise<string> {
   // Guard against path traversal in registry-supplied sourcePath values.
   const normalised = sourcePath.replace(/\\/g, "/");
@@ -896,13 +894,16 @@ async function fetchComponentSource(
     );
   }
 
-  // In development: try to read from local registry/ui/src/
-  const localPath = resolve("registry", "ui", "src", sourcePath);
+  // Prefer the registry shipped in this workspace, independent of the caller’s directory.
+  const localPath = resolve(__cliDir, "../../../registry/ui/src", normalised);
   if (existsSync(localPath)) {
     return readFileSync(localPath, "utf-8");
   }
+  if (!registryBaseUrl) {
+    throw new Error("Component source is unavailable locally. Supply an HTTPS --registry URL.");
+  }
 
-  // In production: fetch from registry URL with a 10-second timeout.
+  // Fetch from an explicitly configured registry with a 10-second timeout.
   const url = `${registryBaseUrl}/${sourcePath}`;
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!response.ok) {
