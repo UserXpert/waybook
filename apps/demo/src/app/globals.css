@@ -6797,3 +6797,42 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   .tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker > button { width: 100%; }
   .tenant-dashboard-page .calendar-date-picker__popover { width: min(19rem, calc(100vw - 6rem)); }
 }
+
+/* Month overview: a full-width schedule with direct booking and day links. */
+.tenant-dashboard-page .waybook-month-calendar { max-width: none; width: 100%; }
+.tenant-dashboard-page .waybook-month-calendar__day { display: block; min-width: 0; padding: .55rem; }
+.tenant-dashboard-page .waybook-month-calendar__day:hover { outline: none; background: inherit; }
+.tenant-dashboard-page .waybook-month-calendar__day-link { position: absolute; inset: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: .2rem; padding: .55rem; color: inherit; text-decoration: none; }
+.tenant-dashboard-page .waybook-month-calendar__day-link:focus-visible { outline: 2px solid var(--waybook-accent, #262626); outline-offset: -2px; }
+.tenant-dashboard-page .waybook-month-calendar__count { color: #71717a; font-size: .65rem; white-space: nowrap; }
+.tenant-dashboard-page .waybook-month-calendar__appointments { position: relative; z-index: 2; display: grid; gap: .25rem; margin-top: 1.8rem; pointer-events: none; }
+.tenant-dashboard-page .waybook-month-calendar__appointment,.tenant-dashboard-page .waybook-month-calendar__more { overflow: hidden; min-width: 0; border-left: 3px solid var(--waybook-accent, #777); border-radius: .25rem; padding: .22rem .3rem; background: #f1f1f3; color: #27272a; font-size: .68rem; line-height: 1.3; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto; }
+.tenant-dashboard-page .waybook-month-calendar__appointment:hover,.tenant-dashboard-page .waybook-month-calendar__appointment:focus-visible { background: #e4e4e7; outline: 2px solid var(--waybook-accent, #262626); }
+.tenant-dashboard-page .waybook-month-calendar__more { width: fit-content; border: 0; background: transparent; color: #52525b; }
+.tenant-dashboard-page .waybook-month-calendar__preview { top: 100%; left: .55rem; z-index: 8; width: 15rem; max-width: min(15rem, calc(100vw - 2rem)); padding: .75rem; background: #fff; color: #27272a; }
+.tenant-dashboard-page .waybook-month-calendar__preview a { display: block; border-radius: .25rem; padding: .2rem; color: #27272a; text-decoration: none; }
+.tenant-dashboard-page .waybook-month-calendar__preview a:hover,.tenant-dashboard-page .waybook-month-calendar__preview a:focus-visible { background: #f4f4f5; outline: 2px solid var(--waybook-accent, #262626); }
+.tenant-dashboard-page .waybook-month-calendar__day:hover .waybook-month-calendar__preview { display: none; }
+.tenant-dashboard-page .waybook-month-calendar__day:has(.waybook-month-calendar__day-link:hover) .waybook-month-calendar__preview,.tenant-dashboard-page .waybook-month-calendar__day:has(.waybook-month-calendar__day-link:focus-visible) .waybook-month-calendar__preview,.tenant-dashboard-page .waybook-month-calendar__preview:hover,.tenant-dashboard-page .waybook-month-calendar__preview:focus-within { display: grid; }
+.tenant-dashboard-page .waybook-month-calendar__day:nth-child(7n),.tenant-dashboard-page .waybook-month-calendar__day:nth-child(7n + 6) { --month-preview-left: auto; }
+.tenant-dashboard-page .waybook-month-calendar__day:nth-child(7n) .waybook-month-calendar__preview,.tenant-dashboard-page .waybook-month-calendar__day:nth-child(7n + 6) .waybook-month-calendar__preview { left: auto; right: .55rem; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-month-calendar__appointment { background: #303036; color: #f4f4f5; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-month-calendar__more,:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-month-calendar__count { color: #d4d4d8; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-month-calendar__preview { border-color: #505058; background: #29292d; color: #f4f4f5; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-month-calendar__preview a { color: #f4f4f5; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-month-calendar__preview a:hover,:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-month-calendar__preview a:focus-visible { background: #414148; }
+.tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav { height: 2.25rem; min-height: 2.25rem; align-items: stretch; }
+.tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav > a,.tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker > button { box-sizing: border-box; height: 100%; min-height: 0; }
+.tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav > a:last-child { border-left: 1px solid #d4d4d8; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav > a:last-child { border-color: #4a4a51; }
+@media (max-width: 760px) {
+  .tenant-dashboard-page .waybook-month-calendar__day { min-height: 6.5rem; padding: .25rem; }
+  .tenant-dashboard-page .waybook-month-calendar__day-link { padding: .3rem; }
+  .tenant-dashboard-page .waybook-month-calendar__count { display: none; }
+  .tenant-dashboard-page .waybook-month-calendar__appointments { margin-top: 1.4rem; gap: .15rem; }
+  .tenant-dashboard-page .waybook-month-calendar__appointment,.tenant-dashboard-page .waybook-month-calendar__more { padding: .15rem; font-size: .58rem; }
+  .tenant-dashboard-page .waybook-month-calendar__preview { display: none !important; }
+}
+.tenant-dashboard-page .waybook-month-calendar { overflow: visible; }
+.tenant-dashboard-page .waybook-month-calendar__day:focus-within { z-index: 3; }
+.tenant-dashboard-page .waybook-month-calendar__day:nth-last-child(-n + 7) .waybook-month-calendar__preview { top: auto; bottom: 100%; }

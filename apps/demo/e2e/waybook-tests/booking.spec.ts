@@ -120,9 +120,10 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await chooseCalendarDate(page, monthDay);
   await check(page).toHaveURL(new RegExp(`day=${monthDay}`));
 
-  const day = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
-  await check(day).toContainText("3 bookings");
-  await check(day).toHaveAttribute("aria-describedby", `month-preview-${monthDay}`);
+  const day = page.locator(`a.waybook-month-calendar__day-link[href*="day=${monthDay}"]`);
+  const dayCell = day.locator("..");
+  await check(dayCell).toContainText("3 bookings");
+  await check(dayCell.locator(".waybook-month-calendar__appointment")).toHaveCount(3);
   const dayView = page.getByRole("link", { name: "Day", exact: true });
   expect(await dayView.getAttribute("href")).not.toContain("employee=");
   await dayView.click();
@@ -133,13 +134,15 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await page.getByRole("link", { name: "Month", exact: true }).click();
   await check(page.locator(".waybook-month-calendar")).toBeVisible();
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
+  await dayCell.locator(".waybook-month-calendar__appointment").first().click();
+  await check(page.getByRole("link", { name: "Close appointment" })).toBeVisible();
+  await page.getByRole("link", { name: "Close appointment" }).click();
   await day.click();
-  const monthlyDrawer = page.locator(".waybook-month-calendar__drawer");
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
-  await check(page.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(monthlyDrawer.getByText(/Monthly calendar 13/)).toBeVisible();
-  await check(monthlyDrawer.getByText(/Monthly calendar 14/)).toBeVisible();
+  await check(page).toHaveURL(new RegExp(`view=day.*day=${monthDay}`));
+  await check(page.locator(".team-day-calendar")).toBeVisible();
 
+  await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await page.getByLabel("Next month").click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await page.getByLabel("Previous month").click();
@@ -147,10 +150,9 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await page.getByLabel("Staff").fill("Z E2E roster 21");
   await page.getByRole("option", { name: "Z E2E roster 21" }).click();
   await check(page).toHaveURL(/employee=/);
-  const scopedDay = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
+  const scopedDay = page.locator(`a.waybook-month-calendar__day-link[href*="day=${monthDay}"]`).locator("..");
   await check(scopedDay).toContainText("1 booking");
-  await scopedDay.click();
-  await check(monthlyDrawer.getByText(/Monthly calendar 15/)).toBeVisible();
+  await check(scopedDay.locator(".waybook-month-calendar__appointment")).toContainText(/Monthly calendar 15/);
 });
 
 test("changing the reschedule day ignores an older availability response", async ({ page }) => {

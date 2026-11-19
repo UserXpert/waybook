@@ -242,7 +242,6 @@ export default async function CalendarsPage({
     before,
     createStaff,
     showOffShift,
-    monthDay,
   } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -656,9 +655,6 @@ export default async function CalendarsPage({
     gridRow: visibleTeamMembers.findIndex((member) => member.id === booking.teamMemberId) + 2,
     borderLeftColor: booking.teamMemberColor,
   });
-  const selectedMonthDay = monthlyView && /^\d{4}-\d{2}-\d{2}$/.test(monthDay ?? "") && monthDay! >= currentMonth && monthDay! < addMonths(currentMonth, 1)
-    ? monthDay!
-    : undefined;
   const monthlyBookings = monthScopedBookings.filter(
     (booking) => !selectedService || booking.serviceId === selectedService.id,
   );
@@ -738,17 +734,21 @@ export default async function CalendarsPage({
                       {monthDays.map((date) => {
                         const dayBookings = monthBookingsByDay.get(date) ?? [];
                         const label = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
-                        return <Link key={date} href={href({ view: "month", day: currentMonth, monthDay: date })} className={`waybook-month-calendar__day${selectedMonthDay === date ? " is-selected" : ""}`} aria-current={selectedMonthDay === date ? "date" : undefined} aria-describedby={`month-preview-${date}`}>
-                          <span className="waybook-month-calendar__date">{date.slice(-2).replace(/^0/, "")}</span>
-                          <strong>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}</strong>
-                          <span className="waybook-month-calendar__preview" id={`month-preview-${date}`} role="tooltip"><b>{label}</b>{dayBookings.length ? dayBookings.slice(0, 3).map((booking) => <span key={booking.id}>{clock.format(booking.startsAt)} · {booking.customerName}</span>) : <span>No bookings</span>}{dayBookings.length > 3 ? <span>+{dayBookings.length - 3} more</span> : null}</span>
-                        </Link>;
+                        const dayHref = href({ view: "day", day: date });
+                        const staffCount = new Set(dayBookings.map((booking) => booking.teamMemberId)).size;
+                        return <div key={date} className="waybook-month-calendar__day">
+                          <Link href={dayHref} className="waybook-month-calendar__day-link" aria-label={`${label}, ${dayBookings.length} ${dayBookings.length === 1 ? "booking" : "bookings"}. Open day view`}>
+                            <span className="waybook-month-calendar__date">{date.slice(-2).replace(/^0/, "")}</span>
+                            {dayBookings.length > 0 ? <span className="waybook-month-calendar__count">{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}</span> : null}
+                          </Link>
+                          {dayBookings.length > 0 ? <div className="waybook-month-calendar__preview" aria-label={`Bookings for ${label}`}><b>{label}</b><span>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"} · {staffCount} {staffCount === 1 ? "staff member" : "staff"}</span>{dayBookings.slice(0, 5).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })}>{clock.format(booking.startsAt)} · {booking.customerName}</Link>)}{dayBookings.length > 5 ? <Link href={dayHref}>+{dayBookings.length - 5} more · Open day</Link> : null}</div> : null}
+                          <div className="waybook-month-calendar__appointments">
+                            {dayBookings.slice(0, 3).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })} className="waybook-month-calendar__appointment" style={{ borderLeftColor: booking.teamMemberColor }} title={`${clock.format(booking.startsAt)} · ${booking.customerName} · ${booking.teamMemberName}`}><span>{clock.format(booking.startsAt)}</span> {booking.customerName}</Link>)}
+                            {dayBookings.length > 3 ? <Link className="waybook-month-calendar__more" href={dayHref}>+{dayBookings.length - 3} more</Link> : null}
+                          </div>
+                        </div>;
                       })}
                     </div>
-                    {selectedMonthDay ? <aside className="waybook-month-calendar__drawer" aria-label={`Bookings for ${selectedMonthDay}`}>
-                      <header><div><p>DAY DETAILS</p><h3>{new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${selectedMonthDay}T12:00:00Z`))}</h3></div><Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-label="Close day details">×</Link></header>
-                      {(monthBookingsByDay.get(selectedMonthDay) ?? []).length ? <ol>{(monthBookingsByDay.get(selectedMonthDay) ?? []).map((booking) => <li key={booking.id}><Link href={href({ view: "month", day: currentMonth, monthDay: selectedMonthDay, booking: booking.id })}><strong>{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)}</strong><span>{booking.customerName} · {booking.serviceTitle}</span><small>{booking.teamMemberName}</small></Link></li>)}</ol> : <p>No bookings on this day.</p>}
-                    </aside> : null}
                   </div>
                 </section>
               ) : teamView ? (
