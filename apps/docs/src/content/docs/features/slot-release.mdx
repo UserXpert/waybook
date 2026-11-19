@@ -20,8 +20,8 @@ Strategies are **optional** — omit `slotRelease` from `SlotComputeOptions` and
 Enable a rolling window strategy to limit slot visibility:
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
-import type { SlotComputeOptions } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
+import type { SlotComputeOptions } from "@waybook/core";
 
 const options: SlotComputeOptions = {
   duration: 60,
@@ -54,7 +54,7 @@ Show slots only within a sliding time horizon from the current moment.
 ### Configuration
 
 ```typescript
-import type { RollingWindowConfig } from "@thebookingkit/core";
+import type { RollingWindowConfig } from "@waybook/core";
 
 const config: RollingWindowConfig = {
   strategy: "rolling_window",
@@ -74,8 +74,8 @@ Given `now` (current time), only slots whose `start` time falls at or before `no
 ### Example: Restaurant dinner booking
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
-import type { SlotComputeOptions } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
+import type { SlotComputeOptions } from "@waybook/core";
 
 const restaurantOptions: SlotComputeOptions = {
   duration: 90,  // 90-minute seatings
@@ -112,7 +112,7 @@ Hide later time windows until earlier ones reach a fill-rate threshold.
 ### Configuration
 
 ```typescript
-import type { FillEarlierFirstConfig } from "@thebookingkit/core";
+import type { FillEarlierFirstConfig } from "@waybook/core";
 
 const config: FillEarlierFirstConfig = {
   strategy: "fill_earlier_first",
@@ -143,8 +143,8 @@ With boundaries `["09:00", "12:00", "17:00"]`, your day has 4 windows:
 ### Example: Barber shop with morning priority
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
-import type { SlotComputeOptions } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
+import type { SlotComputeOptions } from "@waybook/core";
 
 // Barber wants to fill mornings first, then afternoons
 const barberOptions: SlotComputeOptions = {
@@ -184,7 +184,7 @@ Return all slots but annotate hard-to-fill windows with a discount percentage.
 ### Configuration
 
 ```typescript
-import type { DiscountIncentiveConfig } from "@thebookingkit/core";
+import type { DiscountIncentiveConfig } from "@waybook/core";
 
 const config: DiscountIncentiveConfig = {
   strategy: "discount_incentive",
@@ -220,8 +220,8 @@ Given tiers:
 ### Example: Therapist early-bird pricing
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
-import type { SlotComputeOptions, Slot } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
+import type { SlotComputeOptions, Slot } from "@waybook/core";
 
 const therapistOptions: SlotComputeOptions = {
   duration: 45,
@@ -269,8 +269,8 @@ When a window is empty (0 candidate slots), its fill rate is 100% (vacuously ful
 Slot release strategies work seamlessly with resource-based booking via `getResourceAvailableSlots()`:
 
 ```typescript
-import { getResourceAvailableSlots } from "@thebookingkit/core";
-import type { SlotComputeOptions } from "@thebookingkit/core";
+import { getResourceAvailableSlots } from "@waybook/core";
+import type { SlotComputeOptions } from "@waybook/core";
 
 const restaurantOptions: SlotComputeOptions = {
   duration: 90,
@@ -304,7 +304,7 @@ Slot release strategies compose cleanly with other Booking Kit features:
 **With booking limits:**
 
 ```typescript
-import { getAvailableSlots, filterSlotsByLimits } from "@thebookingkit/core";
+import { getAvailableSlots, filterSlotsByLimits } from "@waybook/core";
 
 // 1. Apply booking limits first (filters by event type, max per day, etc.)
 let slots = getAvailableSlots(

@@ -1,5 +1,5 @@
 /**
- * Embed configuration utilities for @thebookingkit/embed.
+ * Embed configuration utilities for @waybook/embed.
  *
  * Generates embed configuration, validates embed options,
  * and produces HTML snippets for copy-paste integration.

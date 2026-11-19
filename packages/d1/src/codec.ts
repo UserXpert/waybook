@@ -22,11 +22,11 @@
  *   values in the form "YYYY-MM-DDTHH:mm:ss.sssZ".
  * - Query bounds passed to Drizzle (`gte`, `lte`) MUST use `D1DateCodec.encode()`.
  * - Rows retrieved from D1 MUST be parsed with `D1DateCodec.decode()` before
- *   being passed to `@thebookingkit/core` functions.
+ *   being passed to `@waybook/core` functions.
  */
 
 import { fromZonedTime } from "date-fns-tz";
-import { isValidTimezone } from "@thebookingkit/core";
+import { isValidTimezone } from "@waybook/core";
 
 /** The canonical UTC-Z regex. Matches "YYYY-MM-DDTHH:mm:ss.sssZ". */
 const UTC_ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
@@ -152,7 +152,7 @@ export const D1DateCodec = {
 
   /**
    * Decode a D1 text column value into a UTC `Date` object suitable for
-   * passing to `@thebookingkit/core` functions (`getAvailableSlots`, `isSlotAvailable`).
+   * passing to `@waybook/core` functions (`getAvailableSlots`, `isSlotAvailable`).
    *
    * Accepts:
    * - UTC-Z strings (canonical format, preferred).

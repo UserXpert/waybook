@@ -23,7 +23,7 @@ interface PaymentAdapter {
 }
 ```
 
-`@thebookingkit/server` ships `StripePaymentAdapter` as a concrete implementation. `stripe` is an optional peer dependency — install it only if you use this adapter:
+`@waybook/server` ships `StripePaymentAdapter` as a concrete implementation. `stripe` is an optional peer dependency — install it only if you use this adapter:
 
 ```bash
 npm install stripe
@@ -31,7 +31,7 @@ npm install stripe
 
 ```typescript
 import Stripe from "stripe";
-import { StripePaymentAdapter } from "@thebookingkit/server";
+import { StripePaymentAdapter } from "@waybook/server";
 
 export const paymentAdapter = new StripePaymentAdapter({
   stripe: new Stripe(process.env.STRIPE_SECRET_KEY!),
@@ -44,7 +44,7 @@ export const paymentAdapter = new StripePaymentAdapter({
 Configure a partial upfront charge per event type via `deposit_cents` (fixed) or `deposit_percentage` (variable). When both are set, percentage wins.
 
 ```typescript
-import { computeDepositAmount, requiresDeposit } from "@thebookingkit/core";
+import { computeDepositAmount, requiresDeposit } from "@waybook/core";
 
 requiresDeposit({}, 10000);                                  // false
 requiresDeposit({ depositPercentage: 25 }, 10000);            // true
@@ -56,7 +56,7 @@ computeDepositAmount({ depositCents: 99999 }, 10000);         // 10000 (capped a
 The booking flow uses `initiateDeposit` to create the PaymentIntent and `refundDeposit` to release it on cancellation per the policy below:
 
 ```typescript
-import { initiateDeposit, refundDeposit } from "@thebookingkit/server";
+import { initiateDeposit, refundDeposit } from "@waybook/server";
 
 const result = await initiateDeposit(paymentAdapter, {
   bookingId: booking.id,
@@ -73,8 +73,8 @@ const result = await initiateDeposit(paymentAdapter, {
 Define tiered fee schedules based on how far in advance a booking is cancelled:
 
 ```typescript
-import { evaluateCancellationFee, validateCancellationPolicy } from "@thebookingkit/core";
-import type { CancellationPolicy, CancellationFeeResult } from "@thebookingkit/core";
+import { evaluateCancellationFee, validateCancellationPolicy } from "@waybook/core";
+import type { CancellationPolicy, CancellationFeeResult } from "@waybook/core";
 
 // Free cancellation if 48+ hours notice, escalating fees for closer cancellations
 const policy: CancellationPolicy = [
@@ -111,8 +111,8 @@ console.log(fee);
 Tiered cancellation scenarios:
 
 ```typescript
-import { evaluateCancellationFee } from "@thebookingkit/core";
-import type { CancellationPolicy } from "@thebookingkit/core";
+import { evaluateCancellationFee } from "@waybook/core";
+import type { CancellationPolicy } from "@waybook/core";
 
 const policy: CancellationPolicy = [
   { hoursBefore: 48, feePercentage: 0 },
@@ -161,8 +161,8 @@ import {
   validateCurrency,
   formatPaymentAmount,
   computePaymentSummary,
-} from "@thebookingkit/core";
-import type { PaymentRecord, CancellationPolicy } from "@thebookingkit/core";
+} from "@waybook/core";
+import type { PaymentRecord, CancellationPolicy } from "@waybook/core";
 
 // Check if an event type requires payment
 requiresPayment({ priceCents: 5000 });           // true
@@ -236,7 +236,7 @@ console.log(summary);
 
 ```typescript
 // app/api/webhooks/stripe/route.ts
-import { handleStripeWebhook } from "@thebookingkit/server";
+import { handleStripeWebhook } from "@waybook/server";
 
 export async function POST(req: Request) {
   const result = await handleStripeWebhook(

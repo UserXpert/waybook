@@ -12,7 +12,7 @@ The Booking Kit's webhook system delivers signed HTTP payloads to subscriber end
 Every webhook payload is signed with the subscription's secret:
 
 ```typescript
-import { signWebhookPayload, verifyWebhookSignature, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@thebookingkit/server";
+import { signWebhookPayload, verifyWebhookSignature, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@waybook/server";
 
 // Signing (sender side)
 const payload = {
@@ -64,7 +64,7 @@ Register a webhook subscription:
 
 ```typescript
 import { db } from "@/db";
-import { webhookSubscriptions } from "@thebookingkit/db";
+import { webhookSubscriptions } from "@waybook/db";
 import { v4 as uuid } from "uuid";
 
 const subscription = await db
@@ -87,7 +87,7 @@ console.log("Webhook registered:", subscription[0].id);
 Sending a webhook:
 
 ```typescript
-import { signWebhookPayload } from "@thebookingkit/server";
+import { signWebhookPayload } from "@waybook/server";
 
 async function sendWebhook(subscription, bookingData) {
   const payload = {
@@ -124,7 +124,7 @@ async function sendWebhook(subscription, bookingData) {
 Handle incoming webhooks with verification:
 
 ```typescript
-import { verifyWebhookSignature } from "@thebookingkit/server";
+import { verifyWebhookSignature } from "@waybook/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
 Failed deliveries are retried with exponential backoff:
 
 ```typescript
-import { getRetryDelay, isSuccessResponse, DEFAULT_RETRY_CONFIG } from "@thebookingkit/server";
+import { getRetryDelay, isSuccessResponse, DEFAULT_RETRY_CONFIG } from "@waybook/server";
 
 // Default config: 3 retries, 60s base delay, 3600s max delay
 const delay = getRetryDelay(0, DEFAULT_RETRY_CONFIG);  // ~60s
@@ -181,8 +181,8 @@ isSuccessResponse(404); // false
 ## Subscription management
 
 ```typescript
-import { validateWebhookSubscription, matchWebhookSubscriptions } from "@thebookingkit/server";
-import type { WebhookSubscription } from "@thebookingkit/core";
+import { validateWebhookSubscription, matchWebhookSubscriptions } from "@waybook/server";
+import type { WebhookSubscription } from "@waybook/core";
 
 // Validate a subscription before saving
 try {

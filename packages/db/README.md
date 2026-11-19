@@ -1,8 +1,8 @@
-# @thebookingkit/db
+# @waybook/db
 
 Drizzle ORM schema and migrations for PostgreSQL-backed booking systems.
 
-[![npm version](https://img.shields.io/npm/v/@thebookingkit/db)](https://www.npmjs.com/package/@thebookingkit/db)
+[![npm version](https://img.shields.io/npm/v/@waybook/db)](https://www.npmjs.com/package/@waybook/db)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
@@ -11,14 +11,14 @@ Part of [The Booking Kit](https://docs.thebookingkit.dev) — The Headless Booki
 ## Install
 
 ```bash
-npm install @thebookingkit/db
+npm install @waybook/db
 ```
 
 ## Quick Start
 
 ```ts
-import { createDb } from "@thebookingkit/db";
-import { bookings, eventTypes, providers } from "@thebookingkit/db/schema";
+import { createDb } from "@waybook/db";
+import { bookings, eventTypes, providers } from "@waybook/db/schema";
 
 const db = createDb(process.env.DATABASE_URL!);
 const upcoming = await db.select().from(bookings).where(/* ... */);
@@ -32,7 +32,7 @@ const upcoming = await db.select().from(bookings).where(/* ... */);
 - **Booking audit trail** — Append-only `booking_events` table tracks every status change
 - **Multi-tenancy ready** — Optional `organization_id` on all tables
 - **Custom migrations** — `runCustomMigrations` for btree_gist, audit triggers, and GDPR compliance
-- **Multiple entry points** — `@thebookingkit/db`, `@thebookingkit/db/schema`, `@thebookingkit/db/client`
+- **Multiple entry points** — `@waybook/db`, `@waybook/db/schema`, `@waybook/db/client`
 
 ## Documentation
 

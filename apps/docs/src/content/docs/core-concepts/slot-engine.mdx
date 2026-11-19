@@ -123,8 +123,8 @@ The remaining windows are sliced into individual slots of the configured `durati
 Compute available slots for a provider working Mon-Fri 9am-5pm:
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 const rules: AvailabilityRuleInput[] = [
   {
@@ -169,8 +169,8 @@ console.log(slots[0]);
 Check if a specific time slot is available without computing all slots:
 
 ```typescript
-import { isSlotAvailable } from "@thebookingkit/core";
-import type { BookingInput } from "@thebookingkit/core";
+import { isSlotAvailable } from "@waybook/core";
+import type { BookingInput } from "@waybook/core";
 
 const existingBookings: BookingInput[] = [
   {
@@ -205,12 +205,12 @@ if (result.available) {
 Compute slots for a provider with a day off, shortened hours on one day, and an existing booking:
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
 import type {
   AvailabilityRuleInput,
   AvailabilityOverrideInput,
   BookingInput,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 const rules: AvailabilityRuleInput[] = [
   {
@@ -274,7 +274,7 @@ console.log(slots.length);  // Output: 53
 Buffer time creates "guard zones" around bookings:
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
 
 // Booking from 2:00 PM to 3:00 PM UTC
 const bookings = [

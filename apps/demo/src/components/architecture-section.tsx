@@ -71,7 +71,7 @@ export function ArchitectureSection() {
         <div className="arch-diagram">
           <div className="arch-layer arch-layer-core">
             <div className="arch-layer-label">Layer 1</div>
-            <div className="arch-layer-name">@thebookingkit/core</div>
+            <div className="arch-layer-name">@waybook/core</div>
             <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
               Pure scheduling math — no side effects, no I/O, no framework dependencies.
               Works in browser, Node, and Cloudflare Workers.
@@ -96,7 +96,7 @@ export function ArchitectureSection() {
 
           <div className="arch-layer arch-layer-server">
             <div className="arch-layer-label">Layer 2</div>
-            <div className="arch-layer-name">@thebookingkit/server</div>
+            <div className="arch-layer-name">@waybook/server</div>
             <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>
               Backend infrastructure with swappable adapters. Handles auth, email, webhooks,
               background jobs, and booking tokens.

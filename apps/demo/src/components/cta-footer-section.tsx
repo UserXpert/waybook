@@ -43,13 +43,13 @@ export function CTAFooterSection() {
             </p>
           </div>
           <div>
-            <CopyCommand command="npm install @thebookingkit/core" label="Core Only" />
+            <CopyCommand command="npm install @waybook/core" label="Core Only" />
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
               Just the scheduling engine &mdash; pure functions, zero framework dependencies
             </p>
           </div>
           <div>
-            <CopyCommand command="npm install @thebookingkit/core @thebookingkit/server @waybook/db" label="Full Stack" />
+            <CopyCommand command="npm install @waybook/core @waybook/server @waybook/db" label="Full Stack" />
             <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
               Engine + server adapters + database schema for complete booking system
             </p>
@@ -106,7 +106,7 @@ export function CTAFooterSection() {
           <div className="cta-footer-note">
             Demo app &mdash; no real appointments are being made.
             <br />
-            All slot computation powered by <code style={{ fontFamily: "var(--font-mono)", fontSize: "0.9em" }}>@thebookingkit/core</code>.
+            All slot computation powered by <code style={{ fontFamily: "var(--font-mono)", fontSize: "0.9em" }}>@waybook/core</code>.
           </div>
         </div>
       </div>

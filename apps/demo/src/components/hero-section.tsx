@@ -13,7 +13,7 @@ export function HeroSection() {
   };
 
   const handleCopyCore = () => {
-    navigator.clipboard.writeText("npm install @thebookingkit/core").catch(() => {});
+    navigator.clipboard.writeText("npm install @waybook/core").catch(() => {});
     setCopiedCore(true);
     setTimeout(() => setCopiedCore(false), 2000);
   };
@@ -62,7 +62,7 @@ export function HeroSection() {
           </p>
           <div className="hero-npm" style={{ marginTop: "0.5rem", opacity: 0.8 }}>
             <span className="hero-npm-label">Core Only</span>
-            <code>npm install @thebookingkit/core</code>
+            <code>npm install @waybook/core</code>
             <button className="hero-npm-copy" onClick={handleCopyCore} aria-label="Copy install command">
               {copiedCore ? "Copied" : "Copy"}
             </button>
@@ -127,7 +127,7 @@ export function HeroSection() {
                 {" } "}
                 <span className="code-kw">{"from"}</span>
                 {" "}
-                <span className="code-str">{"\"@thebookingkit/core\""}</span>
+                <span className="code-str">{"\"@waybook/core\""}</span>
                 {"\n\n"}
                 <span className="code-kw">{"const"}</span>
                 {" "}

@@ -6,7 +6,7 @@ import type {
   AvailabilityRuleInput,
   AvailabilityOverrideInput,
   BookingInput,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 import { BARBER_SHOP, SERVICES, type Service } from "./constants";
 import { getNextServiceDay, makeET } from "./demo-utils";
 

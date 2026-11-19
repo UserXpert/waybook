@@ -1,8 +1,8 @@
-# @thebookingkit/server
+# @waybook/server
 
 Auth, webhooks, API keys, workflows, and adapter interfaces for booking system backends.
 
-[![npm version](https://img.shields.io/npm/v/@thebookingkit/server)](https://www.npmjs.com/package/@thebookingkit/server)
+[![npm version](https://img.shields.io/npm/v/@waybook/server)](https://www.npmjs.com/package/@waybook/server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
@@ -11,13 +11,13 @@ Part of [The Booking Kit](https://docs.thebookingkit.dev) — The Headless Booki
 ## Install
 
 ```bash
-npm install @thebookingkit/server
+npm install @waybook/server
 ```
 
 ## Quick Start
 
 ```ts
-import { withAuth, signWebhookPayload, generateApiKey } from "@thebookingkit/server";
+import { withAuth, signWebhookPayload, generateApiKey } from "@waybook/server";
 
 // Protect a route with auth middleware
 const handler = withAuth(async (req) => {

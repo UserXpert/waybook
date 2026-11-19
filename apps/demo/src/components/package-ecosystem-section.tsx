@@ -1,7 +1,7 @@
 export function PackageEcosystemSection() {
   const packages = [
     {
-      name: "@thebookingkit/core",
+      name: "@waybook/core",
       version: "0.2.0",
       env: "universal",
       envLabel: "Browser / Edge / Node",
@@ -20,7 +20,7 @@ export function PackageEcosystemSection() {
         "resolveKioskSettings",
         "generateEmbedSnippet",
       ],
-      snippet: `import { getAvailableSlots } from "@thebookingkit/core";
+      snippet: `import { getAvailableSlots } from "@waybook/core";
 
 const slots = getAvailableSlots(
   rules, overrides, bookings,
@@ -29,7 +29,7 @@ const slots = getAvailableSlots(
 );`,
     },
     {
-      name: "@thebookingkit/server",
+      name: "@waybook/server",
       version: "0.2.0",
       env: "node",
       envLabel: "Node / Edge",
@@ -45,7 +45,7 @@ const slots = getAvailableSlots(
         "createApiKey",
         "withSerializableRetry",
       ],
-      snippet: `import { withSerializableRetry } from "@thebookingkit/server";
+      snippet: `import { withSerializableRetry } from "@waybook/server";
 
 // Automatically retries on SQLSTATE 40001
 const booking = await withSerializableRetry(
@@ -78,7 +78,7 @@ const upcoming = await db
   .where(eq(bookings.status, "confirmed"));`,
     },
     {
-      name: "@thebookingkit/d1",
+      name: "@waybook/d1",
       version: "0.2.0",
       env: "edge",
       envLabel: "Cloudflare D1 / Edge",
@@ -91,7 +91,7 @@ const upcoming = await db
         "D1BookingLock",
         "weeklyScheduleToRules",
       ],
-      snippet: `import { insertBookingIfFree } from "@thebookingkit/d1";
+      snippet: `import { insertBookingIfFree } from "@waybook/d1";
 
 // Overlap check + INSERT in one atomic statement,
 // so concurrent requests cannot double-book
@@ -99,7 +99,7 @@ const { inserted } = await insertBookingIfFree(db, booking);
 if (!inserted) throw new BookingConflictError();`,
     },
     {
-      name: "@thebookingkit/cli",
+      name: "@waybook/cli",
       version: "0.2.0",
       env: "cli",
       envLabel: "CLI Tool",

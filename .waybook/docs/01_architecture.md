@@ -79,9 +79,9 @@ The root post-login route sends a tenant member to `/{business}/app`; a platform
 
 Approved adapted foundations:
 
-- `@thebookingkit/core`: availability, RRULE, timezone, buffers, scheduling, resource handling, booking limits, validation.
-- `@thebookingkit/server`: serializable retry, conflict translation, date/ICS, adapter patterns, selected cryptographic utilities.
-- `@thebookingkit/db`: Drizzle + `postgres.js`, exclusion constraints, append-only audit patterns, useful tests.
+- `@waybook/core`: availability, RRULE, timezone, buffers, scheduling, resource handling, booking limits, validation.
+- `@waybook/server`: serializable retry, conflict translation, date/ICS, adapter patterns, selected cryptographic utilities.
+- `@waybook/db`: Drizzle + `postgres.js`, exclusion constraints, append-only audit patterns, useful tests.
 
 Must not be adopted as-is: Booking Kit organisation scoping/auth/schema, signed booking-management tokens, in-memory rate limits, D1/SQLite, demo data, payments, queues, kiosk, recurring bookings, embeds, webhooks, workflows, calendar sync, and SMS.
 

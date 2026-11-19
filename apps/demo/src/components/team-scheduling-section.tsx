@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchTeamSchedulingDemo, type TeamDemoResult } from "@/lib/actions";
-import type { AssignmentStrategy } from "@thebookingkit/core";
+import type { AssignmentStrategy } from "@waybook/core";
 
 function getNextWeekday(): string {
   const d = new Date();

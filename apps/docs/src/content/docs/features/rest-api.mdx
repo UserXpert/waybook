@@ -8,7 +8,7 @@ The Booking Kit provides utilities for building a REST API layer on top of the c
 ## API key management
 
 ```typescript
-import { generateApiKey, hashApiKey, verifyApiKey, hasScope, isKeyExpired } from "@thebookingkit/core";
+import { generateApiKey, hashApiKey, verifyApiKey, hasScope, isKeyExpired } from "@waybook/core";
 
 // Generate a new API key
 const key = generateApiKey();
@@ -44,7 +44,7 @@ isKeyExpired(apiKeyRecord); // true if past expiresAt
 Token bucket algorithm with configurable limits:
 
 ```typescript
-import { checkRateLimit } from "@thebookingkit/core";
+import { checkRateLimit } from "@waybook/core";
 
 const result = checkRateLimit(currentState, {
   maxTokens: 120,       // 120 requests
@@ -59,7 +59,7 @@ const result = checkRateLimit(currentState, {
 ## Cursor-based pagination
 
 ```typescript
-import { encodeCursor, decodeCursor } from "@thebookingkit/core";
+import { encodeCursor, decodeCursor } from "@waybook/core";
 
 // Encode the last item's ID and timestamp into a cursor
 const cursor = encodeCursor({ id: "abc123", createdAt: new Date() });
@@ -77,7 +77,7 @@ import {
   createErrorResponse,
   createPaginatedResponse,
   API_ERROR_CODES,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Success
 createSuccessResponse(booking);
@@ -95,7 +95,7 @@ createPaginatedResponse(bookings, { cursor: nextCursor, hasMore: true, total: 42
 ## Query validation
 
 ```typescript
-import { validateSlotQueryParams, parseSortParam } from "@thebookingkit/core";
+import { validateSlotQueryParams, parseSortParam } from "@waybook/core";
 
 const params = validateSlotQueryParams({
   date: "2026-03-10",

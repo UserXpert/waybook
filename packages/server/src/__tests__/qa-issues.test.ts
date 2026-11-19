@@ -1,5 +1,5 @@
 /**
- * QA Issue regression tests for @thebookingkit/server
+ * QA Issue regression tests for @waybook/server
  *
  * Each test is written to FAIL on the current (buggy) code, confirming the
  * presence of the bug. Fix the underlying production code and the test will

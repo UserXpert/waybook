@@ -107,7 +107,7 @@ interface SmsAdapter {
 
 While The Booking Kit is built for PostgreSQL, it provides specialized adapters for other database environments.
 
-### Cloudflare D1 / SQLite (`@thebookingkit/d1`)
+### Cloudflare D1 / SQLite (`@waybook/d1`)
 
 Cloudflare D1 requires special handling for date storage and concurrency. This package provides:
 
@@ -117,7 +117,7 @@ Cloudflare D1 requires special handling for date storage and concurrency. This p
 - **Schedule Adapters**: Utilities to intersect personal and location schedules into RRULE windows.
 
 ```typescript
-import { insertBookingIfFree } from "@thebookingkit/d1";
+import { insertBookingIfFree } from "@waybook/d1";
 
 // The overlap check and the INSERT are one atomic statement — no lock required
 const { inserted } = await insertBookingIfFree(db, {
@@ -141,7 +141,7 @@ See the [D1 API reference](/api-reference/d1/) for buffer time, rescheduling, re
 
 ```typescript
 import sgMail from "@sendgrid/mail";
-import type { EmailAdapter } from "@thebookingkit/core";
+import type { EmailAdapter } from "@waybook/core";
 
 export const sendGridEmailAdapter: EmailAdapter = {
   async sendEmail(options) {
@@ -176,7 +176,7 @@ export const sendGridEmailAdapter: EmailAdapter = {
 
 ```typescript
 import { createClient } from "@supabase/supabase-js";
-import type { AuthAdapter, AuthSession, AuthUser } from "@thebookingkit/core";
+import type { AuthAdapter, AuthSession, AuthUser } from "@waybook/core";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -215,7 +215,7 @@ export const supabaseAuthAdapter: AuthAdapter = {
 
 ```typescript
 import { TriggerClient, eventTrigger } from "@trigger.dev/sdk/v3";
-import type { JobAdapter } from "@thebookingkit/core";
+import type { JobAdapter } from "@waybook/core";
 
 const client = new TriggerClient({ id: "booking-kit" });
 
@@ -243,7 +243,7 @@ export const triggerJobAdapter: JobAdapter = {
 Pass adapters to the functions that need them:
 
 ```typescript
-import { sendConfirmationEmail } from "@thebookingkit/server";
+import { sendConfirmationEmail } from "@waybook/server";
 import { sendGridEmailAdapter } from "@/adapters/email";
 
 // Email will be sent via SendGrid
@@ -256,7 +256,7 @@ await sendConfirmationEmail(
 ### Adapter composition for testing
 
 ```typescript
-import type { EmailAdapter } from "@thebookingkit/core";
+import type { EmailAdapter } from "@waybook/core";
 
 // Mock adapter for testing
 const mockEmailAdapter: EmailAdapter = {

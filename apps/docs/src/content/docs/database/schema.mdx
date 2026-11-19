@@ -122,7 +122,7 @@ Insert a booking:
 
 ```typescript
 import { db } from "@/db";
-import { bookings } from "@thebookingkit/db";
+import { bookings } from "@waybook/db";
 import { v4 as uuid } from "uuid";
 
 const newBooking = await db
@@ -148,7 +148,7 @@ Query bookings with related data:
 
 ```typescript
 import { db } from "@/db";
-import { bookings } from "@thebookingkit/db";
+import { bookings } from "@waybook/db";
 import { eq } from "drizzle-orm";
 
 const booking = await db.query.bookings.findFirst({
@@ -166,7 +166,7 @@ Find available providers with their schedules:
 
 ```typescript
 import { db } from "@/db";
-import { providers, availabilityRules } from "@thebookingkit/db";
+import { providers, availabilityRules } from "@waybook/db";
 import { eq } from "drizzle-orm";
 
 const provider = await db.query.providers.findFirst({
@@ -185,7 +185,7 @@ Create an availability rule:
 
 ```typescript
 import { db } from "@/db";
-import { availabilityRules } from "@thebookingkit/db";
+import { availabilityRules } from "@waybook/db";
 import { v4 as uuid } from "uuid";
 
 const rule = await db
@@ -207,7 +207,7 @@ Find bookings on a specific date:
 
 ```typescript
 import { db } from "@/db";
-import { bookings } from "@thebookingkit/db";
+import { bookings } from "@waybook/db";
 import { eq, and, gte, lt } from "drizzle-orm";
 
 const providerId = "provider-uuid";

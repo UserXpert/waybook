@@ -442,7 +442,7 @@ was removed. This slice is passed locally.
 `/app/calendars` is Calendars-entitlement guarded and uses compact
 location/staff/service selectors. It renders a tenant-timezone week grid of
 confirmed bookings and merged bookable periods calculated with
-`@thebookingkit/core`, scoped to the chosen location. Staff hours and
+`@waybook/core`, scoped to the chosen location. Staff hours and
 exceptions are managed in Staff details rather than Calendar.
 
 The refreshed calendar layout defaults to a team Day board with compact

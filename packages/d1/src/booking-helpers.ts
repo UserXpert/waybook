@@ -1,5 +1,5 @@
 /**
- * D1 booking helpers — bridge between raw D1 row data and @thebookingkit/core types.
+ * D1 booking helpers — bridge between raw D1 row data and @waybook/core types.
  *
  * These functions handle the two-way conversion that every D1-backed booking
  * flow requires:
@@ -11,8 +11,8 @@
  * All conversions go through D1DateCodec so the format is always UTC-Z.
  */
 
-import type { BookingInput, AvailabilityOverrideInput, AvailabilityRuleInput, BookingStatus } from "@thebookingkit/core";
-import { normalizeToUTC } from "@thebookingkit/core";
+import type { BookingInput, AvailabilityOverrideInput, AvailabilityRuleInput, BookingStatus } from "@waybook/core";
+import { normalizeToUTC } from "@waybook/core";
 import { toZonedTime } from "date-fns-tz";
 import { format } from "date-fns";
 import { D1DateCodec } from "./codec.js";

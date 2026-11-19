@@ -19,7 +19,7 @@ Dependency and correctness release. All packages move to 0.5.0 together.
 
 ### Fixes
 
-- **`withSerializableRetry`** (`@thebookingkit/server`) now finds the Postgres SQLSTATE anywhere down the error's `cause` chain. On drizzle-orm ≥ 0.44 (which wraps driver errors) a double-booking used to surface as a raw "Failed query" error instead of `BookingConflictError`, and serialization failures were not retried.
+- **`withSerializableRetry`** (`@waybook/server`) now finds the Postgres SQLSTATE anywhere down the error's `cause` chain. On drizzle-orm ≥ 0.44 (which wraps driver errors) a double-booking used to surface as a raw "Failed query" error instead of `BookingConflictError`, and serialization failures were not retried.
 - **Stripe Connect cancels** — `StripePaymentAdapter.cancelPaymentIntent` works with stripe-node 22+ (request options moved to the third argument).
 - **`createSetupIntent`** no longer sends `receipt_email`, which Stripe rejects for SetupIntents.
 - **Plain Node ESM** — the packages now load outside a bundler (previously rrule's packaging made `import` throw under bare Node).
@@ -28,8 +28,8 @@ Dependency and correctness release. All packages move to 0.5.0 together.
 
 - `stripe` peer range: `>=17.0.0 <24.0.0`. Pass `new Stripe(...)` straight to `StripePaymentAdapter` — no cast needed.
 - `date-fns`: `^3.6.0 || ^4.0.0` in core and d1.
-- `@thebookingkit/db` requires `drizzle-orm` `^0.45.4` (SQL-injection advisory fixed in 0.45.2).
-- `@thebookingkit/cli` requires Node ≥ 22.12.
+- `@waybook/db` requires `drizzle-orm` `^0.45.4` (SQL-injection advisory fixed in 0.45.2).
+- `@waybook/cli` requires Node ≥ 22.12.
 
 ## 0.2.0 (2026-03-25)
 
@@ -37,7 +37,7 @@ Dependency and correctness release. All packages move to 0.5.0 together.
 
 Control **when** time slots become visible to customers — fill earlier gaps first, use rolling release windows, or incentivize early bookings with discounts.
 
-#### @thebookingkit/core
+#### @waybook/core
 
 - **New:** `applySlotRelease()` — three slot release strategies:
   - `fill_earlier_first`: Hide afternoon slots until morning reaches a fill threshold (barbers, salons)
@@ -52,7 +52,7 @@ Control **when** time slots become visible to customers — fill earlier gaps fi
 
 Book **restaurant tables, yoga mats, meeting rooms, tennis courts**, and any physical bookable unit with capacity-aware scheduling.
 
-#### @thebookingkit/core
+#### @waybook/core
 
 - **New:** `getResourceAvailableSlots()` — capacity-aware slot computation across resource pools (per-resource pipeline, then merge)
 - **New:** `assignResource()` — auto-assign best resource with 4 strategies: `best_fit`, `first_available`, `round_robin`, `largest_first`
@@ -68,7 +68,7 @@ Book **restaurant tables, yoga mats, meeting rooms, tennis courts**, and any phy
 
 Extracted reusable conflict detection primitives from the kiosk module for use across any booking flow.
 
-#### @thebookingkit/core
+#### @waybook/core
 
 - **New:** `findConflicts()` — generic booking overlap detection. Checks half-open intervals, excludes inactive statuses, supports self-exclusion via `excludeId`
 - **New:** `canReschedule()` — status check for reschedulable bookings (only `confirmed` and `pending`)
@@ -76,7 +76,7 @@ Extracted reusable conflict detection primitives from the kiosk module for use a
 - **New:** Types: `ConflictCheckBooking`, `ConflictDetail`
 - **Refactored:** `validateReschedule` and `validateBreakBlock` now delegate to `findConflicts()` — eliminates duplicated overlap logic
 
-#### @thebookingkit/db
+#### @waybook/db
 
 - **New:** `resources` table — bookable physical units with type, capacity, and location
 - **New:** `resource_availability_rules` and `resource_availability_overrides` tables
@@ -84,7 +84,7 @@ Extracted reusable conflict detection primitives from the kiosk module for use a
 - **New:** Updated `create_booking()` function with optional `p_resource_id` parameter
 - **New:** Migration `0005_resources.sql` (idempotent)
 
-#### @thebookingkit/d1
+#### @waybook/d1
 
 - **New:** `d1ResourceAvailabilityRowsToInputs()` and `d1ResourceOverrideRowsToInputs()` converters
 - **New:** `D1ResourceBookingLock` for resource-scoped advisory locking
@@ -92,7 +92,7 @@ Extracted reusable conflict detection primitives from the kiosk module for use a
 - **New:** `ALL_DDL` — convenience aggregate for initializing a complete D1 database in one call
 - **New:** `d1AvailabilityRuleRowsToInputs()` — converter for provider availability rules (was missing)
 
-#### @thebookingkit/server
+#### @waybook/server
 
 - **New:** 12 webhook triggers: `BOOKING_COMPLETED`, `RESOURCE_BOOKED`, `RESOURCE_RELEASED`, `WALK_IN_ADDED`, `WALK_IN_STARTED`, `WALK_IN_COMPLETED`, `WALK_IN_CANCELLED`, `SLOT_RELEASED`, `RECURRING_SERIES_CREATED`, `OCCURRENCE_CANCELLED`, `OCCURRENCE_RESCHEDULED`, `PAYMENT_REFUNDED`
 - **New:** 5 background job names for walk-in, resource, recurring, and slot release workflows
@@ -129,14 +129,14 @@ Extracted reusable conflict detection primitives from the kiosk module for use a
 
 This release includes a comprehensive QA audit across all packages, fixing 49 bugs across scheduling logic, database constraints, server security, D1 adapter edge cases, and CLI stability.
 
-#### @thebookingkit/core (13 fixes)
+#### @waybook/core (13 fixes)
 
 - **Critical**: Midnight-crossing availability windows now produce correct slots; single `now` reference in slot filter prevents time drift; RRULE `dtstart` preserved when `BYDAY` is present
 - **High**: Booking limit counters increment after validation; overlapping booking intervals merged before wait time calculation; array responses handled element-wise in condition evaluation
 - **Medium**: Multi-select validation rejects invalid options; break-to-override returns specific time window; HTML escaping in embed snippets
 - **Low**: Slug generation handles special characters; cancellation fee validation throws on invalid timing; queue reordering preserves unmentioned entries; auto-reject deadlines clamped to minimum 1 hour
 
-#### @thebookingkit/db (10 fixes)
+#### @waybook/db (10 fixes)
 
 - **Critical**: EXCLUDE constraint now excludes `rescheduled` status; audit trigger uses `updated` fallback; metadata initialization fixed
 - **High**: `teams.slug` and `eventTypes.slug` now have unique constraints
@@ -144,21 +144,21 @@ This release includes a comprehensive QA audit across all packages, fixing 49 bu
 - **Medium**: `WalkInQueue` type exports added; pgcrypto extension added to setup migration; integration test `ANY(array)` queries fixed to use `inArray()` and `sql.join`
 - **Low**: Added vitest test script; `drizzle.config.ts` schema path corrected to compiled output
 
-#### @thebookingkit/d1 (13 fixes)
+#### @waybook/d1 (13 fixes)
 
 - **Critical**: SQL identifier validation prevents injection; table name validation in migrations
 - **High**: Lock acquisition only retries on UNIQUE constraint errors; other errors re-thrown immediately
 - **Medium**: DST-aware day boundary computation; 1ms adjustment for midnight exclusion; hour normalization and validation; stricter time range validation; stale lock cleanup timing; date codec refactored to reject ambiguous formats
 - **Low**: Out-of-range time rejection; unused import removed
 
-#### @thebookingkit/server (14 fixes)
+#### @waybook/server (14 fixes)
 
 - **Critical**: Full 256-bit HMAC signatures in booking tokens; constant-time comparison for token verification
 - **High**: Error handling sanitizes stack traces; role hierarchy enforces admin > provider > member; SSRF validation on webhook subscriptions and fire_webhook action; UUID validation in slot query params
 - **Medium**: Multi-tenancy scope assertions throw on null resource; recursive template injection prevented; XSS prevention in email templates; 90-day date range limit for DoS prevention; slug validation prevents path traversal; timezone-aware time/date formatting in workflows
 - **Low**: ICS carriage return stripping prevents line structure injection
 
-#### @thebookingkit/cli (16 fixes)
+#### @waybook/cli (16 fixes)
 
 - **Critical**: Registry HTTPS validation; adapter input validation prevents shell injection
 - **High**: Manifest JSON parse errors wrapped with helpful messages; partial install state preserved; null-check on registry responses; directory escape prevention; circular dependency detection
@@ -218,10 +218,10 @@ This release includes a comprehensive QA audit across all packages, fixing 49 bu
 We are excited to announce the first public release of The Booking Kit!
 
 #### Packages Published:
-- `@thebookingkit/core@0.1.1`
-- `@thebookingkit/server@0.1.1`
-- `@thebookingkit/cli@0.1.1`
-- `@thebookingkit/d1@0.1.1`
+- `@waybook/core@0.1.1`
+- `@waybook/server@0.1.1`
+- `@waybook/cli@0.1.1`
+- `@waybook/d1@0.1.1`
 
 #### Key Features:
 - **Headless Core Engine**: Timezone-aware slot computation and RRULE expansion.

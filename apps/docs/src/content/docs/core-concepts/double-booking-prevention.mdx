@@ -28,8 +28,8 @@ This constraint is enforced at the database level — even if your application h
 For additional safety, booking creation runs in `SERIALIZABLE` isolation with automatic retry:
 
 ```typescript
-import { withSerializableRetry } from "@thebookingkit/server";
-import { isSlotAvailable, BookingConflictError } from "@thebookingkit/core";
+import { withSerializableRetry } from "@waybook/server";
+import { isSlotAvailable, BookingConflictError } from "@waybook/core";
 
 const booking = await withSerializableRetry(async (tx) => {
   // Check availability within the transaction
@@ -81,11 +81,11 @@ The `EXCLUDE` constraint is the final safety net — if somehow both transaction
 Full booking flow with double-booking prevention:
 
 ```typescript
-import { withSerializableRetry } from "@thebookingkit/server";
-import { isSlotAvailable, BookingConflictError } from "@thebookingkit/core";
+import { withSerializableRetry } from "@waybook/server";
+import { isSlotAvailable, BookingConflictError } from "@waybook/core";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { bookings, availabilityRules, availabilityOverrides } from "@thebookingkit/db";
+import { bookings, availabilityRules, availabilityOverrides } from "@waybook/db";
 
 async function createBookingWithPrevention(
   providerId: string,
@@ -167,7 +167,7 @@ async function createBookingWithPrevention(
 ## Error handling
 
 ```typescript
-import { BookingConflictError, SerializationRetryExhaustedError } from "@thebookingkit/core";
+import { BookingConflictError, SerializationRetryExhaustedError } from "@waybook/core";
 
 try {
   const booking = await createBookingWithPrevention(

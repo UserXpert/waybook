@@ -1,5 +1,5 @@
 /**
- * D1 resource helpers — bridge between raw D1 row data and @thebookingkit/core types
+ * D1 resource helpers — bridge between raw D1 row data and @waybook/core types
  * for resource-based booking (tables, rooms, courts, desks, etc.).
  *
  * These functions handle the conversion that every D1-backed resource booking
@@ -14,7 +14,7 @@
  * D1BookingLock pattern scoped to a specific resource_id instead of a provider.
  */
 
-import type { AvailabilityRuleInput, AvailabilityOverrideInput } from "@thebookingkit/core";
+import type { AvailabilityRuleInput, AvailabilityOverrideInput } from "@waybook/core";
 import { D1DateCodec } from "./codec.js";
 import { D1BookingLock } from "./lock.js";
 import type { LockDb, D1BookingLockOptions, LockHandle } from "./lock.js";

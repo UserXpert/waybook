@@ -4,11 +4,11 @@
   "commit": false,
   "fixed": [
     [
-      "@thebookingkit/core",
+      "@waybook/core",
       "@waybook/db",
-      "@thebookingkit/d1",
-      "@thebookingkit/server",
-      "@thebookingkit/cli"
+      "@waybook/d1",
+      "@waybook/server",
+      "@waybook/cli"
     ]
   ],
   "linked": [],

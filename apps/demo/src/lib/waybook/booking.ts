@@ -1,7 +1,7 @@
 import "server-only";
 
-import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput, type BookingInput } from "@thebookingkit/core";
-import { withSerializableRetry } from "@thebookingkit/server";
+import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput, type BookingInput } from "@waybook/core";
+import { withSerializableRetry } from "@waybook/server";
 import { createHash, randomBytes } from "node:crypto";
 import type { TenantRecord } from "./database";
 import { tenantDb } from "./database";

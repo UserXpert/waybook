@@ -92,7 +92,7 @@ export function generateThebookingkitConfig(config: Partial<BookingKitConfig>): 
   const typesOutput = sanitizePath(rawTypesOutput, "typesOutput");
 
   // Generated config uses the flat BookingKitConfig interface shape.
-  return `import type { BookingKitConfig } from "@thebookingkit/cli";
+  return `import type { BookingKitConfig } from "@waybook/cli";
 
 const config: BookingKitConfig = {
   databaseUrl: process.env.DATABASE_URL!,

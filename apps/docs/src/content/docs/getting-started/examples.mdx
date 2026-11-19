@@ -11,17 +11,17 @@ The Booking Kit is a general-purpose scheduling primitive. The same core APIs po
 
 ## 1. Barber Shop — Multi-Location with Walk-Ins
 
-A barber shop with multiple locations and individual barber schedules. Each barber has their own weekly availability stored as simple JSON in Cloudflare D1. The `@thebookingkit/d1` adapter converts these into the RRULE-based rules that `@thebookingkit/core` expects.
+A barber shop with multiple locations and individual barber schedules. Each barber has their own weekly availability stored as simple JSON in Cloudflare D1. The `@waybook/d1` adapter converts these into the RRULE-based rules that `@waybook/core` expects.
 
-**Stack:** TanStack Start (or Next.js), Cloudflare D1 (or Postgres), `@thebookingkit/core`, `@thebookingkit/d1`, Drizzle ORM.
+**Stack:** TanStack Start (or Next.js), Cloudflare D1 (or Postgres), `@waybook/core`, `@waybook/d1`, Drizzle ORM.
 
 ```typescript
-import { toWeeklyAvailabilityRules } from '@thebookingkit/d1';
-import { getAvailableSlots } from '@thebookingkit/core';
+import { toWeeklyAvailabilityRules } from '@waybook/d1';
+import { getAvailableSlots } from '@waybook/core';
 
 // Each barber stores their schedule as a simple JSON object in D1.
 // The adapter converts this to RRULE-based AvailabilityRuleInput[] that
-// @thebookingkit/core understands.
+// @waybook/core understands.
 const barberSchedule = {
   monday:    { startTime: '09:00', endTime: '18:00', isOff: false },
   tuesday:   { startTime: '09:00', endTime: '18:00', isOff: false },
@@ -51,7 +51,7 @@ const slots = getAvailableSlots({
 The kiosk view uses the walk-in queue API to accept walk-in customers alongside scheduled appointments:
 
 ```typescript
-import { addWalkIn, estimateWaitTime } from '@thebookingkit/core';
+import { addWalkIn, estimateWaitTime } from '@waybook/core';
 
 // Receptionist adds a walk-in at the desk.
 const entry = addWalkIn({
@@ -78,7 +78,7 @@ const { estimatedWaitMinutes } = estimateWaitTime({
 A medical clinic needs to route appointment requests to available doctors using round-robin assignment, and requires manual approval before confirming any appointment. Patients book a type of appointment (GP visit, specialist review) and the system assigns a doctor — the patient does not pick one directly.
 
 ```typescript
-import { getTeamSlots, assignHost } from '@thebookingkit/core';
+import { getTeamSlots, assignHost } from '@waybook/core';
 
 // Get available slots across the entire GP team.
 // The team scheduling engine merges individual availability windows
@@ -125,7 +125,7 @@ const booking = await createBooking({
 A fitness studio runs group classes with a fixed capacity. Multiple participants can book the same time slot up to the seat limit. Classes repeat on the same days each week via a recurring schedule.
 
 ```typescript
-import { getAvailableSlots, isSlotAvailable } from '@thebookingkit/core';
+import { getAvailableSlots, isSlotAvailable } from '@waybook/core';
 import { rrulestr } from 'rrule';
 
 // The instructor's recurring availability is defined as an RRULE.
@@ -169,7 +169,7 @@ if (!available) {
 A tutoring marketplace connects students with tutors across multiple countries. A routing form first asks the student what subject they need, then routes them to tutors who teach that subject. Slots are displayed in the student's local timezone regardless of where the tutor is located.
 
 ```typescript
-import { evaluateRoutingForm, getAvailableSlots } from '@thebookingkit/core';
+import { evaluateRoutingForm, getAvailableSlots } from '@waybook/core';
 
 // The routing form asks for subject and level, then resolves
 // to a filtered list of tutors and their event types.
@@ -226,7 +226,7 @@ import {
   estimateWaitTime,
   findNextAvailableGap,
   getQueueMetrics,
-} from '@thebookingkit/core';
+} from '@waybook/core';
 
 // Find the next gap in the stylist's schedule that fits a 45-minute service.
 // See the [Walk-In Queue](/features/walk-in) guide for details
@@ -275,7 +275,7 @@ const metrics = getQueueMetrics({
 A restaurant manages multiple dining tables with varying capacities. Customers book tables based on party size, and the system auto-assigns the best-fit table (smallest table that fits their party).
 
 ```typescript
-import { getResourceAvailableSlots, assignResource } from '@thebookingkit/core';
+import { getResourceAvailableSlots, assignResource } from '@waybook/core';
 
 // Define the restaurant's table pool
 const tables = [
@@ -364,7 +364,7 @@ console.log(`Assigned ${assignment.resourceName} (${assignment.reason})`);
 A hotel manages multiple room types (standard, deluxe, suite) with varying capacities. A booking spans check-in to check-out, and the system ensures each room is assigned to only one guest at a time.
 
 ```typescript
-import { getResourceAvailableSlots, assignResource } from '@thebookingkit/core';
+import { getResourceAvailableSlots, assignResource } from '@waybook/core';
 
 const hotelRooms = [
   {
@@ -449,7 +449,7 @@ const roomAssignment = assignResource(
 A coworking space manages desks, meeting rooms, and phone booths. Members book by resource type; the system handles per-resource capacity and availability.
 
 ```typescript
-import { getResourceAvailableSlots, assignResource, getResourcePoolSummary } from '@thebookingkit/core';
+import { getResourceAvailableSlots, assignResource, getResourcePoolSummary } from '@waybook/core';
 
 const coworkingResources = [
   {
@@ -551,6 +551,6 @@ console.log(`Desks available right now: ${deskUtilization[0]?.availableResources
 
 ## What to Build Next
 
-All eight examples above use the same underlying APIs from `@thebookingkit/core`. Provider booking uses `getAvailableSlots` and `getTeamSlots`; resource booking uses `getResourceAvailableSlots`, `assignResource`, and `getResourcePoolSummary`. The difference is configuration: which scheduling algorithm, what capacity model, which timezone, whether confirmation is automatic or manual.
+All eight examples above use the same underlying APIs from `@waybook/core`. Provider booking uses `getAvailableSlots` and `getTeamSlots`; resource booking uses `getResourceAvailableSlots`, `assignResource`, and `getResourcePoolSummary`. The difference is configuration: which scheduling algorithm, what capacity model, which timezone, whether confirmation is automatic or manual.
 
 To start integrating The Booking Kit into your own application, follow the [Quick Start](/getting-started/quick-start) guide or review the [Architecture](/getting-started/architecture) page for a full picture of how the packages fit together.

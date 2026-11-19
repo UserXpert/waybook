@@ -524,11 +524,11 @@ program
     if (depsToInstall.length > 0) {
       console.log("\nInstall required dependencies:");
       console.log(
-        `  ${installCmd} @thebookingkit/core ${depsToInstall.map(([n, v]) => `${n}@${v}`).join(" ")}`,
+        `  ${installCmd} @waybook/core ${depsToInstall.map(([n, v]) => `${n}@${v}`).join(" ")}`,
       );
     } else {
       console.log("\nInstall required dependency:");
-      console.log(`  ${installCmd} @thebookingkit/core`);
+      console.log(`  ${installCmd} @waybook/core`);
     }
   });
 
@@ -792,7 +792,7 @@ program
       "Run 'npx thebookingkit init' to create it.",
     );
 
-    // 2. @thebookingkit/core in package.json?
+    // 2. @waybook/core in package.json?
     const pkgJsonPath = resolve("package.json");
     let hasCoreInstalled = false;
     if (existsSync(pkgJsonPath)) {
@@ -802,16 +802,16 @@ program
           devDependencies?: Record<string, string>;
         };
         hasCoreInstalled =
-          "@thebookingkit/core" in (pkgJson.dependencies ?? {}) ||
-          "@thebookingkit/core" in (pkgJson.devDependencies ?? {});
+          "@waybook/core" in (pkgJson.dependencies ?? {}) ||
+          "@waybook/core" in (pkgJson.devDependencies ?? {});
       } catch {
         // unparseable package.json — will fail the check below
       }
     }
     check(
-      "@thebookingkit/core is in package.json",
+      "@waybook/core is in package.json",
       hasCoreInstalled,
-      "Run: npm install @thebookingkit/core",
+      "Run: npm install @waybook/core",
     );
 
     // 3. Manifest and installed files.

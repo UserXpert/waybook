@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BookingConflictError } from "@thebookingkit/server";
+import { BookingConflictError } from "@waybook/server";
 import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { consumeBookingManagementAttempt } from "@/lib/waybook/booking-management-rate-limit";

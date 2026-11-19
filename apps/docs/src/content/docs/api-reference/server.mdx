@@ -1,12 +1,12 @@
 ---
-title: "Server Reference (@thebookingkit/server)"
-description: "Complete API reference for @thebookingkit/server — auth middleware, adapters, webhooks, API keys, booking tokens, multi-tenancy, and workflow utilities."
+title: "Server Reference (@waybook/server)"
+description: "Complete API reference for @waybook/server — auth middleware, adapters, webhooks, API keys, booking tokens, multi-tenancy, and workflow utilities."
 ---
 
-`@thebookingkit/server` provides server-side utilities for Next.js API routes: authentication middleware, pluggable adapters, webhook signing, API key management, booking tokens, multi-tenancy helpers, and workflow evaluation.
+`@waybook/server` provides server-side utilities for Next.js API routes: authentication middleware, pluggable adapters, webhook signing, API key management, booking tokens, multi-tenancy helpers, and workflow evaluation.
 
 ```bash
-npm install @thebookingkit/server
+npm install @waybook/server
 ```
 
 ---
@@ -18,7 +18,7 @@ npm install @thebookingkit/server
 Middleware wrapper that injects the authenticated user into every request handler. Rejects unauthenticated requests with HTTP 401. Optionally enforces a minimum role.
 
 ```typescript
-import { withAuth } from "@thebookingkit/server";
+import { withAuth } from "@waybook/server";
 
 // app/api/bookings/route.ts
 export const GET = withAuth(authAdapter, async (req) => {
@@ -59,7 +59,7 @@ export const DELETE = withAuth(
 Throws `ForbiddenError` if the authenticated user's ID does not match the resource owner's user ID. Use to scope provider data access.
 
 ```typescript
-import { assertProviderOwnership } from "@thebookingkit/server";
+import { assertProviderOwnership } from "@waybook/server";
 
 assertProviderOwnership(req.user.id, provider.userId);
 // throws ForbiddenError if IDs do not match
@@ -77,7 +77,7 @@ assertProviderOwnership(req.user.id, provider.userId);
 Throws `ForbiddenError` if the authenticated user's email does not match the booking's customer email.
 
 ```typescript
-import { assertCustomerAccess } from "@thebookingkit/server";
+import { assertCustomerAccess } from "@waybook/server";
 
 assertCustomerAccess(req.user.email, booking.customerEmail);
 ```
@@ -96,7 +96,7 @@ assertCustomerAccess(req.user.email, booking.customerEmail);
 The `AuthAdapter` interface is the contract for pluggable authentication backends. Implement it to integrate any auth provider.
 
 ```typescript
-import type { AuthAdapter, AuthUser, AuthSession } from "@thebookingkit/server";
+import type { AuthAdapter, AuthUser, AuthSession } from "@waybook/server";
 
 class MyAuthAdapter implements AuthAdapter {
   async getCurrentUser(request: Request): Promise<AuthUser | null> {
@@ -138,7 +138,7 @@ Signed, time-limited tokens that let customers view or manage their booking with
 ### `generateBookingToken()`
 
 ```typescript
-import { generateBookingToken } from "@thebookingkit/server";
+import { generateBookingToken } from "@waybook/server";
 
 const token = generateBookingToken(
   booking.id,
@@ -161,7 +161,7 @@ const token = generateBookingToken(
 ### `verifyBookingToken()`
 
 ```typescript
-import { verifyBookingToken } from "@thebookingkit/server";
+import { verifyBookingToken } from "@waybook/server";
 
 const result = verifyBookingToken(token, process.env.BOOKING_TOKEN_SECRET!);
 if (!result) {
@@ -188,7 +188,7 @@ HMAC-SHA256 signed webhook delivery with replay protection.
 ### `signWebhookPayload()`
 
 ```typescript
-import { signWebhookPayload, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@thebookingkit/server";
+import { signWebhookPayload, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@waybook/server";
 
 const timestampSeconds = Math.floor(Date.now() / 1000);
 const rawBody = JSON.stringify(envelope);
@@ -212,7 +212,7 @@ const signature = signWebhookPayload(rawBody, webhookSecret, timestampSeconds);
 ### `verifyWebhookSignature()`
 
 ```typescript
-import { verifyWebhookSignature } from "@thebookingkit/server";
+import { verifyWebhookSignature } from "@waybook/server";
 
 const result = verifyWebhookSignature(
   rawBody,
@@ -244,7 +244,7 @@ if (!result.valid) {
 Constructs the standard webhook envelope object.
 
 ```typescript
-import { createWebhookEnvelope } from "@thebookingkit/server";
+import { createWebhookEnvelope } from "@waybook/server";
 
 const envelope = createWebhookEnvelope("BOOKING_CONFIRMED", {
   bookingId: booking.id,
@@ -262,7 +262,7 @@ const envelope = createWebhookEnvelope("BOOKING_CONFIRMED", {
 Filters a list of subscriptions to those that are active and subscribed to the given trigger, with optional event type or team scope.
 
 ```typescript
-import { matchWebhookSubscriptions } from "@thebookingkit/server";
+import { matchWebhookSubscriptions } from "@waybook/server";
 
 const matching = matchWebhookSubscriptions(
   allSubscriptions,
@@ -306,7 +306,7 @@ Validates a subscription before saving it. Throws `WebhookValidationError` if th
 Generates a new API key. The full key is returned only once and must be shown to the user immediately. Only the hash is stored in the database.
 
 ```typescript
-import { generateApiKey } from "@thebookingkit/server";
+import { generateApiKey } from "@waybook/server";
 
 const { key, prefix, hash } = generateApiKey("sk_live_");
 // key:    "sk_live_a3f2..." (show once, never store)
@@ -325,7 +325,7 @@ const { key, prefix, hash } = generateApiKey("sk_live_");
 Hashes an API key with HMAC-SHA256 using the `THEBOOKINGKIT_API_KEY_SECRET` environment variable. Throws if the secret is not set.
 
 ```typescript
-import { hashApiKey } from "@thebookingkit/server";
+import { hashApiKey } from "@waybook/server";
 
 const hash = hashApiKey(incomingKey);
 ```
@@ -335,7 +335,7 @@ const hash = hashApiKey(incomingKey);
 Verifies an incoming API key against a stored hash using constant-time comparison.
 
 ```typescript
-import { verifyApiKey } from "@thebookingkit/server";
+import { verifyApiKey } from "@waybook/server";
 
 const valid = verifyApiKey(incomingKey, storedRecord.keyHash);
 ```
@@ -345,7 +345,7 @@ const valid = verifyApiKey(incomingKey, storedRecord.keyHash);
 Checks whether an API key's scopes include the required scope. The `"admin"` scope grants all permissions.
 
 ```typescript
-import { hasScope } from "@thebookingkit/server";
+import { hasScope } from "@waybook/server";
 
 if (!hasScope(apiKey.scopes, "write:bookings")) {
   return Response.json({ error: "Insufficient scope" }, { status: 403 });
@@ -355,7 +355,7 @@ if (!hasScope(apiKey.scopes, "write:bookings")) {
 ### `isKeyExpired()`
 
 ```typescript
-import { isKeyExpired } from "@thebookingkit/server";
+import { isKeyExpired } from "@waybook/server";
 
 if (isKeyExpired(apiKey.expiresAt)) {
   return Response.json({ error: "API key expired" }, { status: 401 });
@@ -369,7 +369,7 @@ if (isKeyExpired(apiKey.expiresAt)) {
 ### Rate limiting
 
 ```typescript
-import { checkRateLimit } from "@thebookingkit/server";
+import { checkRateLimit } from "@waybook/server";
 
 const { result, newState } = checkRateLimit(
   storedRateLimitState,  // null for first request
@@ -403,7 +403,7 @@ Wraps a database operation in retry logic for `SERIALIZABLE` transaction isolati
 - `23P01` (`exclusion_violation`): immediately throws `BookingConflictError` — the slot is taken, retry would not help.
 
 ```typescript
-import { withSerializableRetry } from "@thebookingkit/server";
+import { withSerializableRetry } from "@waybook/server";
 
 const booking = await withSerializableRetry(
   () => db.transaction(async (tx) => {
@@ -442,7 +442,7 @@ import {
   createSuccessResponse,
   createPaginatedResponse,
   API_ERROR_CODES,
-} from "@thebookingkit/server";
+} from "@waybook/server";
 
 // Error response
 return Response.json(
@@ -466,7 +466,7 @@ return Response.json(
 ### Pagination cursors
 
 ```typescript
-import { encodeCursor, decodeCursor } from "@thebookingkit/server";
+import { encodeCursor, decodeCursor } from "@waybook/server";
 
 const cursor = encodeCursor({ id: lastItem.id, createdAt: lastItem.createdAt });
 const decoded = decodeCursor(cursor); // => { id: "...", createdAt: "..." } | null
@@ -475,7 +475,7 @@ const decoded = decodeCursor(cursor); // => { id: "...", createdAt: "..." } | nu
 ### Request validation
 
 ```typescript
-import { validateSlotQueryParams, parseSortParam } from "@thebookingkit/server";
+import { validateSlotQueryParams, parseSortParam } from "@waybook/server";
 
 const validation = validateSlotQueryParams({
   providerId: params.get("providerId") ?? undefined,
@@ -515,7 +515,7 @@ import {
   deleteBookingFromCalendar,
   formatDateTimeForEmail,
   formatDurationForEmail,
-} from "@thebookingkit/server";
+} from "@waybook/server";
 ```
 
 These functions accept a `NotificationBookingData` payload and delegate to your configured `EmailAdapter` and `CalendarAdapter`.
@@ -533,7 +533,7 @@ import {
   CANCELLATION_EMAIL_HTML,
   RESCHEDULE_EMAIL_HTML,
   type EmailTemplateVars,
-} from "@thebookingkit/server";
+} from "@waybook/server";
 
 const html = interpolateTemplate(CONFIRMATION_EMAIL_HTML, {
   customerName: booking.customerName,
@@ -546,7 +546,7 @@ const html = interpolateTemplate(CONFIRMATION_EMAIL_HTML, {
 ### Email Adapter interface
 
 ```typescript
-import type { EmailAdapter, SendEmailOptions, EmailResult } from "@thebookingkit/server";
+import type { EmailAdapter, SendEmailOptions, EmailResult } from "@waybook/server";
 
 class ResendEmailAdapter implements EmailAdapter {
   async sendEmail(options: SendEmailOptions): Promise<EmailResult> {
@@ -564,7 +564,7 @@ class ResendEmailAdapter implements EmailAdapter {
 Evaluates a set of workflow conditions against a context object. Returns `true` only if all conditions pass.
 
 ```typescript
-import { evaluateConditions } from "@thebookingkit/server";
+import { evaluateConditions } from "@waybook/server";
 
 const matches = evaluateConditions(workflow.conditions, {
   bookingStatus: "confirmed",
@@ -577,7 +577,7 @@ const matches = evaluateConditions(workflow.conditions, {
 Finds all active workflows that match a trigger event and whose conditions evaluate to true for the given context.
 
 ```typescript
-import { matchWorkflows } from "@thebookingkit/server";
+import { matchWorkflows } from "@waybook/server";
 
 const triggered = matchWorkflows(allWorkflows, "booking_confirmed", context);
 ```
@@ -610,7 +610,7 @@ Replaces `{{variable}}` placeholders in workflow action templates with values fr
 Resolves the effective configuration for a booking request by cascading settings from global defaults through organization, provider, and event type levels. More specific settings override less specific ones.
 
 ```typescript
-import { resolveEffectiveSettings, GLOBAL_DEFAULTS } from "@thebookingkit/server";
+import { resolveEffectiveSettings, GLOBAL_DEFAULTS } from "@waybook/server";
 
 const settings = resolveEffectiveSettings(
   GLOBAL_DEFAULTS,
@@ -626,7 +626,7 @@ const settings = resolveEffectiveSettings(
 Throws `TenantAuthorizationError` if the member does not hold the required permission within the organization.
 
 ```typescript
-import { assertOrgPermission } from "@thebookingkit/server";
+import { assertOrgPermission } from "@waybook/server";
 
 assertOrgPermission(member, "manage:members");
 ```
@@ -634,7 +634,7 @@ assertOrgPermission(member, "manage:members");
 ### `getRolePermissions()` and `roleHasPermission()`
 
 ```typescript
-import { getRolePermissions, roleHasPermission } from "@thebookingkit/server";
+import { getRolePermissions, roleHasPermission } from "@waybook/server";
 
 const perms = getRolePermissions("admin");
 const can = roleHasPermission("member", "view:own-bookings"); // true
@@ -645,7 +645,7 @@ const can = roleHasPermission("member", "view:own-bookings"); // true
 Utilities for generating and parsing organization-scoped booking URLs.
 
 ```typescript
-import { buildOrgBookingUrl, parseOrgBookingPath } from "@thebookingkit/server";
+import { buildOrgBookingUrl, parseOrgBookingPath } from "@waybook/server";
 
 const url = buildOrgBookingUrl("acme-corp", "consultation");
 // => "/org/acme-corp/consultation"
@@ -669,7 +669,7 @@ const parsed = parseOrgBookingPath("/org/acme-corp/consultation");
 **Constants**
 
 ```typescript
-import { GLOBAL_DEFAULTS } from "@thebookingkit/server";
+import { GLOBAL_DEFAULTS } from "@waybook/server";
 // => { timezone: "UTC", currency: "usd", bufferMinutes: 0 }
 ```
 
@@ -694,7 +694,7 @@ import type {
   CreatePaymentIntentResult,
   CaptureResult,
   RefundResult,
-} from "@thebookingkit/server";
+} from "@waybook/server";
 ```
 
 | Interface | Default implementation | Alternatives |
@@ -710,7 +710,7 @@ import type {
 ### ICS calendar attachment
 
 ```typescript
-import { generateICSAttachment, JOB_NAMES } from "@thebookingkit/server";
+import { generateICSAttachment, JOB_NAMES } from "@waybook/server";
 
 const icsContent = generateICSAttachment({
   bookingId: booking.id,
@@ -736,10 +736,10 @@ import {
   UnauthorizedError,
   ForbiddenError,
   ResourceUnavailableError,
-} from "@thebookingkit/server";
+} from "@waybook/server";
 ```
 
-These are re-exported from `@thebookingkit/core` for convenience so server code does not need to depend on both packages to throw and catch the same error types.
+These are re-exported from `@waybook/core` for convenience so server code does not need to depend on both packages to throw and catch the same error types.
 
 | Error class | HTTP status | When thrown |
 |---|---|---|

@@ -1,12 +1,12 @@
 ---
-title: "Database Reference (@thebookingkit/db)"
-description: "Complete API reference for @thebookingkit/db — Drizzle ORM schema, database client, TypeScript types, and migration utilities for Postgres 15+."
+title: "Database Reference (@waybook/db)"
+description: "Complete API reference for @waybook/db — Drizzle ORM schema, database client, TypeScript types, and migration utilities for Postgres 15+."
 ---
 
-`@thebookingkit/db` provides the Drizzle ORM schema, a typed database client factory, inferred TypeScript types for all tables, and a migration runner for custom SQL that Drizzle's kit does not handle.
+`@waybook/db` provides the Drizzle ORM schema, a typed database client factory, inferred TypeScript types for all tables, and a migration runner for custom SQL that Drizzle's kit does not handle.
 
 ```bash
-npm install @thebookingkit/db drizzle-orm postgres
+npm install @waybook/db drizzle-orm postgres
 ```
 
 ---
@@ -18,7 +18,7 @@ npm install @thebookingkit/db drizzle-orm postgres
 Creates a Drizzle database client connected to a Postgres instance. Uses `postgres.js` as the driver.
 
 ```typescript
-import { createDb } from "@thebookingkit/db";
+import { createDb } from "@waybook/db";
 
 const db = createDb(process.env.DATABASE_URL!, {
   max: 10,   // connection pool size
@@ -40,7 +40,7 @@ const db = createDb(process.env.DATABASE_URL!, {
 The type of the client returned by `createDb`. Use this to type function parameters that accept a database connection.
 
 ```typescript
-import type { Database } from "@thebookingkit/db";
+import type { Database } from "@waybook/db";
 
 async function getBooking(db: Database, id: string) {
   return db.query.bookings.findFirst({
@@ -53,7 +53,7 @@ async function getBooking(db: Database, id: string) {
 
 ## Schema Tables
 
-All tables are exported from `@thebookingkit/db` and can be used with Drizzle's query builder or SQL template tags.
+All tables are exported from `@waybook/db` and can be used with Drizzle's query builder or SQL template tags.
 
 ```typescript
 import {
@@ -83,7 +83,7 @@ import {
   resources,
   resourceAvailabilityRules,
   resourceAvailabilityOverrides,
-} from "@thebookingkit/db";
+} from "@waybook/db";
 ```
 
 **Core tables**
@@ -167,7 +167,7 @@ import type {
   EmailDeliveryStatusDb,
   BookingSourceDb,
   WalkInStatusDb,
-} from "@thebookingkit/db";
+} from "@waybook/db";
 ```
 
 | Type | Values |
@@ -222,7 +222,7 @@ import type {
   Resource,
   ResourceAvailabilityRule,
   ResourceAvailabilityOverride,
-} from "@thebookingkit/db";
+} from "@waybook/db";
 ```
 
 ---
@@ -259,7 +259,7 @@ import type {
   NewResource,
   NewResourceAvailabilityRule,
   NewResourceAvailabilityOverride,
-} from "@thebookingkit/db";
+} from "@waybook/db";
 ```
 
 ---
@@ -271,7 +271,7 @@ import type {
 Runs the custom SQL migration files that Drizzle Kit does not manage — extensions, exclusion constraints, audit triggers, stored functions, and resource tables.
 
 ```typescript
-import { runCustomMigrations } from "@thebookingkit/db";
+import { runCustomMigrations } from "@waybook/db";
 
 await runCustomMigrations(process.env.DATABASE_URL!);
 ```
@@ -301,7 +301,7 @@ Run this once after your initial schema push and after any upgrade that adds new
 ### Querying bookings with Drizzle
 
 ```typescript
-import { createDb, bookings, providers } from "@thebookingkit/db";
+import { createDb, bookings, providers } from "@waybook/db";
 import { eq, and, gte, lte } from "drizzle-orm";
 
 const db = createDb(process.env.DATABASE_URL!);
@@ -323,7 +323,7 @@ const upcoming = await db
 ### Inserting a booking with type safety
 
 ```typescript
-import { createDb, bookings, type NewBooking } from "@thebookingkit/db";
+import { createDb, bookings, type NewBooking } from "@waybook/db";
 
 const db = createDb(process.env.DATABASE_URL!);
 
@@ -344,7 +344,7 @@ const [inserted] = await db.insert(bookings).values(newBooking).returning();
 ### Using select types in API responses
 
 ```typescript
-import type { Booking, BookingStatusDb } from "@thebookingkit/db";
+import type { Booking, BookingStatusDb } from "@waybook/db";
 
 function isConfirmed(booking: Booking): boolean {
   return booking.status === "confirmed" satisfies BookingStatusDb;
@@ -355,8 +355,8 @@ function isConfirmed(booking: Booking): boolean {
 
 ```typescript
 // lib/db.ts — singleton database client
-import { createDb, type Database } from "@thebookingkit/db";
-import { runCustomMigrations } from "@thebookingkit/db";
+import { createDb, type Database } from "@waybook/db";
+import { runCustomMigrations } from "@waybook/db";
 
 let _db: Database | null = null;
 

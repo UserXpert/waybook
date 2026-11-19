@@ -9,8 +9,8 @@
 - [ ] Verify GitHub Actions e2e workflow passes (73 Playwright tests against mock data)
 
 ### Known Pre-Existing CI Issues
-- `@thebookingkit/db` build fails due to `seed.ts` missing `@types/node` (uses `process`, `console` without Node types in tsconfig)
-- `@thebookingkit/core` build fails because test files (`.test.ts`) are included in `tsc` compilation but `vitest` types aren't in the build tsconfig
+- `@waybook/db` build fails due to `seed.ts` missing `@types/node` (uses `process`, `console` without Node types in tsconfig)
+- `@waybook/core` build fails because test files (`.test.ts`) are included in `tsc` compilation but `vitest` types aren't in the build tsconfig
 - These don't affect the demo build because it depends on the already-built `dist/` output
 
 ---
@@ -38,7 +38,7 @@ Prove the full stack works: Drizzle schema → Postgres → real queries → rea
 - Playwright config passes `DATABASE_URL` to Next.js dev server in DB mode
 
 ### Tasks
-- [ ] Fix `@thebookingkit/db` build (add `@types/node`, exclude test files from tsc)
+- [ ] Fix `@waybook/db` build (add `@types/node`, exclude test files from tsc)
 - [ ] Verify `drizzle-kit push` works against Docker Postgres locally
 - [ ] Verify `seed.ts` runs cleanly
 - [ ] Run `npm run e2e:db` locally and fix any issues
@@ -87,16 +87,16 @@ Test adapter implementations against real (or accurately simulated) services.
 
 ## Phase 4: Package Build Fixes
 
-### `@thebookingkit/db`
+### `@waybook/db`
 - [ ] Add `@types/node` to devDependencies
 - [ ] Exclude `src/__tests__/**` and `src/seed.ts` from tsconfig `include`
 - [ ] Verify `npm run build` passes
 
-### `@thebookingkit/core`
+### `@waybook/core`
 - [ ] Exclude `src/__tests__/**` from tsconfig `include`
 - [ ] Verify `npm run build` passes
 
-### `@thebookingkit/server`
+### `@waybook/server`
 - [ ] Verify build passes (currently succeeds)
 
 ### Monorepo

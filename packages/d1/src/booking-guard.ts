@@ -62,7 +62,7 @@
  *
  * A row blocks unless its status is in `INACTIVE_STATUSES`
  * (`cancelled`, `rejected`, `no_show`, `rescheduled`) — identical to
- * `getActiveBookings()` in `@thebookingkit/core` and to the PostgreSQL
+ * `getActiveBookings()` in `@waybook/core` and to the PostgreSQL
  * `EXCLUDE USING gist` predicates, so all three backends agree on occupancy.
  * The predicate is `NOT IN`, so any status added in future blocks by default:
  * the safe direction.
@@ -78,7 +78,7 @@
  *
  * @example
  * ```ts
- * import { insertBookingIfFree } from "@thebookingkit/d1";
+ * import { insertBookingIfFree } from "@waybook/d1";
  *
  * const result = await insertBookingIfFree(db, {
  *   id: crypto.randomUUID(),
@@ -99,7 +99,7 @@
  * ```
  */
 
-import { BookingConflictError } from "@thebookingkit/core";
+import { BookingConflictError } from "@waybook/core";
 import { D1DateCodec } from "./codec.js";
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ import { D1DateCodec } from "./codec.js";
 /**
  * Statuses whose bookings do NOT block a slot.
  *
- * Mirrors `INACTIVE_STATUSES` in `@thebookingkit/core`'s slot pipeline so that
+ * Mirrors `INACTIVE_STATUSES` in `@waybook/core`'s slot pipeline so that
  * the database-level guard and the in-memory slot engine agree exactly. A
  * `no_show` did not happen, and a `rescheduled` booking moved to a new row, so
  * in both cases the original slot is free.

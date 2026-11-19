@@ -1,7 +1,7 @@
 import {
   BookingConflictError,
   SerializationRetryExhaustedError,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 /** Options for the serialization retry wrapper */
 export interface SerializableRetryOptions {

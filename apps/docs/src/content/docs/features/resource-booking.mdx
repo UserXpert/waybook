@@ -42,8 +42,8 @@ import {
   getResourceAvailableSlots,
   assignResource,
   isResourceSlotAvailable,
-} from "@thebookingkit/core";
-import type { ResourceInput } from "@thebookingkit/core";
+} from "@waybook/core";
+import type { ResourceInput } from "@waybook/core";
 
 // 1. Define a resource
 const tableResource: ResourceInput = {
@@ -267,7 +267,7 @@ const conferenceRoom: ResourceInput = {
 ### Basic usage
 
 ```typescript
-import { getResourceAvailableSlots } from "@thebookingkit/core";
+import { getResourceAvailableSlots } from "@waybook/core";
 
 const slots = getResourceAvailableSlots(
   resources,          // ResourceInput[]
@@ -361,7 +361,7 @@ const slots = getResourceAvailableSlots(
 Selects the **smallest resource** whose capacity ≥ requested party size. Minimizes wasted seats.
 
 ```typescript
-import { assignResource } from "@thebookingkit/core";
+import { assignResource } from "@waybook/core";
 
 const assignment = assignResource(
   tables,
@@ -457,7 +457,7 @@ const assignment = assignResource(
 When no resource can be assigned, `ResourceUnavailableError` is thrown with a specific `reason`:
 
 ```typescript
-import { assignResource, ResourceUnavailableError } from "@thebookingkit/core";
+import { assignResource, ResourceUnavailableError } from "@waybook/core";
 
 try {
   const assignment = assignResource(tables, startTime, endTime, {
@@ -487,7 +487,7 @@ try {
 Validate whether one specific resource is available at a time:
 
 ```typescript
-import { isResourceSlotAvailable } from "@thebookingkit/core";
+import { isResourceSlotAvailable } from "@waybook/core";
 
 const result = isResourceSlotAvailable(
   tables,
@@ -534,7 +534,7 @@ if (result.available) {
 `getResourcePoolSummary()` provides real-time utilization metrics for admin dashboards.
 
 ```typescript
-import { getResourcePoolSummary } from "@thebookingkit/core";
+import { getResourcePoolSummary } from "@waybook/core";
 
 const summary = getResourcePoolSummary(
   tables,
@@ -605,7 +605,7 @@ import {
   getResourceAvailableSlots,
   assignResource,
   isResourceSlotAvailable,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // 1. Customer selects date, time, and party size
 const partySize = 4;
@@ -684,7 +684,7 @@ Book a spot in a class with a max capacity:
 import {
   getResourceAvailableSlots,
   isResourceSlotAvailable,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // A yoga class is a "resource" with capacity = max students
 const yogaClass: ResourceInput = {

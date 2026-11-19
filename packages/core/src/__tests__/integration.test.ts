@@ -1,5 +1,5 @@
 /**
- * Integration test suite for @thebookingkit/core
+ * Integration test suite for @waybook/core
  *
  * These tests validate that the public API modules compose correctly under
  * realistic end-to-end booking workflows. Every test exercises multiple modules
