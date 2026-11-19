@@ -10,6 +10,7 @@ for (const raw of targets) {
   }
 }
 for (const raw of targets) {
+  const url = new URL(raw!);
   const db = postgres(raw!, { max: 1, ssl: false });
   try {
     await db.begin(async tx => {
