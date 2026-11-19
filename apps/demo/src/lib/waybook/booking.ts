@@ -8,6 +8,9 @@ import { tenantDb } from "./database";
 import { isPublicBookingStartAllowed } from "./public-booking-rules";
 import { isSlotWithinLocationHours, type LocationHours } from "./booking-location-hours";
 
+// Keep the original public import path stable for calendar and booking callers.
+export { isSlotWithinLocationHours };
+
 type Service = { id: string; durationMinutes: number };
 type Location = { id: string; timezone: string };
 async function resolvedLocation(tenant: TenantRecord, requestedId?: string, db = tenantDb(tenant)) {
