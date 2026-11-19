@@ -696,7 +696,7 @@ export default async function CalendarsPage({
                     <div>
                       <p>MONTHLY SCHEDULE</p>
                       <h2>{new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))}</h2>
-                      <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : "All visible staff"} · {tenant.timezone}</span>
+                      <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : "All staff"} · {tenant.timezone}</span>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
                       <details className="calendar-filter-panel">
