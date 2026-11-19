@@ -79,6 +79,8 @@ The application uses Next.js, React, TypeScript and PostgreSQL. Some shared pack
 
 Start with the [documentation entry point](WAYBOOK_MVP.md) and [manifest](.waybook/docs/00_manifest.md). For the current pilot, see the [delivery backlog](.waybook/docs/07_delivery_backlog.md), [readiness record](.waybook/docs/08_pilot_readiness.md), [support runbook](.waybook/docs/09_pilot_support_runbook.md) and [privacy review](.waybook/docs/10_denmark_privacy_review.md).
 
+See the [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) before reconciling local changes or deploying.
+
 ## License and attribution
 
 See [LICENSE](LICENSE) for the applicable MIT copyright and permission notice for inherited code. Preserve third-party notices when modifying or distributing inherited components.
