@@ -26,9 +26,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-        working-directory: apps/demo
+      - name: Check Playwright image version
+        run: node -e 'if (require("@playwright/test/package.json").version !== "1.59.1") throw new Error("Update the Playwright E2E image to match the installed version")'
 
       - name: Build packages
         run: npx turbo build
@@ -50,8 +49,12 @@ jobs:
           node --import tsx scripts/seed-waybook-e2e.mts
 
       - name: Run Waybook E2E tests
-        run: npm run e2e
-        working-directory: apps/demo
+        run: |
+          docker run --rm --network host --ipc=host \\
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/apps/demo" \\
+            -e CI -e WAYBOOK_CONTROL_DATABASE_URL -e WAYBOOK_NORDIC_STUDIO_DATABASE_URL \\
+            -e WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL -e WAYBOOK_GIFT_CARD_CODE_SECRET \\
+            mcr.microsoft.com/playwright:v1.59.1-noble npm run e2e
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v7
