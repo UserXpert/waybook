@@ -23,12 +23,13 @@ jobs:
       RELEASE_SHA: ${{ inputs.release_sha }}
       BASE_SHA: ${{ inputs.base_sha }}
     steps:
-      - name: Require immutable full commit SHAs
-        shell: bash
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Fetch and prove the immutable release baseline
         run: |
-          set -euo pipefail
-          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "release_sha must be a lowercase 40-hex SHA" >&2; exit 1; }
-          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "base_sha must be a lowercase 40-hex SHA" >&2; exit 1; }
+          git fetch --no-tags origin main
+          node scripts/validate-release-inputs.mjs
 
   package-checks:
     name: Build, typecheck, test, lint (published packages)
@@ -47,7 +48,6 @@ jobs:
         run: |
           test "$GITHUB_SHA" = "$RELEASE_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
-          git merge-base --is-ancestor "$BASE_SHA" "$RELEASE_SHA"
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
       - run: npm ci
