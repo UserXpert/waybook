@@ -326,7 +326,7 @@ export default async function CalendarsPage({
     staff: staffSearch || undefined,
     after: staffAfter ?? undefined,
     before: staffBefore ?? undefined,
-    showOffShift: showOffShift === "1" ? "1" : undefined,
+    showOffShift: showOffShift === "0" ? "0" : undefined,
   };
   const calendarView = monthlyView ? "month" : staffDayView ? "day" : teamView ? "team" : "staff";
   const teamDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday;
@@ -606,6 +606,7 @@ export default async function CalendarsPage({
     if (next.customer ?? selectedCustomer?.id)
       params.set("customer", next.customer ?? selectedCustomer!.id);
     if (next.staff ?? staffSearch) params.set("staff", next.staff ?? staffSearch);
+    if (showOffShift === "0") params.set("showOffShift", "0");
     if (next.after) params.set("after", next.after);
     if (next.before) params.set("before", next.before);
     if (next.createStaff) params.set("createStaff", next.createStaff);
@@ -629,7 +630,7 @@ export default async function CalendarsPage({
   );
   const visibleTeamMembers = staffDayView && selected
     ? [selected]
-    : showOffShift === "1" ? members : members.filter((member) =>
+    : showOffShift !== "0" ? members : members.filter((member) =>
     teamDayBookings.some((booking) => booking.teamMemberId === member.id)
     || Array.from(bookableSlotKeys).some((key) => key.startsWith(`${member.id}|${teamDay}T`)),
   );
@@ -776,7 +777,7 @@ export default async function CalendarsPage({
                             week={currentWeek}
                             teamMode={!staffDayView}
                           />
-                          {!staffDayView ? <CalendarRosterControls includeOffShift={showOffShift === "1"} /> : null}
+                          {!staffDayView ? <CalendarRosterControls includeOffShift={showOffShift !== "0"} /> : null}
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
                         </div>
                       </details>
@@ -938,8 +939,8 @@ export default async function CalendarsPage({
                     </>
                   ) : (
                     <div className="team-day-calendar__empty" role="status">
-                      <strong>No staff scheduled</strong>
-                      <span>No staff are visible for {calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}. Choose another day or include off-shift staff in Filters.</span>
+                      <strong>No staff visible</strong>
+                      <span>No staff match the current filters. Adjust Filters to see more staff.</span>
                     </div>
                   )}
                 </section>

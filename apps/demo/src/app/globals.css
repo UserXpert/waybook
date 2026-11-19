@@ -6786,6 +6786,11 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-date-nav > a:last-child,:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker { border-color: #4a4a51; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-date-picker__navigation > button { border-color: #505058; background: #29292d; color: #f4f4f5; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav > a { color: #ededf0; }
+@media (max-width: 480px) {
+  .tenant-dashboard-page .team-day-calendar__grid { --team-staff-rail: 8rem; }
+  .tenant-dashboard-page .team-day-calendar__staff { min-width: 8rem; justify-content: flex-start; }
+  .tenant-dashboard-page .team-day-calendar__staff strong { display: block; }
+}
 @media (max-width: 760px) {
   .tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-calendar-date-nav { flex: 0 0 auto; }
   .tenant-dashboard-page .waybook-calendar-date-nav .calendar-date-picker { flex: 1 1 auto; }
