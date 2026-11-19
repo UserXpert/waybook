@@ -15,6 +15,10 @@ security/tenant isolation, recovery, billing/compliance choice, browser QA,
 and the first 5–10-client operating workflow. P2 items are deliberately not
 silent prerequisites for that decision.
 
+## Current top priority
+
+Repository identity and inherited code cleanup is tracked in GitHub issue #45. Replace outdated product documentation and safely rename or remove inherited branding while preserving behavior and required attribution. The work is in progress; pilot safety and recovery gates remain in force.
+
 ## Approved implementation sequence
 
 This sequence controls feature work. The full priority inventory below remains
