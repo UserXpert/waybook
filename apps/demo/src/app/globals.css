@@ -6771,3 +6771,5 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 @media (max-width: 760px) { .tenant-dashboard-page .calendar-date-picker__popover { width: min(19rem, calc(100vw - 6rem)); } .tenant-dashboard-page .calendar-date-picker__navigation { grid-template-columns: 1.6rem minmax(0, 1fr) 4.8rem 1.6rem; gap: .2rem; } .tenant-dashboard-page .calendar-date-picker__navigation > button { width: 1.6rem; } }
 @media (max-width: 760px) { .tenant-dashboard-page .calendar-date-picker__popover { width: min(19rem, calc(100vw - 9rem)); min-width: 13rem; } }
 .tenant-dashboard-page .calendar-date-picker__grid button { width: min(2.15rem, 100%); height: auto; aspect-ratio: 1; }
+/* Allow the picker to extend past a short calendar without clipping its dates. */
+.tenant-dashboard-page .waybook-data-card:has(.calendar-date-picker__popover) { overflow: visible; }
