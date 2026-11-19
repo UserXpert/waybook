@@ -38,30 +38,71 @@ The website also describes future possibilities such as SMS, integrations and ad
 
 Waybook is an operations product, not an electronic health record. Diagnoses, treatment notes, prescriptions and clinical images are outside its intended scope. Appointment or service information can still reveal health information, so the [Denmark privacy review](.waybook/docs/10_denmark_privacy_review.md) remains a release requirement.
 
-## Getting started locally
+## Developer onboarding
 
-**Requirements:** Node.js 22.12 or later, npm, and PostgreSQL command-line tools (`initdb`, `pg_ctl`, `createdb` and `psql`). The database script creates a local development cluster on `127.0.0.1:5440`.
+Waybook uses a protected GitHub `main` branch and Vercel production deployment. Local files, the deployed code, database contents and browser appearance settings are separate; a successful deployment does not automatically copy local changes or data.
+
+### 1. Choose the right checkout
+
+Clone [UserXpert/waybook](https://github.com/UserXpert/waybook). On the current development Mac, `/Users/amit/Documents/Waybook` is the designated local checkout; an isolated task worktree based on the latest `main` is also suitable. Preserve work in older checkouts and never reset or discard changes without first reconciling them.
 
 ```sh
-npm install
-npm run waybook:db:start
-npm run waybook:db:migrate -- --local
-npm run waybook:db:seed
-npm run dev --workspace=@waybook/app
+git rev-parse --show-toplevel
+git status --short --branch
+git remote -v
+npm run waybook:release:check
 ```
 
-Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](.env.waybook.local.example).
+The release check compares the checkout and its working tree with GitHub `main`, the commit serving the production domain, and the checkout running on local port 3333. It needs network access, an authenticated Vercel CLI and `lsof`. An unavailable check is not proof of parity; a task branch is expected to differ from `main` until its changes are released.
 
-> The seed command uses configured database variables if present. Before running it, check that they point only to the intended local databases. Local seed credentials are for development only; never use them in a hosted environment.
+### 2. Set up an isolated local environment
 
-### Build and test
+**Requirements:** Node.js 22.12 or later, npm and PostgreSQL tools (`initdb`, `pg_ctl`, `createdb` and `psql`). CI uses Node 24. The local database script uses `127.0.0.1:5440` and creates separate Control, Nordic Studio and Copenhagen Physio databases.
+
+For a **new, disposable** local database only:
+
+```sh
+npm ci
+npm run waybook:db:start
+npm run waybook:db:migrate -- --local
+env -u WAYBOOK_CONTROL_DATABASE_URL -u WAYBOOK_NORDIC_STUDIO_DATABASE_URL -u WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL npm run waybook:db:seed
+npm run waybook:dev
+```
+
+Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](.env.waybook.local.example). The seed command writes demo users and data; the example unsets the three configured database URLs for that command so it targets the local defaults. Do not use seed credentials in hosted environments.
+
+For an **existing** database, preserve its data and check its history first:
+
+```sh
+npm run waybook:db:status -- --local
+```
+
+`npm run waybook:dev` checks the three local histories, applies known pending migrations and starts the app; it does not start PostgreSQL or seed data. It refuses configured Waybook database URLs, missing history and unknown migration records. Back up valuable data before schema changes. The current development Mac has historical tenant records that need reconciliation; follow [issue #54](https://github.com/UserXpert/waybook/issues/54) rather than bypassing the check.
+
+### 3. Build and verify your change
+
+Create a task branch from current `main`, identify the relevant GitHub issue and preserve any existing uncommitted work. Run the checks relevant to the change, for example:
 
 ```sh
 npm run waybook:build
 npm test --workspace=@waybook/app
 ```
 
-These commands do not establish hosted or pilot readiness. Database-backed and browser tests require their own configured test environments; see the [delivery backlog](.waybook/docs/07_delivery_backlog.md) and [pilot readiness record](.waybook/docs/08_pilot_readiness.md).
+Use the [GitHub workflows](.github/workflows/) for package, Postgres integration and browser-test setup. Verify affected user-facing flows on desktop and mobile using isolated test data. A local build alone does not establish hosted or pilot readiness.
+
+### 4. Review, merge and verify production
+
+1. Commit the intended files, push the task branch and open a pull request. Record schema, configuration and data effects separately.
+2. Wait for the required package, database integration, E2E and migration-history checks. Check the Waybook app preview; track unrelated project failures separately.
+3. Review migrations, compatibility and rollback before merging. **Merging to `main` automatically triggers a Vercel production deployment.**
+4. Confirm Vercel is ready, the production domain serves the intended commit, and the affected user-facing flow works. Update the GitHub issue with evidence and leave it open if its acceptance criteria remain unmet.
+5. Update the clean designated local checkout to the released commit and run `npm run waybook:release:check` again. Never overwrite unreconciled changes.
+
+### Database changes and release safety
+
+Database schema changes require versioned migrations; they must not be silently applied during Vercel builds or application startup. The schema guard rejects edits or deletions of existing migration files in pull requests. The history check reports recorded filenames, not a full physical-schema audit. Before hosted schema writes, verify the target, independent backup and recovery, rehearse on isolated copies, and plan a compatible rollout. Automated production schema changes are not yet enabled.
+
+For the full checklist, see the [local-to-production workflow](.waybook/docs/11_local_release_workflow.md), [pilot readiness record](.waybook/docs/08_pilot_readiness.md) and [GitHub issue #54](https://github.com/UserXpert/waybook/issues/54).
 
 ## Inside the repository
 
@@ -73,7 +114,7 @@ packages/db/src/waybook/         Control and tenant database clients and migrati
 scripts/                         Local setup, migrations and focused verification
 ```
 
-The application uses Next.js, React, TypeScript and PostgreSQL. Some shared packages are being renamed as part of the [repository identity cleanup](https://github.com/UserXpert/waybook/issues/45); they remain part of the build until their callers and behavior are verified.
+The application uses Next.js, React, TypeScript and PostgreSQL. Workspace packages use the `@waybook` scope. Other inherited branding and documentation are tracked in the [repository identity cleanup](https://github.com/UserXpert/waybook/issues/45).
 
 ## Documentation
 
