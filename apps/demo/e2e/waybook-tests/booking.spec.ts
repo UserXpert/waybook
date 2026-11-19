@@ -87,7 +87,7 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await check(page).toHaveURL(/\/nordic\/app/);
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await page.locator(".calendar-date-picker > button").click();
-  await page.getByRole("textbox", { name: "Calendar date", exact: true }).fill(monthDay);
+  await page.getByRole("dialog", { name: "Choose calendar date" }).getByLabel("Calendar date", { exact: true }).fill(monthDay);
   await check(page).toHaveURL(new RegExp(`day=${monthDay}`));
 
   const day = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
