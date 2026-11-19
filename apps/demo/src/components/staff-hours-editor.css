@@ -1,0 +1,15 @@
+.tenant-dashboard-page .staff-shift-modal { max-height: min(90vh, 48rem); overflow-y: auto; color: #27272a; }
+.tenant-dashboard-page .staff-shift-modal__row { grid-template-columns: minmax(0, 1fr) auto; }
+.tenant-dashboard-page .staff-shift-modal footer button,.tenant-dashboard-page .staff-shift-modal__remove,.tenant-dashboard-page .staff-shift-modal__add { min-height: 2.5rem; border-radius: .5rem; padding: .55rem .85rem; font: inherit; font-size: .8rem; font-weight: 500; cursor: pointer; }
+.tenant-dashboard-page .staff-shift-modal footer button[type="submit"] { border: 1px solid var(--waybook-accent, #262626); background: var(--waybook-accent, #262626); color: #fff; }
+.tenant-dashboard-page .staff-shift-modal__cancel { border-color: #d4d4d8 !important; color: #3f3f46 !important; }
+.tenant-dashboard-page .staff-shift-modal__remove { border-color: #e4e4e7 !important; background: #fff !important; color: #a14337 !important; }
+.tenant-dashboard-page .staff-shift-modal__add { justify-self: start; border: 1px solid #d4d4d8 !important; padding: .55rem .85rem !important; background: #fff !important; color: #3f3f46 !important; }
+.tenant-dashboard-page .staff-shift-schedule__saved { margin: 0; color: var(--waybook-accent, #25633e); font-size: .8rem; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-shift-modal { background: #202023; color: #f4f4f5; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-shift-modal header,:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-shift-modal footer { border-color: #414148; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-shift-modal h3 { color: #f4f4f5; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-shift-modal__cancel,:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-shift-modal__add,:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-shift-modal__remove { border-color: #505058 !important; background: #29292d !important; color: #f4f4f5 !important; }
+.tenant-dashboard-page .staff-shift-modal[aria-busy="true"] .staff-shift-modal__body { pointer-events: none; }
+/* A filtered ancestor becomes the containing block for fixed-position dialogs. */
+.tenant-dashboard-page .staff-workspace:has(.staff-shift-modal-layer) { backdrop-filter: none !important; }

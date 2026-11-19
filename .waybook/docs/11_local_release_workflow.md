@@ -13,8 +13,41 @@ Waybook's source code, databases and browser settings are separate. A successful
 
 1. Implement a bounded change, update its GitHub issue and record migrations, environment changes and data effects separately.
 2. Run the relevant build and tests; verify UI changes on desktop and mobile against an isolated test database. Confirm that local-only changes are committed before claiming they are included.
-3. Push the branch and open a pull request. Require the package, Postgres integration and E2E workflows, plus the Waybook app preview. Identify unrelated project failures explicitly instead of treating them as app success.
+3. Push the branch and open a pull request. Require the package, Postgres integration, E2E and migration-history workflows. For a direct release also verify the Waybook app preview; for a batch, verify the combined release preview as described below. Identify unrelated project failures explicitly instead of treating them as app success.
 4. Merge only the reviewed commit after checks pass. The main branch automatically triggers Vercel production deployment; group changes when practical and assess migrations and rollback before merging.
+
+### Batch several PRs into one production release
+
+The release collector runs every 30 minutes on a best-effort schedule and
+collects PRs marked `release-ready` into `release/ready` after their exact head
+passes the four GitHub checks. Apply that label only after reviewing the PR.
+Conflicts, changed heads, missing checks, draft PRs and forked branches are
+skipped. See [the collector runbook](release_branch_collector.md) for setup,
+combined validation, first-run limitations and the manual release gate.
+
+For a manual batch, start a short-lived release branch from current GitHub
+`main` (without a `codex/` prefix). Keep each task on its own branch and PR for
+review. Retarget the PRs
+selected for the batch to the release branch and merge them there only after
+their applicable checks and review pass. Alternatively, integrate reviewed
+commits into the release branch while retaining links to each source PR and its
+exact reviewed commit. Resolve conflicts explicitly; do not include unfinished
+or unreviewed work just to fill the batch.
+
+Open one release PR from that branch to `main`. Describe the included PRs and
+issues, schema and configuration changes, data effects, compatibility and
+rollback. Run the required package, database integration, E2E and
+migration-history checks on the combined commit and verify its Waybook preview.
+Apply the hosted migration release gate below to any change that needs schema
+updates. Merge the release PR only after the combined result passes review and
+checks. The single merge to `main` triggers one production deployment; verify
+the exact deployed commit and affected flows using the steps below, and close
+issues only after their own acceptance criteria are met.
+
+Branch pushes can still trigger separate Vercel **preview** builds. Batching
+production merges does not remove preview build limits or turn a failed or
+unavailable required preview into a pass. Do not disable automatic deployments,
+branch protection, or required checks as a shortcut for a batch.
 
 ## After merge
 
@@ -27,7 +60,7 @@ Waybook's source code, databases and browser settings are separate. A successful
 
 `npm run waybook:db:status -- --local` checks the three local schema histories without changing data. `npm run waybook:dev` checks for unknown migration records and applies pending versioned migrations to the three explicitly local databases before starting the app; it refuses unknown records and configured Waybook database URLs and does not seed data or start PostgreSQL. Back up valuable local data before schema changes.
 
-Production schema changes still require versioned migrations: data and constraints do not update themselves. Do not run schema changes during Vercel builds or application startup. Before automating hosted changes, establish independent backups and retention, rehearse on isolated copies, verify compatibility and recovery, and ensure deployment cannot advance on a failed migration. `npm run waybook:db:status` checks explicitly configured targets read-only, but migration history alone does not prove physical schema integrity. The PR schema guard rejects modifications to previously committed SQL migration files. GitHub main currently requires pull requests and the package, database integration, E2E and migration-history checks, with administrator enforcement and force pushes disabled. Verify protection remains enabled; repository settings can change.
+Production schema changes still require versioned migrations: data and constraints do not update themselves. Do not run schema changes during Vercel builds or application startup. Before automating hosted changes, establish independent backups and retention, rehearse on isolated copies, verify compatibility and recovery, and ensure deployment cannot advance on a failed migration. `npm run waybook:db:status` checks explicitly configured targets read-only, but migration history alone does not prove physical schema integrity. The PR schema guard rejects modifications to previously committed SQL migration files. Waybook policy requires pull requests and the package, database integration, E2E and migration-history checks. Do not assume GitHub is enforcing those requirements: protection availability depends on the repository plan and visibility. Verify the current settings before release; if the protection API is unavailable, report enforcement as unverified and apply the review and check gates manually. Never bypass a failed check or force-push the release branch.
 
 ### Hosted migration release gate
 

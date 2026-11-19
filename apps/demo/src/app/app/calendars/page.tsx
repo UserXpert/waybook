@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { CSSProperties } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
+import { CalendarActiveFilters } from "@/components/calendar-active-filters";
 import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
 import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
@@ -9,8 +12,10 @@ import { AppointmentDrawerActions } from "@/components/appointment-drawer-action
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { availableSlots } from "@/lib/waybook/booking";
+import { availableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
 import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
+import { calendarGridBounds } from "@/lib/waybook/calendar-grid-bounds";
+import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput } from "@waybook/core";
 import { tenantDb } from "@/lib/waybook/database";
 import {
   currentTenantRouteSlug,
@@ -70,6 +75,7 @@ type TeamBooking = Booking & {
 type Slot = { startTime: string; endTime: string };
 type ScheduleEntry = { startTime: string; endTime: string };
 type ResourceChoice = { id: string; name: string; isMutuallyExclusive: boolean };
+type LocationHours = { dayOfWeek: number; startTime: string; endTime: string };
 
 function localDateKey(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -188,23 +194,6 @@ function mergeSlots(slots: Slot[]): ScheduleEntry[] {
     }, []);
 }
 
-function calendarGridBounds(intervals: ScheduleEntry[], timezone: string) {
-  if (!intervals.length) return { start: 9 * 60, end: 10 * 60, rowCount: 2 };
-
-  const earliest = Math.min(
-    ...intervals.map((entry) =>
-      localMinutes(new Date(entry.startTime), timezone),
-    ),
-  );
-  const latest = Math.max(
-    ...intervals.map((entry) => localMinutes(new Date(entry.endTime), timezone)),
-  );
-  const start = Math.max(0, Math.floor(earliest / 60) * 60);
-  const end = Math.min(24 * 60, Math.max(start + 60, Math.ceil(latest / 60) * 60));
-
-  return { start, end, rowCount: Math.max(2, (end - start) / 30) };
-}
-
 export default async function CalendarsPage({
   searchParams,
 }: {
@@ -241,7 +230,6 @@ export default async function CalendarsPage({
     before,
     createStaff,
     showOffShift,
-    monthDay,
   } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -265,9 +253,10 @@ export default async function CalendarsPage({
   const selectedLocation = requestedLocation
     ?? bookingLocation
     ?? (await db<Location[]>`SELECT l.id,l.name FROM locations l WHERE l.tenant_id=${tenant.id} AND l.is_active=TRUE ORDER BY CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.tenant_id=l.tenant_id AND b.location_id=l.id AND b.status <> 'cancelled' AND b.starts_at >= (${requestedDay}::date::timestamp AT TIME ZONE ${tenant.timezone}) AND b.starts_at < ((${requestedDay}::date + 1)::timestamp AT TIME ZONE ${tenant.timezone}) AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid)) THEN 0 ELSE 1 END, CASE WHEN l.slug='primary' THEN 0 ELSE 1 END,l.name LIMIT 1`)[0];
-  const locationWorkingDays = selectedLocation
-    ? await db<{ dayOfWeek: number }[]>`SELECT day_of_week AS "dayOfWeek" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${selectedLocation.id} ORDER BY day_of_week`
-    : [] as { dayOfWeek: number }[];
+  const locationHours = selectedLocation
+    ? await db<LocationHours[]>`SELECT day_of_week AS "dayOfWeek",start_time AS "startTime",end_time AS "endTime" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${selectedLocation.id} ORDER BY day_of_week`
+    : [] as LocationHours[];
+  const locationWorkingDays = locationHours;
   const staffSearch = (staffFilter ?? "").trim().slice(0, 100);
   const isMemberId = (value: string | undefined) => /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value ?? "");
   const staffAfter = isMemberId(after) ? after! : null;
@@ -313,11 +302,10 @@ export default async function CalendarsPage({
   const hasSelectedEmployee = Boolean(
     effectiveEmployee && selected?.id === effectiveEmployee,
   );
-  // Team has one operational Day board. An individual can deliberately switch
-  // between their own Day and Week board without changing staff scope.
+  // All-staff uses the operational Day board. A selected staff member uses
+  // their Week board; there is intentionally no single-staff Day board.
   const monthlyView = view === "month";
-  const staffDayView = !monthlyView && hasSelectedEmployee && view === "day";
-  const teamView = !monthlyView && (!hasSelectedEmployee || staffDayView);
+  const teamView = !monthlyView && !hasSelectedEmployee;
   const calendarDatePickerScope = {
     location: selectedLocation?.id,
     employee: hasSelectedEmployee ? selected?.id : undefined,
@@ -325,15 +313,15 @@ export default async function CalendarsPage({
     staff: staffSearch || undefined,
     after: staffAfter ?? undefined,
     before: staffBefore ?? undefined,
-    showOffShift: showOffShift === "1" ? "1" : undefined,
+    showOffShift: showOffShift === "0" ? "0" : undefined,
   };
-  const calendarView = monthlyView ? "month" : staffDayView ? "day" : teamView ? "team" : "staff";
+  const calendarView = monthlyView ? "month" : teamView ? "team" : "staff";
   const teamDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday;
   // A team-day deep link can carry a day without a week. Query the week that
   // contains that day so the grid and booking data can never drift apart.
   const currentWeek = /^\d{4}-\d{2}-\d{2}$/.test(week ?? "")
     ? weekStartFor(week!)
-    : weekStartFor(teamView ? teamDay : tenantToday);
+    : weekStartFor(teamView ? teamDay : (/^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday));
   const currentMonth = monthStartFor(
     /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday,
   );
@@ -443,7 +431,7 @@ export default async function CalendarsPage({
       ?? (await db<Member[]>`SELECT id,name,email,calendar_color AS "calendarColor" FROM team_members WHERE tenant_id=${tenant.id} AND id=${selectedBooking.teamMemberId} LIMIT 1`)[0]
       ?? null
     : null;
-  const selectableServices = monthlyView ? monthCalendarServices : teamView && !staffDayView ? calendarServices : services;
+  const selectableServices = monthlyView ? monthCalendarServices : teamView ? calendarServices : services;
   const selectedService = service
     ? selectableServices.find((item) => item.id === service)
     : undefined;
@@ -452,7 +440,7 @@ export default async function CalendarsPage({
   // carries the compatible service into the create drawer below.
   const availabilityServices = monthlyView ? [] : selectedService
     ? [selectedService]
-    : teamView && !staffDayView
+    : teamView
     ? calendarServices
       : services;
   const visibleServiceDurations = Array.from(
@@ -525,6 +513,27 @@ export default async function CalendarsPage({
     days.includes(localDateKey(new Date(slot.startTime), tenant.timezone)),
   );
   const openPeriods = mergeSlots(slots);
+  const [configuredStaffRules, configuredStaffOverrides] = hasSelectedEmployee && selected && selectedLocation
+    ? await Promise.all([
+        db<AvailabilityRuleInput[]>`SELECT rrule,start_time AS "startTime",end_time AS "endTime",timezone,valid_from AS "validFrom",valid_until AS "validUntil" FROM availability_rules WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id}`,
+        db<AvailabilityOverrideInput[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date,start_time AS "startTime",end_time AS "endTime",is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id} AND local_date >= ${visibleRangeStart}::date AND local_date < ${visibleRangeEnd}::date`,
+      ])
+    : [[], []] as [AvailabilityRuleInput[], AvailabilityOverrideInput[]];
+  // This expands the persisted recurring rules before occupancy is subtracted.
+  // It is therefore the configured working canvas even if every slot is booked.
+  const configuredWorkingPeriods = hasSelectedEmployee && configuredStaffRules.length
+    ? mergeSlots(getAvailableSlots(
+        configuredStaffRules,
+        configuredStaffOverrides,
+        [],
+        { start: rangeStart, end: rangeEnd },
+        tenant.timezone,
+        { duration: 30, slotInterval: 30, now: new Date(0) },
+      ).filter((slot) =>
+        days.includes(localDateKey(new Date(slot.startTime), tenant.timezone))
+        && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, tenant.timezone),
+      ))
+    : [];
   const allIntervals = [
     ...openPeriods,
     ...bookings.map((booking) => ({
@@ -533,6 +542,7 @@ export default async function CalendarsPage({
     })),
   ];
   const { start: gridStart, rowCount } = calendarGridBounds(
+    configuredWorkingPeriods,
     allIntervals,
     tenant.timezone,
   );
@@ -605,30 +615,30 @@ export default async function CalendarsPage({
     if (next.customer ?? selectedCustomer?.id)
       params.set("customer", next.customer ?? selectedCustomer!.id);
     if (next.staff ?? staffSearch) params.set("staff", next.staff ?? staffSearch);
+    if (showOffShift === "0") params.set("showOffShift", "0");
     if (next.after) params.set("after", next.after);
     if (next.before) params.set("before", next.before);
     if (next.createStaff) params.set("createStaff", next.createStaff);
     return `${tenantPath(tenantSlug, "/app/calendars")}?${params.toString()}`;
   };
-  const position = (entry: ScheduleEntry) => {
+  // A selected staff member is read as a seven-row schedule: weekdays occupy
+  // the same rail used for staff in the team Day board and time runs across.
+  const staffWeekPosition = (entry: ScheduleEntry) => {
     const start = new Date(entry.startTime);
     const end = new Date(entry.endTime);
     const dayIndex = days.indexOf(localDateKey(start, tenant.timezone));
     const startMinutes = localMinutes(start, tenant.timezone);
     const endMinutes = localMinutes(end, tenant.timezone);
     return {
-      gridColumn: dayIndex + 2,
-      gridRow: `${2 + Math.floor((startMinutes - gridStart) / 30)} / span ${Math.max(1, Math.ceil((endMinutes - startMinutes) / 30))}`,
+      gridColumn: `${2 + Math.floor((startMinutes - gridStart) / 30)} / span ${Math.max(1, Math.ceil((endMinutes - startMinutes) / 30))}`,
+      gridRow: dayIndex + 2,
     };
   };
   const teamDayBookings = teamBookings.filter(
     (booking) =>
-      localDateKey(booking.startsAt, tenant.timezone) === teamDay &&
-      (!staffDayView || booking.teamMemberId === selected?.id),
+      localDateKey(booking.startsAt, tenant.timezone) === teamDay,
   );
-  const visibleTeamMembers = staffDayView && selected
-    ? [selected]
-    : showOffShift === "1" ? members : members.filter((member) =>
+  const visibleTeamMembers = showOffShift !== "0" ? members : members.filter((member) =>
     teamDayBookings.some((booking) => booking.teamMemberId === member.id)
     || Array.from(bookableSlotKeys).some((key) => key.startsWith(`${member.id}|${teamDay}T`)),
   );
@@ -648,15 +658,12 @@ export default async function CalendarsPage({
     })),
   ];
   const { start: teamGridStart, rowCount: teamRowCount } =
-    calendarGridBounds(teamIntervals, tenant.timezone);
+    calendarGridBounds(teamDayOpenPeriods, teamIntervals, tenant.timezone);
   const teamPosition = (booking: TeamBooking) => ({
     gridColumn: `${2 + Math.floor((localMinutes(booking.startsAt, tenant.timezone) - teamGridStart) / 30)} / span ${Math.max(1, Math.ceil((localMinutes(booking.endsAt, tenant.timezone) - localMinutes(booking.startsAt, tenant.timezone)) / 30))}`,
     gridRow: visibleTeamMembers.findIndex((member) => member.id === booking.teamMemberId) + 2,
     borderLeftColor: booking.teamMemberColor,
   });
-  const selectedMonthDay = monthlyView && /^\d{4}-\d{2}-\d{2}$/.test(monthDay ?? "") && monthDay! >= currentMonth && monthDay! < addMonths(currentMonth, 1)
-    ? monthDay!
-    : undefined;
   const monthlyBookings = monthScopedBookings.filter(
     (booking) => !selectedService || booking.serviceId === selectedService.id,
   );
@@ -714,18 +721,25 @@ export default async function CalendarsPage({
                       <details className="calendar-filter-panel">
                         <summary>Filters</summary>
                         <div className="calendar-filter-panel__content">
-                          <CalendarSelectors location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} teamMode={!hasSelectedEmployee} fixedView="month" />
+                          <CalendarSelectors location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} fixedView="month" />
                         </div>
                       </details>
+                      <CalendarActiveFilters
+                        location={{ name: selectedLocation.name, isExplicit: Boolean(requestedLocation) }}
+                        staff={hasSelectedEmployee && selected ? { name: selected.name, id: selected.id } : undefined}
+                        service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
+                        rosterSearch={staffSearch || undefined}
+                        excludesOffShift={showOffShift === "0"}
+                        dayFallback={teamDay}
+                      />
                       <div className="calendar-view-toggle" aria-label="Calendar range">
-                        <Link href={href({ view: "day", day: currentMonth, monthDay: undefined })}>Day</Link>
-                        <Link href={href({ view: "staff", day: undefined, monthDay: undefined })}>Week</Link>
+                        {hasSelectedEmployee ? <Link href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: teamDay, monthDay: undefined })}>Week</Link> : <Link href={href({ view: "team", employee: "", day: teamDay, monthDay: undefined })}>Day</Link>}
                         <Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-current="page">Month</Link>
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
-                        <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month">←</Link>
-                        <CalendarDatePicker date={currentMonth} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} scope={calendarDatePickerScope} />
-                        <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month">→</Link>
+                        <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month"><ChevronLeft size={17} aria-hidden="true" /></Link>
+                        <CalendarDatePicker date={teamDay} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} scope={calendarDatePickerScope} />
+                        <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month"><ChevronRight size={17} aria-hidden="true" /></Link>
                       </div>
                     </div>
                   </div>
@@ -736,17 +750,23 @@ export default async function CalendarsPage({
                       {monthDays.map((date) => {
                         const dayBookings = monthBookingsByDay.get(date) ?? [];
                         const label = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
-                        return <Link key={date} href={href({ view: "month", day: currentMonth, monthDay: date })} className={`waybook-month-calendar__day${selectedMonthDay === date ? " is-selected" : ""}`} aria-current={selectedMonthDay === date ? "date" : undefined} aria-describedby={`month-preview-${date}`}>
-                          <span className="waybook-month-calendar__date">{date.slice(-2).replace(/^0/, "")}</span>
-                          <strong>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}</strong>
-                          <span className="waybook-month-calendar__preview" id={`month-preview-${date}`} role="tooltip"><b>{label}</b>{dayBookings.length ? dayBookings.slice(0, 3).map((booking) => <span key={booking.id}>{clock.format(booking.startsAt)} · {booking.customerName}</span>) : <span>No bookings</span>}{dayBookings.length > 3 ? <span>+{dayBookings.length - 3} more</span> : null}</span>
-                        </Link>;
+                        const dayHref = hasSelectedEmployee
+                          ? href({ view: "staff", employee: selected?.id, week: weekStartFor(date), day: date })
+                          : href({ view: "team", employee: "", day: date });
+                        const staffCount = new Set(dayBookings.map((booking) => booking.teamMemberId)).size;
+                        return <div key={date} className="waybook-month-calendar__day">
+                          <Link href={dayHref} className="waybook-month-calendar__day-link" aria-label={`${label}, ${dayBookings.length} ${dayBookings.length === 1 ? "booking" : "bookings"}. Open day view`}>
+                            <span className="waybook-month-calendar__date">{date.slice(-2).replace(/^0/, "")}</span>
+                            {dayBookings.length > 0 ? <span className="waybook-month-calendar__count">{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}</span> : null}
+                          </Link>
+                          {dayBookings.length > 0 ? <div className="waybook-month-calendar__preview" aria-label={`Bookings for ${label}`}><b>{label}</b><span>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"} · {staffCount} {staffCount === 1 ? "staff member" : "staff"}</span>{dayBookings.slice(0, 5).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })}>{clock.format(booking.startsAt)} · {booking.customerName}</Link>)}{dayBookings.length > 5 ? <Link href={dayHref}>+{dayBookings.length - 5} more · Open day</Link> : null}</div> : null}
+                          <div className="waybook-month-calendar__appointments">
+                            {dayBookings.slice(0, 3).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })} className="waybook-month-calendar__appointment" style={{ borderLeftColor: booking.teamMemberColor }} title={`${clock.format(booking.startsAt)} · ${booking.customerName} · ${booking.teamMemberName}`}><span>{clock.format(booking.startsAt)}</span> {booking.customerName}</Link>)}
+                            {dayBookings.length > 3 ? <Link className="waybook-month-calendar__more" href={dayHref}>+{dayBookings.length - 3} more</Link> : null}
+                          </div>
+                        </div>;
                       })}
                     </div>
-                    {selectedMonthDay ? <aside className="waybook-month-calendar__drawer" aria-label={`Bookings for ${selectedMonthDay}`}>
-                      <header><div><p>DAY DETAILS</p><h3>{new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${selectedMonthDay}T12:00:00Z`))}</h3></div><Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-label="Close day details">×</Link></header>
-                      {(monthBookingsByDay.get(selectedMonthDay) ?? []).length ? <ol>{(monthBookingsByDay.get(selectedMonthDay) ?? []).map((booking) => <li key={booking.id}><Link href={href({ view: "month", day: currentMonth, monthDay: selectedMonthDay, booking: booking.id })}><strong>{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)}</strong><span>{booking.customerName} · {booking.serviceTitle}</span><small>{booking.teamMemberName}</small></Link></li>)}</ol> : <p>No bookings on this day.</p>}
-                    </aside> : null}
                   </div>
                 </section>
               ) : teamView ? (
@@ -754,15 +774,9 @@ export default async function CalendarsPage({
                   <div className="waybook-calendar-toolbar">
                     <div>
                       <p>
-                        {staffDayView ? "STAFF SCHEDULE · DAY" : null}
-                        {!staffDayView ? <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible staff</span> : null}
+                        <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible staff</span>
                       </p>
-                      <h2>{staffDayView ? `${selected.name}’s schedule` : calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}</h2>
-                      {staffDayView ? (
-                        <span>
-                          {`${calendarDate.format(new Date(`${teamDay}T12:00:00Z`))} · ${selectedLocation?.name}`}
-                        </span>
-                      ) : null}
+                      <h2>{calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}</h2>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
                       <details className="calendar-filter-panel">
@@ -771,43 +785,49 @@ export default async function CalendarsPage({
                           <CalendarSelectors
                             location={selectedLocation!}
                             members={members}
-                            services={staffDayView ? services : calendarServices}
+                            services={calendarServices}
                             week={currentWeek}
-                            teamMode={!staffDayView}
                           />
-                          {!staffDayView ? <CalendarRosterControls includeOffShift={showOffShift === "1"} /> : null}
+                          <CalendarRosterControls includeOffShift={showOffShift !== "0"} />
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
                         </div>
                       </details>
-                      {staffDayView ? <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: "day", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "staff", day: undefined })}>Week</Link></div> : null}
+                      <CalendarActiveFilters
+                        location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
+                        service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
+                        rosterSearch={staffSearch || undefined}
+                        excludesOffShift={showOffShift === "0"}
+                        dayFallback={teamDay}
+                      />
+                      <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: "team", employee: "", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "month", employee: "", day: teamDay })}>Month</Link></div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             day: previousWorkingDay,
                             week: weekStartFor(previousWorkingDay),
                           })}
                           aria-label="Previous day"
                         >
-                          ←
+                          <ChevronLeft size={17} aria-hidden="true" />
                         </Link>
                         <CalendarDatePicker date={teamDay} label={teamNavigationLabel} scope={calendarDatePickerScope} />
                         <Link
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             day: followingWorkingDay,
                             week: weekStartFor(followingWorkingDay),
                           })}
                           aria-label="Next day"
                         >
-                          →
+                          <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </div>
-                      {canManage && (staffDayView ? services : calendarServices).length && !isHistoricalTeamDay ? (
+                      {canManage && calendarServices.length && !isHistoricalTeamDay ? (
                         <Link
                           className="waybook-primary-link"
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             week: weekStartFor(teamDay),
                             day: teamDay,
                             create: `${teamDay}T09:00`,
@@ -863,13 +883,13 @@ export default async function CalendarsPage({
                               style={{ gridColumn: index + 2, gridRow: memberIndex + 2 }}
                               aria-label={`New appointment ${member.name} ${teamDay} ${time}`}
                               href={href({
-                                employee: staffDayView ? member.id : "",
-                                view: staffDayView ? "day" : "team",
+                                employee: "",
+                                view: "team",
                                 week: weekStartFor(teamDay),
                                 day: teamDay,
                                 service: serviceForBookableSlot.get(slotKey),
                                 create: `${teamDay}T${time}`,
-                                createStaff: staffDayView ? undefined : member.id,
+                                createStaff: member.id,
                               })}
                               key={`${member.id}-${index}`}
                             />
@@ -895,7 +915,7 @@ export default async function CalendarsPage({
                         <Link
                           key={booking.id}
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             week: weekStartFor(teamDay),
                             day: teamDay,
                             booking: booking.id,
@@ -915,7 +935,7 @@ export default async function CalendarsPage({
                       ))}
                     </div>
                   </div>
-                  {!staffDayView && (staffBefore || staffAfter || hasMoreMembers) ? (
+                  {staffBefore || staffAfter || hasMoreMembers ? (
                     <nav className="calendar-row-filter__more" aria-label="Staff roster window">
                       {staffBefore ? <Link className="waybook-secondary-link" href={href({ view: "team", before: members[0]?.id })}>Previous staff</Link> : null}
                       {hasMoreMembers ? <Link className="waybook-secondary-link" href={href({ view: "team", after: members.at(-1)?.id })}>Next staff</Link> : null}
@@ -937,8 +957,8 @@ export default async function CalendarsPage({
                     </>
                   ) : (
                     <div className="team-day-calendar__empty" role="status">
-                      <strong>No staff scheduled</strong>
-                      <span>No staff are visible for {calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}. Choose another day or include off-shift staff in Filters.</span>
+                      <strong>No staff visible</strong>
+                      <span>No staff match the current filters. Adjust Filters to see more staff.</span>
                     </div>
                   )}
                 </section>
@@ -947,7 +967,7 @@ export default async function CalendarsPage({
                   <div className="waybook-calendar-toolbar">
                     <div>
                       <p>STAFF SCHEDULE</p>
-                      <h2>{selected.name}’s schedule</h2>
+                      <h2>{selected.name}</h2>
                       <span>
                         Confirmed bookings and live bookable periods in{" "}
                         {selectedLocation?.name} · {tenant.timezone}.
@@ -965,31 +985,39 @@ export default async function CalendarsPage({
                           />
                         </div>
                       </details>
+                      <CalendarActiveFilters
+                        location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
+                        staff={selected ? { name: selected.name, id: selected.id } : undefined}
+                        service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
+                        rosterSearch={staffSearch || undefined}
+                        excludesOffShift={showOffShift === "0"}
+                        dayFallback={teamDay}
+                      />
                       <div className="calendar-view-toggle" aria-label="Calendar range">
-                        <Link href={href({ view: "day", day: tenantToday })}>Day</Link>
                         <Link href={href({ view: "staff", day: undefined })} aria-current="page">Week</Link>
+                        <Link href={href({ view: "month", day: teamDay })}>Month</Link>
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
                           href={href({
                             view: "staff",
                             week: addDays(visibleWeekStart, -7),
-                            day: undefined,
+                            day: addDays(visibleWeekStart, -7),
                           })}
                           aria-label="Previous week"
                         >
-                          ←
+                          <ChevronLeft size={17} aria-hidden="true" />
                         </Link>
                         <CalendarDatePicker date={currentWeek} label={staffNavigationLabel} scope={calendarDatePickerScope} />
                         <Link
                           href={href({
                             view: "staff",
                             week: addDays(visibleWeekStart, 7),
-                            day: undefined,
+                            day: addDays(visibleWeekStart, 7),
                           })}
                           aria-label="Next week"
                         >
-                          →
+                          <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </div>
                       {canManage && services.length && hasCurrentOrFutureWeekDay ? (
@@ -1014,16 +1042,28 @@ export default async function CalendarsPage({
                   ) : null}
                   <div className="waybook-week-calendar__scroll">
                     <div
-                      className="waybook-week-calendar__grid"
+                      className="waybook-week-calendar__grid staff-week-calendar__grid"
                       style={{
-                        gridTemplateRows: `3rem repeat(${rowCount}, 2.65rem)`,
+                        gridTemplateColumns: `var(--staff-week-rail, 12rem) repeat(${rowCount}, minmax(4.4rem, 1fr))`,
+                        gridTemplateRows: "3rem repeat(7, 4.25rem)",
                       }}
                     >
-                      <div className="waybook-week-calendar__corner">Time</div>
-                      {days.map((day) => (
+                      <div className="waybook-week-calendar__corner" style={{ gridColumn: 1, gridRow: 1 }}>{selected.name}</div>
+                      {Array.from({ length: rowCount }, (_, index) => {
+                        const time = `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:${String((gridStart + index * 30) % 60).padStart(2, "0")}`;
+                        return <div
+                          className="waybook-week-calendar__time"
+                          key={`time-${index}`}
+                          style={{ gridColumn: index + 2, gridRow: 1, "--staff-week-grid-column": index + 2 } as CSSProperties}
+                        >
+                          {index % 2 === 0 ? time : ""}
+                        </div>;
+                      })}
+                      {days.map((day, dayIndex) => (
                         <div
                           key={day}
                           className="waybook-week-calendar__day"
+                          style={{ gridColumn: 1, gridRow: dayIndex + 2 }}
                           data-availability-state={selectedBookableDays.has(day) ? "available" : "unavailable"}
                         >
                           <span>{calendarDate.format(new Date(`${day}T12:00:00Z`))}</span>
@@ -1032,17 +1072,8 @@ export default async function CalendarsPage({
                           ) : null}
                         </div>
                       ))}
-                      {Array.from({ length: rowCount }, (_, index) => [
-                        <div
-                          className="waybook-week-calendar__time"
-                          key={`time-${index}`}
-                          style={{ gridColumn: 1, gridRow: index + 2 }}
-                        >
-                          {index % 2 === 0
-                            ? `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:00`
-                            : ""}
-                        </div>,
-                        ...days.map((day, dayIndex) => {
+                      {days.flatMap((day, dayIndex) =>
+                        Array.from({ length: rowCount }, (_, index) => {
                           const time = `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:${String((gridStart + index * 30) % 60).padStart(2, "0")}`;
                           const slotKey = `${selected?.id}|${day}T${time}`;
                           const isPastDate = isPastCalendarSlot(day, time, tenant.timezone, calendarNow);
@@ -1066,7 +1097,7 @@ export default async function CalendarsPage({
                               data-calendar-team-member-id={selected!.id}
                               data-calendar-starts-at={`${day}T${time}`}
                               data-calendar-service-ids={Array.from(servicesForBookableSlot.get(slotKey) ?? []).join(",")}
-                              style={{ gridColumn: dayIndex + 2, gridRow: index + 2 }}
+                              style={{ gridColumn: index + 2, gridRow: dayIndex + 2 }}
                               aria-label={`New appointment ${day} ${time}`}
                               href={href({
                                 view: "staff",
@@ -1089,16 +1120,16 @@ export default async function CalendarsPage({
                                 : {})}
                               aria-label={isPastDate ? "Past time" : isAppointmentConflict ? "Overlaps an existing appointment" : "Unavailable"}
                               key={`${day}-${index}`}
-                              style={{ gridColumn: dayIndex + 2, gridRow: index + 2 }}
+                              style={{ gridColumn: index + 2, gridRow: dayIndex + 2 }}
                             />
                           );
                         }),
-                      ])}
+                      )}
                       {openPeriods.map((period) => (
                         <div
                           key={period.startTime}
                           className="waybook-week-calendar__entry is-open"
-                          style={position(period)}
+                          style={staffWeekPosition(period)}
                         >
                           <strong>Bookable</strong>
                           <span>
@@ -1118,7 +1149,7 @@ export default async function CalendarsPage({
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
                           draggable={canManage}
-                          style={position({
+                          style={staffWeekPosition({
                             startTime: booking.startsAt.toISOString(),
                             endTime: booking.endsAt.toISOString(),
                           })}

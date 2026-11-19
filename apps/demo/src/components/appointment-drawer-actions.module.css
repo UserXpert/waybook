@@ -1,0 +1,32 @@
+.saveNotice {
+  width: fit-content;
+  margin: 0.15rem 0 0;
+  border: 1px solid #b9d8ca;
+  border-radius: 999px;
+  padding: 0.3rem 0.55rem;
+  background: #f1faf5;
+  color: #17613f;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.error {
+  border-color: #e6bcbc;
+  background: #fff4f3;
+  color: #a52c23;
+}
+
+@media (prefers-color-scheme: dark) {
+  .saveNotice {
+    border-color: #2c7555;
+    background: #123b2b;
+    color: #a8ebc8;
+  }
+
+  .error {
+    border-color: #98433e;
+    background: #4a1f1e;
+    color: #ffc1bb;
+  }
+}

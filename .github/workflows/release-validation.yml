@@ -1,0 +1,160 @@
+name: Release branch validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact collected release commit to validate
+        required: true
+        type: string
+      base_sha:
+        description: Exact main baseline for migration-history validation
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-inputs:
+    name: Validate release inputs
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      BASE_SHA: ${{ inputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Fetch and prove the immutable release baseline
+        run: |
+          git fetch --no-tags origin main
+          node scripts/validate-release-inputs.mjs
+
+  package-checks:
+    name: Build, typecheck, test, lint (published packages)
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      BASE_SHA: ${{ inputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+      - name: Verify the dispatch ref and checkout match the requested release commit
+        run: |
+          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npx turbo build --filter='./packages/*'
+      - run: npm run check:node-esm
+      - run: npx turbo typecheck test lint --filter='./packages/*'
+      - name: StripeLike accepts a stripe 17 client
+        run: |
+          npm install --no-save stripe@17
+          npx tsc --noEmit -p packages/server/tsconfig.typetest.json
+
+  schema-history:
+    name: migration-history
+    needs: validate-inputs
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      BASE_SHA: ${{ inputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+      - name: Verify the dispatch ref and checkout match the requested release commit
+        run: |
+          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+      - uses: actions/setup-node@v7
+        with: { node-version: 24 }
+      - run: node --test scripts/check-migration-immutability.test.mjs
+      - run: node scripts/check-migration-immutability.mjs "$BASE_SHA"
+
+  integration:
+    name: DB Integration Tests (Postgres 15)
+    needs: validate-inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://thebookingkit:thebookingkit@localhost:5432/thebookingkit
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      BASE_SHA: ${{ inputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+      - name: Verify the dispatch ref and checkout match the requested release commit
+        run: |
+          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: npm }
+      - run: docker run -d --name release-validation-db -e POSTGRES_DB=thebookingkit -e POSTGRES_USER=thebookingkit -e POSTGRES_PASSWORD=thebookingkit -p 5432:5432 postgres:15-alpine
+      - run: npm ci && npx turbo build
+      - run: echo yes | (cd packages/db && npx drizzle-kit push --verbose)
+      - name: Verify tables were created
+        working-directory: packages/db
+        run: |
+          node -e "
+            const postgres = require('postgres');
+            const sql = postgres(process.env.DATABASE_URL);
+            sql\`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename\`
+              .then(rows => { if (rows.length === 0) process.exit(1); return sql.end(); })
+              .catch(err => { console.error(err.message); process.exit(1); });
+          "
+      - name: Run custom SQL migrations
+        working-directory: packages/db
+        run: node --import tsx/esm src/migrate.ts
+      - name: Run DB integration tests
+        working-directory: packages/db
+        run: npx vitest run src/__tests__/integration.test.ts
+      - if: always()
+        run: docker rm -f release-validation-db || true
+
+  e2e:
+    name: e2e
+    needs: validate-inputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      WAYBOOK_CONTROL_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_control
+      WAYBOOK_NORDIC_STUDIO_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_nordic
+      WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_copenhagen
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      BASE_SHA: ${{ inputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+      - name: Verify the dispatch ref and checkout match the requested release commit
+        run: |
+          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+      - uses: actions/setup-node@v7
+        with: { node-version: 24, cache: npm }
+      - run: npm ci && npx turbo build
+      - name: Check Playwright image version
+        run: node -e 'if (require("@playwright/test/package.json").version !== "1.59.1") throw new Error("Update the Playwright E2E image to match the installed version")'
+      - run: echo "WAYBOOK_GIFT_CARD_CODE_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - run: |
+          docker run -d --name release-validation-e2e -e POSTGRES_USER=waybook -e POSTGRES_PASSWORD=waybook -p 5432:5432 postgres:15-alpine
+          for i in $(seq 1 30); do docker exec release-validation-e2e pg_isready -h 127.0.0.1 -U waybook -q && break; sleep 1; done
+          for name in control nordic copenhagen; do docker exec release-validation-e2e createdb -U waybook "waybook_e2e_$name"; done
+          npm run waybook:db:migrate && npm run waybook:db:seed
+          node --import tsx scripts/seed-waybook-e2e.mts
+          node --import tsx scripts/verify-waybook-transaction-conflicts.mts
+      - run: docker run --rm --network host --ipc=host -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/apps/demo" -e CI -e WAYBOOK_CONTROL_DATABASE_URL -e WAYBOOK_NORDIC_STUDIO_DATABASE_URL -e WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL -e WAYBOOK_GIFT_CARD_CODE_SECRET mcr.microsoft.com/playwright:v1.59.1-noble npm run e2e
+      - if: always()
+        run: docker rm -f release-validation-e2e || true
