@@ -3,7 +3,11 @@ import "server-only";
 import { createWaybookSql } from "@waybook/db";
 import { workspaceHostname, workspaceMembershipQuery } from "./workspace-lookup-query";
 
-const localUrl = (name: string) => `postgresql://waybook@127.0.0.1:5440/${name}`;
+const localUrl = (name: string) => {
+  const port = process.env.WAYBOOK_POSTGRES_PORT || "5440";
+  if (!/^[0-9]+$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw new Error("WAYBOOK_POSTGRES_PORT must be a valid TCP port.");
+  return `postgresql://waybook@127.0.0.1:${Number(port)}/${name}`;
+};
 const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL ?? localUrl("waybook_control");
 type WaybookSql = ReturnType<typeof createWaybookSql>;
 

@@ -58,6 +58,10 @@ After setup and once the local server is running, run `npm run waybook:release:c
 
 **Requirements:** Node.js 22.12 or later, npm and PostgreSQL tools (`initdb`, `pg_ctl`, `createdb` and `psql`). CI uses Node 24. The local database script uses `127.0.0.1:5440` and creates separate Control, Nordic Studio and Copenhagen Physio databases.
 
+If port 5440 is occupied, choose an unused local port for this checkout and set `export WAYBOOK_POSTGRES_PORT=5549` in the same shell before running the commands below. This setting applies to the database, migration, seed and application commands. Verify the port is free first; never point a disposable setup at an existing database.
+
+The database cluster belongs to this checkout; stop it before changing its port. If application port 3333 is also occupied, replace the final `waybook:dev` command with `npm run waybook:db:status -- --local`, then `npm run waybook:db:migrate -- --local`, followed by `./node_modules/.bin/next dev apps/demo --port 3359`. Open `localhost:3359/login` instead.
+
 For a **new, disposable** local database only:
 
 ```sh

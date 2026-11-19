@@ -1,5 +1,11 @@
 export type MigrationTarget = { label: string; kind: "control" | "tenant"; url: string };
 
+export function localPostgresPort(env: NodeJS.ProcessEnv): string {
+  const port = env.WAYBOOK_POSTGRES_PORT || "5440";
+  if (!/^[0-9]+$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw new Error("WAYBOOK_POSTGRES_PORT must be a valid TCP port.");
+  return String(Number(port));
+}
+
 /** Validate the entire target set before connecting to or changing a database. */
 export function migrationTargets(env: NodeJS.ProcessEnv, local: boolean): MigrationTarget[] {
   const definitions = [
@@ -12,7 +18,7 @@ export function migrationTargets(env: NodeJS.ProcessEnv, local: boolean): Migrat
   if (missing.length) throw new Error(`Missing database URLs: ${missing.join(", ")}. Set all targets, or use --local for the local databases.`);
   const seen = new Set<string>();
   return definitions.map(({ label, kind, key, localName }) => {
-    const url = local ? `postgresql://waybook@127.0.0.1:5440/${localName}` : env[key]!.trim();
+    const url = local ? `postgresql://waybook@127.0.0.1:${localPostgresPort(env)}/${localName}` : env[key]!.trim();
     let parsed: URL;
     try { parsed = new URL(url); } catch { throw new Error(`Invalid database URL for ${label}.`); }
     if (!["postgres:", "postgresql:"].includes(parsed.protocol) || !parsed.hostname || !parsed.pathname.slice(1)) throw new Error(`Invalid database URL for ${label}.`);
