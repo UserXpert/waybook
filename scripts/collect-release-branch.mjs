@@ -28,6 +28,21 @@ export function checkRunsFromResponse(response) {
   return checks;
 }
 
+export function loadCandidateChecks(pulls, fetchChecks) {
+  const checksBySha = {};
+  for (const pull of pulls) {
+    const sha = pull.head?.sha;
+    if (!sha || Object.hasOwn(checksBySha, sha)) continue;
+    try {
+      checksBySha[sha] = fetchChecks(sha);
+    } catch {
+      process.stdout.write(`${JSON.stringify({ number: pull.number, action: "skip", reason: "check-runs-unavailable" })}\n`);
+      checksBySha[sha] = null;
+    }
+  }
+  return checksBySha;
+}
+
 export function evaluatePullRequest(pull, checks, repository) {
   if (pull.draft) return { eligible: false, reason: "draft" };
   if (pull.base?.ref !== "main") return { eligible: false, reason: "base-not-main" };
@@ -47,6 +62,7 @@ export function evaluatePullRequest(pull, checks, repository) {
 export function planCollection(pulls, checksBySha, repository) {
   const seen = new Set();
   return pulls.map((pull) => {
+    if (checksBySha[pull.head?.sha] === null) return { number: pull.number, action: "skip", eligible: false, reason: "check-runs-unavailable" };
     const evaluated = evaluatePullRequest(pull, checksBySha[pull.head?.sha] ?? [], repository);
     if (!evaluated.eligible) return { number: pull.number, action: "skip", ...evaluated };
     if (seen.has(evaluated.sha)) return { number: pull.number, action: "skip", eligible: false, reason: "duplicate-head", sha: evaluated.sha };
@@ -146,11 +162,10 @@ export function collect({ repository, owner, releaseBranch, pulls, checksBySha, 
   return results;
 }
 
-function dispatchReleaseValidation(releaseBranch, releaseSha, baseSha) {
-  // GitHub's workflow-dispatch API accepts a branch or tag reference, not an
-  // arbitrary commit SHA. The validation workflow checks out and verifies this
-  // immutable input before it runs any project command.
-  run("gh", ["workflow", "run", "release-validation.yml", "--ref", releaseBranch, "-f", `release_sha=${releaseSha}`, "-f", `base_sha=${baseSha}`]);
+function dispatchReleaseValidation(releaseSha, baseSha) {
+  // Load the workflow from main, never from the candidate-controlled release
+  // branch. The workflow separately checks out and verifies the exact input.
+  run("gh", ["workflow", "run", "release-validation.yml", "--ref", "main", "-f", `release_sha=${releaseSha}`, "-f", `base_sha=${baseSha}`]);
   process.stdout.write(`Dispatched release validation for ${releaseSha} against ${baseSha}. Completion is not implied by this dispatch.\n`);
 }
 
@@ -184,7 +199,7 @@ function main() {
   const advancedReleaseBase = branchDecision.action === "fast-forward-to-main" && releaseSha !== baseSha;
   if (advancedReleaseBase) git(["merge", "--ff-only", "origin/main"]);
   const pulls = ghApi(`repos/${repository}/pulls?state=open&base=main&per_page=100`);
-  const checksBySha = Object.fromEntries(pulls.map((pull) => [pull.head.sha, checkRuns(repository, pull.head.sha)]));
+  const checksBySha = loadCandidateChecks(pulls, (sha) => checkRuns(repository, sha));
   const results = collect({ repository, owner, releaseBranch, pulls, checksBySha, execute: true });
   const summary = advancedReleaseBase ? [{ action: "advanced-release-base", sha: baseSha }, ...results] : results;
   writeFileSync(process.env.GITHUB_STEP_SUMMARY ?? "/tmp/release-collection.json", `${JSON.stringify(summary, null, 2)}\n`);
@@ -192,7 +207,7 @@ function main() {
   if (advancedReleaseBase || collected) {
     const collectedReleaseSha = git(["rev-parse", "HEAD"]);
     git(["push", "origin", `HEAD:refs/heads/${releaseBranch}`]);
-    if (collected) dispatchReleaseValidation(releaseBranch, collectedReleaseSha, baseSha);
+    if (collected) dispatchReleaseValidation(collectedReleaseSha, baseSha);
   }
 }
 

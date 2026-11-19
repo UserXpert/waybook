@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REQUIRED_CHECKS, checkRunsFromResponse, collect, evaluatePullRequest, fetchedHeadDecision, flattenPaginatedPages, isFullSha, mergeAttemptDecision, planCollection, releaseBranchDecision } from "./collect-release-branch.mjs";
+import { REQUIRED_CHECKS, checkRunsFromResponse, collect, evaluatePullRequest, fetchedHeadDecision, flattenPaginatedPages, isFullSha, loadCandidateChecks, mergeAttemptDecision, planCollection, releaseBranchDecision } from "./collect-release-branch.mjs";
 import { releaseValidationDecision } from "./validate-release-inputs.mjs";
 
 const repository = "UserXpert/waybook";
@@ -38,6 +38,18 @@ test("rejects truncated check-runs pages", () => {
   assert.deepEqual(checkRunsFromResponse({ total_count: checks.length, check_runs: checks }), checks);
   assert.throws(() => checkRunsFromResponse({ total_count: 101, check_runs: Array.from({ length: 100 }, () => checks[0]) }), /incomplete/);
   assert.throws(() => checkRunsFromResponse({ total_count: 1, check_runs: [] }), /incomplete/);
+});
+
+test("an unavailable check response skips only that candidate", () => {
+  const first = pull();
+  const second = pull({ number: 2, head: { ...first.head, sha: "b".repeat(40) } });
+  const loaded = loadCandidateChecks([first, second], (sha) => {
+    if (sha === first.head.sha) throw new Error("incomplete response");
+    return checks;
+  });
+  const plan = planCollection([first, second], loaded, repository);
+  assert.equal(plan[0].reason, "check-runs-unavailable");
+  assert.equal(plan[1].action, "collect");
 });
 
 test("plans duplicate and missing-check cases deterministically", () => {
@@ -75,9 +87,10 @@ test("accepts only full SHAs and flattens every gh pagination page", () => {
 test("rejects a release validation run when main advanced after collection", () => {
   const releaseSha = "a".repeat(40);
   const baseSha = "b".repeat(40);
-  const valid = { releaseSha, baseSha, dispatchSha: releaseSha, checkedOutSha: releaseSha, originMainSha: baseSha, baseIsAncestor: true };
+  const valid = { releaseSha, baseSha, dispatchSha: baseSha, checkedOutSha: releaseSha, originMainSha: baseSha, baseIsAncestor: true };
   assert.deepEqual(releaseValidationDecision(valid), { valid: true });
   assert.deepEqual(releaseValidationDecision({ ...valid, originMainSha: "c".repeat(40) }), { valid: false, reason: "main-advanced" });
+  assert.deepEqual(releaseValidationDecision({ ...valid, dispatchSha: releaseSha }), { valid: false, reason: "dispatch-sha-mismatch" });
   assert.deepEqual(releaseValidationDecision({ ...valid, releaseSha: "invalid" }), { valid: false, reason: "invalid-release-sha" });
 });
 

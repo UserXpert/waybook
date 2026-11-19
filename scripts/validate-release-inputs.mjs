@@ -7,7 +7,7 @@ const git = (args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 export function releaseValidationDecision({ releaseSha, baseSha, dispatchSha, checkedOutSha, originMainSha, baseIsAncestor }) {
   if (!isFullSha(releaseSha)) return { valid: false, reason: "invalid-release-sha" };
   if (!isFullSha(baseSha)) return { valid: false, reason: "invalid-base-sha" };
-  if (dispatchSha !== releaseSha) return { valid: false, reason: "dispatch-sha-mismatch" };
+  if (dispatchSha !== baseSha) return { valid: false, reason: "dispatch-sha-mismatch" };
   if (checkedOutSha !== releaseSha) return { valid: false, reason: "checkout-sha-mismatch" };
   if (originMainSha !== baseSha) return { valid: false, reason: "main-advanced" };
   if (!baseIsAncestor) return { valid: false, reason: "base-not-release-ancestor" };
