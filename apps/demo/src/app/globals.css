@@ -5464,7 +5464,7 @@ body {
   height: auto;
   /* The arrow in the supplied mark rises above the lettering; compensate for
      that extra optical height so the wordmark sits on the workspace baseline. */
-  transform: translateY(-.24rem);
+  transform: translateY(-.34rem);
 }
 .tenant-dashboard-page .tenant-dashboard-nav__logo--light { display: none; }
 .tenant-dashboard-page .tenant-dashboard-nav__logo--dark { display: block; }
