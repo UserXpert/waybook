@@ -1,5 +1,5 @@
 /**
- * Integration tests — exercises the full @thebookingkit/d1 + @thebookingkit/core pipeline.
+ * Integration tests — exercises the full @thebookingkit/d1 + @waybook/core pipeline.
  *
  * These tests simulate the complete flow:
  *   Raw D1 rows → d1BookingRowsToInputs → getAvailableSlots / isSlotAvailable
@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { getAvailableSlots, isSlotAvailable, normalizeToUTC } from "@thebookingkit/core";
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import { getAvailableSlots, isSlotAvailable, normalizeToUTC } from "@waybook/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 import {
   d1DayQuery,
   d1LocalDayQuery,

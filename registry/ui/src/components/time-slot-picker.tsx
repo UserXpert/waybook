@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import type { Slot } from "@thebookingkit/core";
+import type { Slot } from "@waybook/core";
 import { cn } from "../utils/cn.js";
 
 /** Props for the TimeSlotPicker component */

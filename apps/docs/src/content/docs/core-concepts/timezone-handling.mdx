@@ -14,7 +14,7 @@ import {
   isValidTimezone,
   getTimezoneOffset,
   InvalidTimezoneError,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 ```
 
 ### `normalizeToUTC(localTime, timezone)`
@@ -142,7 +142,7 @@ The Booking Kit handles DST transitions correctly:
 ### Converting between timezones
 
 ```typescript
-import { normalizeToUTC, utcToLocal } from "@thebookingkit/core";
+import { normalizeToUTC, utcToLocal } from "@waybook/core";
 
 // Convert a local time (9 AM Eastern) to UTC
 const utc = normalizeToUTC("2026-03-10T09:00:00", "America/New_York");
@@ -165,7 +165,7 @@ console.log(tokyoTime);
 The Booking Kit handles DST correctly across time changes:
 
 ```typescript
-import { normalizeToUTC } from "@thebookingkit/core";
+import { normalizeToUTC } from "@waybook/core";
 
 // Before spring forward (DST) — EST (UTC-5)
 const beforeDST = normalizeToUTC("2026-03-08T09:00:00", "America/New_York");
@@ -184,7 +184,7 @@ console.log(afterDST.toISOString());
 ### Validating timezones
 
 ```typescript
-import { isValidTimezone, InvalidTimezoneError } from "@thebookingkit/core";
+import { isValidTimezone, InvalidTimezoneError } from "@waybook/core";
 
 isValidTimezone("America/New_York");    // true
 isValidTimezone("Europe/London");       // true
@@ -208,7 +208,7 @@ try {
 ### Getting timezone offset
 
 ```typescript
-import { getTimezoneOffset } from "@thebookingkit/core";
+import { getTimezoneOffset } from "@waybook/core";
 
 // Get offset in minutes for a specific date
 // March 10 is in EDT (UTC-4)
@@ -229,8 +229,8 @@ console.log(tokyoOffset);  // Output: 540 (UTC+9 = 540 minutes, all year)
 Complete example: customer in Tokyo booking with provider in New York:
 
 ```typescript
-import { getAvailableSlots, normalizeToUTC, utcToLocal } from "@thebookingkit/core";
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import { getAvailableSlots, normalizeToUTC, utcToLocal } from "@waybook/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 // Provider in New York, available Mon-Fri 9am-5pm EST
 const providerRules: AvailabilityRuleInput[] = [
@@ -276,7 +276,7 @@ console.log(selectedUTC.toISOString());
 ### Preventing timezone pitfalls
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
 
 // ✅ Correct: UTC dates with Z suffix
 const correctRange = {
@@ -314,4 +314,4 @@ The Booking Kit uses `date-fns` and `date-fns-tz` for all date/time operations:
 - `toZonedTime()` — Convert UTC to local time
 - `format()` — Format dates in a specific timezone
 
-These are peer dependencies of `@thebookingkit/core`.
+These are peer dependencies of `@waybook/core`.

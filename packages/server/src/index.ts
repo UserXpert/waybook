@@ -5,7 +5,7 @@ export {
   UnauthorizedError,
   ForbiddenError,
   ResourceUnavailableError,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Resource scheduling (E-22)
 export {
@@ -13,14 +13,14 @@ export {
   assignResource,
   isResourceSlotAvailable,
   getResourcePoolSummary,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Slot release (E-23)
 export {
   applySlotRelease,
   type SlotReleaseResult,
   type SlotReleaseConfig,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Serialization retry utility
 export {

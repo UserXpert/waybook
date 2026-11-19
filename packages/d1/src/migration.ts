@@ -506,7 +506,7 @@ CREATE TABLE IF NOT EXISTS bookings (
  *   10:15–10:45) are not covered — a unique index cannot express range
  *   exclusion. `insertBookingIfFree()` remains the authoritative overlap guard;
  *   this is defence in depth beneath it.
- * - The predicate matches `INACTIVE_STATUSES` in `@thebookingkit/core`, so
+ * - The predicate matches `INACTIVE_STATUSES` in `@waybook/core`, so
  *   cancelled, rejected, and no-show rows do not occupy the slot and a
  *   cancelled booking can be rebooked at the same time.
  * - The resource index is `WHERE resource_id IS NOT NULL`, so provider-only

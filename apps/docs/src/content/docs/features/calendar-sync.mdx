@@ -23,7 +23,7 @@ interface CalendarAdapter {
 3. **Booking cancelled** → `deleteBookingFromCalendar()` removes the calendar event
 
 ```typescript
-import { syncBookingToCalendar, deleteBookingFromCalendar } from "@thebookingkit/core";
+import { syncBookingToCalendar, deleteBookingFromCalendar } from "@waybook/core";
 
 // In your booking creation handler
 await syncBookingToCalendar({
@@ -73,7 +73,7 @@ The default `CalendarAdapter` implementation uses Google Calendar OAuth:
 For email-based calendar integration (works with any calendar app):
 
 ```typescript
-import { generateICSAttachment } from "@thebookingkit/core";
+import { generateICSAttachment } from "@waybook/core";
 
 const ics = generateICSAttachment({
   title: "Consultation",

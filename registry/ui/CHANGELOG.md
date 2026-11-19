@@ -12,13 +12,13 @@
   - `event_types.deposit_cents` and `event_types.deposit_percentage` columns on both DB targets, defaulting to 0.
   - Postgres migration `0006_deposits.sql`; D1 in-place upgrade exported as `MIGRATION_0002_DEPOSITS_DDL`.
 
-  **`@thebookingkit/core`**
+  **`@waybook/core`**
 
   - Widened `PaymentType` union with `"deposit"`.
   - New `computeDepositAmount(cfg, priceCents)` and `requiresDeposit(cfg, priceCents)` helpers; resolution rule: percentage wins when both set; result is always capped at `priceCents`.
   - `PaymentSummary` now exposes `depositRevenueCents` and `countByType`.
 
-  **`@thebookingkit/server`**
+  **`@waybook/server`**
 
   - New `StripePaymentAdapter` — concrete `PaymentAdapter` implementation with full Stripe Connect support. `stripe` is an optional peer dependency.
   - `PaymentAdapter` now accepts an optional `connectedAccountId` on `capture`, `cancel`, `refund`, and `createConnectOnboardingUrl` (additive).
@@ -36,4 +36,4 @@
 
 - Updated dependencies [aac30ce]
 - Updated dependencies [d3ab748]
-  - @thebookingkit/core@0.3.0
+  - @waybook/core@0.3.0

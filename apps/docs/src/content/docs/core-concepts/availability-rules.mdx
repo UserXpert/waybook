@@ -136,7 +136,7 @@ interface AvailabilityOverrideInput {
 The Booking Kit uses the `rrule` npm package for parsing. The `parseRecurrence()` function expands an RRULE into concrete date occurrences:
 
 ```typescript
-import { parseRecurrence } from "@thebookingkit/core";
+import { parseRecurrence } from "@waybook/core";
 
 const occurrences = parseRecurrence(
   "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR",
@@ -159,7 +159,7 @@ const occurrences = parseRecurrence(
 ### Creating common patterns
 
 ```typescript
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 // Mon-Fri 9am-5pm (standard business hours)
 const businessHours: AvailabilityRuleInput = {
@@ -205,7 +205,7 @@ const dailyAvailability: AvailabilityRuleInput = {
 ### Seasonal availability
 
 ```typescript
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 // Only available during summer (June 1 - August 31)
 const summerOnly: AvailabilityRuleInput = {
@@ -232,7 +232,7 @@ const openingDate: AvailabilityRuleInput = {
 For a provider with morning and afternoon hours, use two rules:
 
 ```typescript
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 const morningShift: AvailabilityRuleInput = {
   rrule: "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
@@ -255,8 +255,8 @@ const rules = [morningShift, afternoonShift];
 ### Using with slot computation
 
 ```typescript
-import { getAvailableSlots, parseRecurrence } from "@thebookingkit/core";
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import { getAvailableSlots, parseRecurrence } from "@waybook/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 const rule: AvailabilityRuleInput = {
   rrule: "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",

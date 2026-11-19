@@ -1,7 +1,7 @@
 /**
  * Schedule adapter — converts JSON WeeklySchedule objects (as stored in
  * Cloudflare D1 / SQLite text columns) into `AvailabilityRuleInput[]` arrays
- * for `@thebookingkit/core`'s slot engine.
+ * for `@waybook/core`'s slot engine.
  *
  * This logic was originally hand-written in `forza-barber-v2/src/lib/thebookingkit-adapter.ts`.
  * Moving it into `@thebookingkit/d1` makes it reusable for any D1-backed booking
@@ -9,7 +9,7 @@
  * normalised RRULE rows.
  */
 
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 /** Day of week keys as used in WeeklySchedule. */
 export type DayOfWeek =

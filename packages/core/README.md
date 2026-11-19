@@ -1,8 +1,8 @@
-# @thebookingkit/core
+# @waybook/core
 
 Framework-agnostic scheduling math engine for building booking systems.
 
-[![npm version](https://img.shields.io/npm/v/@thebookingkit/core)](https://www.npmjs.com/package/@thebookingkit/core)
+[![npm version](https://img.shields.io/npm/v/@waybook/core)](https://www.npmjs.com/package/@waybook/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
@@ -11,13 +11,13 @@ Part of [The Booking Kit](https://docs.thebookingkit.dev) — The Headless Booki
 ## Install
 
 ```bash
-npm install @thebookingkit/core
+npm install @waybook/core
 ```
 
 ## Quick Start
 
 ```ts
-import { getAvailableSlots, isSlotAvailable } from "@thebookingkit/core";
+import { getAvailableSlots, isSlotAvailable } from "@waybook/core";
 
 const slots = getAvailableSlots(
   availabilityRules,

@@ -10,7 +10,7 @@
 
 ### Known Pre-Existing CI Issues
 - `@thebookingkit/db` build fails due to `seed.ts` missing `@types/node` (uses `process`, `console` without Node types in tsconfig)
-- `@thebookingkit/core` build fails because test files (`.test.ts`) are included in `tsc` compilation but `vitest` types aren't in the build tsconfig
+- `@waybook/core` build fails because test files (`.test.ts`) are included in `tsc` compilation but `vitest` types aren't in the build tsconfig
 - These don't affect the demo build because it depends on the already-built `dist/` output
 
 ---
@@ -92,11 +92,11 @@ Test adapter implementations against real (or accurately simulated) services.
 - [ ] Exclude `src/__tests__/**` and `src/seed.ts` from tsconfig `include`
 - [ ] Verify `npm run build` passes
 
-### `@thebookingkit/core`
+### `@waybook/core`
 - [ ] Exclude `src/__tests__/**` from tsconfig `include`
 - [ ] Verify `npm run build` passes
 
-### `@thebookingkit/server`
+### `@waybook/server`
 - [ ] Verify build passes (currently succeeds)
 
 ### Monorepo

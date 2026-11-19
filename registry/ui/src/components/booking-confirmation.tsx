@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { Slot } from "@thebookingkit/core";
+import type { Slot } from "@waybook/core";
 import type { BookingFormData } from "./booking-questions.js";
 import { cn } from "../utils/cn.js";
 

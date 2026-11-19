@@ -1,14 +1,14 @@
 ---
-title: "@thebookingkit/core API"
+title: "@waybook/core API"
 description: Complete API reference for the core scheduling engine.
 ---
 
-All exports from `@thebookingkit/core`.
+All exports from `@waybook/core`.
 
 ## Slot Engine
 
 ```typescript
-import { getAvailableSlots, isSlotAvailable } from "@thebookingkit/core";
+import { getAvailableSlots, isSlotAvailable } from "@waybook/core";
 
 // Compute available slots for a date range
 const slots = getAvailableSlots(
@@ -38,7 +38,7 @@ const available = isSlotAvailable(
 ## RRULE Parser
 
 ```typescript
-import { parseRecurrence, InvalidRRuleError } from "@thebookingkit/core";
+import { parseRecurrence, InvalidRRuleError } from "@waybook/core";
 
 const occurrences = parseRecurrence(
   "RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR",
@@ -55,7 +55,7 @@ const occurrences = parseRecurrence(
 ## Timezone
 
 ```typescript
-import { normalizeToUTC, utcToLocal, isValidTimezone, getTimezoneOffset } from "@thebookingkit/core";
+import { normalizeToUTC, utcToLocal, isValidTimezone, getTimezoneOffset } from "@waybook/core";
 
 const utc = normalizeToUTC("2026-03-10T09:00:00", "America/New_York");
 const local = utcToLocal(new Date("2026-03-10T14:00:00.000Z"), "America/New_York");
@@ -73,7 +73,7 @@ const offset = getTimezoneOffset("America/New_York", new Date());
 ## Booking Limits
 
 ```typescript
-import { computeBookingLimits, filterSlotsByLimits } from "@thebookingkit/core";
+import { computeBookingLimits, filterSlotsByLimits } from "@waybook/core";
 ```
 
 | Function | Description |
@@ -84,19 +84,19 @@ import { computeBookingLimits, filterSlotsByLimits } from "@thebookingkit/core";
 ## Event Types
 
 ```typescript
-import { validateEventType, generateSlug, validateQuestionResponses, EventTypeValidationError } from "@thebookingkit/core";
+import { validateEventType, generateSlug, validateQuestionResponses, EventTypeValidationError } from "@waybook/core";
 ```
 
 ## Confirmation Mode
 
 ```typescript
-import { getInitialBookingStatus, getAutoRejectDeadline, isPendingBookingOverdue, CONFIRMATION_TIMEOUT_HOURS } from "@thebookingkit/core";
+import { getInitialBookingStatus, getAutoRejectDeadline, isPendingBookingOverdue, CONFIRMATION_TIMEOUT_HOURS } from "@waybook/core";
 ```
 
 ## Auth Middleware
 
 ```typescript
-import { withAuth, assertProviderOwnership, assertCustomerAccess } from "@thebookingkit/server";
+import { withAuth, assertProviderOwnership, assertCustomerAccess } from "@waybook/server";
 ```
 
 | Function | Description |
@@ -108,19 +108,19 @@ import { withAuth, assertProviderOwnership, assertCustomerAccess } from "@theboo
 ## Serialization Retry
 
 ```typescript
-import { withSerializableRetry, SerializationRetryExhaustedError } from "@thebookingkit/server";
+import { withSerializableRetry, SerializationRetryExhaustedError } from "@waybook/server";
 ```
 
 ## Booking Tokens
 
 ```typescript
-import { generateBookingToken, verifyBookingToken } from "@thebookingkit/server";
+import { generateBookingToken, verifyBookingToken } from "@waybook/server";
 ```
 
 ## Team Scheduling
 
 ```typescript
-import { getTeamSlots, assignHost, resolveManagedEventType, isFieldLocked, propagateTemplateChanges } from "@thebookingkit/core";
+import { getTeamSlots, assignHost, resolveManagedEventType, isFieldLocked, propagateTemplateChanges } from "@waybook/core";
 
 // Compute team slots
 const slots = getTeamSlots(teamMembers, dateRange, timezone, options);
@@ -143,7 +143,7 @@ const locked = isFieldLocked(template, "durationMinutes");
 ## Payments
 
 ```typescript
-import { evaluateCancellationFee, validateCancellationPolicy, computePaymentSummary, requiresPayment, formatPaymentAmount } from "@thebookingkit/core";
+import { evaluateCancellationFee, validateCancellationPolicy, computePaymentSummary, requiresPayment, formatPaymentAmount } from "@waybook/core";
 
 const policy = [
   { hoursBefore: 48, feePercentage: 0 },
@@ -166,7 +166,7 @@ const formatted = formatPaymentAmount(5000, "usd");  // "$50.00"
 ## Webhooks
 
 ```typescript
-import { signWebhookPayload, verifyWebhookSignature, matchWebhookSubscriptions } from "@thebookingkit/server";
+import { signWebhookPayload, verifyWebhookSignature, matchWebhookSubscriptions } from "@waybook/server";
 
 const signature = signWebhookPayload(JSON.stringify(payload), secret, timestamp);
 const result = verifyWebhookSignature(body, signature, timestamp, secret);
@@ -183,7 +183,7 @@ const matching = matchWebhookSubscriptions(subscriptions, "booking.created");
 ## Recurring Bookings
 
 ```typescript
-import { generateOccurrences, checkRecurringAvailability, cancelFutureOccurrences } from "@thebookingkit/core";
+import { generateOccurrences, checkRecurringAvailability, cancelFutureOccurrences } from "@waybook/core";
 
 const occurrences = generateOccurrences({
   startsAt: new Date(),
@@ -206,37 +206,37 @@ const cancelled = cancelFutureOccurrences(seriesBookings, new Date("2026-04-01")
 ## Seats / Group Bookings
 
 ```typescript
-import { computeSeatAvailability, canReserveSeat, isGroupEvent, computeGroupEventSummary, formatSeatCount, validateSeatReservation, SeatError } from "@thebookingkit/core";
+import { computeSeatAvailability, canReserveSeat, isGroupEvent, computeGroupEventSummary, formatSeatCount, validateSeatReservation, SeatError } from "@waybook/core";
 ```
 
 ## Notifications
 
 ```typescript
-import { sendConfirmationEmail, sendReminderEmail, sendCancellationEmail, sendRescheduleEmail, scheduleAutoReject, syncBookingToCalendar, deleteBookingFromCalendar, formatDateTimeForEmail, formatDurationForEmail } from "@thebookingkit/server";
+import { sendConfirmationEmail, sendReminderEmail, sendCancellationEmail, sendRescheduleEmail, scheduleAutoReject, syncBookingToCalendar, deleteBookingFromCalendar, formatDateTimeForEmail, formatDurationForEmail } from "@waybook/server";
 ```
 
 ## Email Templates
 
 ```typescript
-import { interpolateTemplate, CONFIRMATION_EMAIL_HTML, CONFIRMATION_EMAIL_TEXT, REMINDER_EMAIL_HTML, CANCELLATION_EMAIL_HTML, RESCHEDULE_EMAIL_HTML } from "@thebookingkit/server";
+import { interpolateTemplate, CONFIRMATION_EMAIL_HTML, CONFIRMATION_EMAIL_TEXT, REMINDER_EMAIL_HTML, CANCELLATION_EMAIL_HTML, RESCHEDULE_EMAIL_HTML } from "@waybook/server";
 ```
 
 ## Routing Forms
 
 ```typescript
-import { validateRoutingForm, evaluateRoutingRules, validateRoutingResponses, computeRoutingAnalytics, RoutingFormValidationError } from "@thebookingkit/core";
+import { validateRoutingForm, evaluateRoutingRules, validateRoutingResponses, computeRoutingAnalytics, RoutingFormValidationError } from "@waybook/core";
 ```
 
 ## Embed
 
 ```typescript
-import { validateEmbedConfig, generateEmbedSnippet, generateAllSnippets, buildEmbedUrl, EmbedConfigError } from "@thebookingkit/core";
+import { validateEmbedConfig, generateEmbedSnippet, generateAllSnippets, buildEmbedUrl, EmbedConfigError } from "@waybook/core";
 ```
 
 ## REST API Utilities
 
 ```typescript
-import { createErrorResponse, createSuccessResponse, createPaginatedResponse, generateApiKey, hashApiKey, verifyApiKey, hasScope, isKeyExpired, checkRateLimit, encodeCursor, decodeCursor, validateSlotQueryParams, parseSortParam, API_ERROR_CODES } from "@thebookingkit/server";
+import { createErrorResponse, createSuccessResponse, createPaginatedResponse, generateApiKey, hashApiKey, verifyApiKey, hasScope, isKeyExpired, checkRateLimit, encodeCursor, decodeCursor, validateSlotQueryParams, parseSortParam, API_ERROR_CODES } from "@waybook/server";
 ```
 
 ## CLI Utilities
@@ -248,25 +248,25 @@ import { COMPONENT_REGISTRY, findComponent, resolveComponentDependencies, listCo
 ## Multi-Tenancy
 
 ```typescript
-import { resolveEffectiveSettings, getRolePermissions, roleHasPermission, assertOrgPermission, assertTenantScope, buildOrgBookingUrl, parseOrgBookingPath, TenantAuthorizationError, GLOBAL_DEFAULTS } from "@thebookingkit/server";
+import { resolveEffectiveSettings, getRolePermissions, roleHasPermission, assertOrgPermission, assertTenantScope, buildOrgBookingUrl, parseOrgBookingPath, TenantAuthorizationError, GLOBAL_DEFAULTS } from "@waybook/server";
 ```
 
 ## Errors
 
 ```typescript
-import { BookingConflictError, SerializationRetryExhaustedError, UnauthorizedError, ForbiddenError } from "@thebookingkit/core";
+import { BookingConflictError, SerializationRetryExhaustedError, UnauthorizedError, ForbiddenError } from "@waybook/core";
 ```
 
 ## Adapters
 
 ```typescript
-import type { AuthAdapter, EmailAdapter, CalendarAdapter, JobAdapter, PaymentAdapter, StorageAdapter, SmsAdapter } from "@thebookingkit/server";
-import { generateICSAttachment, JOB_NAMES } from "@thebookingkit/server";
+import type { AuthAdapter, EmailAdapter, CalendarAdapter, JobAdapter, PaymentAdapter, StorageAdapter, SmsAdapter } from "@waybook/server";
+import { generateICSAttachment, JOB_NAMES } from "@waybook/server";
 ```
 
 ## Walk-In Queue
 
-Imported from `@thebookingkit/core`. Enables providers to accept walk-in customers
+Imported from `@waybook/core`. Enables providers to accept walk-in customers
 alongside scheduled appointments. Walk-ins are placed in gaps between existing
 bookings, with automatic wait-time estimation and a lifecycle state machine.
 
@@ -296,7 +296,7 @@ import {
   recomputeWaitTimes,
   isAcceptingWalkIns,
   computeWalkInAnalytics,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Estimate how long a new walk-in will wait
 const estimate = estimateWaitTime(queue, existingBookings, 30);
@@ -365,7 +365,7 @@ Valid transitions for `WalkInStatus`:
 
 ## Kiosk Mode
 
-Imported from `@thebookingkit/core`. Configuration, validation, and utilities for
+Imported from `@waybook/core`. Configuration, validation, and utilities for
 the interactive kiosk calendar view (E-20). Handles display settings, reschedule
 validation, break/block management, conflict detection, and multi-provider resource
 views.
@@ -387,7 +387,7 @@ views.
 ### Constants
 
 ```typescript
-import { DEFAULT_KIOSK_SETTINGS } from "@thebookingkit/core";
+import { DEFAULT_KIOSK_SETTINGS } from "@waybook/core";
 
 // Full default KioskSettings object:
 // {
@@ -418,7 +418,7 @@ import {
   validateBreakBlock,
   breakBlockToOverride,
   resolveKioskProviders,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Validate a partial settings object before saving
 const { valid, errors } = validateKioskSettings({ slotHeightPx: 10 });
@@ -518,7 +518,7 @@ import {
   WalkInsDisabledError,
   QueueEntryNotFoundError,
   InvalidQueueTransitionError,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 ```
 
 | Class | `code` | Additional properties | Thrown when |

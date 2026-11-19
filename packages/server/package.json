@@ -1,25 +1,21 @@
 {
-  "name": "@thebookingkit/server",
+  "name": "@waybook/server",
   "version": "0.5.0",
-  "description": "Backend APIs, auth middleware, webhooks, notifications, and multi-tenant utilities for The Booking Kit",
+  "description": "Backend APIs, auth middleware, webhooks, notifications, and multi-tenant utilities for Waybook",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zainalshanan/thebookingkit.git",
+    "url": "git+https://github.com/UserXpert/waybook.git",
     "directory": "packages/server"
   },
-  "homepage": "https://thebookingkit.dev",
   "keywords": [
-    "thebookingkit",
+    "waybook",
     "booking",
     "scheduling",
     "server",
     "api"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "private": false,
+  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -42,7 +38,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@thebookingkit/core": "^0.5.0"
+    "@waybook/core": "^0.5.0"
   },
   "peerDependencies": {
     "stripe": ">=17.0.0 <24.0.0"

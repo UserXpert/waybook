@@ -22,7 +22,7 @@ import {
   requiresDeposit,
   type CancellationPolicy,
   type DepositConfig,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 import type {
   PaymentAdapter,
   CreatePaymentIntentResult,

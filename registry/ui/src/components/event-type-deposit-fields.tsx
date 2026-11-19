@@ -28,7 +28,7 @@ export interface EventTypeDepositFieldsProps {
  *
  * Renders two inputs — a fixed deposit (cents) and a percentage of price —
  * plus a live preview of the resolved deposit amount. Mirrors the resolution
- * rule in `@thebookingkit/core`'s `computeDepositAmount`: percentage wins
+ * rule in `@waybook/core`'s `computeDepositAmount`: percentage wins
  * when both are set, and the deposit is capped at the event price.
  *
  * Drop into any event-type editor:
@@ -148,7 +148,7 @@ export function EventTypeDepositFields({
   );
 }
 
-/** Mirror of `computeDepositAmount` from @thebookingkit/core (kept inline so this component is copy-paste). */
+/** Mirror of `computeDepositAmount` from @waybook/core (kept inline so this component is copy-paste). */
 function computeDepositPreview(
   depositCents: number | null,
   depositPercentage: number | null,

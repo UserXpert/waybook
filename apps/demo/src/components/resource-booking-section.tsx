@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { ResourceAssignmentStrategy } from "@thebookingkit/core";
+import type { ResourceAssignmentStrategy } from "@waybook/core";
 import {
   fetchResourceSlots,
   fetchResourceAssignment,

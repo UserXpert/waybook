@@ -3,7 +3,7 @@ title: "D1 Reference (@thebookingkit/d1)"
 description: "Complete API reference for @thebookingkit/d1 — Cloudflare D1 / SQLite adapter providing atomic double-booking prevention, date encoding, advisory locks, schedule helpers, query utilities, and migration tools."
 ---
 
-`@thebookingkit/d1` bridges Cloudflare D1's text-based date storage with `@thebookingkit/core`'s UTC `Date` object expectations. It also provides double-booking prevention for SQLite, which lacks Postgres's `EXCLUDE USING gist` constraint — an atomic overlap-guarded insert, an optional schema-level unique index, and an advisory lock.
+`@thebookingkit/d1` bridges Cloudflare D1's text-based date storage with `@waybook/core`'s UTC `Date` object expectations. It also provides double-booking prevention for SQLite, which lacks Postgres's `EXCLUDE USING gist` constraint — an atomic overlap-guarded insert, an optional schema-level unique index, and an advisory lock.
 
 ```bash
 npm install @thebookingkit/d1
@@ -58,7 +58,7 @@ D1DateCodec.encode("2026-03-10T09:00:00", { timezone: "Australia/Sydney" });
 
 ### `D1DateCodec.decode()`
 
-Decodes a D1 text column value into a UTC `Date` object for use with `@thebookingkit/core`.
+Decodes a D1 text column value into a UTC `Date` object for use with `@waybook/core`.
 
 ```typescript
 const date = D1DateCodec.decode(row.startsAt);
@@ -148,7 +148,7 @@ Both expose a `raw` property with the original string and a descriptive message 
 
 ## Booking Helpers
 
-Functions that bridge raw D1 row data to the types expected by `@thebookingkit/core`.
+Functions that bridge raw D1 row data to the types expected by `@waybook/core`.
 
 ```typescript
 import {
@@ -423,7 +423,7 @@ Intervals are half-open `[startsAt, endsAt)`, matching the slot engine. Back-to-
 | 09:00–09:30 | 09:30–10:00 | **Allowed** |
 | 09:00–09:30 | 08:30–09:00 | **Allowed** |
 
-A row blocks unless its status is `cancelled`, `rejected`, or `no_show` — identical to `getActiveBookings()` in `@thebookingkit/core`. The predicate is `NOT IN`, so any status added in future blocks by default.
+A row blocks unless its status is `cancelled`, `rejected`, or `no_show` — identical to `getActiveBookings()` in `@waybook/core`. The predicate is `NOT IN`, so any status added in future blocks by default.
 
 :::note[Requires canonical dates]
 The guard compares date columns lexicographically as TEXT, which is exact only for the fixed-width UTC-Z format from `D1DateCodec.encode()`. Run [`findLegacyRows()`](#findlegacyrows) and [`migrateRowDates()`](#migraterowdates) before relying on it if your table predates the codec.
@@ -468,7 +468,7 @@ is why step 1 alone is not enough and `excludeId` is required.
 
 ### `insertBookingOrThrow()`
 
-Identical to `insertBookingIfFree()` but throws `BookingConflictError` (from `@thebookingkit/core`, code `BOOKING_CONFLICT`) instead of returning `inserted: false`. Use it when your handler already maps that error to HTTP 409, so the D1 and Postgres paths raise the same error type.
+Identical to `insertBookingIfFree()` but throws `BookingConflictError` (from `@waybook/core`, code `BOOKING_CONFLICT`) instead of returning `inserted: false`. Use it when your handler already maps that error to HTTP 409, so the D1 and Postgres paths raise the same error type.
 
 :::caution[Blocking statuses differ between backends]
 The D1 guard mirrors core's `INACTIVE_STATUSES` (`cancelled`, `rejected`, `no_show`), while the Postgres `EXCLUDE` constraint uses `cancelled`, `rejected`, `rescheduled`. So a `no_show` blocks the slot in Postgres but not on D1, and a `rescheduled` blocks on D1 but not in Postgres. Align them before relying on identical behaviour across backends.
@@ -884,8 +884,8 @@ import {
   encodeD1Date,
   localToday,
 } from "@thebookingkit/d1";
-import { getAvailableSlots, isSlotAvailable } from "@thebookingkit/core";
-import { BookingConflictError } from "@thebookingkit/server";
+import { getAvailableSlots, isSlotAvailable } from "@waybook/core";
+import { BookingConflictError } from "@waybook/server";
 
 // ── Step 1: Get today's date in the provider's timezone ──────────────────────
 const timezone = "Australia/Sydney";

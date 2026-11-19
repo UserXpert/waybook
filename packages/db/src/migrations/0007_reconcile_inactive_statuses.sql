@@ -1,7 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- 0007: Reconcile slot-occupancy semantics across all three backends.
 --
--- The PostgreSQL EXCLUDE constraints and @thebookingkit/core's slot engine
+-- The PostgreSQL EXCLUDE constraints and @waybook/core's slot engine
 -- disagreed about which terminal statuses free a slot — and were inverted on
 -- both of them:
 --

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { withSerializableRetry } from "@thebookingkit/server";
+import { withSerializableRetry } from "@waybook/server";
 import { availableSlots } from "./booking";
 import { tenantDb, type TenantRecord } from "./database";
 import { refundGiftCardOnCancellation } from "./gift-card-cancellation";

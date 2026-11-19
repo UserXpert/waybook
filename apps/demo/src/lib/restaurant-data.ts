@@ -6,7 +6,7 @@ import type {
   ResourceInput,
   AvailabilityRuleInput,
   BookingInput,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 import { getNextServiceDay, makeET } from "./demo-utils";
 
 // ---------------------------------------------------------------------------

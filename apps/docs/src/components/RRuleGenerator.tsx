@@ -868,7 +868,7 @@ export default function RRuleGenerator() {
         <p className="rrule-gen__title">RRULE Generator</p>
         <p className="rrule-gen__subtitle">
           Build an iCalendar RRULE for use with{" "}
-          <code>AvailabilityRuleInput</code> in @thebookingkit/core
+          <code>AvailabilityRuleInput</code> in @waybook/core
         </p>
       </div>
 

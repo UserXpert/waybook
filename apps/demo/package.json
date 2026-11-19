@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "WAYBOOK_NEXT_DIST_DIR=.next-dev next dev --port 3333",
-    "prebuild": "npm run build --workspace=@thebookingkit/core && npm run build --workspace=@waybook/db && npm run build --workspace=@thebookingkit/server",
+    "prebuild": "npm run build --workspace=@waybook/core && npm run build --workspace=@waybook/db && npm run build --workspace=@waybook/server",
     "build": "next build",
     "start": "next start --port 3333",
     "test": "tsx --test src/lib/waybook/*.test.ts",
@@ -15,9 +15,9 @@
     "e2e:db": "E2E_WITH_DB=1 playwright test --config e2e/playwright.config.ts"
   },
   "dependencies": {
-    "@thebookingkit/core": "*",
+    "@waybook/core": "*",
     "@waybook/db": "*",
-    "@thebookingkit/server": "*",
+    "@waybook/server": "*",
     "better-auth": "^1.7.17",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",

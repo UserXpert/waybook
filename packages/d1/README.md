@@ -23,7 +23,7 @@ import {
   encodeD1Date,
   insertBookingIfFree,
 } from "@thebookingkit/d1";
-import { getAvailableSlots } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
 
 // Query bookings for a day — returns aligned bounds + dateRange
 const { bounds, dateRange } = d1DayQuery("2026-03-09");
@@ -65,7 +65,7 @@ release the lock a *different* request now owns, and `withLock` raises
 - **Atomic Booking Guard** — `insertBookingIfFree` / `insertBookingOrThrow` check and insert in one statement, so concurrent requests cannot double-book
 - **Date Codec** — `D1DateCodec` for canonical UTC-Z encoding/decoding between D1 text columns and JS Date objects
 - **Query Helpers** — `d1DayQuery` and `d1LocalDayQuery` produce aligned SQL bounds and `DateRange` in one call
-- **Booking Bridge** — `d1BookingRowsToInputs` converts D1 rows to `@thebookingkit/core` inputs
+- **Booking Bridge** — `d1BookingRowsToInputs` converts D1 rows to `@waybook/core` inputs
 - **Schedule Adapter** — `weeklyScheduleToRules` and `intersectSchedulesToRules` convert WeeklySchedule JSON to availability rules
 - **Advisory Locks** — `D1BookingLock` with fencing tokens, lease extension, and stale-lock recovery
 - **Migration Utilities** — `findLegacyRows`, `migrateRowDates`, `buildMigrationSql` for date format upgrades

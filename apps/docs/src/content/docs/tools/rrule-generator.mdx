@@ -5,7 +5,7 @@ description: Interactive tool to generate RRULE strings for availability rules i
 
 import RRuleGenerator from "../../../components/RRuleGenerator.tsx";
 
-The Booking Kit uses the [iCalendar RRULE standard](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10) to define recurring availability windows. An RRULE is a compact string like `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` that encodes an infinite recurrence pattern — the `@thebookingkit/core` slot engine expands it into concrete time windows when computing available slots.
+The Booking Kit uses the [iCalendar RRULE standard](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10) to define recurring availability windows. An RRULE is a compact string like `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` that encodes an infinite recurrence pattern — the `@waybook/core` slot engine expands it into concrete time windows when computing available slots.
 
 Use the generator below to build an RRULE visually, then copy the output directly into your code.
 
@@ -145,10 +145,10 @@ const afternoonBlock: AvailabilityRuleInput = {
 
 ## Saving rules to the database
 
-Pass the `AvailabilityRuleInput` objects to `setAvailabilityRules()` from `@thebookingkit/core`:
+Pass the `AvailabilityRuleInput` objects to `setAvailabilityRules()` from `@waybook/core`:
 
 ```typescript
-import { setAvailabilityRules } from "@thebookingkit/core";
+import { setAvailabilityRules } from "@waybook/core";
 
 await setAvailabilityRules(db, providerId, [
   {

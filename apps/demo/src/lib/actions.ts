@@ -40,7 +40,7 @@ import {
   type ResourceAssignmentStrategy,
   type ResourcePoolSummary,
   type SlotReleaseConfig,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 import {
   AVAILABILITY_RULES,
   getBookingsAsInput as getMockBookingsAsInput,

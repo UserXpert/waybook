@@ -14,7 +14,7 @@ Timestamps are stored in UTC and rendered in the tenant timezone (`Europe/Copenh
 
 ## Availability and pooled employees
 
-Availability reads persisted services, schedules, overrides, bookings, and active holds using `@thebookingkit/core`. Public slot presentation is the deduplicated union of slots for all eligible employees.
+Availability reads persisted services, schedules, overrides, bookings, and active holds using `@waybook/core`. Public slot presentation is the deduplicated union of slots for all eligible employees.
 
 Availability overrides have two authoritative meanings: an unavailable override
 without hours removes the whole local day; an unavailable override with both
@@ -87,7 +87,7 @@ Proof recorded on 2026-11-05:
 ## Holds and booking conflict protection
 
 - Holds expire and occupy availability until expiry, release, or confirmation.
-- The hold endpoint uses `@thebookingkit/server` serializable retry plus PostgreSQL exclusion constraints.
+- The hold endpoint uses `@waybook/server` serializable retry plus PostgreSQL exclusion constraints.
 - `0002_hold_schedule.sql` preserves the customer-visible appointment interval while database reservation intervals include service buffers.
 - Constraints, not the UI, are authoritative for provider/resource conflicts.
 - Confirmation from a valid hold is transactional and idempotent.

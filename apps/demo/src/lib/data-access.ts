@@ -11,7 +11,7 @@ import type {
   AvailabilityRuleInput,
   AvailabilityOverrideInput,
   BookingInput,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 import { getDb } from "./db";
 import {
   AVAILABILITY_RULES,

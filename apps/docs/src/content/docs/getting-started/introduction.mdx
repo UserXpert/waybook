@@ -15,7 +15,7 @@ The Booking Kit is an open-source TypeScript toolkit for building production-gra
 
 **"Hide the Math, Expose the UI."**
 
-The hard parts — timezone-aware slot computation, RRULE (the iCalendar recurrence rule standard — e.g., `FREQ=WEEKLY;BYDAY=MO,TU,WE` means every Monday, Tuesday, Wednesday) recurrence expansion, double-booking prevention, team scheduling algorithms — are encapsulated in `@thebookingkit/core`. The UI components are copy-paste source code you own entirely, following the [shadcn/ui](https://ui.shadcn.com/) convention.
+The hard parts — timezone-aware slot computation, RRULE (the iCalendar recurrence rule standard — e.g., `FREQ=WEEKLY;BYDAY=MO,TU,WE` means every Monday, Tuesday, Wednesday) recurrence expansion, double-booking prevention, team scheduling algorithms — are encapsulated in `@waybook/core`. The UI components are copy-paste source code you own entirely, following the [shadcn/ui](https://ui.shadcn.com/) convention.
 
 ## Who is The Booking Kit for?
 
@@ -29,7 +29,7 @@ The hard parts — timezone-aware slot computation, RRULE (the iCalendar recurre
 
 | Package | Description |
 |---|---|
-| `@thebookingkit/core` | Framework-agnostic scheduling engine, business logic, and adapter interfaces |
+| `@waybook/core` | Framework-agnostic scheduling engine, business logic, and adapter interfaces |
 | `@thebookingkit/db` | Drizzle ORM schema (26 tables), migrations, and type exports for PostgreSQL 15+ |
 | `@thebookingkit/ui` | 31 React components — booking calendar, slot picker, admin views |
 
@@ -49,9 +49,9 @@ The hard parts — timezone-aware slot computation, RRULE (the iCalendar recurre
 
 ## Framework agnostic
 
-- **`@thebookingkit/core`** is pure TypeScript. Runs in Node.js, Deno, Bun, and edge runtimes.
+- **`@waybook/core`** is pure TypeScript. Runs in Node.js, Deno, Bun, and edge runtimes.
 - **`@thebookingkit/db`** uses standard Postgres via Drizzle ORM. Database constraints work regardless of your backend.
-- **`@thebookingkit/ui`** provides React components. Use `@thebookingkit/core` with any frontend framework.
+- **`@thebookingkit/ui`** provides React components. Use `@waybook/core` with any frontend framework.
 
 ## Next steps
 

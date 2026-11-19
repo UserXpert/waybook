@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Slot } from "@thebookingkit/core";
+import type { Slot } from "@waybook/core";
 import {
   fetchSlotsComparison,
   fetchTimezoneComparison,
@@ -31,7 +31,7 @@ export function FeatureShowcase() {
   return (
     <div>
       <p className="showcase-intro">
-        Interactive demos showing how <code>@thebookingkit/core</code> handles different scheduling scenarios.
+        Interactive demos showing how <code>@waybook/core</code> handles different scheduling scenarios.
         All computations run server-side using the same pure functions your app would use.
       </p>
 
@@ -319,7 +319,7 @@ function EmbedDemo() {
 
       <div className="embed-api-note">
         <h4>API Reference</h4>
-        <code className="embed-api-code">{`import { generateAllSnippets, validateEmbedConfig, buildEmbedUrl } from "@thebookingkit/core";
+        <code className="embed-api-code">{`import { generateAllSnippets, validateEmbedConfig, buildEmbedUrl } from "@waybook/core";
 
 const snippets = generateAllSnippets({
   providerId: "fade-and-shave",

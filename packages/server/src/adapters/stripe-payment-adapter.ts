@@ -6,13 +6,13 @@
  * account (`{ stripeAccount }` request option), which routes the funds and
  * the resulting PaymentIntent / Customer / Refund to that account.
  *
- * The `stripe` package is a **peer dependency** of `@thebookingkit/server`.
+ * The `stripe` package is a **peer dependency** of `@waybook/server`.
  * Consumers that don't use this adapter don't need it installed.
  *
  * @example
  * ```ts
  * import Stripe from "stripe";
- * import { StripePaymentAdapter } from "@thebookingkit/server";
+ * import { StripePaymentAdapter } from "@waybook/server";
  *
  * const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
  * const adapter = new StripePaymentAdapter({

@@ -16,7 +16,7 @@ The Booking Kit can generate embed snippets for adding booking flows to any webs
 ## Configuration
 
 ```typescript
-import { validateEmbedConfig, type EmbedConfig } from "@thebookingkit/core";
+import { validateEmbedConfig, type EmbedConfig } from "@waybook/core";
 
 const config: EmbedConfig = {
   mode: "popup",
@@ -37,7 +37,7 @@ validateEmbedConfig(config);
 ## Snippet generation
 
 ```typescript
-import { generateEmbedSnippet, generateAllSnippets, buildEmbedUrl } from "@thebookingkit/core";
+import { generateEmbedSnippet, generateAllSnippets, buildEmbedUrl } from "@waybook/core";
 
 // Generate a snippet for a specific mode
 const snippet = generateEmbedSnippet(config);

@@ -91,8 +91,8 @@ interface TeamMemberInput {
 Three barbers with different schedules and load balancing:
 
 ```typescript
-import { getTeamSlots, assignHost } from "@thebookingkit/core";
-import type { TeamMemberInput, MemberBookingCount } from "@thebookingkit/core";
+import { getTeamSlots, assignHost } from "@waybook/core";
+import type { TeamMemberInput, MemberBookingCount } from "@waybook/core";
 
 // Barber availability and workload
 const barbers: TeamMemberInput[] = [
@@ -246,8 +246,8 @@ Returns only slots where **every** team member is available. Uses **intersection
 ### Example: Panel Interview Room
 
 ```typescript
-import { getTeamSlots } from "@thebookingkit/core";
-import type { TeamMemberInput } from "@thebookingkit/core";
+import { getTeamSlots } from "@waybook/core";
+import type { TeamMemberInput } from "@waybook/core";
 
 const interviewPanel: TeamMemberInput[] = [
   {
@@ -360,11 +360,11 @@ import {
   resolveManagedEventType,
   isFieldLocked,
   propagateTemplateChanges,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 import type {
   ManagedEventTypeTemplate,
   MemberEventTypeOverride,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Corporate defines the template
 const corporateTemplate: ManagedEventTypeTemplate = {
@@ -468,8 +468,8 @@ propagated.forEach((result) => {
 ### Example: Patient Books Their Regular Doctor
 
 ```typescript
-import { getTeamSlots } from "@thebookingkit/core";
-import type { TeamMemberInput } from "@thebookingkit/core";
+import { getTeamSlots } from "@waybook/core";
+import type { TeamMemberInput } from "@waybook/core";
 
 // Patient wants Dr. Sarah (their regular doctor)
 const doctorId = "dr-sarah";
@@ -516,8 +516,8 @@ const booking = await db.insert(bookings).values({
 A realistic flow: Setup → Display slots → Customer picks time → Auto-assign barber → Book.
 
 ```typescript
-import { getTeamSlots, assignHost } from "@thebookingkit/core";
-import type { TeamMemberInput, MemberBookingCount } from "@thebookingkit/core";
+import { getTeamSlots, assignHost } from "@waybook/core";
+import type { TeamMemberInput, MemberBookingCount } from "@waybook/core";
 
 // --- Step 1: Define team ---
 const barbers: TeamMemberInput[] = [

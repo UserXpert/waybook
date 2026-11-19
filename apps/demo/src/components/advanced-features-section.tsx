@@ -502,7 +502,7 @@ export function AdvancedFeaturesSection() {
           <h2 className="section-title-lg">Everything Booking Systems Need</h2>
           <p className="section-desc">
             Six advanced scheduling primitives, each with interactive demos backed by live
-            server action calls to <code style={{ fontFamily: "var(--font-mono)", fontSize: "0.9em", background: "var(--surface-dark)", padding: "0.1em 0.35em", borderRadius: "4px" }}>@thebookingkit/core</code>.
+            server action calls to <code style={{ fontFamily: "var(--font-mono)", fontSize: "0.9em", background: "var(--surface-dark)", padding: "0.1em 0.35em", borderRadius: "4px" }}>@waybook/core</code>.
           </p>
         </div>
 

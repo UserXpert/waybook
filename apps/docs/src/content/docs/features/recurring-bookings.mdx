@@ -8,8 +8,8 @@ Recurring bookings let customers book a series of appointments at a regular cade
 ## Creating a series
 
 ```typescript
-import { generateOccurrences } from "@thebookingkit/core";
-import type { RecurringSeriesInput, RecurringOccurrence } from "@thebookingkit/core";
+import { generateOccurrences } from "@waybook/core";
+import type { RecurringSeriesInput, RecurringOccurrence } from "@waybook/core";
 
 const input: RecurringSeriesInput = {
   startsAt: new Date("2026-03-10T14:00:00.000Z"),  // First appointment (UTC)
@@ -34,7 +34,7 @@ console.log(occurrences);
 Different frequencies:
 
 ```typescript
-import { generateOccurrences } from "@thebookingkit/core";
+import { generateOccurrences } from "@waybook/core";
 
 // Weekly: every Tuesday at 2pm UTC, 6 sessions
 const weekly = generateOccurrences({
@@ -72,8 +72,8 @@ const monthly = generateOccurrences({
 ## Availability checking
 
 ```typescript
-import { checkRecurringAvailability } from "@thebookingkit/core";
-import type { AvailabilityRuleInput, BookingInput } from "@thebookingkit/core";
+import { checkRecurringAvailability } from "@waybook/core";
+import type { AvailabilityRuleInput, BookingInput } from "@waybook/core";
 
 // First, generate the series occurrences
 const occurrences = generateOccurrences({
@@ -117,7 +117,7 @@ if (result.allAvailable) {
 Customer can choose to book only available occurrences:
 
 ```typescript
-import { generateOccurrences, checkRecurringAvailability } from "@thebookingkit/core";
+import { generateOccurrences, checkRecurringAvailability } from "@waybook/core";
 
 const occurrences = generateOccurrences({
   startsAt: new Date("2026-03-10T14:00:00.000Z"),
@@ -152,8 +152,8 @@ const bookingsToCreate = availableOccurrences.map(occ => ({
 ## Cancelling future occurrences
 
 ```typescript
-import { cancelFutureOccurrences } from "@thebookingkit/core";
-import type { SeriesBooking } from "@thebookingkit/core";
+import { cancelFutureOccurrences } from "@waybook/core";
+import type { SeriesBooking } from "@waybook/core";
 
 // Get all bookings in the series
 const seriesBookings: SeriesBooking[] = [

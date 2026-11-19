@@ -376,7 +376,7 @@ describe("D1-M8 — d1LocalDayQuery no timezone validation", () => {
   });
 
   it("error thrown for invalid timezone should be clear (InvalidTimezoneError from core)", () => {
-    // The error that propagates is InvalidTimezoneError from @thebookingkit/core.
+    // The error that propagates is InvalidTimezoneError from @waybook/core.
     // This test documents that the error IS clear (test is expected to PASS).
     // However the error originates from core, not from d1LocalDayQuery itself —
     // d1LocalDayQuery performs no upfront timezone validation of its own.
@@ -404,7 +404,7 @@ describe("D1-M8 — d1LocalDayQuery no timezone validation", () => {
   it("does not validate timezone before calling normalizeToUTC (documents coupling)", () => {
     // d1LocalDayQuery has no guard of the form:
     //   if (!isValidTimezone(timezone)) throw new RangeError(...)
-    // This means the error message is owned by @thebookingkit/core, not by this function.
+    // This means the error message is owned by @waybook/core, not by this function.
     // A well-designed function should validate its own inputs early and clearly.
     //
     // This test confirms that the function itself does not throw a RangeError

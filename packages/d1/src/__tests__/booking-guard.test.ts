@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { BookingConflictError, INACTIVE_STATUSES } from "@thebookingkit/core";
+import { BookingConflictError, INACTIVE_STATUSES } from "@waybook/core";
 import {
   buildInsertIfFree,
   insertBookingIfFree,

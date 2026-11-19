@@ -17,7 +17,7 @@ export function BookingSection() {
           <h2 className="section-title-lg">Live Booking Flow</h2>
           <p className="section-desc">
             A real barber shop booking system — Fade &amp; Shave Barbershop — powered entirely
-            by <code style={{ fontFamily: "var(--font-mono)", fontSize: "0.9em", background: "var(--surface-dark)", padding: "0.1em 0.35em", borderRadius: "4px" }}>@thebookingkit/core</code>.
+            by <code style={{ fontFamily: "var(--font-mono)", fontSize: "0.9em", background: "var(--surface-dark)", padding: "0.1em 0.35em", borderRadius: "4px" }}>@waybook/core</code>.
             All slot computation runs server-side using pure functions.
           </p>
         </div>
@@ -79,7 +79,7 @@ export function BookingSection() {
           {showApiCalls && (
             <div className="api-call-banner">
               <span className="api-call-method">SERVER</span>
-              <span className="api-call-fn">@thebookingkit/core</span>
+              <span className="api-call-fn">@waybook/core</span>
               <span className="api-call-args">
                 {currentApiCall
                   ? currentApiCall

@@ -2,7 +2,7 @@
  * @thebookingkit/d1 — Cloudflare D1 / SQLite adapter for TheBookingKit
  *
  * This package bridges the gap between D1's text-based date storage and
- * `@thebookingkit/core`'s UTC Date object expectations.
+ * `@waybook/core`'s UTC Date object expectations.
  *
  * ## Quick Start
  *
@@ -15,7 +15,7 @@
  *   intersectSchedulesToRules,
  *   D1BookingLock,
  * } from "@thebookingkit/d1";
- * import { getAvailableSlots, isSlotAvailable } from "@thebookingkit/core";
+ * import { getAvailableSlots, isSlotAvailable } from "@waybook/core";
  *
  * // Build query bounds + DateRange together so they never diverge
  * const { bounds, dateRange } = d1DayQuery("2026-03-09");

@@ -10,7 +10,7 @@ This guide walks you through computing available time slots, checking slot avail
 Availability rules use RRULE syntax to define recurring schedules:
 
 ```typescript
-import type { AvailabilityRuleInput } from "@thebookingkit/core";
+import type { AvailabilityRuleInput } from "@waybook/core";
 
 const rules: AvailabilityRuleInput[] = [
   {
@@ -28,7 +28,7 @@ This creates a Monday-Friday, 9am-5pm schedule in Eastern time.
 ## 2. Compute available slots
 
 ```typescript
-import { getAvailableSlots } from "@thebookingkit/core";
+import { getAvailableSlots } from "@waybook/core";
 
 const slots = getAvailableSlots(
   rules,                // availability rules
@@ -58,7 +58,7 @@ console.log(slots[0]);
 ## 3. Check if a specific slot is available
 
 ```typescript
-import { isSlotAvailable } from "@thebookingkit/core";
+import { isSlotAvailable } from "@waybook/core";
 
 const result = isSlotAvailable(
   rules,                                    // availability rules
@@ -83,7 +83,7 @@ if (result.available) {
 Real-world usage includes overrides (blocked days, extra hours) and existing bookings:
 
 ```typescript
-import type { AvailabilityOverrideInput, BookingInput } from "@thebookingkit/core";
+import type { AvailabilityOverrideInput, BookingInput } from "@waybook/core";
 
 // Block a specific day
 const overrides: AvailabilityOverrideInput[] = [
@@ -156,8 +156,8 @@ The example below uses React with `useState`/`useEffect`. The `'use client'` dir
 'use client'; // Next.js App Router only — remove for Remix, Vite, Astro, etc.
 
 import { useState, useEffect } from 'react';
-import { getAvailableSlots, isSlotAvailable } from '@thebookingkit/core';
-import type { AvailabilityRuleInput, Slot } from '@thebookingkit/core';
+import { getAvailableSlots, isSlotAvailable } from '@waybook/core';
+import type { AvailabilityRuleInput, Slot } from '@waybook/core';
 
 export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -309,7 +309,7 @@ export default function BookingPage() {
 The examples above show provider-based booking (1:1 appointments with people). The Booking Kit also supports **resource-based booking** for physical spaces: restaurant tables, hotel rooms, coworking desks, tennis courts, etc.
 
 ```typescript
-import { getResourceAvailableSlots, assignResource } from '@thebookingkit/core';
+import { getResourceAvailableSlots, assignResource } from '@waybook/core';
 
 // Define a pool of restaurant tables
 const tables = [

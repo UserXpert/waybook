@@ -7,7 +7,7 @@
  * root instead.
  */
 
-import type { AvailabilityOverrideInput } from "@thebookingkit/core";
+import type { AvailabilityOverrideInput } from "@waybook/core";
 import { D1DateCodec } from "./codec.js";
 
 /**

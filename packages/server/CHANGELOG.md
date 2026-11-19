@@ -1,4 +1,4 @@
-# @thebookingkit/server
+# @waybook/server
 
 ## 0.5.0
 
@@ -8,15 +8,15 @@
   
   **Fixes**
   
-  - `@thebookingkit/server` — `withSerializableRetry` now finds the Postgres SQLSTATE anywhere down the error's `cause` chain. Drizzle ≥ 0.44 wraps driver errors in `DrizzleQueryError`, so on those versions an exclusion violation (23P01) used to escape as a raw "Failed query" error instead of `BookingConflictError`, and serialization failures (40001) were never retried.
-  - `@thebookingkit/server` — `StripePaymentAdapter.cancelPaymentIntent` passes request options in the third argument (`cancel(id, undefined, { stripeAccount })`). stripe-node ≥ 22 no longer reads options from the params slot, so Connect cancels were sent to the platform account with an invalid parameter.
-  - `@thebookingkit/server` — `createSetupIntent` no longer sends `receipt_email`, which is not a SetupIntent parameter (any call with `customerEmail` was rejected by Stripe). The option is still accepted and ignored.
-  - `@thebookingkit/core` (and therefore `d1` and `server`) — packages now import under plain Node ESM, not only inside a bundler. rrule's UMD build exposes no named exports to Node, so `import { RRule } from "rrule"` threw outside Vite/Next/esbuild.
+  - `@waybook/server` — `withSerializableRetry` now finds the Postgres SQLSTATE anywhere down the error's `cause` chain. Drizzle ≥ 0.44 wraps driver errors in `DrizzleQueryError`, so on those versions an exclusion violation (23P01) used to escape as a raw "Failed query" error instead of `BookingConflictError`, and serialization failures (40001) were never retried.
+  - `@waybook/server` — `StripePaymentAdapter.cancelPaymentIntent` passes request options in the third argument (`cancel(id, undefined, { stripeAccount })`). stripe-node ≥ 22 no longer reads options from the params slot, so Connect cancels were sent to the platform account with an invalid parameter.
+  - `@waybook/server` — `createSetupIntent` no longer sends `receipt_email`, which is not a SetupIntent parameter (any call with `customerEmail` was rejected by Stripe). The option is still accepted and ignored.
+  - `@waybook/core` (and therefore `d1` and `server`) — packages now import under plain Node ESM, not only inside a bundler. rrule's UMD build exposes no named exports to Node, so `import { RRule } from "rrule"` threw outside Vite/Next/esbuild.
   
   **Compatibility**
   
   - `stripe` peer range widened from `^17.0.0` to `>=17.0.0 <24.0.0` (still optional). `StripeLike` now accepts a real Stripe client from either end of the range without a cast; this is enforced by a type test.
-  - `@thebookingkit/core` and `@thebookingkit/d1` accept `date-fns` `^3.6.0 || ^4.0.0`, so projects on date-fns 4 no longer bundle a second copy. Slot output is identical under both.
+  - `@waybook/core` and `@thebookingkit/d1` accept `date-fns` `^3.6.0 || ^4.0.0`, so projects on date-fns 4 no longer bundle a second copy. Slot output is identical under both.
   - `@thebookingkit/db` requires `drizzle-orm` `^0.45.4` (was `^0.39.0`): 0.45.2 fixes an SQL-injection advisory for improperly escaped identifiers. If your app pins its own drizzle-orm, upgrade it too.
   - `@thebookingkit/cli` uses commander 15 and requires Node ≥ 22.12 (Node 20 is end-of-life).
   
@@ -25,21 +25,21 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @thebookingkit/core@0.5.0
+  - @waybook/core@0.5.0
 
 ## 0.4.0
 
 ### Patch Changes
 
 - Updated dependencies [88f91f5]
-  - @thebookingkit/core@0.4.0
+  - @waybook/core@0.4.0
 
 ## 0.3.1
 
 ### Patch Changes
 
 - Updated dependencies
-  - @thebookingkit/core@0.3.1
+  - @waybook/core@0.3.1
 
 ## 0.3.0
 
@@ -53,13 +53,13 @@
   - `event_types.deposit_cents` and `event_types.deposit_percentage` columns on both DB targets, defaulting to 0.
   - Postgres migration `0006_deposits.sql`; D1 in-place upgrade exported as `MIGRATION_0002_DEPOSITS_DDL`.
 
-  **`@thebookingkit/core`**
+  **`@waybook/core`**
 
   - Widened `PaymentType` union with `"deposit"`.
   - New `computeDepositAmount(cfg, priceCents)` and `requiresDeposit(cfg, priceCents)` helpers; resolution rule: percentage wins when both set; result is always capped at `priceCents`.
   - `PaymentSummary` now exposes `depositRevenueCents` and `countByType`.
 
-  **`@thebookingkit/server`**
+  **`@waybook/server`**
 
   - New `StripePaymentAdapter` — concrete `PaymentAdapter` implementation with full Stripe Connect support. `stripe` is an optional peer dependency.
   - `PaymentAdapter` now accepts an optional `connectedAccountId` on `capture`, `cancel`, `refund`, and `createConnectOnboardingUrl` (additive).
@@ -110,7 +110,7 @@
 
 - Updated dependencies [aac30ce]
 - Updated dependencies [d3ab748]
-  - @thebookingkit/core@0.3.0
+  - @waybook/core@0.3.0
 
 ## 0.2.0
 
@@ -137,7 +137,7 @@
 
 #### Platform Integration
 
-- Re-exported `ResourceUnavailableError`, resource engine functions, and slot release functions from `@thebookingkit/core`
+- Re-exported `ResourceUnavailableError`, resource engine functions, and slot release functions from `@waybook/core`
 
 #### Branding
 
@@ -147,7 +147,7 @@
 
 ### Minor Changes — QA Audit (2026-03-12)
 
-14 bugs fixed in `@thebookingkit/server`.
+14 bugs fixed in `@waybook/server`.
 
 ### Bug Fixes
 
@@ -179,7 +179,7 @@
 
 ### Dependencies
 
-- Updated `@thebookingkit/core` to `^0.1.5`
+- Updated `@waybook/core` to `^0.1.5`
 
 ## 0.1.1
 
@@ -187,4 +187,4 @@
 
 - Initial release of The Booking Kit packages.
 - Updated dependencies
-  - @thebookingkit/core@0.1.1
+  - @waybook/core@0.1.1

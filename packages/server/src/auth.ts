@@ -1,4 +1,4 @@
-import { UnauthorizedError, ForbiddenError, BookingConflictError, ResourceUnavailableError } from "@thebookingkit/core";
+import { UnauthorizedError, ForbiddenError, BookingConflictError, ResourceUnavailableError } from "@waybook/core";
 
 /** Represents an authenticated user in the system */
 export interface AuthUser {

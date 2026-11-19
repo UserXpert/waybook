@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The Booking Kit ("The Headless Booking Primitive") is an open-source, MIT-licensed developer toolkit for building production-grade booking systems. It provides a Drizzle ORM database schema, scheduling math engine, and copy-paste UI components (shadcn/ui convention) for Next.js applications backed by any Postgres 15+ instance.
 
-Philosophy: **"Hide the Math, Expose the UI."** The scheduling logic is encapsulated in `@thebookingkit/core`; UI components are copy-paste source code developers own entirely.
+Philosophy: **"Hide the Math, Expose the UI."** The scheduling logic is encapsulated in `@waybook/core`; UI components are copy-paste source code developers own entirely.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ Philosophy: **"Hide the Math, Expose the UI."** The scheduling logic is encapsul
 
 | Package | Path | Purpose |
 |---|---|---|
-| `@thebookingkit/core` | `packages/core/` | Slot engine, timezone utils, RRULE parser, team scheduling algorithms |
+| `@waybook/core` | `packages/core/` | Slot engine, timezone utils, RRULE parser, team scheduling algorithms |
 | `@thebookingkit/db` | `packages/db/` | Drizzle ORM schema, migrations, type exports |
 | `@thebookingkit/cli` | `packages/cli/` | Scaffolding CLI: init, add, migrate, generate, diff, update |
 | `@thebookingkit/embed` | `packages/embed/` | Lightweight embed script for non-Next.js sites |
@@ -24,7 +24,7 @@ Philosophy: **"Hide the Math, Expose the UI."** The scheduling logic is encapsul
 
 ### Three System Layers
 
-1. **Logic Package (`@thebookingkit/core`)** — Framework-agnostic scheduling math. Key APIs: `useAvailability`, `getAvailableSlots`, `getTeamSlots`, `assignHost`, `isSlotAvailable`. Uses `date-fns`/`date-fns-tz` for time, `rrule` for recurrence.
+1. **Logic Package (`@waybook/core`)** — Framework-agnostic scheduling math. Key APIs: `useAvailability`, `getAvailableSlots`, `getTeamSlots`, `assignHost`, `isSlotAvailable`. Uses `date-fns`/`date-fns-tz` for time, `rrule` for recurrence.
 2. **UI Components (copy-paste)** — React components built on shadcn/ui, react-day-picker, react-big-calendar, react-hook-form. Developers own the source.
 3. **Backend (Postgres + Next.js + Inngest)** — Drizzle ORM schema, Next.js API routes, Inngest background jobs. Middleware-based auth via pluggable `AuthAdapter` (NextAuth.js default).
 
@@ -115,7 +115,7 @@ When modifying any component in `registry/ui/src/components/`:
 
 ## Change Workflow — Packages (`packages/*`)
 
-When modifying any package (`@thebookingkit/core`, `@thebookingkit/d1`, `@thebookingkit/db`, `@thebookingkit/cli`, `@thebookingkit/embed`):
+When modifying any package (`@waybook/core`, `@thebookingkit/d1`, `@thebookingkit/db`, `@thebookingkit/cli`, `@thebookingkit/embed`):
 
 1. **Build** — Run the package's build script (e.g., `cd packages/d1 && npm run build` or `turbo build --filter=@thebookingkit/d1`). The package MUST compile cleanly before anything else.
 2. **Test** — Run the package's test suite (e.g., `npm test` or `turbo test --filter=@thebookingkit/d1`). All tests must pass. If you changed behavior, add or update tests to cover it.

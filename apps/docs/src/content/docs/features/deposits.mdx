@@ -51,7 +51,7 @@ import { EventTypeDepositFields } from "@thebookingkit/registry";
 
 ```ts
 import Stripe from "stripe";
-import { StripePaymentAdapter } from "@thebookingkit/server";
+import { StripePaymentAdapter } from "@waybook/server";
 
 export const paymentAdapter = new StripePaymentAdapter({
   stripe: new Stripe(process.env.STRIPE_SECRET_KEY!),
@@ -59,7 +59,7 @@ export const paymentAdapter = new StripePaymentAdapter({
 });
 ```
 
-`stripe` is an **optional peer dependency** of `@thebookingkit/server` —
+`stripe` is an **optional peer dependency** of `@waybook/server` —
 install it if you use this adapter:
 
 ```bash
@@ -71,8 +71,8 @@ npm install stripe
 After persisting the `bookings` row, call `initiateDeposit`:
 
 ```ts
-import { initiateDeposit } from "@thebookingkit/server";
-import { computeDepositAmount } from "@thebookingkit/core";
+import { initiateDeposit } from "@waybook/server";
+import { computeDepositAmount } from "@waybook/core";
 
 const result = await initiateDeposit(paymentAdapter, {
   bookingId: booking.id,
@@ -119,7 +119,7 @@ In the booking flow:
 
 ```ts
 // app/api/webhooks/stripe/route.ts
-import { handleStripeWebhook } from "@thebookingkit/server";
+import { handleStripeWebhook } from "@waybook/server";
 import { paymentAdapter, paymentEventStore } from "@/lib/payments";
 
 export async function POST(req: Request) {
@@ -149,7 +149,7 @@ was required to confirm) move the booking to `confirmed`.
 `evaluateCancellationFee` and issues a partial refund:
 
 ```ts
-import { refundDeposit } from "@thebookingkit/server";
+import { refundDeposit } from "@waybook/server";
 
 const result = await refundDeposit(paymentAdapter, {
   paymentIntentId: depositPayment.stripePaymentIntentId,

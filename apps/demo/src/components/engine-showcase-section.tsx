@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Slot } from "@thebookingkit/core";
+import type { Slot } from "@waybook/core";
 import {
   fetchSlotsComparison,
   fetchTimezoneComparison,
@@ -341,7 +341,7 @@ function EmbedDemo() {
 
       <div className="embed-api-note">
         <h4>API Reference</h4>
-        <code className="embed-api-code">{`import { generateAllSnippets, validateEmbedConfig, buildEmbedUrl } from "@thebookingkit/core";
+        <code className="embed-api-code">{`import { generateAllSnippets, validateEmbedConfig, buildEmbedUrl } from "@waybook/core";
 
 const snippets = generateAllSnippets({
   providerId: "fade-and-shave",

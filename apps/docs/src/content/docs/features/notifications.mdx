@@ -13,7 +13,7 @@ import {
   sendReminderEmail,
   sendCancellationEmail,
   sendRescheduleEmail,
-} from "@thebookingkit/core";
+} from "@waybook/core";
 
 // Each function takes a payload and an EmailAdapter
 await sendConfirmationEmail(
@@ -44,7 +44,7 @@ await sendConfirmationEmail(
 ### Template interpolation
 
 ```typescript
-import { interpolateTemplate } from "@thebookingkit/core";
+import { interpolateTemplate } from "@waybook/core";
 
 const html = interpolateTemplate(CONFIRMATION_EMAIL_HTML, {
   customerName: "Alice",
@@ -59,7 +59,7 @@ const html = interpolateTemplate(CONFIRMATION_EMAIL_HTML, {
 ## Calendar sync
 
 ```typescript
-import { syncBookingToCalendar, deleteBookingFromCalendar } from "@thebookingkit/core";
+import { syncBookingToCalendar, deleteBookingFromCalendar } from "@waybook/core";
 
 // Create a calendar event for a booking
 await syncBookingToCalendar(bookingPayload, calendarAdapter);
@@ -71,7 +71,7 @@ await deleteBookingFromCalendar(deletePayload, calendarAdapter);
 ## ICS attachments
 
 ```typescript
-import { generateICSAttachment } from "@thebookingkit/core";
+import { generateICSAttachment } from "@waybook/core";
 
 const ics = generateICSAttachment({
   title: "Consultation with Dr. Smith",
@@ -85,7 +85,7 @@ const ics = generateICSAttachment({
 ## Formatting helpers
 
 ```typescript
-import { formatDateTimeForEmail, formatDurationForEmail } from "@thebookingkit/core";
+import { formatDateTimeForEmail, formatDurationForEmail } from "@waybook/core";
 
 formatDateTimeForEmail(new Date("2026-03-10T14:00:00Z"), "America/New_York");
 // "Tuesday, March 10, 2026 at 9:00 AM EST"
