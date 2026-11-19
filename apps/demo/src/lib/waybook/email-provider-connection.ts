@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Sql } from "postgres";
 import { decryptProviderSecret, encryptProviderSecret, type ProviderSecretEnvelope, type ProviderSecretKey } from "./provider-secret";
+import { isResendOnboardingTestSender } from "./resend-onboarding-test";
 
 const provider = "resend" as const;
 const senderPattern = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
@@ -10,7 +11,7 @@ export type EmailConnectionInfo = { id: string; senderEmail: string; createdAt: 
 export async function replaceEmailConnection(db: Sql, tenantId: string, senderEmail: string, apiKey: string, key: ProviderSecretKey, actorId?: string): Promise<EmailConnectionInfo> {
   const sender = senderEmail.trim();
   const credential = apiKey.trim();
-  if (!tenantId || !senderPattern.test(sender) || sender.length > 254 || !credential || /[\r\n]/.test(credential)) throw new Error("Enter a valid sender address and provider credential.");
+  if (!tenantId || !senderPattern.test(sender) || sender.length > 254 || !credential || /[\r\n]/.test(credential) || isResendOnboardingTestSender(sender)) throw new Error("Enter a valid sender address and provider credential.");
   const id = randomUUID();
   const envelope = encryptProviderSecret(credential, { tenantId, connectionId: id, provider }, key);
   return db.begin(async (transaction) => {
