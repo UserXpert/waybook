@@ -1,6 +1,6 @@
 export type LocationHours = { dayOfWeek: number; startTime: string; endTime: string };
 
-function localDateAndMinutes(date: Date, timezone: string) {
+export function localDateAndMinutes(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
   const value = (name: string) => parts.find((part) => part.type === name)?.value ?? "";
   const localDate = `${value("year")}-${value("month")}-${value("day")}`;

@@ -6,7 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { TenantRecord } from "./database";
 import { tenantDb } from "./database";
 import { isPublicBookingStartAllowed } from "./public-booking-rules";
-import { isSlotWithinLocationHours, type LocationHours } from "./booking-location-hours";
+import { isSlotWithinLocationHours, localDateAndMinutes, type LocationHours } from "./booking-location-hours";
 
 // Keep the original public import path stable for calendar and booking callers.
 export { isSlotWithinLocationHours };
