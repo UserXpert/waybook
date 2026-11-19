@@ -161,6 +161,7 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await check(page).toHaveURL(/employee=/);
   expect(await page.getByRole("link", { name: "Day", exact: true }).count()).toBe(0);
   await page.getByRole("link", { name: "Week", exact: true }).click();
+  await check(page).toHaveURL(/view=staff/);
   await check(page.getByRole("heading", { name: "Z E2E roster 21", exact: true })).toBeVisible();
   await check(page.locator(".waybook-week-calendar")).toBeVisible();
   await page.getByRole("link", { name: "Month", exact: true }).click();
