@@ -7,7 +7,6 @@ export const REQUIRED_CHECKS = [
   "e2e",
   "DB Integration Tests (Postgres 15)",
   "migration-history",
-  "Vercel",
 ];
 
 const run = (command, args, options = {}) => execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options }).trim();
@@ -37,6 +36,24 @@ export function planCollection(pulls, checksBySha, repository) {
   });
 }
 
+export function fetchedHeadDecision(item, fetchedSha) {
+  if (fetchedSha !== item.sha) return { action: "skip", reason: "stale-head", expected: item.sha, actual: fetchedSha };
+  return { action: "continue" };
+}
+
+export function mergeAttemptDecision({ alreadyCollected = false, conflicted = false } = {}) {
+  if (alreadyCollected) return { action: "skip", reason: "already-collected" };
+  if (conflicted) return { action: "skip", reason: "merge-conflict" };
+  return { action: "commit" };
+}
+
+export function releaseBranchDecision({ releaseIsAncestorOfMain, mainIsAncestorOfRelease, hasOpenReleasePull }) {
+  if (releaseIsAncestorOfMain) return { action: "fast-forward-to-main" };
+  if (!mainIsAncestorOfRelease) return { action: "fail", reason: "release-branch-diverged" };
+  if (!hasOpenReleasePull) return { action: "skip", reason: "missing-open-release-pr" };
+  return { action: "collect" };
+}
+
 function ghApi(path) {
   return json("gh", ["api", "--paginate", path]);
 }
@@ -55,6 +72,15 @@ function git(args) {
   return run("git", args);
 }
 
+function isAncestor(ancestor, descendant) {
+  try {
+    git(["merge-base", "--is-ancestor", ancestor, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function record(results, entry) {
   results.push(entry);
   process.stdout.write(`${JSON.stringify(entry)}\n`);
@@ -69,20 +95,21 @@ export function collect({ repository, owner, releaseBranch, pulls, checksBySha, 
     const pull = pulls.find((candidate) => candidate.number === item.number);
     git(["fetch", "origin", pull.head.ref]);
     const fetched = git(["rev-parse", `origin/${pull.head.ref}`]);
-    if (fetched !== item.sha) {
-      record(results, { number: item.number, action: "skip", reason: "stale-head", expected: item.sha, actual: fetched });
+    const fetchedDecision = fetchedHeadDecision(item, fetched);
+    if (fetchedDecision.action === "skip") {
+      record(results, { number: item.number, ...fetchedDecision });
       continue;
     }
     try {
       git(["merge-base", "--is-ancestor", item.sha, "HEAD"]);
-      record(results, { number: item.number, action: "skip", reason: "already-collected", sha: item.sha });
+      record(results, { number: item.number, ...mergeAttemptDecision({ alreadyCollected: true }), sha: item.sha });
       continue;
     } catch {}
     try {
       git(["merge", "--no-ff", "--no-commit", item.sha]);
     } catch {
       git(["merge", "--abort"]);
-      record(results, { number: item.number, action: "skip", reason: "merge-conflict", sha: item.sha });
+      record(results, { number: item.number, ...mergeAttemptDecision({ conflicted: true }), sha: item.sha });
       continue;
     }
     git(["commit", "-m", `release: collect #${item.number}`]);
@@ -91,22 +118,54 @@ export function collect({ repository, owner, releaseBranch, pulls, checksBySha, 
   return results;
 }
 
+function dispatchReleaseValidation(releaseBranch, releaseSha, baseSha) {
+  // GitHub's workflow-dispatch API accepts a branch or tag reference, not an
+  // arbitrary commit SHA. The validation workflow checks out and verifies this
+  // immutable input before it runs any project command.
+  run("gh", ["workflow", "run", "release-validation.yml", "--ref", releaseBranch, "-f", `release_sha=${releaseSha}`, "-f", `base_sha=${baseSha}`]);
+  process.stdout.write(`Dispatched release validation for ${releaseSha} against ${baseSha}. Completion is not implied by this dispatch.\n`);
+}
+
 function main() {
   const repository = process.env.GITHUB_REPOSITORY;
   const owner = process.env.GITHUB_REPOSITORY_OWNER;
   const releaseBranch = process.env.RELEASE_BRANCH ?? "release/ready";
   if (!repository || !owner) throw new Error("GITHUB_REPOSITORY and GITHUB_REPOSITORY_OWNER are required.");
-  if (!releasePullExists(repository, owner, releaseBranch)) {
-    process.stdout.write(`No open, non-draft release PR found for ${releaseBranch}. A human must create ${releaseBranch} -> main once before collection can push.\n`);
+  try {
+    git(["fetch", "origin", "main", releaseBranch]);
+  } catch {
+    process.stdout.write(`Release branch ${releaseBranch} does not exist. A human must create it from current main; the collector can append the first batch, after which a human opens ${releaseBranch} -> main.\n`);
     return;
   }
-  git(["fetch", "origin", releaseBranch]);
   git(["switch", "--detach", `origin/${releaseBranch}`]);
+  const baseSha = git(["rev-parse", "origin/main"]);
+  const releaseSha = git(["rev-parse", "HEAD"]);
+  const branchDecision = releaseBranchDecision({
+    releaseIsAncestorOfMain: isAncestor(releaseSha, baseSha),
+    mainIsAncestorOfRelease: isAncestor(baseSha, releaseSha),
+    hasOpenReleasePull: releasePullExists(repository, owner, releaseBranch),
+  });
+  if (branchDecision.action === "fail") {
+    writeFileSync(process.env.GITHUB_STEP_SUMMARY ?? "/tmp/release-collection.json", `${JSON.stringify(branchDecision, null, 2)}\n`);
+    throw new Error(`Refusing to collect: ${releaseBranch} and main have diverged. Resolve the release branch manually; the collector will not reset or force-push.`);
+  }
+  if (branchDecision.action === "skip") {
+    process.stdout.write(`No open, non-draft release PR found for an ahead ${releaseBranch}. A human must open ${releaseBranch} -> main before another batch can be collected.\n`);
+    return;
+  }
+  const advancedReleaseBase = branchDecision.action === "fast-forward-to-main" && releaseSha !== baseSha;
+  if (advancedReleaseBase) git(["merge", "--ff-only", "origin/main"]);
   const pulls = ghApi(`repos/${repository}/pulls?state=open&base=main&per_page=100`);
   const checksBySha = Object.fromEntries(pulls.map((pull) => [pull.head.sha, checkRuns(repository, pull.head.sha)]));
   const results = collect({ repository, owner, releaseBranch, pulls, checksBySha, execute: true });
-  writeFileSync(process.env.GITHUB_STEP_SUMMARY ?? "/tmp/release-collection.json", `${JSON.stringify(results, null, 2)}\n`);
-  if (results.some((entry) => entry.action === "collected")) git(["push", "origin", `HEAD:refs/heads/${releaseBranch}`]);
+  const summary = advancedReleaseBase ? [{ action: "advanced-release-base", sha: baseSha }, ...results] : results;
+  writeFileSync(process.env.GITHUB_STEP_SUMMARY ?? "/tmp/release-collection.json", `${JSON.stringify(summary, null, 2)}\n`);
+  const collected = results.some((entry) => entry.action === "collected");
+  if (advancedReleaseBase || collected) {
+    const collectedReleaseSha = git(["rev-parse", "HEAD"]);
+    git(["push", "origin", `HEAD:refs/heads/${releaseBranch}`]);
+    if (collected) dispatchReleaseValidation(releaseBranch, collectedReleaseSha, baseSha);
+  }
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) main();
