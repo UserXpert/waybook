@@ -5,7 +5,7 @@
 
   A simpler way from interest to appointment — for clinics and other service businesses.
 
-  [Explore the website](https://waybook-website.vercel.app/) · [Product documentation](WAYBOOK_MVP.md) · [Delivery backlog](.waybook/docs/07_delivery_backlog.md) · [GitHub issues](https://github.com/UserXpert/waybook/issues)
+  [Explore the website](https://waybook-website.vercel.app/) · [Documentation](docs/README.md) · [Delivery backlog](.waybook/docs/07_delivery_backlog.md) · [GitHub issues](https://github.com/UserXpert/waybook/issues)
 </div>
 
 ---
@@ -50,10 +50,9 @@ Clone [UserXpert/waybook](https://github.com/UserXpert/waybook). On the current 
 git rev-parse --show-toplevel
 git status --short --branch
 git remote -v
-npm run waybook:release:check
 ```
 
-The release check compares the checkout and its working tree with GitHub `main`, the commit serving the production domain, and the checkout running on local port 3333. It needs network access, an authenticated Vercel CLI and `lsof`. An unavailable check is not proof of parity; a task branch is expected to differ from `main` until its changes are released.
+After setup and once the local server is running, run `npm run waybook:release:check`. The release check compares the checkout and its working tree with GitHub `main`, the commit serving the production domain, and the checkout running on local port 3333. It needs network access, an authenticated Vercel CLI and `lsof`. An unavailable check is not proof of parity; a task branch is expected to differ from `main` until its changes are released.
 
 ### 2. Set up an isolated local environment
 
@@ -63,13 +62,16 @@ For a **new, disposable** local database only:
 
 ```sh
 npm ci
+npm run build --workspace=@waybook/core
+npm run build --workspace=@waybook/db
+npm run build --workspace=@waybook/server
 npm run waybook:db:start
 npm run waybook:db:migrate -- --local
 env -u WAYBOOK_CONTROL_DATABASE_URL -u WAYBOOK_NORDIC_STUDIO_DATABASE_URL -u WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL npm run waybook:db:seed
 npm run waybook:dev
 ```
 
-Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](.env.waybook.local.example). The seed command writes demo users and data; the example unsets the three configured database URLs for that command so it targets the local defaults. Do not use seed credentials in hosted environments.
+Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](.env.waybook.local.example). The three shared packages must be built after a clean install because the app imports their generated outputs. The seed command writes demo users and data; the example unsets the three configured database URLs for that command so it targets the local defaults. For a fresh seed, sign in as `owner@nordic.local` with the local-only default password `waybook-local-only`, unless `WAYBOOK_LOCAL_PASSWORD` was set when seeding. Do not use seed credentials in hosted environments.
 
 For an **existing** database, preserve its data and check its history first:
 
@@ -118,9 +120,7 @@ The application uses Next.js, React, TypeScript and PostgreSQL. Workspace packag
 
 ## Documentation
 
-Start with the [documentation entry point](WAYBOOK_MVP.md) and [manifest](.waybook/docs/00_manifest.md). For the current pilot, see the [delivery backlog](.waybook/docs/07_delivery_backlog.md), [readiness record](.waybook/docs/08_pilot_readiness.md), [support runbook](.waybook/docs/09_pilot_support_runbook.md) and [privacy review](.waybook/docs/10_denmark_privacy_review.md).
-
-See the [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) before reconciling local changes or deploying.
+Use the [documentation index](docs/README.md) to find architecture, booking, release, support and privacy guidance. The [manifest](.waybook/docs/00_manifest.md) routes implementation work to the authoritative topic documents. The [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) is required before reconciling changes or deploying. Historical inherited notes are kept separately in [the archive](docs/archive/README.md).
 
 ## License and attribution
 
