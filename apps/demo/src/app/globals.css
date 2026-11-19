@@ -6930,6 +6930,16 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   .tenant-dashboard-page .waybook-month-calendar__appointment,.tenant-dashboard-page .waybook-month-calendar__more { padding: .15rem; font-size: .58rem; }
   .tenant-dashboard-page .waybook-month-calendar__preview { display: none !important; }
 }
+
+/* Global success confirmation for tenant drawer actions. */
+.waybook-success-toast-region { position: fixed; z-index: 110; top: 1rem; right: 1rem; width: min(24rem, calc(100vw - 2rem)); pointer-events: none; }
+.waybook-success-toast { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border: 1px solid #a8cbb5; border-radius: .65rem; padding: .7rem .75rem .7rem 1rem; background: #f1fbf4; color: #1e5738; box-shadow: 0 .65rem 1.5rem rgba(20, 66, 42, .18); font-size: .82rem; line-height: 1.4; pointer-events: auto; }
+.waybook-success-toast span { min-width: 0; }
+.waybook-success-toast button { display: grid; flex: 0 0 auto; width: 1.9rem; height: 1.9rem; place-items: center; border: 0; border-radius: .4rem; padding: 0; background: transparent; color: inherit; font: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.waybook-success-toast button:hover { background: rgba(30, 87, 56, .1); }
+.waybook-success-toast button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+:root[data-waybook-theme="dark"] .waybook-success-toast { border-color: #37694c; background: #173827; color: #d6f4df; box-shadow: 0 .65rem 1.5rem rgba(0, 0, 0, .34); }
+@media (max-width: 760px) { .waybook-success-toast-region { top: auto; right: 1rem; bottom: 1rem; left: 1rem; width: auto; } }
 .tenant-dashboard-page .waybook-month-calendar { overflow: visible; }
 .tenant-dashboard-page .waybook-month-calendar__day:focus-within { z-index: 3; }
 .tenant-dashboard-page .waybook-month-calendar__day:nth-last-child(-n + 7) .waybook-month-calendar__preview { top: auto; bottom: 100%; }

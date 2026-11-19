@@ -9,6 +9,7 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
+import { withSuccessToast } from "@/lib/waybook/toast";
 
 async function managerContext() {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -53,7 +54,7 @@ export async function savePackageDefinition(formData: FormData) {
   });
   revalidatePath("/app/packages");
   const slug = await currentTenantRouteSlug(tenant.slug);
-  redirect(tenantPath(slug, "/app/packages"));
+  redirect(withSuccessToast(tenantPath(slug, "/app/packages"), "Package saved."));
 }
 
 export async function issueClientPackage(formData: FormData) {
@@ -76,5 +77,5 @@ export async function issueClientPackage(formData: FormData) {
   });
   revalidatePath("/app/packages"); revalidatePath("/app/customers");
   const slug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(slug, "/app/packages")}?package=${issuedId}`);
+  redirect(withSuccessToast(`${tenantPath(slug, "/app/packages")}?package=${issuedId}`, "Package issued."));
 }

@@ -8,6 +8,7 @@ import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { withSuccessToast } from "@/lib/waybook/toast";
 import { giftCardCodeHashes, normaliseGiftCardCode } from "@/lib/waybook/gift-card-code";
 
 const quantityFrom = (value: FormDataEntryValue | null) => Number.parseInt(String(value ?? ""), 10);
@@ -52,7 +53,7 @@ export async function addProductToAppointmentSale(formData: FormData) {
   revalidatePath("/app/bookings");
   revalidatePath("/app/calendars");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`, "Product added to sale."));
 }
 
 export async function redeemPackageForAppointmentSale(formData: FormData) {
@@ -85,7 +86,7 @@ export async function redeemPackageForAppointmentSale(formData: FormData) {
   });
   revalidatePath("/app/sales"); revalidatePath("/app/bookings"); revalidatePath("/app/calendars"); revalidatePath("/app/packages");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`, "Package redeemed."));
 }
 
 export type GiftCardTenderState = { error: string | null };
@@ -122,5 +123,5 @@ export async function redeemGiftCardForAppointmentSale(_previous: GiftCardTender
   }
   revalidatePath("/app/sales"); revalidatePath("/app/bookings"); revalidatePath("/app/calendars"); revalidatePath("/app/gift-cards");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`, "Gift card redeemed."));
 }

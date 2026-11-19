@@ -1,15 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
 import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { hashPassword, requireIdentity } from "@/lib/waybook/auth";
 import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
-import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 import { defaultStaffCalendarColor, staffCalendarColorValues } from "@/lib/waybook/staff-calendar-colors";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
+import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { withSuccessToast } from "@/lib/waybook/toast";
 
 async function editableStaffTenant() {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -154,6 +157,8 @@ export async function saveTeamMember(formData: FormData) {
   for (const location of validLocations) await db`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) VALUES (${tenant.id}, ${member.id}, ${location.id})`;
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${memberId ? "staff.updated" : "staff.created"}, 'team_member', ${member.id}, ${JSON.stringify({ fields: ["name", "email", "role", "isActive", "phone", "jobTitle", "specialty", "workLocation", "staffCode", "internalNotes", "calendarColor", "serviceIds", "locationIds"] })}::jsonb)`;
   revalidateStaff();
+  const slug = await currentTenantRouteSlug(tenant.slug);
+  redirect(withSuccessToast(`${tenantPath(slug, "/app/team")}?employee=${member.id}`, "Staff member saved."));
 }
 
 export async function provisionStaffLogin(formData: FormData) {
@@ -276,6 +281,8 @@ export async function saveStaffPermissions(formData: FormData) {
   );
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, 'staff.permissions.updated', 'team_member', ${memberId}, ${JSON.stringify(permissions)}::jsonb)`;
   revalidateStaff();
+  const slug = await currentTenantRouteSlug(tenant.slug);
+  redirect(withSuccessToast(`${tenantPath(slug, "/app/team")}?employee=${memberId}&tab=permissions`, "Staff permissions saved."));
 }
 
 export async function saveStaffWorkingHours(formData: FormData) {
