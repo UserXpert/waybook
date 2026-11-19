@@ -53,7 +53,7 @@ const booking = await withSerializableRetry(
 );`,
     },
     {
-      name: "@thebookingkit/db",
+      name: "@waybook/db",
       version: "0.2.0",
       env: "node",
       envLabel: "Node (Postgres)",
@@ -68,8 +68,8 @@ const booking = await withSerializableRetry(
         "schema",
         "migrate",
       ],
-      snippet: `import { db } from "@thebookingkit/db";
-import { bookings } from "@thebookingkit/db/schema";
+      snippet: `import { db } from "@waybook/db";
+import { bookings } from "@waybook/db/schema";
 
 // Drizzle ORM — type-safe queries
 const upcoming = await db

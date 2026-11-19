@@ -1,25 +1,23 @@
 {
-  "name": "@thebookingkit/db",
+  "name": "@waybook/db",
   "version": "0.5.0",
-  "description": "Drizzle ORM schema, migrations, and TypeScript types for The Booking Kit's 25 Postgres tables",
+  "private": true,
+  "description": "Database schemas, migrations, and clients used by Waybook",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zainalshanan/thebookingkit.git",
+    "url": "git+https://github.com/UserXpert/waybook.git",
     "directory": "packages/db"
   },
-  "homepage": "https://thebookingkit.dev",
+  "homepage": "https://github.com/UserXpert/waybook",
   "keywords": [
-    "thebookingkit",
+    "waybook",
     "booking",
     "scheduling",
     "drizzle",
     "postgres",
     "schema"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

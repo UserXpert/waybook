@@ -201,7 +201,7 @@ export const BOOKING_LOCKS_HOLDER_MIGRATION_SQL =
  * Ready-to-use SQL statements that create the three resource tables required
  * by E-22 resource-capacity booking in a SQLite / Cloudflare D1 database.
  *
- * Differences from the PostgreSQL schema in `@thebookingkit/db`:
+ * Differences from the PostgreSQL schema in `@waybook/db`:
  * - Dates stored as TEXT (UTC-Z format via D1DateCodec) — no native TIMESTAMPTZ.
  * - No `EXCLUDE USING gist` range constraint — use `D1ResourceBookingLock` instead.
  * - No `btree_gist` extension dependency.

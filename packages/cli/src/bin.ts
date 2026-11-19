@@ -866,7 +866,7 @@ program
   .command("migrate")
   .description("Run pending Booking Kit database migrations")
   .action(() => {
-    console.log("Migration support requires @thebookingkit/db.");
+    console.log("Migration support requires @waybook/db.");
     console.log("Run: npx drizzle-kit push");
     console.log("Or:  npx drizzle-kit migrate");
   });

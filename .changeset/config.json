@@ -5,7 +5,7 @@
   "fixed": [
     [
       "@thebookingkit/core",
-      "@thebookingkit/db",
+      "@waybook/db",
       "@thebookingkit/d1",
       "@thebookingkit/server",
       "@thebookingkit/cli"

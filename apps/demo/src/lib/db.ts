@@ -2,10 +2,10 @@
  * Database client for the demo app.
  *
  * When DATABASE_URL is set, connects to a real Postgres instance via
- * @thebookingkit/db. Otherwise returns null, and the demo falls back
+ * @waybook/db. Otherwise returns null, and the demo falls back
  * to in-memory mock data.
  */
-import { createDb, type Database } from "@thebookingkit/db";
+import { createDb, type Database } from "@waybook/db";
 
 let _db: Database | null = null;
 let _initialized = false;

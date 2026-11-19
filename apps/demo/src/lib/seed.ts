@@ -7,8 +7,8 @@
  * Usage: DATABASE_URL=... npx tsx apps/demo/src/lib/seed.ts
  */
 
-import { createDb } from "@thebookingkit/db";
-import { providers, eventTypes, availabilityRules, bookings } from "@thebookingkit/db";
+import { createDb } from "@waybook/db";
+import { providers, eventTypes, availabilityRules, bookings } from "@waybook/db";
 import { SERVICES, BARBER_SHOP } from "./constants";
 
 async function seed() {

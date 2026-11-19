@@ -1,7 +1,7 @@
 /**
  * Data access layer for the demo app.
  *
- * When DATABASE_URL is set, reads from real Postgres via @thebookingkit/db.
+ * When DATABASE_URL is set, reads from real Postgres via @waybook/db.
  * Otherwise falls back to in-memory mock data.
  *
  * This dual-mode approach lets the demo work both as a static marketing site
@@ -31,7 +31,7 @@ export async function getAvailabilityRules(): Promise<AvailabilityRuleInput[]> {
   const db = getDb();
   if (!db) return AVAILABILITY_RULES;
 
-  const schema = await import("@thebookingkit/db");
+  const schema = await import("@waybook/db");
   const rows = await db.select().from(schema.availabilityRules);
 
   return rows.map((r: { rrule: string; startTime: string; endTime: string; timezone: string | null }) => ({
@@ -47,7 +47,7 @@ export async function getOverrides(): Promise<AvailabilityOverrideInput[]> {
   const db = getDb();
   if (!db) return getMockOverrides();
 
-  const schema = await import("@thebookingkit/db");
+  const schema = await import("@waybook/db");
   const rows = await db.select().from(schema.availabilityOverrides);
 
   return rows.map((r: { date: Date; startTime: string | null; endTime: string | null; isUnavailable: boolean }) => ({
@@ -63,7 +63,7 @@ export async function getBookingsAsInput(): Promise<BookingInput[]> {
   const db = getDb();
   if (!db) return getMockBookingsAsInput();
 
-  const schema = await import("@thebookingkit/db");
+  const schema = await import("@waybook/db");
   const rows = await db.select().from(schema.bookings);
 
   return rows.map((r: { startsAt: Date; endsAt: Date; status: string }) => ({
@@ -78,7 +78,7 @@ export async function getAllBookings(): Promise<StoredBooking[]> {
   const db = getDb();
   if (!db) return getMockBookings();
 
-  const schema = await import("@thebookingkit/db");
+  const schema = await import("@waybook/db");
   const { eq } = await import("drizzle-orm");
   const rows = await db.select().from(schema.bookings);
 
@@ -124,7 +124,7 @@ export async function addBooking(
   const db = getDb();
   if (!db) return addMockBooking(booking);
 
-  const schema = await import("@thebookingkit/db");
+  const schema = await import("@waybook/db");
   const { eq } = await import("drizzle-orm");
 
   const [et] = await db
@@ -172,7 +172,7 @@ export async function updateBookingStatus(
   const db = getDb();
   if (!db) return updateMockStatus(id, status);
 
-  const schema = await import("@thebookingkit/db");
+  const schema = await import("@waybook/db");
   const { eq } = await import("drizzle-orm");
 
   const [updated] = await db
