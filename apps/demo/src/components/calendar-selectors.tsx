@@ -126,13 +126,14 @@ export function SearchPicker<T extends { id: string }>({
 
 /** Calendar filters use compact async search instead of serialising large
  * location, staff, or service directories into native dropdowns. */
-export function CalendarSelectors({ location, members, services, week, teamMode = false }: { location: Location; members: Member[]; services: Service[]; week: string; teamMode?: boolean }) {
+export function CalendarSelectors({ location, members, services, week, teamMode = false, fixedView }: { location: Location; members: Member[]; services: Service[]; week: string; teamMode?: boolean; fixedView?: "month" }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedEmployeeId = searchParams.get("employee") ?? "";
   const selectedServiceId = searchParams.get("service") ?? "";
   const selectedDay = searchParams.get("day") ?? "";
+  const selectedMonthDay = searchParams.get("monthDay") ?? "";
   const rosterSearch = searchParams.get("staff") ?? "";
   const selectedEmployee = members.find((item) => item.id === selectedEmployeeId);
   const selectedService = services.find((item) => item.id === selectedServiceId);
@@ -148,7 +149,8 @@ export function CalendarSelectors({ location, members, services, week, teamMode 
     if (selectedDay) params.set("day", selectedDay);
     if (nextServiceId) params.set("service", nextServiceId);
     if (nextRosterSearch) params.set("staff", nextRosterSearch);
-    params.set("view", nextEmployeeId ? "staff" : "team");
+    if (selectedMonthDay) params.set("monthDay", selectedMonthDay);
+    params.set("view", fixedView ?? (nextEmployeeId ? "staff" : "team"));
     router.push(`${pathname}?${params.toString()}`);
   };
 

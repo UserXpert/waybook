@@ -48,6 +48,13 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await check(calendar).toHaveURL(/\/nordic\/app/);
   await calendar.goto(`/nordic/app/calendars?day=${localDayAfter(8)}`);
   await check(calendar.getByText("Waybook E2E customer", { exact: true })).toBeVisible();
+  const bookingDay = localDayAfter(8);
+  await calendar.goto(`/nordic/app/calendars?view=month&day=${bookingDay}`);
+  const monthDay = calendar.locator(`a.waybook-month-calendar__day[href*="monthDay=${bookingDay}"]`);
+  await check(monthDay).toContainText(/booking/);
+  await monthDay.click();
+  await check(calendar.getByText("DAY DETAILS", { exact: true })).toBeVisible();
+  await check(calendar.getByText("Waybook E2E customer", { exact: true })).toBeVisible();
 
   await findBooking();
   await page.getByRole("button", { name: "Cancel booking" }).click();
