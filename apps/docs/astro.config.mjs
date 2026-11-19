@@ -6,11 +6,11 @@ import react from '@astrojs/react';
 
 export default defineConfig({
     integrations: [starlight({
-        title: 'The Booking Kit',
-        description: 'The Headless Booking Primitive — open-source scheduling toolkit for Next.js and Postgres. Currently in Beta.',
-        social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/zainalshanan/thebookingkit' }],
+        title: 'Waybook documentation',
+        description: 'Technical notes for the Waybook booking-operations application.',
+        social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/UserXpert/waybook' }],
         editLink: {
-            baseUrl: 'https://github.com/zainalshanan/thebookingkit/edit/main/apps/docs/',
+            baseUrl: 'https://github.com/UserXpert/waybook/edit/main/apps/docs/',
         },
         customCss: ['./src/styles/custom.css'],
         sidebar: [

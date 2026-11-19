@@ -1,5 +1,5 @@
 /*
- * Custom CSS overrides for The Booking Kit documentation site.
+ * Custom CSS overrides for the Waybook documentation site.
  * Imported via astro.config.mjs → starlight({ customCss: [...] }).
  */
 
@@ -10,7 +10,7 @@
  * even child to create the staggered visual. This is fine when card
  * heights are equal, but when card text lengths differ the cards drift
  * out of vertical alignment. The fix below forces the grid into a
- * standard (non-staggered) layout on the homepage "Why The Booking Kit?"
+ * standard (non-staggered) layout on the homepage cards
  * section and ensures all cards in any CardGrid stretch to the same
  * height via align-items: stretch.
  * ----------------------------------------------------------------------- */
