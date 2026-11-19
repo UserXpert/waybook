@@ -77,6 +77,29 @@ test("tenant owner can sign in but cannot access another workspace", async ({ pa
   expect(other.status()).toBe(404);
 });
 
+test("monthly calendar keeps all-staff scope and shows every booking for a day", async ({ page }) => {
+  const check = expect.configure({ timeout: 30_000 });
+  const monthDay = localDayAfter(10);
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await check(page).toHaveURL(/\/nordic\/app/);
+  await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
+
+  const day = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
+  await check(day).toContainText("2 bookings");
+  await check(day).toHaveAttribute("aria-describedby", `month-preview-${monthDay}`);
+  await day.click();
+  expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
+  await check(page.getByText("DAY DETAILS", { exact: true })).toBeVisible();
+  await check(page.getByText("Monthly calendar 13", { exact: true })).toBeVisible();
+  await check(page.getByText("Monthly calendar 14", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Next month").click();
+  expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
+});
+
 test("changing the reschedule day ignores an older availability response", async ({ page }) => {
   let firstAvailabilityStarted!: () => void;
   const firstAvailability = new Promise<void>(resolve => { firstAvailabilityStarted = resolve; });
