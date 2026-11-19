@@ -2,6 +2,8 @@
 
 This is an engineering inventory for issue #13, not legal approval or a complete record of processing. The pilot business, actual configuration and contracts must be reviewed with qualified Danish/EU counsel before real client data is admitted.
 
+As of 2026-11-19, Waybook's operating and contracting legal entity has not been decided. Continue preparatory work, then identify the entity and complete the applicable agreements, notices and legal review before the pilot or release involving real client data.
+
 ## Data and locations to assess
 
 | Data | Evidence in repository | Outstanding verification |
