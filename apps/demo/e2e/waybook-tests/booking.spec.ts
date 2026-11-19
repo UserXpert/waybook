@@ -8,15 +8,26 @@ function localDayAfter(days: number) {
   return day.toISOString().slice(0, 10);
 }
 
+function localWeekdayAfter(days: number) {
+  const day = new Date(`${localDayAfter(days)}T12:00:00Z`);
+  while ([0, 6].includes(day.getUTCDay())) day.setUTCDate(day.getUTCDate() + 1);
+  return day.toISOString().slice(0, 10);
+}
+
 test("customer books, reschedules and cancels without a stale confirmation", async ({ page }) => {
   test.setTimeout(120_000);
   const check = expect.configure({ timeout: 30_000 });
+  const runId = `${Date.now()}-${test.info().retry}`;
+  const customerName = `Waybook E2E customer ${runId}`;
+  const customerEmail = `waybook-e2e-${runId}@example.test`;
   await page.goto("/nordic/book");
   await page.getByRole("button", { name: /Studio session/ }).click();
   await page.getByRole("button", { name: "Next dates" }).click();
-  await page.getByRole("button", { name: "09:00", exact: true }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Waybook E2E customer");
-  await page.getByLabel("Email", { exact: true }).fill("waybook-e2e@example.test");
+  const publicSlots = page.locator(".tenant-time-grid button");
+  await check(publicSlots.first()).toBeVisible();
+  await publicSlots.first().click();
+  await page.getByLabel("Name", { exact: true }).fill(customerName);
+  await page.getByLabel("Email", { exact: true }).fill(customerEmail);
   await page.getByRole("button", { name: "Confirm booking" }).click();
   await check(page.getByText("BOOKING CONFIRMED")).toBeVisible();
   const summary = await page.locator(".tenant-complete-stage").innerText();
@@ -28,7 +39,7 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   // different public tenant route.
   const managementRequest = {
     headers: { Origin: new URL(page.url()).origin },
-    data: { action: "lookup", bookingId: number!, email: "waybook-e2e@example.test" },
+    data: { action: "lookup", bookingId: number!, email: customerEmail },
   };
   const ownLookup = await page.request.post("/nordic/api/public/manage", managementRequest);
   expect(ownLookup.status()).toBe(200);
@@ -45,14 +56,17 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   async function findBooking() {
     await page.getByRole("button", { name: "Manage booking" }).click();
     await page.getByLabel("Booking number").fill(number!);
-    await page.getByLabel("Email address").fill("waybook-e2e@example.test");
+    await page.getByLabel("Email address").fill(customerEmail);
     await page.getByRole("button", { name: "Find booking" }).click();
     await check(page.getByRole("heading", { name: "Your booking" })).toBeVisible();
   }
   await findBooking();
   await page.getByRole("button", { name: "Reschedule booking" }).click();
-  await page.getByLabel("Day").fill(localDayAfter(8));
-  await page.getByRole("button", { name: "10:00", exact: true }).click();
+  const rescheduleDay = localWeekdayAfter(8);
+  await page.getByLabel("Day").fill(rescheduleDay);
+  const rescheduleSlots = page.locator(".booking-manage-times button");
+  await check(rescheduleSlots.first()).toBeVisible();
+  await rescheduleSlots.first().click();
   await page.getByRole("button", { name: "Confirm new time" }).click();
   await check(page.getByText("Your booking has been rescheduled.")).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
@@ -65,23 +79,23 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await calendar.getByPlaceholder("Enter your password").fill("waybook-local-only");
   await calendar.getByRole("button", { name: "Sign in" }).click();
   await check(calendar).toHaveURL(/\/nordic\/app/);
-  await calendar.goto(`/nordic/app/calendars?day=${localDayAfter(8)}`);
-  await check(calendar.getByText(/Waybook E2E customer/)).toBeVisible();
-  const bookingDay = localDayAfter(8);
+  await calendar.goto(`/nordic/app/calendars?day=${rescheduleDay}`);
+  await check(calendar.getByText(customerName, { exact: true })).toBeVisible();
+  const bookingDay = rescheduleDay;
   await calendar.goto(`/nordic/app/calendars?view=month&day=${bookingDay}`);
   const monthDay = calendar.locator(`a.waybook-month-calendar__day[href*="monthDay=${bookingDay}"]`);
   await check(monthDay).toContainText(/booking/);
   await monthDay.click();
   const bookingDrawer = calendar.locator(".waybook-month-calendar__drawer");
   await check(calendar.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(bookingDrawer.getByText(/Waybook E2E customer/)).toBeVisible();
+  await check(bookingDrawer.getByText(customerName, { exact: true })).toBeVisible();
 
   await findBooking();
   await page.getByRole("button", { name: "Cancel booking" }).click();
   await page.getByRole("button", { name: "Confirm cancellation" }).click();
   await check(page.getByText("Your booking has been cancelled.")).toBeVisible();
   await calendar.reload();
-  await check(calendar.getByText("Waybook E2E customer", { exact: true })).toHaveCount(0);
+  await check(calendar.getByText(customerName, { exact: true })).toHaveCount(0);
   await calendar.close();
 });
 
