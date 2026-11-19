@@ -74,6 +74,24 @@ open in #42; its exact cause is not established. A direct-to-workspace
 redirect did not fix that failure and was reverted. Production release checks
 remain open.
 
+#### Protected preview browser check
+
+For an interactive end-to-end check, use a browser already authenticated to
+Vercel and authorized for the project. Open the exact isolated preview URL,
+confirm it is the intended deployment, and sign in through Waybook's normal
+form using a synthetic preview account. Keep JavaScript enabled; verify the
+tenant name, perform the intended synthetic workflow, and repeat at desktop
+and mobile widths. Record the deployment commit, viewport, account role and
+outcome without recording credentials or client data. If Vercel asks for sign-in,
+the authorized account holder must establish that browser session. Never disable
+deployment protection or point a synthetic test at production data.
+
+This interactive route was checked on 18 November in authenticated Chrome;
+it is not proof that a fresh unattended browser or the trusted-source header
+flow works. For header-based automation follow Vercel's protected-deployment
+guidance and keep the short-lived token out of logs and screenshots. The
+observed flight-data failure remains unresolved in #42.
+
 The first clinic pilot is planned for Denmark. Booking confirmations and
 cancellations use the business's manual process until automatic delivery is
 configured and verified. The process must still be exercised with a pilot.
