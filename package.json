@@ -25,7 +25,10 @@
     "waybook:test:booking-package-redemption": "tsx scripts/verify-waybook-booking-package-redemption.ts",
     "waybook:build": "npm --prefix apps/demo run build",
     "registry:build": "npx tsx scripts/build-registry.ts",
-    "check:node-esm": "node scripts/check-node-esm.mjs"
+    "check:node-esm": "node scripts/check-node-esm.mjs",
+    "waybook:release:check": "node scripts/check-waybook-release.mjs",
+    "waybook:db:status": "tsx scripts/check-waybook-schema.mts",
+    "waybook:dev": "npm run waybook:db:status -- --local --allow-pending && npm run waybook:db:migrate -- --local && npm run dev --workspace=@waybook/app"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
