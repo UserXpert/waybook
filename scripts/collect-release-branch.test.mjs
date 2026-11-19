@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { REQUIRED_CHECKS, evaluatePullRequest, fetchedHeadDecision, mergeAttemptDecision, planCollection, releaseBranchDecision } from "./collect-release-branch.mjs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { REQUIRED_CHECKS, collect, evaluatePullRequest, fetchedHeadDecision, flattenPaginatedPages, isFullSha, mergeAttemptDecision, planCollection, releaseBranchDecision } from "./collect-release-branch.mjs";
 
 const repository = "UserXpert/waybook";
 const checks = REQUIRED_CHECKS.map((name) => ({ name, conclusion: "SUCCESS" }));
@@ -35,4 +39,74 @@ test("advances only a merged release branch and fails closed on divergence", () 
   assert.deepEqual(releaseBranchDecision({ releaseIsAncestorOfMain: false, mainIsAncestorOfRelease: true, hasOpenReleasePull: true }), { action: "collect" });
   assert.deepEqual(releaseBranchDecision({ releaseIsAncestorOfMain: false, mainIsAncestorOfRelease: true, hasOpenReleasePull: false }), { action: "skip", reason: "missing-open-release-pr" });
   assert.deepEqual(releaseBranchDecision({ releaseIsAncestorOfMain: false, mainIsAncestorOfRelease: false, hasOpenReleasePull: true }), { action: "fail", reason: "release-branch-diverged" });
+});
+
+test("accepts only full SHAs and flattens every gh pagination page", () => {
+  assert.equal(isFullSha("a".repeat(40)), true);
+  assert.equal(isFullSha("A".repeat(40)), false);
+  assert.equal(isFullSha("a".repeat(39)), false);
+  assert.deepEqual(flattenPaginatedPages([[{ number: 1 }], [{ number: 2 }]]), [{ number: 1 }, { number: 2 }]);
+  assert.throws(() => flattenPaginatedPages([{ number: 1 }]), /slurp paginated/);
+});
+
+const command = (cwd, args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+const commitFile = (cwd, name, contents, message) => {
+  writeFileSync(join(cwd, name), contents);
+  command(cwd, ["add", name]);
+  command(cwd, ["commit", "-m", message]);
+  return command(cwd, ["rev-parse", "HEAD"]);
+};
+
+test("collect integrates an eligible branch once, skips stale heads, and aborts conflicts cleanly", () => {
+  const root = mkdtempSync(join(tmpdir(), "waybook-release-collector-"));
+  const remote = join(root, "remote.git");
+  const worktree = join(root, "worktree");
+  const originalCwd = process.cwd();
+  try {
+    command(root, ["init", "--bare", remote]);
+    command(root, ["clone", remote, worktree]);
+    command(worktree, ["config", "user.email", "release-test@example.invalid"]);
+    command(worktree, ["config", "user.name", "Release Test"]);
+    command(worktree, ["checkout", "-b", "main"]);
+    commitFile(worktree, "shared.txt", "base\n", "initial");
+    command(worktree, ["push", "-u", "origin", "main"]);
+    command(worktree, ["checkout", "-b", "release/ready"]);
+    command(worktree, ["push", "-u", "origin", "release/ready"]);
+    command(worktree, ["checkout", "-b", "feature/eligible", "main"]);
+    const eligibleSha = commitFile(worktree, "eligible.txt", "eligible\n", "eligible change");
+    command(worktree, ["push", "-u", "origin", "feature/eligible"]);
+    command(worktree, ["checkout", "release/ready"]);
+    process.chdir(worktree);
+
+    const eligible = pull({ head: { sha: eligibleSha, ref: "feature/eligible", repo: { full_name: repository } } });
+    const first = collect({ repository, pulls: [eligible], checksBySha: { [eligibleSha]: checks }, execute: true });
+    assert.equal(first.at(-1).action, "collected");
+    const second = collect({ repository, pulls: [eligible], checksBySha: { [eligibleSha]: checks }, execute: true });
+    assert.equal(second.at(-1).reason, "already-collected");
+
+    command(worktree, ["checkout", "-b", "feature/stale", "main"]);
+    const staleSha = commitFile(worktree, "stale.txt", "first\n", "stale first");
+    command(worktree, ["push", "-u", "origin", "feature/stale"]);
+    commitFile(worktree, "stale.txt", "second\n", "stale updated");
+    command(worktree, ["push"]);
+    command(worktree, ["checkout", "release/ready"]);
+    const stale = pull({ number: 2, head: { sha: staleSha, ref: "feature/stale", repo: { full_name: repository } } });
+    const staleResult = collect({ repository, pulls: [stale], checksBySha: { [staleSha]: checks }, execute: true });
+    assert.equal(staleResult.at(-1).reason, "stale-head");
+
+    command(worktree, ["checkout", "-b", "feature/conflict", "main"]);
+    const conflictSha = commitFile(worktree, "shared.txt", "feature\n", "feature conflict");
+    command(worktree, ["push", "-u", "origin", "feature/conflict"]);
+    command(worktree, ["checkout", "release/ready"]);
+    commitFile(worktree, "shared.txt", "release\n", "release conflict");
+    const beforeConflict = command(worktree, ["rev-parse", "HEAD"]);
+    const conflicting = pull({ number: 3, head: { sha: conflictSha, ref: "feature/conflict", repo: { full_name: repository } } });
+    const conflictResult = collect({ repository, pulls: [conflicting], checksBySha: { [conflictSha]: checks }, execute: true });
+    assert.equal(conflictResult.at(-1).reason, "merge-conflict");
+    assert.equal(command(worktree, ["rev-parse", "HEAD"]), beforeConflict);
+    assert.equal(command(worktree, ["status", "--porcelain"]), "");
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(root, { recursive: true, force: true });
+  }
 });

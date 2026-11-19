@@ -9,6 +9,12 @@ export const REQUIRED_CHECKS = [
   "migration-history",
 ];
 
+export const FULL_SHA = /^[0-9a-f]{40}$/;
+
+export function isFullSha(value) {
+  return typeof value === "string" && FULL_SHA.test(value);
+}
+
 const run = (command, args, options = {}) => execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...options }).trim();
 const json = (command, args) => JSON.parse(run(command, args));
 const labelNames = (pull) => new Set((pull.labels ?? []).map((label) => typeof label === "string" ? label : label.name));
@@ -54,8 +60,13 @@ export function releaseBranchDecision({ releaseIsAncestorOfMain, mainIsAncestorO
   return { action: "collect" };
 }
 
+export function flattenPaginatedPages(pages) {
+  if (!Array.isArray(pages) || !pages.every(Array.isArray)) throw new Error("Expected gh --slurp paginated array response.");
+  return pages.flat();
+}
+
 function ghApi(path) {
-  return json("gh", ["api", "--paginate", path]);
+  return flattenPaginatedPages(json("gh", ["api", "--paginate", "--slurp", path]));
 }
 
 function checkRuns(repository, sha) {
@@ -93,6 +104,10 @@ export function collect({ repository, owner, releaseBranch, pulls, checksBySha, 
 
   for (const item of results.filter((entry) => entry.action === "collect")) {
     const pull = pulls.find((candidate) => candidate.number === item.number);
+    if (!isFullSha(item.sha)) {
+      record(results, { number: item.number, action: "skip", reason: "invalid-head-sha", sha: item.sha });
+      continue;
+    }
     git(["fetch", "origin", pull.head.ref]);
     const fetched = git(["rev-parse", `origin/${pull.head.ref}`]);
     const fetchedDecision = fetchedHeadDecision(item, fetched);
