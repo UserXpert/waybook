@@ -190,7 +190,9 @@ function mergeSlots(slots: Slot[]): ScheduleEntry[] {
 }
 
 function calendarGridBounds(intervals: ScheduleEntry[], timezone: string) {
-  if (!intervals.length) return { start: 9 * 60, end: 10 * 60, rowCount: 2 };
+  // A historical closed day has no availability intervals, but it still needs
+  // a useful schedule canvas. Keep the normal operating-day range visible.
+  if (!intervals.length) return { start: 9 * 60, end: 17 * 60, rowCount: 16 };
 
   const earliest = Math.min(
     ...intervals.map((entry) =>
@@ -313,11 +315,10 @@ export default async function CalendarsPage({
   const hasSelectedEmployee = Boolean(
     effectiveEmployee && selected?.id === effectiveEmployee,
   );
-  // Team has one operational Day board. An individual can deliberately switch
-  // between their own Day and Week board without changing staff scope.
+  // All-staff uses the operational Day board. A selected staff member uses
+  // their Week board; there is intentionally no single-staff Day board.
   const monthlyView = view === "month";
-  const staffDayView = !monthlyView && hasSelectedEmployee && view === "day";
-  const teamView = !monthlyView && (!hasSelectedEmployee || staffDayView);
+  const teamView = !monthlyView && !hasSelectedEmployee;
   const calendarDatePickerScope = {
     location: selectedLocation?.id,
     employee: hasSelectedEmployee ? selected?.id : undefined,
@@ -327,13 +328,13 @@ export default async function CalendarsPage({
     before: staffBefore ?? undefined,
     showOffShift: showOffShift === "0" ? "0" : undefined,
   };
-  const calendarView = monthlyView ? "month" : staffDayView ? "day" : teamView ? "team" : "staff";
+  const calendarView = monthlyView ? "month" : teamView ? "team" : "staff";
   const teamDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday;
   // A team-day deep link can carry a day without a week. Query the week that
   // contains that day so the grid and booking data can never drift apart.
   const currentWeek = /^\d{4}-\d{2}-\d{2}$/.test(week ?? "")
     ? weekStartFor(week!)
-    : weekStartFor(teamView ? teamDay : tenantToday);
+    : weekStartFor(teamView ? teamDay : (/^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday));
   const currentMonth = monthStartFor(
     /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday,
   );
@@ -443,7 +444,7 @@ export default async function CalendarsPage({
       ?? (await db<Member[]>`SELECT id,name,email,calendar_color AS "calendarColor" FROM team_members WHERE tenant_id=${tenant.id} AND id=${selectedBooking.teamMemberId} LIMIT 1`)[0]
       ?? null
     : null;
-  const selectableServices = monthlyView ? monthCalendarServices : teamView && !staffDayView ? calendarServices : services;
+  const selectableServices = monthlyView ? monthCalendarServices : teamView ? calendarServices : services;
   const selectedService = service
     ? selectableServices.find((item) => item.id === service)
     : undefined;
@@ -452,7 +453,7 @@ export default async function CalendarsPage({
   // carries the compatible service into the create drawer below.
   const availabilityServices = monthlyView ? [] : selectedService
     ? [selectedService]
-    : teamView && !staffDayView
+    : teamView
     ? calendarServices
       : services;
   const visibleServiceDurations = Array.from(
@@ -624,12 +625,9 @@ export default async function CalendarsPage({
   };
   const teamDayBookings = teamBookings.filter(
     (booking) =>
-      localDateKey(booking.startsAt, tenant.timezone) === teamDay &&
-      (!staffDayView || booking.teamMemberId === selected?.id),
+      localDateKey(booking.startsAt, tenant.timezone) === teamDay,
   );
-  const visibleTeamMembers = staffDayView && selected
-    ? [selected]
-    : showOffShift !== "0" ? members : members.filter((member) =>
+  const visibleTeamMembers = showOffShift !== "0" ? members : members.filter((member) =>
     teamDayBookings.some((booking) => booking.teamMemberId === member.id)
     || Array.from(bookableSlotKeys).some((key) => key.startsWith(`${member.id}|${teamDay}T`)),
   );
@@ -716,8 +714,7 @@ export default async function CalendarsPage({
                         </div>
                       </details>
                       <div className="calendar-view-toggle" aria-label="Calendar range">
-                        <Link href={href({ view: "day", day: currentMonth, monthDay: undefined })}>Day</Link>
-                        <Link href={href({ view: "staff", employee: selected?.id, day: undefined, monthDay: undefined })}>Week</Link>
+                        {hasSelectedEmployee ? <Link href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: teamDay, monthDay: undefined })}>Week</Link> : <Link href={href({ view: "team", employee: "", day: teamDay, monthDay: undefined })}>Day</Link>}
                         <Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-current="page">Month</Link>
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
@@ -734,7 +731,9 @@ export default async function CalendarsPage({
                       {monthDays.map((date) => {
                         const dayBookings = monthBookingsByDay.get(date) ?? [];
                         const label = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
-                        const dayHref = href({ view: "day", day: date });
+                        const dayHref = hasSelectedEmployee
+                          ? href({ view: "staff", employee: selected?.id, week: weekStartFor(date), day: date })
+                          : href({ view: "team", employee: "", day: date });
                         const staffCount = new Set(dayBookings.map((booking) => booking.teamMemberId)).size;
                         return <div key={date} className="waybook-month-calendar__day">
                           <Link href={dayHref} className="waybook-month-calendar__day-link" aria-label={`${label}, ${dayBookings.length} ${dayBookings.length === 1 ? "booking" : "bookings"}. Open day view`}>
@@ -756,15 +755,9 @@ export default async function CalendarsPage({
                   <div className="waybook-calendar-toolbar">
                     <div>
                       <p>
-                        {staffDayView ? "STAFF SCHEDULE · DAY" : null}
-                        {!staffDayView ? <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible staff</span> : null}
+                        <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible staff</span>
                       </p>
-                      <h2>{staffDayView ? `${selected.name}’s schedule` : calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}</h2>
-                      {staffDayView ? (
-                        <span>
-                          {`${calendarDate.format(new Date(`${teamDay}T12:00:00Z`))} · ${selectedLocation?.name}`}
-                        </span>
-                      ) : null}
+                      <h2>{calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}</h2>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
                       <details className="calendar-filter-panel">
@@ -773,19 +766,19 @@ export default async function CalendarsPage({
                           <CalendarSelectors
                             location={selectedLocation!}
                             members={members}
-                            services={staffDayView ? services : calendarServices}
+                            services={calendarServices}
                             week={currentWeek}
-                            teamMode={!staffDayView}
+                            teamMode
                           />
-                          {!staffDayView ? <CalendarRosterControls includeOffShift={showOffShift !== "0"} /> : null}
+                          <CalendarRosterControls includeOffShift={showOffShift !== "0"} />
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
                         </div>
                       </details>
-                      <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: staffDayView ? "day" : "team", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: undefined })}>Week</Link><Link href={href({ view: "month", employee: staffDayView ? selected?.id : "", day: teamDay })}>Month</Link></div>
+                      <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: "team", employee: "", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "month", employee: "", day: teamDay })}>Month</Link></div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             day: previousWorkingDay,
                             week: weekStartFor(previousWorkingDay),
                           })}
@@ -796,7 +789,7 @@ export default async function CalendarsPage({
                         <CalendarDatePicker date={teamDay} label={teamNavigationLabel} scope={calendarDatePickerScope} />
                         <Link
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             day: followingWorkingDay,
                             week: weekStartFor(followingWorkingDay),
                           })}
@@ -805,11 +798,11 @@ export default async function CalendarsPage({
                           <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </div>
-                      {canManage && (staffDayView ? services : calendarServices).length && !isHistoricalTeamDay ? (
+                      {canManage && calendarServices.length && !isHistoricalTeamDay ? (
                         <Link
                           className="waybook-primary-link"
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             week: weekStartFor(teamDay),
                             day: teamDay,
                             create: `${teamDay}T09:00`,
@@ -865,13 +858,13 @@ export default async function CalendarsPage({
                               style={{ gridColumn: index + 2, gridRow: memberIndex + 2 }}
                               aria-label={`New appointment ${member.name} ${teamDay} ${time}`}
                               href={href({
-                                employee: staffDayView ? member.id : "",
-                                view: staffDayView ? "day" : "team",
+                                employee: "",
+                                view: "team",
                                 week: weekStartFor(teamDay),
                                 day: teamDay,
                                 service: serviceForBookableSlot.get(slotKey),
                                 create: `${teamDay}T${time}`,
-                                createStaff: staffDayView ? undefined : member.id,
+                                createStaff: member.id,
                               })}
                               key={`${member.id}-${index}`}
                             />
@@ -897,7 +890,7 @@ export default async function CalendarsPage({
                         <Link
                           key={booking.id}
                           href={href({
-                            view: staffDayView ? "day" : "team",
+                            view: "team",
                             week: weekStartFor(teamDay),
                             day: teamDay,
                             booking: booking.id,
@@ -917,7 +910,7 @@ export default async function CalendarsPage({
                       ))}
                     </div>
                   </div>
-                  {!staffDayView && (staffBefore || staffAfter || hasMoreMembers) ? (
+                  {staffBefore || staffAfter || hasMoreMembers ? (
                     <nav className="calendar-row-filter__more" aria-label="Staff roster window">
                       {staffBefore ? <Link className="waybook-secondary-link" href={href({ view: "team", before: members[0]?.id })}>Previous staff</Link> : null}
                       {hasMoreMembers ? <Link className="waybook-secondary-link" href={href({ view: "team", after: members.at(-1)?.id })}>Next staff</Link> : null}
@@ -949,7 +942,7 @@ export default async function CalendarsPage({
                   <div className="waybook-calendar-toolbar">
                     <div>
                       <p>STAFF SCHEDULE</p>
-                      <h2>{selected.name}’s schedule</h2>
+                      <h2>{selected.name}</h2>
                       <span>
                         Confirmed bookings and live bookable periods in{" "}
                         {selectedLocation?.name} · {tenant.timezone}.
@@ -968,16 +961,15 @@ export default async function CalendarsPage({
                         </div>
                       </details>
                       <div className="calendar-view-toggle" aria-label="Calendar range">
-                        <Link href={href({ view: "day", day: tenantToday })}>Day</Link>
                         <Link href={href({ view: "staff", day: undefined })} aria-current="page">Week</Link>
-                        <Link href={href({ view: "month", day: currentWeek })}>Month</Link>
+                        <Link href={href({ view: "month", day: teamDay })}>Month</Link>
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
                           href={href({
                             view: "staff",
                             week: addDays(visibleWeekStart, -7),
-                            day: undefined,
+                            day: addDays(visibleWeekStart, -7),
                           })}
                           aria-label="Previous week"
                         >
@@ -988,7 +980,7 @@ export default async function CalendarsPage({
                           href={href({
                             view: "staff",
                             week: addDays(visibleWeekStart, 7),
-                            day: undefined,
+                            day: addDays(visibleWeekStart, 7),
                           })}
                           aria-label="Next week"
                         >

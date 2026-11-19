@@ -129,8 +129,7 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await dayView.click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await check(page.locator(".team-day-calendar")).toBeVisible();
-  await page.getByRole("link", { name: "Week", exact: true }).click();
-  await check(page.locator(".waybook-week-calendar")).toBeVisible();
+  expect(await page.getByRole("link", { name: "Week", exact: true }).count()).toBe(0);
   await page.getByRole("link", { name: "Month", exact: true }).click();
   await check(page.locator(".waybook-month-calendar")).toBeVisible();
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
@@ -150,6 +149,11 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await page.getByLabel("Staff").fill("Z E2E roster 21");
   await page.getByRole("option", { name: "Z E2E roster 21" }).click();
   await check(page).toHaveURL(/employee=/);
+  expect(await page.getByRole("link", { name: "Day", exact: true }).count()).toBe(0);
+  await page.getByRole("link", { name: "Week", exact: true }).click();
+  await check(page.getByRole("heading", { name: "Z E2E roster 21", exact: true })).toBeVisible();
+  await check(page.locator(".waybook-week-calendar")).toBeVisible();
+  await page.getByRole("link", { name: "Month", exact: true }).click();
   const scopedDay = page.locator(`a.waybook-month-calendar__day-link[href*="day=${monthDay}"]`).locator("..");
   await check(scopedDay).toContainText("1 booking");
   await check(scopedDay.locator(".waybook-month-calendar__appointment")).toContainText(/Monthly calendar 15/);
