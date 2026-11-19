@@ -1,56 +1,39 @@
 ---
-title: The Booking Kit Documentation
-description: The NextAuth of Scheduling — open-source scheduling toolkit for TypeScript and Postgres.
+title: Waybook documentation
+description: Technical documentation for the Waybook booking-operations application.
 template: splash
 hero:
-  tagline: The database schema, scheduling math, and UI components to build production-grade booking systems. Open source. MIT licensed.
+  tagline: Product and engineering notes for Waybook’s multi-tenant booking application.
   actions:
-    - text: Get Started
-      link: /getting-started/introduction
-      icon: right-arrow
+    - text: Read the README
+      link: https://github.com/UserXpert/waybook#readme
+      icon: external
       variant: primary
     - text: View on GitHub
-      link: https://github.com/zainalshanan/thebookingkit
-      icon: external
-    - text: Try the Demo
-      link: https://thebookingkit.dev
+      link: https://github.com/UserXpert/waybook
       icon: external
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 import { Aside } from '@astrojs/starlight/components';
 
-<Aside type="caution" title="Beta Status">
-  This project is currently in **beta**. APIs and features may change. We welcome feedback and contributions on [GitHub](https://github.com/zainalshanan/thebookingkit).
+<Aside type="caution" title="Documentation status">
+  This documentation area still contains inherited reference material. It is being reviewed and does not describe a public component catalogue, hosted demo or current Waybook architecture. For the maintained application, start with the repository [README](https://github.com/UserXpert/waybook#readme).
 </Aside>
 
-## Why The Booking Kit?
+## Waybook
 
 <CardGrid stagger>
-  <Card title="Hide the Math" icon="pencil">
-    Timezone-safe slot computation, RRULE expansion, double-booking prevention, and team scheduling algorithms — all handled for you.
+  <Card title="Booking operations" icon="calendar">
+    Waybook provides a multi-tenant workspace for booking, calendar and client-management workflows.
   </Card>
-  <Card title="Expose the UI" icon="puzzle">
-    31 React components following the shadcn/ui convention. Copy the source, customize completely. You own the code.
+  <Card title="Public booking" icon="open-book">
+    Customers can select a service and available time through a tenant-branded booking flow.
   </Card>
-  <Card title="Any Postgres" icon="setting">
-    Standard PostgreSQL 15+ via Drizzle ORM. Works with Neon, Supabase, Railway, Vercel Postgres, AWS RDS, or local Docker.
+  <Card title="Engineering workflow" icon="setting">
+    The repository records separate release, database and verification safeguards for changes to the live product.
   </Card>
-  <Card title="Pluggable Everything" icon="open-book">
-    Swap auth (NextAuth, Clerk), email (Resend, SendGrid), jobs (Inngest, BullMQ), and payments (Stripe) via adapter interfaces.
-  </Card>
-</CardGrid>
-
-## Packages
-
-<CardGrid>
-  <Card title="@waybook/core" icon="seti:typescript">
-    Framework-agnostic scheduling engine. Slot computation, team scheduling, payments, workflows, webhooks, and more. Zero framework dependencies.
-  </Card>
-  <Card title="@waybook/db" icon="seti:db">
-    26 PostgreSQL tables via Drizzle ORM. Custom SQL migrations for double-booking prevention, audit triggers, and GDPR compliance.
-  </Card>
-  <Card title="@waybook/ui" icon="seti:react">
-    31 React components — booking calendar, slot picker, admin schedule view, workflow builder, webhook manager, and more.
+  <Card title="Reference material" icon="pencil">
+    Older pages remain available while their claims, examples and inherited naming are reviewed. Treat them as historical references, not product promises.
   </Card>
 </CardGrid>
