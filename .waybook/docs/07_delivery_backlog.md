@@ -7,6 +7,180 @@ It replaces open-ended feature chasing. A slice is only complete when its
 persisted data, authorization, mutation path, focused test, and desktop/mobile
 browser check are recorded in its owning document.
 
+## Current priority — workspace performance and scale (2026-11-10)
+
+On 2026-11-18, a signed-in owner navigated in Chrome against the local
+Next.js development server. One automation-timed sample took approximately
+1,272 ms from clicking Clients to its heading appearing; another took 1,011 ms
+from clicking Calendar to its route changing. These measurements include
+browser automation and development-mode overhead, use different completion
+signals, and are not production, sustained-load, or before/after benchmarks.
+The client directory and calendar rendered. Further repeatable measurements of
+hosted behavior and calendar readiness are needed before drawing conclusions.
+
+
+Before continuing feature work, measure and improve page navigation and database
+latency, then test representative multi-year tenant workloads. Local development
+currently uses remote Control and tenant databases: a read-only probe measured
+about 225–309 ms per warm round trip and 2.2–2.9 seconds for a new connection.
+This is not a production benchmark. Reuse request-scoped identity, tenant and
+permission checks; remove independent query waterfalls; profile the overdue
+booking sweep and move it off interactive requests only after its scheduled
+execution and recovery are proven; inspect history-dependent queries and index
+plans with realistic data. Preserve tenant isolation and lifecycle correctness.
+Record before/after timings, test results and any remaining operational limits.
+Completed items remain in the historical inventory below, not the active queue.
+
+First local slice: reuse identity, tenant and permission resolution within a
+single React server render, while keeping explicit API-header resolution separate;
+load the three independent online-booking settings queries concurrently. A
+three-sample, read-only warm-pool probe against the configured tenant database
+measured those queries at 1,435–2,407 ms sequentially and 544–803 ms in parallel.
+This is query-level evidence, not an end-to-end or multi-year workload benchmark.
+The overdue sweep remains on requests until the scheduler is proven reliable.
+
+An isolated local database with 3,000 synthetic clients and 30,000 bookings
+spread over roughly three years exposed two history-dependent scans. On that
+fixture, paging clients before aggregating their bookings reduced one warm
+`EXPLAIN ANALYZE` sample from 8.699 ms to 1.107 ms; the first page, a later
+cursor page and a filtered page matched the previous results. Migration 0049
+adds a partial index for confirmed bookings: the empty overdue lookup fell from
+1.303 ms and 753 buffer hits to 0.021 ms and 2 buffer hits in one warm sample.
+The actual sweep converted one synthetic confirmed booking once and left
+arrived and completed bookings unchanged. These are local query timings, not
+end-to-end latency or a concurrency benchmark. Migration 0049 has been applied
+only to the disposable benchmark database; plan production index creation and
+locking before deploying it to a large tenant. The disposable database was
+removed after verification.
+
+A repeat run on 2026-11-18 used local PostgreSQL temporary tables with
+3,000 synthetic clients and 30,000 bookings. Client first/later pages, search,
+selector and foreign cursor matched: one warm query sample was 6.603 ms before
+and 0.513 ms after. The booking query matched manager, staff, filters and search
+cases; three samples were 61.3–63.8 ms before and 2.5–3.6 ms after. These are
+query-level local measurements, not hosted or end-to-end performance evidence.
+
+The client lookup API also serves directory pagination and operational
+selectors, so it now pages clients before aggregating booking history. Against
+temporary local tables with 3,000 synthetic clients and 30,000 bookings, a
+warm query sample fell from 7.051 ms to 0.553 ms. Results matched the previous
+query for first and later pages, search, small selector pages, duplicate names,
+and a cursor from a second synthetic tenant. A signed-in browser check returned
+two non-overlapping pages from the existing API. These are query-level checks;
+they do not establish end-to-end or production concurrency performance.
+The repeatable local-only verifier is `scripts/verify-waybook-client-pagination.ts`;
+set `WAYBOOK_LOCAL_PERF_DB_URL` to a local PostgreSQL database and run it with
+`node --import tsx`. It creates only temporary tables and rejects remote hosts.
+The bookings list now selects the latest 100 matching bookings before joining
+payment history. `scripts/verify-waybook-bookings-performance.ts` compares the
+old and new queries using 30,000 synthetic bookings in local temporary tables,
+including access filters, searches, refunds and tenant boundaries. Three warm
+local runs measured about 60 ms before and 1–2 ms after for the query alone;
+these are not end-to-end or production timings. Tied start times now use the
+booking ID as a deterministic secondary sort. The local mobile bookings table
+still needs a separate readability review.
+
+The shared navigation now loads feature settings and the permission-gated
+review indicator concurrently instead of waiting for the feature query first.
+The manager's app drawer and Services navigation were checked locally on desktop,
+and the drawer was opened at mobile width. No end-to-end timing comparison or
+staff-role browser verification has yet been recorded for this change.
+
+Migration 0050 adds a partial index for ended-arrival review lookups. With
+100,000 synthetic bookings in a temporary local table, one `EXPLAIN ANALYZE`
+sample for the navigation's existence check fell from 0.532 ms (148 local
+buffer hits) to 0.009 ms (two local buffers); the ordered booking lookup fell
+from 2.615 ms to 0.004 ms. This measures the lookup, not the notification
+page's joins or end-to-end latency. The migration has not been applied to a
+hosted database; assess index creation locking before deploying it.
+
+Workspace lookup now retrieves the active tenant and the signed-in identity's
+membership in one Control database query. An isolated database check exercised
+valid memberships, cross-tenant denial, inactive tenants and invalid slugs;
+the owner navigated to Bookings locally on desktop and mobile. The active-staff
+check and overdue sweep remain in place. The local overdue cron runs only daily,
+so removing the request-time sweep would leave statuses stale. No end-to-end
+before/after timing or staff-role browser check has yet been recorded.
+Repeat the isolated access checks with
+`scripts/verify-waybook-workspace-lookup.ts` and a local
+`WAYBOOK_LOCAL_PERF_DB_URL`; it creates temporary tables only and checks
+membership removal as well as tenant and lifecycle boundaries.
+
+The calendar's default-location lookup now uses timezone-aware day boundaries
+instead of applying `to_char` to each booking. On 100,000 synthetic bookings,
+a local count-query sample fell from 24.252 ms to 0.015 ms and used the existing
+tenant/start index. Day counts matched for manager and staff filters across
+Copenhagen, New York and Kolkata, including DST transition dates. This is not
+an end-to-end timing, and multi-location selection still needs browser coverage.
+The owner calendar and next-day navigation were checked locally, including a
+mobile viewport.
+
+Availability now batches rules, overrides and occupied blocks per service
+instead of issuing three serial queries per eligible staff member. An isolated
+comparison of the actual old and new calculators matched slots for two staff,
+an override, another tenant's records, an occupied block and a reschedule
+exclusion. The owner calendar showed bookable and occupied slots locally on
+desktop and mobile; 36 Waybook tests and a production build passed. Larger
+end-to-end workloads and concurrent holds still require verification.
+Occupied-block reads now also exclude history outside a conservative two-day
+margin around the requested range. An isolated comparison with 1,000 historical
+blocks and a boundary-crossing held block matched the earlier slot results;
+desktop and mobile calendar rendering and the production build passed. This
+does not replace concurrency or production-scale end-to-end testing.
+Extra-hours overrides could previously generate slots outside the requested
+range. Availability now bounds override reads and excludes those slots, so the
+occupied-block range limit cannot expose an unchecked outside slot. An isolated
+regression reproduced the old leakage and verified in-range parity with held
+and excluded blocks; the public time selector loaded locally on desktop and
+mobile and the production build passed.
+Availability's independent location/service lookups and subsequent
+hours/closure/member/hold-expiry operations now run concurrently; expired holds
+still finish updating before occupied blocks are read. The isolated slot parity
+and out-of-range override checks passed, as did the public time-selector check
+on desktop and mobile. No remote before/after timing has yet been recorded.
+Closure-date reads also include the surrounding local dates. A synthetic
+UTC+14 test reproduced and corrected a case where extra hours on a closed local
+day appeared bookable because both UTC query endpoints fell on the prior day.
+The public time selector and production build passed locally after the fix.
+Run `scripts/verify-waybook-availability.mts` with a local
+`WAYBOOK_LOCAL_PERF_DB_URL` on Node 26 to repeat the actual availability-code
+checks for occupied and excluded blocks, tenant separation, requested range,
+and a UTC+14 closure with an open-day control. It uses temporary tables only.
+
+An isolated production-mode HTTP check used fully migrated local databases
+with 30,050 bookings, 3,015 clients, 11 services, 11 staff and four locations.
+After one initial request, three warm full-response samples were 13–19 ms for
+the overview, 26–32 ms for bookings, 7–8 ms for clients and 84–91 ms for the
+calendar. Four concurrent calendar responses took 158–304 ms each. These are
+local server HTTP timings with synthetic data, not browser rendering, a remote
+database, hosted production or a sustained-load test. The existing local dev
+server points at remote databases; its previously observed round-trip latency
+therefore remains relevant. The fixture used completed historical bookings and
+does not establish correctness under simultaneous booking mutations.
+
+An isolated production-mode public-hold race used one eligible staff member
+and eight simultaneous requests per slot against the 30,050-booking fixture.
+The first run returned one 201 and seven generic 422 responses. A synchronized
+reproduction identified PostgreSQL deadlock errors (40P01). The transaction
+retry wrapper now retries deadlocks with the same bounded backoff as serialization
+failures. Four synchronized races and one normal race on the final build each
+returned one 201 and seven 409 conflicts, with exactly one active hold; 11
+retry-wrapper tests passed. The temporary delay and diagnostic logs were removed.
+These local results do not replace hosted or sustained concurrency testing.
+After availability-query parallelization, the isolated race again produced one
+201 and seven generic 422 responses. PostgreSQL logs from that run show repeated
+deadlocks between inserts checking the staff overlap exclusion constraint.
+Public hold transactions now take a tenant-and-staff-scoped transaction lock
+before inserting, while the exclusion constraint continues to guard other
+writers. On the revised production build, two eight-request races with a test
+trigger delaying inserts each produced one 201, seven 409 responses and one
+active hold; one run included expired-hold cleanup. The trigger was removed.
+This is local evidence for competing holds, not proof of hosted behavior or
+all combinations of concurrent rescheduling and calendar mutations.
+The current Waybook retry call sites wrap database transactions; email delivery
+prompts in calendar actions occur after the transaction completes. This source
+review does not establish behavior for future call sites or external consumers.
+
 ## Release boundary
 
 **Pilot-ready is the stopping point for this backlog.** When every P0 and P1
@@ -29,7 +203,7 @@ handled alongside this sequence, not deferred by it.
 | 3 | Staff-row operational calendar | Depends on scalable staff discovery and keeps the board usable at scale. | Passed locally 2026-11-08 |
 | 4 | Shared time-range control | Reuses an existing control and improves location hours, staff shifts, and waitlist windows. | Passed locally 2026-11-08 |
 | 5 | Branded online booking and website embed | Turns public booking into a configurable, embeddable product. | Designed |
-| 6 | Compact Apps popup | Important usability polish, but no data or booking-risk impact. | Designed |
+| 6 | Compact Apps popup | Important usability polish, but no data or booking-risk impact. | Implemented locally; desktop/390px layout, search, Escape, outside dismissal and navigation verified 2026-11-18; keyboard focus wrapping also verified; role-specific visibility still requires checks |
 | 7 | Package redemption at appointment | Completes package value use at checkout. | Passed locally 2026-11-08 |
 | 8 | Gift-card tender at appointment | Financially sensitive; follows the same appointment-sale model. | Designed |
 | 9 | Appointment-sale detail | Gives managers a complete, safe commerce view. | Designed |

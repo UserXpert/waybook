@@ -2,11 +2,98 @@
 
 Goal: support a small number of manually onboarded businesses with reliable day-to-day bookings. Self-service onboarding, broad provider configuration and new commerce features are outside this scope.
 
+## Pilot decisions — 18 November 2026
+
+The first clinic pilot is planned for Denmark. Scope the privacy, legal and
+operations-only data-boundary review accordingly; professional review and the
+remaining release gates still need evidence.
+
+Use manual booking confirmation and cancellation communications for now.
+The business must exercise the interim procedure below with its existing
+approved communication channel before pilot. Automated email delivery is not a
+prerequisite for this manual pilot workflow and must not be represented as live
+until it is configured and verified.
+
+The preceding booking reliability goal was reported merged and deployed in
+PR #1, including hosted tenant indexes and a live calendar check. The historical
+release notes below predate that completion; the broader pilot gates remain open.
+
+## Current local release review — 18 November 2026
+
+PR #1 is confirmed merged (merge commit `edebaff9d688ffd3f6825332706792d66fbb6782`).
+The current mixed email/UI branch diverges from the released reliability branch
+at `dd051cd`; many release changes also exist as uncommitted files here. A local
+build is not evidence that this mixed tree can safely replace the deployed
+release. Reconcile and review the combined changes on a release branch based on
+current main, preserving the existing working tree, then rerun integration and
+browser checks before deployment. Do not deploy this mixed tree as-is.
+
+Staff photo permissions now explicitly deny read-only members and other staff
+profiles, and the photo update and audit entry are transactional. Role-matrix
+unit tests and the manager's profile-control rendering passed locally. An isolated browser test now verifies an oversized rejection and a successful
+synthetic upload that persists after reload on desktop and mobile. Staff self-service, read-only UI denial, role-filtered Apps visibility and
+role-appropriate sign-in were verified on desktop and mobile. A forged direct
+server-action check and rollback on audit failure remain unverified. The tenant photo migration must be assessed on the target databases.
+
+### Isolated release reconciliation evidence — 18 November 2026
+
+The `codex/pilot-release-reconcile` worktree combines released `origin/main`
+with the committed email branch plus the staff-photo and compact Apps changes.
+The original mixed working tree is preserved. The combined work is committed locally for review (latest `372ee08`),
+not pushed or deployed; remaining unrelated local changes have not been
+ported or assessed. The release build and 37 app and 395 server unit tests pass.
+Against disposable local databases, desktop and 390px mobile booking,
+rescheduling, cancellation, tenant isolation, photo upload/oversize handling and
+Apps menu checks passed. Separate desktop/mobile checks verified staff photo
+self-service, read-only photo controls hidden, role-filtered menu items and
+staff/read-only sign-in landing on Calendar. The email/booking integration also
+passed with delivery disabled and a fake provider. These results do not establish
+hosted email delivery, production database migration/rollback, or a full pilot
+security and recovery review. The login landing fix is also in the original
+working tree. Confirm releases and database targets independently before deploy.
+
 ## Pilot exit checklist
 
 All five gates must pass. Record the deployment, date, operator and evidence for each; a local-only result does not establish hosted readiness.
 
-1. **Release and access — open.** Review the local changes and required migrations, deploy the approved version, then verify that a business can access its own workspace and that another tenant and a read-only account cannot perform unauthorized writes. The current diff adds no migration files; the migration runner itself has changed. On 2026-11-10 the production build and 20 Waybook unit tests passed, but the hosted schema and deployment have not been verified for this release.
+1. **Release and access — open.** Review the local changes and required migrations, deploy the approved version, then verify that a business can access its own workspace and that another tenant and a read-only account cannot perform unauthorized writes. The current worktree includes tenant migrations 0049 and 0050 for booking lookup indexes; they have been tested locally only. Assess index creation locks and the hosted schema before applying them. The app's npm build rebuilds the shared core, database and server packages before Next; it no longer runs migrations. Apply required migrations explicitly using `npm run waybook:db:migrate` with verified target database credentials before deploying code that needs them. The worktree also contains dashboard, settings, email and typography changes requiring review. The hosted schema and deployment have not been verified for this release.
+
+   User direction: finish roadmap item 1, then stop before starting item 2.
+
+   Goal 1 review branch: `codex/booking-reliability-review`, draft PR
+   https://github.com/UserXpert/waybook/pull/1. It was based on current main
+   to avoid including the separate email-provider commits. Its production build,
+   server and app unit tests, isolated migration rerun and synchronized
+   eight-request booking race passed locally. The app's Vercel preview build
+   succeeded. The configured tenant database variables target both production
+   and preview, so the preview must not be treated as isolated. GitHub CI and
+   hosted migration, access and booking checks remain release gates.
+   A browser walkthrough against a disposable production-mode fixture created,
+   rescheduled and cancelled a booking. It exposed a stale original confirmation
+   after management; the review branch now clears it when that same booking is
+   changed, and cancellation was rechecked in the browser. The initial GitHub
+   browser workflow failed because `ubuntu-latest` resolved to unsupported 26.04;
+   the review branch pins that workflow to 24.04 and its new run is pending.
+
+   Local server-package suite: 395 tests passed on 2026-11-10. This does not
+   replace a clean release build, review of the mixed worktree, or hosted checks.
+
+   A fresh source copy with an offline dependency install successfully ran the
+   complete npm app build against isolated databases; the generated server
+   package includes deadlock retry handling. Vercel project inspection reports
+   `apps/demo` as root. The latest existing production deployment's build log
+   shows `turbo run build` and core/database package builds; it predates the
+   current uncommitted changes and does not prove the new app prebuild or server
+   package build ran. Confirm both in the eventual reviewed deployment log.
+   The revised npm build was also verified with database connections unavailable;
+   it succeeded without running migrations. Preview deployments still require
+   isolated credentials for any application data access or explicit migrations.
+   The migration command validates all three database URLs before connecting;
+   local defaults require `npm run waybook:db:migrate -- --local` with no
+   configured Waybook database URLs. Explicitly configured targets were verified
+   against three isolated local databases, and missing, invalid and duplicate
+   targets have local tests. Review the complete target list and backup before
+   running it against hosted databases.
 2. **Backup and recovery — open.** Agree a retention and backup arrangement suitable for the pilot, restore Control and tenant data to an isolated destination, start the application against it, and verify a recovered booking and calendar entry. Record the recovery steps and result without exposing credentials.
 3. **Booking communication — open.** Demonstrate reliable confirmation and cancellation delivery, or explicitly agree and exercise a manual process with the pilot business. Customers and staff must know how booking references and changes will be communicated.
 4. **Operations — open.** Verify hosted migration state, scheduled-job execution and failure visibility, designate an operator for checking failures, and exercise the support runbook for a booking problem and a recovery escalation.

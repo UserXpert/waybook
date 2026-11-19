@@ -12,3 +12,7 @@ This block is written and re-added by `turbo` before repository-scoped commands 
 ## Form-field typography
 
 - Never use bold text inside form fields. Entered values, placeholders, and selected dropdown values should use regular font weight; labels may be emphasized.
+
+## Git workflow
+
+- Do not push directly to `main`. Work on a branch, push the branch, complete appropriate audits and reviews, and merge only afterward.

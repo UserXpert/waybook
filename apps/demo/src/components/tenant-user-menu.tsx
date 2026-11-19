@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Camera, ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
-import { applyStoredTenantAppearance, TenantAppearanceControls } from "@/components/tenant-appearance-controls";
+import { applyStoredTenantAppearance } from "@/components/tenant-appearance-controls";
 
 type TenantUserMenuProps = {
   displayName: string;
@@ -54,7 +54,6 @@ export function TenantUserMenu({ displayName, email, tenantName, role, staffHref
         {staffHref ? <Link role="menuitem" href={staffHref} onClick={() => setOpen(false)}><b aria-hidden><UserRound /></b><span>Edit profile<small>Personal information and staff settings</small></span></Link> : null}
         {settingsHref ? <Link role="menuitem" href={settingsHref} onClick={() => setOpen(false)}><b aria-hidden><Settings /></b><span>Settings<small>Workspace services and configuration</small></span></Link> : null}
       </div>
-      <TenantAppearanceControls />
       <form action={onSignOut}><button type="submit" role="menuitem"><b aria-hidden><LogOut /></b> Sign out</button></form>
     </section> : null}
   </div>;

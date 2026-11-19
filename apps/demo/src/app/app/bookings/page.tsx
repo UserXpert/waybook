@@ -5,6 +5,7 @@ import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { cancelAppointment, getRescheduleBookingAvailability, rescheduleBooking, updateBookingDetails, updateBookingStatus } from "../calendars/actions";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
+import { bookingListQuery, type BookingRow } from "@/lib/waybook/booking-list-query";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -12,7 +13,6 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { tenantDateKey } from "@/lib/waybook/today-command-centre";
 import { logout } from "../../actions";
 
-type BookingRow = { id: string; bookingNumber: string; serviceId: string; resourceId: string | null; customerPhone: string | null; saleId: string | null; startsAt: Date; endsAt: Date; status: string; source: string; bookedPriceCents: number; paidCents: number; customerName: string; customerEmail: string; serviceTitle: string; teamMemberId: string | null; teamMemberName: string | null; locationId: string | null; locationName: string | null; resourceName: string | null };
 type Location = { id: string; name: string };
 const bookingStatuses = ["confirmed", "arrived", "completed", "cancelled", "no_show"] as const;
 const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
@@ -28,21 +28,13 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
   const selectedLocation = locations.find((item) => item.id === location);
   const selectedStatus = bookingStatuses.includes(status as typeof bookingStatuses[number]) ? status : undefined;
   const search = (q ?? "").trim().slice(0, 100);
-  const pattern = `%${search}%`;
-  const bookings = await db<BookingRow[]>`
-    SELECT b.id, b.booking_number AS "bookingNumber", b.service_id AS "serviceId", bra.resource_id AS "resourceId", c.phone AS "customerPhone", cs.id AS "saleId", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, b.source, b.booked_price_cents AS "bookedPriceCents", coalesce(sum(CASE WHEN pr.kind='payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
-      c.name AS "customerName", c.email AS "customerEmail", s.title AS "serviceTitle", tm.id AS "teamMemberId", tm.name AS "teamMemberName", b.location_id AS "locationId", l.name AS "locationName", r.name AS "resourceName"
-    FROM bookings b JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
-      JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id
-      LEFT JOIN team_members tm ON tm.id = b.team_member_id AND tm.tenant_id = b.tenant_id
-      LEFT JOIN locations l ON l.id = b.location_id AND l.tenant_id = b.tenant_id
-      LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
-      LEFT JOIN resources r ON r.id = bra.resource_id AND r.tenant_id = b.tenant_id
-      LEFT JOIN commerce_sales cs ON cs.booking_id = b.id AND cs.tenant_id = b.tenant_id
-      LEFT JOIN payment_records pr ON pr.booking_id = b.id AND pr.tenant_id = b.tenant_id
-    WHERE b.tenant_id = ${tenant.id} ${permissions.isManager ? db`` : db`AND b.team_member_id = ${permissions.teamMemberId}`} ${selectedLocation ? db`AND b.location_id = ${selectedLocation.id}` : db``} ${selectedStatus ? db`AND b.status = ${selectedStatus}` : db``} ${search ? db`AND (c.name ILIKE ${pattern} OR c.email ILIKE ${pattern} OR b.booking_number ILIKE ${pattern} OR s.title ILIKE ${pattern} OR coalesce(tm.name, '') ILIKE ${pattern})` : db``}
-    GROUP BY b.id, cs.id, c.id, s.id, tm.id, l.id, r.id, bra.resource_id ORDER BY b.starts_at DESC LIMIT 100
-  `;
+  const bookings = await bookingListQuery(db, tenant.id, {
+    isManager: permissions.isManager,
+    teamMemberId: permissions.teamMemberId,
+    locationId: selectedLocation?.id,
+    status: selectedStatus,
+    search,
+  });
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const saleHrefFor = (booking: BookingRow) => booking.saleId && permissions.isManager ? `${tenantPath(tenantSlug, "/app/sales")}?sale=${booking.saleId}` : null;

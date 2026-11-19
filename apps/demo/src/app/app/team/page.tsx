@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Pencil } from "lucide-react";
+import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
+import { StaffPhotoUpload } from "@/components/staff-photo-upload";
 import { StaffHoursEditor } from "@/components/staff-hours-editor";
 import { StaffAccessMenu } from "@/components/staff-access-menu";
 import { StaffTimeOffForm } from "@/components/staff-time-off-form";
@@ -12,9 +14,9 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { addStaffTimeOff, deleteStaffTimeOff, saveStaffPermissions, saveTeamMember, updateStaffTimeOff } from "./actions";
+import { addStaffTimeOff, deleteStaffTimeOff, saveStaffPermissions, saveStaffPhoto, saveTeamMember, updateStaffTimeOff } from "./actions";
 
-type StaffRow = { id: string; name: string; email: string; role: string; isActive: boolean; identityId: string | null; archivedAt: string | null; phone: string | null; jobTitle: string | null; specialty: string | null; workLocation: string | null; staffCode: string | null; internalNotes: string | null; calendarColor: string };
+type StaffRow = { id: string; name: string; email: string; role: string; isActive: boolean; identityId: string | null; archivedAt: string | null; phone: string | null; jobTitle: string | null; specialty: string | null; workLocation: string | null; staffCode: string | null; internalNotes: string | null; calendarColor: string; photoDataUrl: string | null };
 type Selection = { id: string; name: string };
 type Rule = { rrule: string; startTime: string; endTime: string };
 type Override = { id: string; localDate: string; startTime: string | null; endTime: string | null; isUnavailable: boolean; reason: string | null };
@@ -41,12 +43,15 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const db = tenantDb(tenant);
   const archiveAvailable = await staffLifecycleAvailable(tenant);
+  const [photoColumn] = await db<{ available: boolean }[]>`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'team_members' AND column_name = 'photo_data_url') AS available`;
+  const photosAvailable = photoColumn?.available ?? false;
   const search = (q ?? "").trim().slice(0, 100);
   const rawCursor = (after ?? "").trim();
   const cursor = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(rawCursor) ? rawCursor : null;
   const archiveSelect = archiveAvailable ? "tm.archived_at::text AS \"archivedAt\"" : "NULL::text AS \"archivedAt\"";
   const archiveOrder = archiveAvailable ? "tm.archived_at NULLS FIRST," : "";
-  const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.internal_notes AS \"internalNotes\",tm.calendar_color AS \"calendarColor\" FROM team_members tm`;
+  const photoSelect = photosAvailable ? 'tm.photo_data_url' : 'NULL::text';
+  const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.internal_notes AS \"internalNotes\",tm.calendar_color AS \"calendarColor\",${photoSelect} AS \"photoDataUrl\" FROM team_members tm`;
   const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1 AND ($2::uuid IS NULL OR tm.id=$2::uuid) AND ($3='' OR tm.name ILIKE $4 OR tm.email ILIKE $4) AND ($5::uuid IS NULL OR (tm.name,tm.id) > (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$5::uuid),''),$5::uuid)) ORDER BY ${archiveOrder}tm.is_active DESC,tm.name,tm.id LIMIT 51`;
   const memberRows = await db.unsafe<StaffRow[]>(staffDirectorySql, [tenant.id, canManage ? null : signedInPermissions.teamMemberId, search, `%${search}%`, cursor]);
   const hasMoreMembers = memberRows.length > 50;
@@ -87,7 +92,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
         {canManage ? <form method="get" className="waybook-list-filter"><label>Search staff<input name="q" type="search" defaultValue={search} placeholder="Name or email" /></label><button type="submit">Search</button></form> : null}
         <nav>
           {members.map((member) => <Link key={member.id} href={staffPath(member.id)} aria-current={selected?.id === member.id ? "page" : undefined}>
-            <span className="staff-workspace__avatar" aria-hidden="true">{member.name.slice(0, 1)}</span>
+            <span className="staff-workspace__avatar" aria-hidden="true">{member.photoDataUrl ? <img src={member.photoDataUrl} alt="" /> : member.name.slice(0, 1)}</span>
             <span><strong>{member.name}</strong><small>{member.jobTitle ?? member.role}</small></span>
             <i className={member.isActive ? "is-active" : ""}>{member.isActive ? "Active" : "Inactive"}</i>
           </Link>)}
@@ -101,7 +106,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
         </section> : null}
         {!createNew && selected ? <>
           <header className="staff-workspace__profile-header">
-            <span className="staff-workspace__avatar is-large" aria-hidden="true">{selected.name.slice(0, 1)}</span>
+            {photosAvailable && canEditStaffPhoto(membership.role, signedInPermissions.teamMemberId, selected.id) ? <StaffPhotoUpload key={selected.id} memberId={selected.id} name={selected.name} photoDataUrl={selected.photoDataUrl} action={saveStaffPhoto} /> : <span className="staff-workspace__avatar is-large" aria-hidden="true">{selected.photoDataUrl ? <img src={selected.photoDataUrl} alt="" /> : selected.name.slice(0, 1)}</span>}
             <div><p>STAFF PROFILE</p><h2>{selected.name}</h2><span>{selected.jobTitle ?? "Staff member"} · {selected.isActive ? "Active and bookable" : "Inactive"}</span></div>
             <StaffAccessMenu memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} />
           </header>
@@ -110,23 +115,23 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </nav>
           {tab === "details" ? <section className="staff-workspace__panel">
             <PanelHeading title="Details" text="Contact and profile information used inside your workspace." />
-            {canManage ? <ProfileForm member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
+            {canManage ? <ProfileForm key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
           </section> : null}
           {tab === "hours" ? <section className="staff-workspace__panel staff-workspace__panel--wide">
             <PanelHeading title="Working hours" text="A clear weekly schedule for when this person can be offered to customers." />
-            {canManage ? <StaffHoursEditor memberId={selected.id} initialSchedule={schedule} /> : <p>Read-only access.</p>}
+            {canManage ? <StaffHoursEditor key={selected.id} memberId={selected.id} initialSchedule={schedule} /> : <p>Read-only access.</p>}
           </section> : null}
           {tab === "permissions" && canManage ? <section className="staff-workspace__panel staff-workspace__panel--permissions">
             <PanelHeading title="Permissions" text="Set the calendar and waitlist tasks this staff member may perform when they sign in." />
-            <StaffPermissionsForm memberId={selected.id} initial={permissions[0]} workspacePermissionsAvailable={workspacePermissionsAvailable} />
+            <StaffPermissionsForm key={selected.id} memberId={selected.id} initial={permissions[0]} workspacePermissionsAvailable={workspacePermissionsAvailable} />
           </section> : null}
           {tab === "services" ? <section className="staff-workspace__panel">
             <PanelHeading title="Services & locations" text="Control where this person can be booked and what they can deliver." />
-            {canManage ? <ProfileForm member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} assignmentsOnly canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
+            {canManage ? <ProfileForm key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} assignmentsOnly canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
           </section> : null}
           {tab === "time-off" ? <section className="staff-workspace__panel">
             <PanelHeading title="Time off" text="Block one day, a date range, or specific hours for leave, breaks, meetings, or other time off." />
-            {canManage ? <>{editingOverride ? <div className="staff-timeoff-form__editing"><div><b>Editing time off</b><span>Update this one-day exception, then save or remove it.</span></div><Link href={staffPath(selected.id, "time-off")}>Cancel</Link></div> : null}<StaffTimeOffForm memberId={selected.id} timezone={tenant.timezone} action={editingOverride ? updateStaffTimeOff : addStaffTimeOff} deleteAction={editingOverride ? deleteStaffTimeOff : undefined} initial={editingOverride ? { id: editingOverride.id, localDate: editingOverride.localDate, startTime: editingOverride.startTime, endTime: editingOverride.endTime, reason: editingOverride.reason } : undefined} /></> : null}
+            {canManage ? <>{editingOverride ? <div className="staff-timeoff-form__editing"><div><b>Editing time off</b><span>Update this one-day exception, then save or remove it.</span></div><Link href={staffPath(selected.id, "time-off")}>Cancel</Link></div> : null}<StaffTimeOffForm key={`${selected.id}:${editingOverride?.id ?? "new"}`} memberId={selected.id} timezone={tenant.timezone} action={editingOverride ? updateStaffTimeOff : addStaffTimeOff} deleteAction={editingOverride ? deleteStaffTimeOff : undefined} initial={editingOverride ? { id: editingOverride.id, localDate: editingOverride.localDate, startTime: editingOverride.startTime, endTime: editingOverride.endTime, reason: editingOverride.reason } : undefined} /></> : null}
             <div className="staff-exception-list">{overrides.map((override) => <Link className="staff-exception-list__row" key={override.id} href={staffPath(selected.id, "time-off") + "&editTimeOff=" + override.id}><div><strong>{displayOverrideDate(override.localDate)}</strong><span>{displayOverride(override)}</span><small>{override.reason ?? "No reason provided"}</small></div><Pencil aria-hidden="true" /></Link>)}{overrides.length === 0 ? <p>No time off recorded yet.</p> : null}</div>
           </section> : null}
         </> : null}
