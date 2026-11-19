@@ -49,7 +49,7 @@ test("password reset revokes an active staff session and accepts only the replac
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/nordic\/app/);
     await page.goto(`/nordic/app/team?employee=${member.id}`);
-    await page.getByRole("button", { name: "Actions for Session revocation test" }).click();
+    await page.getByLabel("Actions for Session revocation test").click();
     await page.getByRole("button", { name: "Change password" }).click();
     await page.getByLabel("Temporary password").fill(replacementPassword);
     await page.getByLabel("Confirm password").fill(replacementPassword);
