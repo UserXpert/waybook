@@ -79,7 +79,7 @@ For an **existing** database, preserve its data and check its history first:
 npm run waybook:db:status -- --local
 ```
 
-`npm run waybook:dev` checks the three local histories, applies known pending migrations and starts the app; it does not start PostgreSQL or seed data. It refuses configured Waybook database URLs, missing history and unknown migration records. Back up valuable data before schema changes. The current development Mac has historical tenant records that need reconciliation; follow [issue #54](https://github.com/UserXpert/waybook/issues/54) rather than bypassing the check.
+`npm run waybook:dev` checks the three local histories, applies known pending migrations and starts the app; it does not start PostgreSQL or seed data. It refuses configured Waybook database URLs, missing history and unknown migration records. Back up valuable data before schema changes. On the current development Mac, the historical tenant records were reconciled after a backup and restore rehearsal; their original names and timestamps remain in each tenant database’s `waybook_local_migration_history_archive`. If another database reports unknown records, investigate and back it up rather than bypassing the check; see [issue #54](https://github.com/UserXpert/waybook/issues/54).
 
 ### 3. Build and verify your change
 
