@@ -733,7 +733,7 @@ export default async function CalendarsPage({
                         dayFallback={teamDay}
                       />
                       <div className="calendar-view-toggle" aria-label="Calendar range">
-                        {hasSelectedEmployee ? <Link href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: teamDay, monthDay: undefined })} prefetch={false}>Week</Link> : <Link href={href({ view: "team", employee: "", day: teamDay, monthDay: undefined })}>Day</Link>}
+                        {hasSelectedEmployee ? <a href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: teamDay, monthDay: undefined })}>Week</a> : <Link href={href({ view: "team", employee: "", day: teamDay, monthDay: undefined })}>Day</Link>}
                         <Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-current="page">Month</Link>
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
