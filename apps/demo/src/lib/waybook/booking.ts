@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput, type BookingInput } from "@waybook/core";
-import { withSerializableRetry } from "@waybook/server";
+import { withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
 import { createHash, randomBytes } from "node:crypto";
 import type { TenantRecord } from "./database";
 import { tenantDb } from "./database";

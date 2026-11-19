@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
 import { fromZonedTime } from "date-fns-tz";
-import { BookingConflictError, withSerializableRetry } from "@waybook/server";
+import { BookingConflictError, withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { availableSlots } from "@/lib/waybook/booking";
 import { tenantDb } from "@/lib/waybook/database";
