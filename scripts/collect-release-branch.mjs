@@ -19,17 +19,27 @@ const run = (command, args, options = {}) => execFileSync(command, args, { encod
 const json = (command, args) => JSON.parse(run(command, args));
 const labelNames = (pull) => new Set((pull.labels ?? []).map((label) => typeof label === "string" ? label : label.name));
 const sameRepository = (pull, repository) => pull.head?.repo?.full_name === repository;
+const successfulGitHubActionsCheck = (check) => check?.app?.slug === "github-actions" && check.status === "completed" && String(check.conclusion ?? "").toUpperCase() === "SUCCESS";
+
+export function checkRunsFromResponse(response) {
+  const checks = response?.check_runs;
+  if (!Array.isArray(checks) || !Number.isInteger(response?.total_count)) throw new Error("Expected a complete check-runs response.");
+  if (response.total_count !== checks.length) throw new Error("Refusing an incomplete check-runs response.");
+  return checks;
+}
 
 export function evaluatePullRequest(pull, checks, repository) {
   if (pull.draft) return { eligible: false, reason: "draft" };
   if (pull.base?.ref !== "main") return { eligible: false, reason: "base-not-main" };
   if (!sameRepository(pull, repository)) return { eligible: false, reason: "not-same-repository" };
   if (!labelNames(pull).has("release-ready")) return { eligible: false, reason: "missing-release-ready-label" };
-  // GitHub's REST check-runs endpoint returns lowercase conclusion values
-  // (for example, "success"), while older fixtures and some callers use
-  // uppercase values. Compare the semantic value rather than its casing.
-  const byName = new Map(checks.map((check) => [check.name, String(check.conclusion ?? check.status ?? "").toUpperCase()]));
-  const missing = REQUIRED_CHECKS.filter((name) => byName.get(name) !== "SUCCESS");
+  // Only an unambiguous completed GitHub Actions run can satisfy a required
+  // check. This prevents a same-name external, stale, or pending run from
+  // being selected by API response ordering.
+  const missing = REQUIRED_CHECKS.filter((name) => {
+    const matching = checks.filter((check) => check.name === name);
+    return matching.length !== 1 || !successfulGitHubActionsCheck(matching[0]);
+  });
   if (missing.length) return { eligible: false, reason: "required-check-not-success", missing };
   return { eligible: true, sha: pull.head.sha };
 }
@@ -73,8 +83,8 @@ function ghApi(path) {
 }
 
 function checkRuns(repository, sha) {
-  const response = json("gh", ["api", "-H", "Accept: application/vnd.github+json", `repos/${repository}/commits/${sha}/check-runs?per_page=100`]);
-  return response.check_runs ?? [];
+  const response = json("gh", ["api", "-H", "Accept: application/vnd.github+json", `repos/${repository}/commits/${sha}/check-runs?filter=latest&per_page=100`]);
+  return checkRunsFromResponse(response);
 }
 
 function releasePullExists(repository, owner, releaseBranch) {
