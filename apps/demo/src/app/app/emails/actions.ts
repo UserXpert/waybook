@@ -14,6 +14,10 @@ import { confirmEmailProviderTest, sendEmailProviderTest } from "@/lib/waybook/e
 import { queueRejectedEmail } from "@/lib/waybook/email-retry";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 import { emailTemplateError } from "@/lib/waybook/email-template-render";
+import { configuredResendOnboardingTest, sendResendOnboardingTest } from "@/lib/waybook/resend-onboarding-test";
+import { canManageEmailProvider } from "@/lib/waybook/email-provider-access";
+import { emailTemplates } from "@/lib/waybook/email-templates";
+import { renderBookingEmail } from "@/lib/waybook/email-template-render";
 
 export async function saveEmailTemplate(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -45,7 +49,7 @@ export async function saveReminderSettings(formData: FormData) {
 async function providerContext() {
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "email-notifications");
-  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to manage email settings.");
+  if (!canManageEmailProvider(await staffPermissionContext(tenant, membership))) throw new Error("You do not have permission to manage email settings.");
   const identity = await requireIdentity();
   const path = tenantPath(await currentTenantRouteSlug(tenant.slug), "/app/emails");
   return { tenant, identity, path };
@@ -97,6 +101,33 @@ export async function sendProviderTest() {
   revalidatePath("/app/emails");
   if (result === "accepted") redirect(`${path}?view=connection&testSent=1`);
   redirect(`${path}?view=connection&providerError=${result}`);
+}
+
+/** A deployment-gated QA check. It is intentionally independent of provider verification and the email queue. */
+export async function sendOnboardingProviderTest() {
+  const { tenant, identity, path } = await providerContext();
+  const config = configuredResendOnboardingTest();
+  if (!config) redirect(`${path}?view=connection&providerError=config`);
+  const db = tenantDb(tenant);
+  const [savedTemplate] = await db.unsafe<Array<{ subject: string; body: string }>>("SELECT subject,body FROM email_templates WHERE tenant_id=$1 AND template_key='confirmation'", [tenant.id]);
+  const fallback = emailTemplates.find((template) => template.key === "confirmation")!;
+  let message: { subject: string; text: string };
+  try {
+    message = renderBookingEmail(savedTemplate?.subject ?? fallback.subject, savedTemplate?.body ?? fallback.body, {
+      customer_name: "QA recipient",
+      business_name: tenant.name,
+      service_name: "Example service",
+      appointment_date: "Friday, 1 January 2038 at 09:00",
+      booking_number: "QA-TEST-0001",
+    });
+  } catch {
+    redirect(`${path}?view=connection&providerError=test`);
+  }
+  const result = await sendResendOnboardingTest({ tenantId: tenant.id, config, message });
+  if (result.kind !== "accepted") redirect(`${path}?view=connection&providerError=${result.kind}`);
+  await db.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'email_provider.onboarding_test_sent','tenant',$3,$4::text::jsonb)", [tenant.id, identity.id, tenant.id, JSON.stringify({ provider: "resend", mode: "onboarding_confirmation_format_test" })]);
+  revalidatePath("/app/emails");
+  redirect(`${path}?view=connection&onboardingTestSent=1`);
 }
 
 export async function confirmProviderTest() {

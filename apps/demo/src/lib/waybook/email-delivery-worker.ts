@@ -5,6 +5,7 @@ import { claimEmail, failUnpreparedEmail, finishEmailAttempt, prepareEmailAttemp
 import { renderBookingEmail } from "./email-template-render";
 import { emailTemplates } from "./email-templates";
 import { sendWithResend, type ResendResult } from "./resend-delivery";
+import { isResendOnboardingTestSender } from "./resend-onboarding-test";
 
 type Source = { messageType: string; recipient: string; createdAt: Date; status: string; expectedStartsAt: string | null; customerName: string; serviceName: string; startsAt: Date; bookingNumber: string; businessName: string; timezone: string; subject: string | null; body: string | null };
 type Send = typeof sendWithResend;
@@ -12,7 +13,7 @@ type Send = typeof sendWithResend;
 /** Process one message. Scheduling, authorization, and key management remain the caller's responsibility. */
 export async function deliverOneEmail(db: Sql, tenantId: string, resolveKey: (id: string) => Buffer | undefined, send: Send = sendWithResend, outboxId?: string): Promise<"not_configured" | "empty" | "processed" | "lost_claim"> {
   const [connection] = await db.unsafe<Array<{ id: string; sender: string; createdAt: Date }>>(`SELECT id,sender_email AS sender,created_at AS "createdAt" FROM email_provider_connections WHERE tenant_id=$1 AND provider='resend' AND revoked_at IS NULL AND verified_at IS NOT NULL`, [tenantId]);
-  if (!connection) return "not_configured";
+  if (!connection || isResendOnboardingTestSender(connection.sender)) return "not_configured";
   const token = randomUUID();
   const claim = await claimEmail(db, tenantId, token, outboxId);
   if (!claim) return "empty";
