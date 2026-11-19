@@ -26,6 +26,12 @@ jobs:
             echo 'Email scheduler secret is missing or invalid.' >&2
             exit 1
           fi
-          curl --fail --silent --show-error --max-time 45 \
+          response=""
+          if ! response="$(curl --fail-with-body --silent --show-error --max-time 45 \
+            --header "Accept: application/json" \
             --header "Authorization: Bearer ${CRON_SECRET}" \
-            https://waybook-booking.vercel.app/api/cron/email-delivery
+            https://waybook-booking.vercel.app/api/cron/email-delivery)"; then
+            printf 'Email delivery sweep failed: %s\n' "$response" >&2
+            exit 1
+          fi
+          printf 'Email delivery sweep completed: %s\n' "$response"
