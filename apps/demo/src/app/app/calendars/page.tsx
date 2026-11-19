@@ -710,7 +710,7 @@ export default async function CalendarsPage({
                       <details className="calendar-filter-panel">
                         <summary>Filters</summary>
                         <div className="calendar-filter-panel__content">
-                          <CalendarSelectors location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} teamMode={!hasSelectedEmployee} fixedView="month" />
+                          <CalendarSelectors location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} fixedView="month" />
                         </div>
                       </details>
                       <div className="calendar-view-toggle" aria-label="Calendar range">
@@ -768,7 +768,6 @@ export default async function CalendarsPage({
                             members={members}
                             services={calendarServices}
                             week={currentWeek}
-                            teamMode
                           />
                           <CalendarRosterControls includeOffShift={showOffShift !== "0"} />
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
