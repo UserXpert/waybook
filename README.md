@@ -124,4 +124,4 @@ Use the [documentation index](docs/README.md) to find architecture, booking, rel
 
 ## License and attribution
 
-See [LICENSE](LICENSE) for the applicable MIT copyright and permission notice for inherited code. Preserve third-party notices when modifying or distributing inherited components.
+Original Waybook contributions are reserved by Amit Das; see [LICENSE](LICENSE). Waybook also contains inherited code subject to its own license, recorded in [third-party notices](THIRD_PARTY_NOTICES.md). That notice applies to the inherited material, not to Waybook as a whole. The scope of inherited code is being reviewed in [issue #60](https://github.com/UserXpert/waybook/issues/60).
