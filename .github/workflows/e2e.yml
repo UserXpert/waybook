@@ -47,6 +47,7 @@ jobs:
           npm run waybook:db:migrate
           npm run waybook:db:seed
           node --import tsx scripts/seed-waybook-e2e.mts
+          node --import tsx scripts/verify-waybook-transaction-conflicts.mts
 
       - name: Run Waybook E2E tests
         run: |
