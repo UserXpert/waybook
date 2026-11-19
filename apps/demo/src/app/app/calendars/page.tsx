@@ -724,7 +724,7 @@ export default async function CalendarsPage({
                       </div>
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
                         <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month">←</Link>
-                        <CalendarDatePicker date={currentMonth} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} scope={calendarDatePickerScope} />
+                        <CalendarDatePicker date={teamDay} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} scope={calendarDatePickerScope} />
                         <Link href={href({ view: "month", day: addMonths(currentMonth, 1), monthDay: undefined })} aria-label="Next month">→</Link>
                       </div>
                     </div>
