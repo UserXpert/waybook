@@ -1,7 +1,8 @@
 import { randomBytes, scryptSync } from "node:crypto";
 import postgres from "postgres";
+import { localPostgresPort } from "./waybook-migration-targets";
 
-const local = (name: string) => `postgresql://waybook@127.0.0.1:5440/${name}`;
+const local = (name: string) => `postgresql://waybook@127.0.0.1:${localPostgresPort(process.env)}/${name}`;
 const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL ?? local("waybook_control");
 
 function passwordHash(password: string): string {

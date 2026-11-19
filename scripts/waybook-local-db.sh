@@ -10,6 +10,11 @@ data_dir="$project_root/.waybook/postgres"
 port="${WAYBOOK_POSTGRES_PORT:-5440}"
 user="waybook"
 
+if [[ ! "$port" =~ ^[0-9]+$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
+  echo "WAYBOOK_POSTGRES_PORT must be a valid TCP port." >&2
+  exit 1
+fi
+
 if ! command -v initdb >/dev/null || ! command -v pg_ctl >/dev/null || ! command -v createdb >/dev/null; then
   echo "PostgreSQL command-line tools are required (initdb, pg_ctl, createdb)." >&2
   exit 1
@@ -22,6 +27,14 @@ fi
 
 if ! pg_ctl --pgdata="$data_dir" status >/dev/null 2>&1; then
   pg_ctl --pgdata="$data_dir" --wait start --options="-p $port -h 127.0.0.1" >/dev/null
+fi
+
+# A running checkout cluster may be using a different port. Never create
+# databases on another server just because it happens to answer at this port.
+actual_data_dir="$(psql --host=127.0.0.1 --port="$port" --username="$user" --dbname=postgres --tuples-only --no-align --command='SHOW data_directory')"
+if [ "$(cd "$actual_data_dir" && pwd -P)" != "$(cd "$data_dir" && pwd -P)" ]; then
+  echo "The server on port $port does not belong to this checkout; refusing to create databases." >&2
+  exit 1
 fi
 
 for database in waybook_control waybook_nordic_studio waybook_copenhagen_physio; do
