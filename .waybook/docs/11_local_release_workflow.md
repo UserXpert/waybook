@@ -16,6 +16,32 @@ Waybook's source code, databases and browser settings are separate. A successful
 3. Push the branch and open a pull request. Require the package, Postgres integration and E2E workflows, plus the Waybook app preview. Identify unrelated project failures explicitly instead of treating them as app success.
 4. Merge only the reviewed commit after checks pass. The main branch automatically triggers Vercel production deployment; group changes when practical and assess migrations and rollback before merging.
 
+### Batch several PRs into one production release
+
+When several independently reviewed changes should ship together, start a
+short-lived release branch from current GitHub `main` (without a `codex/`
+prefix). Keep each task on its own branch and PR for review. Retarget the PRs
+selected for the batch to the release branch and merge them there only after
+their applicable checks and review pass. Alternatively, integrate reviewed
+commits into the release branch while retaining links to each source PR and its
+exact reviewed commit. Resolve conflicts explicitly; do not include unfinished
+or unreviewed work just to fill the batch.
+
+Open one release PR from that branch to `main`. Describe the included PRs and
+issues, schema and configuration changes, data effects, compatibility and
+rollback. Run the required package, database integration, E2E and
+migration-history checks on the combined commit and verify its Waybook preview.
+Apply the hosted migration release gate below to any change that needs schema
+updates. Merge the release PR only after the combined result passes review and
+checks. The single merge to `main` triggers one production deployment; verify
+the exact deployed commit and affected flows using the steps below, and close
+issues only after their own acceptance criteria are met.
+
+Branch pushes can still trigger separate Vercel **preview** builds. Batching
+production merges does not remove preview build limits or turn a failed or
+unavailable required preview into a pass. Do not disable automatic deployments,
+branch protection, or required checks as a shortcut for a batch.
+
 ## After merge
 
 1. Verify the deployment is READY, its production domain points to the expected Git commit, and essential read-only routes respond. Run an appropriate authenticated smoke test when available.

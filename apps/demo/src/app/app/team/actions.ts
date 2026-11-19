@@ -295,7 +295,7 @@ export async function saveStaffWorkingHours(formData: FormData) {
     throw new Error("Working hours could not be read. Please try again.");
   }
   const validDays = new Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
-  if (!memberId || schedule.length === 0 || schedule.length > 28 || schedule.some((entry) => !validDays.has(entry.day) || !/^\d\d:\d\d$/.test(entry.startTime) || !/^\d\d:\d\d$/.test(entry.endTime) || entry.startTime >= entry.endTime)) throw new Error("Choose at least one day and valid shift times.");
+  if (!memberId || schedule.length > 28 || schedule.some((entry) => !validDays.has(entry.day) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.startTime) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.endTime) || entry.startTime >= entry.endTime)) throw new Error("Choose valid shift times.");
   const shiftsByDay = new Map<string, ScheduleEntry[]>();
   for (const entry of schedule) shiftsByDay.set(entry.day, [...(shiftsByDay.get(entry.day) ?? []), entry]);
   for (const [day, shifts] of shiftsByDay) {
@@ -305,9 +305,11 @@ export async function saveStaffWorkingHours(formData: FormData) {
     }
   }
   const db = await validStaffMember(tenant, memberId);
-  await db`DELETE FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
-  for (const entry of schedule) await db`INSERT INTO availability_rules (tenant_id, team_member_id, rrule, start_time, end_time, timezone) VALUES (${tenant.id}, ${memberId}, ${`FREQ=WEEKLY;BYDAY=${entry.day}`}, ${entry.startTime}, ${entry.endTime}, ${tenant.timezone})`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.updated"}, 'team_member', ${memberId}, ${JSON.stringify({ schedule })}::jsonb)`;
+  await db.begin(async (tx) => {
+    await tx.unsafe("DELETE FROM availability_rules WHERE tenant_id = $1 AND team_member_id = $2", [tenant.id, memberId]);
+    for (const entry of schedule) await tx.unsafe("INSERT INTO availability_rules (tenant_id, team_member_id, rrule, start_time, end_time, timezone) VALUES ($1, $2, $3, $4, $5, $6)", [tenant.id, memberId, `FREQ=WEEKLY;BYDAY=${entry.day}`, entry.startTime, entry.endTime, tenant.timezone]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'team_member', $3, $4::jsonb)", [tenant.id, "staff.availability.updated", memberId, JSON.stringify({ schedule })]);
+  });
   revalidateStaff();
 }
 

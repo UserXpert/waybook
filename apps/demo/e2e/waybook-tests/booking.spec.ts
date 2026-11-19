@@ -8,15 +8,26 @@ function localDayAfter(days: number) {
   return day.toISOString().slice(0, 10);
 }
 
+function localWeekdayAfter(days: number) {
+  const day = new Date(`${localDayAfter(days)}T12:00:00Z`);
+  while ([0, 6].includes(day.getUTCDay())) day.setUTCDate(day.getUTCDate() + 1);
+  return day.toISOString().slice(0, 10);
+}
+
 test("customer books, reschedules and cancels without a stale confirmation", async ({ page }) => {
   test.setTimeout(120_000);
   const check = expect.configure({ timeout: 30_000 });
+  const runId = `${Date.now()}-${test.info().retry}`;
+  const customerName = `Waybook E2E customer ${runId}`;
+  const customerEmail = `waybook-e2e-${runId}@example.test`;
   await page.goto("/nordic/book");
   await page.getByRole("button", { name: /Studio session/ }).click();
   await page.getByRole("button", { name: "Next dates" }).click();
-  await page.getByRole("button", { name: "09:00", exact: true }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Waybook E2E customer");
-  await page.getByLabel("Email", { exact: true }).fill("waybook-e2e@example.test");
+  const publicSlots = page.locator(".tenant-time-grid button");
+  await check(publicSlots.first()).toBeVisible();
+  await publicSlots.first().click();
+  await page.getByLabel("Name", { exact: true }).fill(customerName);
+  await page.getByLabel("Email", { exact: true }).fill(customerEmail);
   await page.getByRole("button", { name: "Confirm booking" }).click();
   await check(page.getByText("BOOKING CONFIRMED")).toBeVisible();
   const summary = await page.locator(".tenant-complete-stage").innerText();
@@ -26,18 +37,21 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   async function findBooking() {
     await page.getByRole("button", { name: "Manage booking" }).click();
     await page.getByLabel("Booking number").fill(number!);
-    await page.getByLabel("Email address").fill("waybook-e2e@example.test");
+    await page.getByLabel("Email address").fill(customerEmail);
     await page.getByRole("button", { name: "Find booking" }).click();
     await check(page.getByRole("heading", { name: "Your booking" })).toBeVisible();
   }
   await findBooking();
   await page.getByRole("button", { name: "Reschedule booking" }).click();
-  await page.getByLabel("Day").fill(localDayAfter(8));
-  await page.getByRole("button", { name: "10:00", exact: true }).click();
+  const rescheduleDay = localWeekdayAfter(8);
+  await page.getByLabel("Day").fill(rescheduleDay);
+  const rescheduleSlots = page.locator(".booking-manage-times button");
+  await check(rescheduleSlots.first()).toBeVisible();
+  await rescheduleSlots.first().click();
   await page.getByRole("button", { name: "Confirm new time" }).click();
   await check(page.getByText("Your booking has been rescheduled.")).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
-  await check(page.getByRole("heading", { name: "Choose a service" })).toBeVisible();
+  await check(page.getByRole("button", { name: /Studio session/ })).toBeVisible();
   await check(page.getByText("BOOKING CONFIRMED")).toHaveCount(0);
 
   const calendar = await page.context().newPage();
@@ -46,23 +60,21 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await calendar.getByPlaceholder("Enter your password").fill("waybook-local-only");
   await calendar.getByRole("button", { name: "Sign in" }).click();
   await check(calendar).toHaveURL(/\/nordic\/app/);
-  await calendar.goto(`/nordic/app/calendars?day=${localDayAfter(8)}`);
-  await check(calendar.getByText(/Waybook E2E customer/)).toBeVisible();
-  const bookingDay = localDayAfter(8);
+  await calendar.goto(`/nordic/app/calendars?day=${rescheduleDay}`);
+  await check(calendar.getByText(customerName, { exact: true })).toBeVisible();
+  const bookingDay = rescheduleDay;
   await calendar.goto(`/nordic/app/calendars?view=month&day=${bookingDay}`);
-  const monthDay = calendar.locator(`a.waybook-month-calendar__day[href*="monthDay=${bookingDay}"]`);
-  await check(monthDay).toContainText(/booking/);
-  await monthDay.click();
-  const bookingDrawer = calendar.locator(".waybook-month-calendar__drawer");
-  await check(calendar.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(bookingDrawer.getByText(/Waybook E2E customer/)).toBeVisible();
+  const monthDay = calendar.locator(`a.waybook-month-calendar__day-link[href*="day=${bookingDay}"]`);
+  const monthCell = monthDay.locator("..");
+  await check(monthCell).toContainText(/booking/);
+  await check(monthCell.locator(".waybook-month-calendar__appointment").filter({ hasText: customerName })).toBeVisible();
 
   await findBooking();
   await page.getByRole("button", { name: "Cancel booking" }).click();
   await page.getByRole("button", { name: "Confirm cancellation" }).click();
   await check(page.getByText("Your booking has been cancelled.")).toBeVisible();
   await calendar.reload();
-  await check(calendar.getByText("Waybook E2E customer", { exact: true })).toHaveCount(0);
+  await check(calendar.getByText(customerName, { exact: true })).toHaveCount(0);
   await calendar.close();
 });
 
@@ -78,6 +90,15 @@ test("tenant owner can sign in but cannot access another workspace", async ({ pa
   expect(other.status()).toBe(404);
 });
 
+async function chooseCalendarDate(page: import("@playwright/test").Page, value: string) {
+  const picker = page.getByRole("dialog", { name: "Choose calendar date" });
+  const target = new Date(`${value}T12:00:00Z`);
+  await picker.getByLabel("Year", { exact: true }).selectOption(String(target.getUTCFullYear()));
+  await picker.getByLabel("Month", { exact: true }).selectOption(String(target.getUTCMonth()));
+  const label = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(target);
+  await picker.getByRole("button", { name: label, exact: true }).click();
+}
+
 test("calendar date picker keeps an implicitly selected location", async ({ page }) => {
   const check = expect.configure({ timeout: 30_000 });
   const chosenDate = localDayAfter(26);
@@ -92,7 +113,7 @@ test("calendar date picker keeps an implicitly selected location", async ({ page
   const initiallySelectedLocation = await context.innerText();
 
   await page.locator(".calendar-date-picker > button").click();
-  await page.getByRole("dialog", { name: "Choose calendar date" }).getByLabel("Calendar date", { exact: true }).fill(chosenDate);
+  await chooseCalendarDate(page, chosenDate);
   await check(page).toHaveURL(new RegExp(`day=${chosenDate}`));
   expect(new URL(page.url()).searchParams.has("location")).toBe(true);
   await check(context).toHaveText(initiallySelectedLocation);
@@ -108,25 +129,29 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await check(page).toHaveURL(/\/nordic\/app/);
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await page.locator(".calendar-date-picker > button").click();
-  await page.getByRole("dialog", { name: "Choose calendar date" }).getByLabel("Calendar date", { exact: true }).fill(monthDay);
+  await chooseCalendarDate(page, monthDay);
   await check(page).toHaveURL(new RegExp(`day=${monthDay}`));
 
-  const day = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
-  await check(day).toContainText("3 bookings");
-  await check(day).toHaveAttribute("aria-describedby", `month-preview-${monthDay}`);
+  const day = page.locator(`a.waybook-month-calendar__day-link[href*="day=${monthDay}"]`);
+  const dayCell = day.locator("..");
+  await check(dayCell).toContainText("3 bookings");
+  await check(dayCell.locator(".waybook-month-calendar__appointment")).toHaveCount(3);
   const dayView = page.getByRole("link", { name: "Day", exact: true });
   expect(await dayView.getAttribute("href")).not.toContain("employee=");
   await dayView.click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await check(page.locator(".team-day-calendar")).toBeVisible();
+  expect(await page.getByRole("link", { name: "Week", exact: true }).count()).toBe(0);
+  await page.getByRole("link", { name: "Month", exact: true }).click();
+  await check(page.locator(".waybook-month-calendar")).toBeVisible();
   await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
-  await day.click();
-  const monthlyDrawer = page.locator(".waybook-month-calendar__drawer");
+  await day.focus();
+  await page.keyboard.press("Enter");
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
-  await check(page.getByText("DAY DETAILS", { exact: true })).toBeVisible();
-  await check(monthlyDrawer.getByText(/Monthly calendar 13/)).toBeVisible();
-  await check(monthlyDrawer.getByText(/Monthly calendar 14/)).toBeVisible();
+  await check(page).toHaveURL(new RegExp(`view=team.*day=${monthDay}`));
+  await check(page.locator(".team-day-calendar")).toBeVisible();
 
+  await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await page.getByLabel("Next month").click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await page.getByLabel("Previous month").click();
@@ -134,10 +159,14 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await page.getByLabel("Staff").fill("Z E2E roster 21");
   await page.getByRole("option", { name: "Z E2E roster 21" }).click();
   await check(page).toHaveURL(/employee=/);
-  const scopedDay = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
+  expect(await page.getByRole("link", { name: "Day", exact: true }).count()).toBe(0);
+  await page.getByRole("link", { name: "Week", exact: true }).click();
+  await check(page.getByRole("heading", { name: "Z E2E roster 21", exact: true })).toBeVisible();
+  await check(page.locator(".waybook-week-calendar")).toBeVisible();
+  await page.getByRole("link", { name: "Month", exact: true }).click();
+  const scopedDay = page.locator(`a.waybook-month-calendar__day-link[href*="day=${monthDay}"]`).locator("..");
   await check(scopedDay).toContainText("1 booking");
-  await scopedDay.click();
-  await check(monthlyDrawer.getByText(/Monthly calendar 15/)).toBeVisible();
+  await check(scopedDay.locator(".waybook-month-calendar__appointment")).toContainText("Monthly calendar 15");
 });
 
 test("changing the reschedule day ignores an older availability response", async ({ page }) => {
