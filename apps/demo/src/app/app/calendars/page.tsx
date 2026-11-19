@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { CSSProperties } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
@@ -613,15 +614,17 @@ export default async function CalendarsPage({
     if (next.createStaff) params.set("createStaff", next.createStaff);
     return `${tenantPath(tenantSlug, "/app/calendars")}?${params.toString()}`;
   };
-  const position = (entry: ScheduleEntry) => {
+  // A selected staff member is read as a seven-row schedule: weekdays occupy
+  // the same rail used for staff in the team Day board and time runs across.
+  const staffWeekPosition = (entry: ScheduleEntry) => {
     const start = new Date(entry.startTime);
     const end = new Date(entry.endTime);
     const dayIndex = days.indexOf(localDateKey(start, tenant.timezone));
     const startMinutes = localMinutes(start, tenant.timezone);
     const endMinutes = localMinutes(end, tenant.timezone);
     return {
-      gridColumn: dayIndex + 2,
-      gridRow: `${2 + Math.floor((startMinutes - gridStart) / 30)} / span ${Math.max(1, Math.ceil((endMinutes - startMinutes) / 30))}`,
+      gridColumn: `${2 + Math.floor((startMinutes - gridStart) / 30)} / span ${Math.max(1, Math.ceil((endMinutes - startMinutes) / 30))}`,
+      gridRow: dayIndex + 2,
     };
   };
   const teamDayBookings = teamBookings.filter(
@@ -1032,16 +1035,28 @@ export default async function CalendarsPage({
                   ) : null}
                   <div className="waybook-week-calendar__scroll">
                     <div
-                      className="waybook-week-calendar__grid"
+                      className="waybook-week-calendar__grid staff-week-calendar__grid"
                       style={{
-                        gridTemplateRows: `3rem repeat(${rowCount}, 2.65rem)`,
+                        gridTemplateColumns: `var(--staff-week-rail, 12rem) repeat(${rowCount}, minmax(4.4rem, 1fr))`,
+                        gridTemplateRows: "3rem repeat(7, 4.25rem)",
                       }}
                     >
-                      <div className="waybook-week-calendar__corner">Time</div>
-                      {days.map((day) => (
+                      <div className="waybook-week-calendar__corner" style={{ gridColumn: 1, gridRow: 1 }}>{selected.name}</div>
+                      {Array.from({ length: rowCount }, (_, index) => {
+                        const time = `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:${String((gridStart + index * 30) % 60).padStart(2, "0")}`;
+                        return <div
+                          className="waybook-week-calendar__time"
+                          key={`time-${index}`}
+                          style={{ gridColumn: index + 2, gridRow: 1, "--staff-week-grid-column": index + 2 } as CSSProperties}
+                        >
+                          {index % 2 === 0 ? time : ""}
+                        </div>;
+                      })}
+                      {days.map((day, dayIndex) => (
                         <div
                           key={day}
                           className="waybook-week-calendar__day"
+                          style={{ gridColumn: 1, gridRow: dayIndex + 2 }}
                           data-availability-state={selectedBookableDays.has(day) ? "available" : "unavailable"}
                         >
                           <span>{calendarDate.format(new Date(`${day}T12:00:00Z`))}</span>
@@ -1050,17 +1065,8 @@ export default async function CalendarsPage({
                           ) : null}
                         </div>
                       ))}
-                      {Array.from({ length: rowCount }, (_, index) => [
-                        <div
-                          className="waybook-week-calendar__time"
-                          key={`time-${index}`}
-                          style={{ gridColumn: 1, gridRow: index + 2 }}
-                        >
-                          {index % 2 === 0
-                            ? `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:00`
-                            : ""}
-                        </div>,
-                        ...days.map((day, dayIndex) => {
+                      {days.flatMap((day, dayIndex) =>
+                        Array.from({ length: rowCount }, (_, index) => {
                           const time = `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:${String((gridStart + index * 30) % 60).padStart(2, "0")}`;
                           const slotKey = `${selected?.id}|${day}T${time}`;
                           const isPastDate = isPastCalendarSlot(day, time, tenant.timezone, calendarNow);
@@ -1084,7 +1090,7 @@ export default async function CalendarsPage({
                               data-calendar-team-member-id={selected!.id}
                               data-calendar-starts-at={`${day}T${time}`}
                               data-calendar-service-ids={Array.from(servicesForBookableSlot.get(slotKey) ?? []).join(",")}
-                              style={{ gridColumn: dayIndex + 2, gridRow: index + 2 }}
+                              style={{ gridColumn: index + 2, gridRow: dayIndex + 2 }}
                               aria-label={`New appointment ${day} ${time}`}
                               href={href({
                                 view: "staff",
@@ -1107,16 +1113,16 @@ export default async function CalendarsPage({
                                 : {})}
                               aria-label={isPastDate ? "Past time" : isAppointmentConflict ? "Overlaps an existing appointment" : "Unavailable"}
                               key={`${day}-${index}`}
-                              style={{ gridColumn: dayIndex + 2, gridRow: index + 2 }}
+                              style={{ gridColumn: index + 2, gridRow: dayIndex + 2 }}
                             />
                           );
                         }),
-                      ])}
+                      )}
                       {openPeriods.map((period) => (
                         <div
                           key={period.startTime}
                           className="waybook-week-calendar__entry is-open"
-                          style={position(period)}
+                          style={staffWeekPosition(period)}
                         >
                           <strong>Bookable</strong>
                           <span>
@@ -1136,7 +1142,7 @@ export default async function CalendarsPage({
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
                           draggable={canManage}
-                          style={position({
+                          style={staffWeekPosition({
                             startTime: booking.startsAt.toISOString(),
                             endTime: booking.endsAt.toISOString(),
                           })}

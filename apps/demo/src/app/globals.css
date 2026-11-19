@@ -4542,6 +4542,41 @@ body {
   color: #a9a9ae !important;
 }
 
+/* Staff Week shares the team Day orientation: the staff name owns the corner,
+   days are readable rows, and the time rail runs left-to-right. Keep this
+   separate from the team board, whose time rail is intentionally vertical. */
+.tenant-dashboard-page .staff-week-calendar__grid .waybook-week-calendar__corner {
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 1rem;
+  text-transform: none;
+}
+.tenant-dashboard-page .staff-week-calendar__grid .waybook-week-calendar__time {
+  grid-column: var(--staff-week-grid-column) !important;
+  min-width: 0;
+  padding: .35rem .25rem 0;
+  place-items: start center;
+  text-align: center;
+}
+.tenant-dashboard-page .staff-week-calendar__grid .waybook-week-calendar__day {
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0 .85rem;
+  text-align: left;
+  text-transform: none;
+}
+.tenant-dashboard-page .staff-week-calendar__grid .waybook-week-calendar__cell {
+  min-height: 4.25rem;
+}
+.tenant-dashboard-page .staff-week-calendar__grid .waybook-week-calendar__entry {
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .tenant-dashboard-page .staff-week-calendar__grid { min-width: max-content; }
+  .tenant-dashboard-page .staff-week-calendar__grid .waybook-week-calendar__corner,
+  .tenant-dashboard-page .staff-week-calendar__grid .waybook-week-calendar__day { width: var(--staff-week-rail, 10rem); }
+}
+
 /* Online-booking tabs share one predictable two-column editor/preview frame. */
 .online-booking-tabs .online-booking-tab--codes { display:none; min-width:0; }
 .online-booking-tabs:has(#booking-tab-codes:checked) .online-booking-tab--codes { display:block; }
