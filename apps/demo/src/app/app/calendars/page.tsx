@@ -12,9 +12,10 @@ import { AppointmentDrawerActions } from "@/components/appointment-drawer-action
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { availableSlots } from "@/lib/waybook/booking";
+import { availableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
 import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
 import { calendarGridBounds } from "@/lib/waybook/calendar-grid-bounds";
+import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput } from "@waybook/core";
 import { tenantDb } from "@/lib/waybook/database";
 import {
   currentTenantRouteSlug,
@@ -74,6 +75,7 @@ type TeamBooking = Booking & {
 type Slot = { startTime: string; endTime: string };
 type ScheduleEntry = { startTime: string; endTime: string };
 type ResourceChoice = { id: string; name: string; isMutuallyExclusive: boolean };
+type LocationHours = { dayOfWeek: number; startTime: string; endTime: string };
 
 function localDateKey(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -251,9 +253,10 @@ export default async function CalendarsPage({
   const selectedLocation = requestedLocation
     ?? bookingLocation
     ?? (await db<Location[]>`SELECT l.id,l.name FROM locations l WHERE l.tenant_id=${tenant.id} AND l.is_active=TRUE ORDER BY CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.tenant_id=l.tenant_id AND b.location_id=l.id AND b.status <> 'cancelled' AND b.starts_at >= (${requestedDay}::date::timestamp AT TIME ZONE ${tenant.timezone}) AND b.starts_at < ((${requestedDay}::date + 1)::timestamp AT TIME ZONE ${tenant.timezone}) AND (${canViewTeam} OR b.team_member_id=${restrictedEmployeeId || null}::uuid)) THEN 0 ELSE 1 END, CASE WHEN l.slug='primary' THEN 0 ELSE 1 END,l.name LIMIT 1`)[0];
-  const locationWorkingDays = selectedLocation
-    ? await db<{ dayOfWeek: number }[]>`SELECT day_of_week AS "dayOfWeek" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${selectedLocation.id} ORDER BY day_of_week`
-    : [] as { dayOfWeek: number }[];
+  const locationHours = selectedLocation
+    ? await db<LocationHours[]>`SELECT day_of_week AS "dayOfWeek",start_time AS "startTime",end_time AS "endTime" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${selectedLocation.id} ORDER BY day_of_week`
+    : [] as LocationHours[];
+  const locationWorkingDays = locationHours;
   const staffSearch = (staffFilter ?? "").trim().slice(0, 100);
   const isMemberId = (value: string | undefined) => /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value ?? "");
   const staffAfter = isMemberId(after) ? after! : null;
@@ -510,6 +513,27 @@ export default async function CalendarsPage({
     days.includes(localDateKey(new Date(slot.startTime), tenant.timezone)),
   );
   const openPeriods = mergeSlots(slots);
+  const [configuredStaffRules, configuredStaffOverrides] = hasSelectedEmployee && selected && selectedLocation
+    ? await Promise.all([
+        db<AvailabilityRuleInput[]>`SELECT rrule,start_time AS "startTime",end_time AS "endTime",timezone,valid_from AS "validFrom",valid_until AS "validUntil" FROM availability_rules WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id}`,
+        db<AvailabilityOverrideInput[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date,start_time AS "startTime",end_time AS "endTime",is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id} AND local_date >= ${visibleRangeStart}::date AND local_date < ${visibleRangeEnd}::date`,
+      ])
+    : [[], []] as [AvailabilityRuleInput[], AvailabilityOverrideInput[]];
+  // This expands the persisted recurring rules before occupancy is subtracted.
+  // It is therefore the configured working canvas even if every slot is booked.
+  const configuredWorkingPeriods = hasSelectedEmployee && configuredStaffRules.length
+    ? mergeSlots(getAvailableSlots(
+        configuredStaffRules,
+        configuredStaffOverrides,
+        [],
+        { start: rangeStart, end: rangeEnd },
+        tenant.timezone,
+        { duration: 30, slotInterval: 30, now: new Date(0) },
+      ).filter((slot) =>
+        days.includes(localDateKey(new Date(slot.startTime), tenant.timezone))
+        && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, tenant.timezone),
+      ))
+    : [];
   const allIntervals = [
     ...openPeriods,
     ...bookings.map((booking) => ({
@@ -518,6 +542,7 @@ export default async function CalendarsPage({
     })),
   ];
   const { start: gridStart, rowCount } = calendarGridBounds(
+    configuredWorkingPeriods,
     allIntervals,
     tenant.timezone,
   );
@@ -633,7 +658,7 @@ export default async function CalendarsPage({
     })),
   ];
   const { start: teamGridStart, rowCount: teamRowCount } =
-    calendarGridBounds(teamIntervals, tenant.timezone);
+    calendarGridBounds(teamDayOpenPeriods, teamIntervals, tenant.timezone);
   const teamPosition = (booking: TeamBooking) => ({
     gridColumn: `${2 + Math.floor((localMinutes(booking.startsAt, tenant.timezone) - teamGridStart) / 30)} / span ${Math.max(1, Math.ceil((localMinutes(booking.endsAt, tenant.timezone) - localMinutes(booking.startsAt, tenant.timezone)) / 30))}`,
     gridRow: visibleTeamMembers.findIndex((member) => member.id === booking.teamMemberId) + 2,
