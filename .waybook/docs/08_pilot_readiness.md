@@ -2,6 +2,28 @@
 
 Goal: support a small number of manually onboarded businesses with reliable day-to-day bookings. Self-service onboarding, broad provider configuration and new commerce features are outside this scope.
 
+## Release update — 19 November 2026
+
+GitHub `main` is at `1a3c7ee`; Vercel production deployment
+`dpl_6rLSmJWyqw2XzEMTer7eeomEM99f` is READY on that commit and serves
+`waybook-booking.vercel.app`.
+Control migrations 0003–0004 and tenant migrations 0045–0048 and 0051–0052
+were rehearsed on an isolated Neon child branch, then applied to all three
+hosted databases using transaction-scoped locks and timeouts. Independent
+checks found all expected migration records, 2 Control tenants, 76 Nordic
+bookings and 0 Copenhagen bookings. Rehearsal retries applied nothing.
+
+The non-expiring `release-backup-20261119-1516` branch is a pre-migration
+snapshot. A separate child of an earlier snapshot was migrated and used by a
+local application to verify an existing Nordic booking in the calendar. This
+is a same-provider recovery exercise, not an independent backup. Establish a
+durable backup and retention policy before a real pilot. The hosted Neon
+project is in US East; the Denmark data-location and transfer assessment is
+still open. The production database role was rotated and the three Waybook
+connection variables updated. The old credential was rejected, and the live
+login and Nordic public booking routes returned HTTP 200. A full authenticated
+production booking lifecycle has not been reverified for this deployment.
+
 ## Pilot exit checklist
 
 All five gates must pass. Record the deployment, date, operator and evidence for each; a local-only result does not establish hosted readiness.
