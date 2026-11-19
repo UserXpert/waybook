@@ -13,14 +13,21 @@ Waybook's source code, databases and browser settings are separate. A successful
 
 1. Implement a bounded change, update its GitHub issue and record migrations, environment changes and data effects separately.
 2. Run the relevant build and tests; verify UI changes on desktop and mobile against an isolated test database. Confirm that local-only changes are committed before claiming they are included.
-3. Push the branch and open a pull request. Require the package, Postgres integration and E2E workflows, plus the Waybook app preview. Identify unrelated project failures explicitly instead of treating them as app success.
+3. Push the branch and open a pull request. Require the package, Postgres integration, E2E and migration-history workflows. For a direct release also verify the Waybook app preview; for a batch, verify the combined release preview as described below. Identify unrelated project failures explicitly instead of treating them as app success.
 4. Merge only the reviewed commit after checks pass. The main branch automatically triggers Vercel production deployment; group changes when practical and assess migrations and rollback before merging.
 
 ### Batch several PRs into one production release
 
-When several independently reviewed changes should ship together, start a
-short-lived release branch from current GitHub `main` (without a `codex/`
-prefix). Keep each task on its own branch and PR for review. Retarget the PRs
+The release collector runs every 30 minutes on a best-effort schedule and
+collects PRs marked `release-ready` into `release/ready` after their exact head
+passes the four GitHub checks. Apply that label only after reviewing the PR.
+Conflicts, changed heads, missing checks, draft PRs and forked branches are
+skipped. See [the collector runbook](release_branch_collector.md) for setup,
+combined validation, first-run limitations and the manual release gate.
+
+For a manual batch, start a short-lived release branch from current GitHub
+`main` (without a `codex/` prefix). Keep each task on its own branch and PR for
+review. Retarget the PRs
 selected for the batch to the release branch and merge them there only after
 their applicable checks and review pass. Alternatively, integrate reviewed
 commits into the release branch while retaining links to each source PR and its
