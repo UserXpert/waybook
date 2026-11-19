@@ -6,11 +6,10 @@ import { createHash, randomBytes } from "node:crypto";
 import type { TenantRecord } from "./database";
 import { tenantDb } from "./database";
 import { isPublicBookingStartAllowed } from "./public-booking-rules";
+import { isSlotWithinLocationHours, type LocationHours } from "./booking-location-hours";
 
 type Service = { id: string; durationMinutes: number };
 type Location = { id: string; timezone: string };
-type LocationHours = { dayOfWeek: number; startTime: string; endTime: string };
-
 async function resolvedLocation(tenant: TenantRecord, requestedId?: string, db = tenantDb(tenant)) {
   const rows = requestedId ? await db<Location[]>`SELECT id, timezone FROM locations WHERE tenant_id=${tenant.id} AND id=${requestedId} AND is_active=TRUE AND is_online_bookable=TRUE` : await db<Location[]>`SELECT id, timezone FROM locations WHERE tenant_id=${tenant.id} AND slug='primary' AND is_active=TRUE AND is_online_bookable=TRUE LIMIT 1`;
   if (!rows[0]) throw new Error("Location is unavailable.");
@@ -19,22 +18,6 @@ async function resolvedLocation(tenant: TenantRecord, requestedId?: string, db =
 
 async function resolvedLocationId(tenant: TenantRecord, requestedId?: string) {
   return (await resolvedLocation(tenant, requestedId)).id;
-}
-
-function localDateAndMinutes(date: Date, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
-  const value = (name: string) => parts.find((part) => part.type === name)?.value ?? "";
-  const localDate = `${value("year")}-${value("month")}-${value("day")}`;
-  return { localDate, minutes: Number(value("hour")) * 60 + Number(value("minute")) };
-}
-
-/** True only when an entire appointment falls within configured local opening hours. */
-export function isSlotWithinLocationHours(start: Date, end: Date, hours: LocationHours[], timezone: string) {
-  const startLocal = localDateAndMinutes(start, timezone);
-  const endLocal = localDateAndMinutes(end, timezone);
-  if (startLocal.localDate !== endLocal.localDate) return false;
-  const dayOfWeek = new Date(`${startLocal.localDate}T12:00:00Z`).getUTCDay();
-  return hours.some((hour) => hour.dayOfWeek === dayOfWeek && startLocal.minutes >= Number(hour.startTime.slice(0, 2)) * 60 + Number(hour.startTime.slice(3, 5)) && endLocal.minutes <= Number(hour.endTime.slice(0, 2)) * 60 + Number(hour.endTime.slice(3, 5)));
 }
 
 /** Calculates tenant-scoped slots from persisted services, schedules, bookings, and active holds. */
