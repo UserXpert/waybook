@@ -93,6 +93,12 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   const day = page.locator(`a.waybook-month-calendar__day[href*="monthDay=${monthDay}"]`);
   await check(day).toContainText("3 bookings");
   await check(day).toHaveAttribute("aria-describedby", `month-preview-${monthDay}`);
+  const dayView = page.getByRole("link", { name: "Day", exact: true });
+  expect(await dayView.getAttribute("href")).not.toContain("employee=");
+  await dayView.click();
+  expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
+  await check(page.locator(".team-day-calendar")).toBeVisible();
+  await page.goto(`/nordic/app/calendars?view=month&day=${monthDay}`);
   await day.click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await check(page.getByText("DAY DETAILS", { exact: true })).toBeVisible();

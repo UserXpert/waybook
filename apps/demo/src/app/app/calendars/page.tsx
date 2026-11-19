@@ -576,8 +576,11 @@ export default async function CalendarsPage({
     const nextView = next.view ?? calendarView;
     // Team navigation must deliberately omit employee. Carrying the fallback
     // selected person here turns a Day link into that person's Week view.
-    const nextEmployee =
-      next.employee ?? (nextView === "team" || (nextView === "month" && !hasSelectedEmployee) ? "" : (selected?.id ?? ""));
+    const nextEmployee = next.employee ?? (
+      nextView === "team" || (monthlyView && !hasSelectedEmployee)
+        ? ""
+        : (selected?.id ?? "")
+    );
     const params = new URLSearchParams({
       location: next.location ?? selectedLocation?.id ?? "",
       service: next.service ?? service ?? "",
