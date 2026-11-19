@@ -1,55 +1,25 @@
-# Contributing to The Booking Kit
+# Contributing to Waybook
 
-First off, thank you for considering contributing! It's people like you that make open source such a great community.
+Waybook is a Denmark-first booking operations application. Start with the [README](README.md), [product manifest](.waybook/docs/00_manifest.md), and [delivery backlog](.waybook/docs/07_delivery_backlog.md) before changing behavior.
 
-## Development Workflow
+## Development
 
-This is a monorepo using **Turborepo** and **npm workspaces**.
+Use Node.js 22.12 or later, npm, and PostgreSQL. Follow the local setup in the README; verify database URLs point to disposable local databases before running migrations or seeds.
 
-1.  **Fork** the repository and clone it locally.
-2.  **Install dependencies**:
-    ```bash
-    npm install
-    ```
-3.  **Build packages**:
-    ```bash
-    npm run build
-    ```
-4.  **Run tests**:
-    ```bash
-    npm test
-    ```
-
-## Adding Changesets
-
-We use [Changesets](https://github.com/changesets/changesets) to manage versions and changelogs. 
-
-If your PR includes changes that should be reflected in a new version (bug fixes, features, etc.), please add a changeset:
-
-```bash
-npx changeset
+```sh
+npm ci
+npm run waybook:build
+npm test --workspace=@waybook/app
 ```
 
-Follow the prompts to select the affected packages and describe the change. Commit the generated markdown file in the `.changeset` directory.
+Run focused package tests for shared scheduling or server changes. Database and browser tests require isolated test databases; the GitHub workflows document their setup. A passing local build alone does not establish hosted or pilot readiness.
 
-## Pull Request Process
+## Changes and review
 
-1.  Create a new branch for your feature or fix.
-2.  Ensure tests pass and the code is linted.
-3.  Include a changeset if applicable.
-4.  Submit a Pull Request.
-5.  All PRs require approval from the maintainers before merging.
+- Keep tenant isolation, role authorization, booking concurrency, and transactional audit behavior intact.
+- Add meaningful tests for behavior changes and verify affected user flows at desktop and mobile sizes.
+- Keep documentation and the relevant GitHub issue current; distinguish implemented behavior from planned features.
+- Use a pull request and wait for package, integration, and E2E checks. Review migrations and deployment effects before merging.
+- Preserve the copyright and permission notices in [LICENSE](LICENSE) and other applicable third-party notices.
 
-## Publishing Policy
-
-To maintain the security and integrity of the project, **only the project owner (@zainalshanan) has permission to publish new versions** of the packages to the npm registry. 
-
-Contributors should never attempt to publish packages directly. Versions are managed via Changesets and triggered exclusively by the maintainer after code is merged into the `main` branch.
-
-## Code of Conduct
-
-Please be respectful and professional in all interactions.
-
----
-
-*The Booking Kit — The Headless Booking Primitive*
+Do not run production seeds or migrations from a development environment. Follow the [pilot readiness record](.waybook/docs/08_pilot_readiness.md) for release gates.
