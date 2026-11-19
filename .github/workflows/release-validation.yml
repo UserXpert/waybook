@@ -25,11 +25,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.release_sha }}
           fetch-depth: 0
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.base_sha }}
+          path: .trusted-release-validation
+          persist-credentials: false
       - name: Fetch and prove the immutable release baseline
         run: |
+          test "$GITHUB_SHA" = "$BASE_SHA"
           git fetch --no-tags origin main
-          node scripts/validate-release-inputs.mjs
+          test "$(git rev-parse origin/main)" = "$BASE_SHA"
+          test "$(git -C .trusted-release-validation rev-parse HEAD)" = "$BASE_SHA"
+          node .trusted-release-validation/scripts/validate-release-inputs.mjs
 
   package-checks:
     name: Build, typecheck, test, lint (published packages)
@@ -44,9 +53,9 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
-      - name: Verify the dispatch ref and checkout match the requested release commit
+      - name: Verify the trusted dispatch and requested release commit
         run: |
-          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$GITHUB_SHA" = "$BASE_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
@@ -71,9 +80,9 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
-      - name: Verify the dispatch ref and checkout match the requested release commit
+      - name: Verify the trusted dispatch and requested release commit
         run: |
-          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$GITHUB_SHA" = "$BASE_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-node@v7
         with: { node-version: 24 }
@@ -94,9 +103,9 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
-      - name: Verify the dispatch ref and checkout match the requested release commit
+      - name: Verify the trusted dispatch and requested release commit
         run: |
-          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$GITHUB_SHA" = "$BASE_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
@@ -138,9 +147,9 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
-      - name: Verify the dispatch ref and checkout match the requested release commit
+      - name: Verify the trusted dispatch and requested release commit
         run: |
-          test "$GITHUB_SHA" = "$RELEASE_SHA"
+          test "$GITHUB_SHA" = "$BASE_SHA"
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
