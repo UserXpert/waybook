@@ -14,18 +14,19 @@ Timestamps are stored in UTC and rendered in the tenant timezone (`Europe/Copenh
 
 ## Availability and pooled employees
 
-Availability reads persisted services, schedules, overrides, bookings, and active holds using `@waybook/core`. Public slot presentation is the deduplicated union of slots for all eligible employees.
+Availability reads persisted services, schedules, overrides, bookings, and active holds. The Waybook app expands staff schedules in `apps/demo/src/lib/waybook/availability.ts` using RRULE calendar dates and tenant-local shift times. The booking and staff calendar paths use the same slot calculator. Public slot presentation is the deduplicated union of slots for all eligible employees.
 
 Availability overrides have two authoritative meanings: an unavailable override
 without hours removes the whole local day; an unavailable override with both
 start/end hours removes only that local interval (for a break or short leave).
-Alternative-hours overrides replace the working window for their date. The core
-engine enforces these semantics before slots are shown or a manual booking is
+Alternative-hours overrides replace the working window for their date. The Waybook
+slot calculator enforces these semantics before slots are shown or a manual booking is
 accepted.
 
-**Tested:** the core slot-engine suite proves a 12:00–13:00 unavailable
-override removes only its overlapping slots and preserves bookable time before
-and after it. Browser proof of a staff-created partial block remains open.
+**Tested:** the app availability suite covers slot intervals, bounded recurrence,
+localized overnight shifts, both Copenhagen daylight saving transitions,
+staff exceptions, and exact occupied intervals. Browser proof of a staff-created
+partial block remains open.
 
 The browser does not select an employee ID. When a customer selects a time, the hold endpoint recalculates eligible employees for that exact interval and assigns one who is actually free. If a concurrent PostgreSQL conflict occurs, the endpoint falls through to another candidate.
 
@@ -87,7 +88,7 @@ Proof recorded on 2026-11-05:
 ## Holds and booking conflict protection
 
 - Holds expire and occupy availability until expiry, release, or confirmation.
-- The hold endpoint uses `@waybook/server` serializable retry plus PostgreSQL exclusion constraints.
+- The hold endpoint uses Waybook’s application transaction retry plus PostgreSQL exclusion constraints.
 - `0002_hold_schedule.sql` preserves the customer-visible appointment interval while database reservation intervals include service buffers.
 - Constraints, not the UI, are authoritative for provider/resource conflicts.
 - Confirmation from a valid hold is transactional and idempotent.

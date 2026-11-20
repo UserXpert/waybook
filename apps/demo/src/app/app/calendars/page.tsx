@@ -14,7 +14,7 @@ import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { availableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
 import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
 import { calendarGridBounds } from "@/lib/waybook/calendar-grid-bounds";
-import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput } from "@waybook/core";
+import { calculateStaffSlots, type ScheduleOverride, type ScheduleRule } from "@/lib/waybook/availability";
 import { tenantDb } from "@/lib/waybook/database";
 import {
   currentTenantRouteSlug,
@@ -512,14 +512,14 @@ export default async function CalendarsPage({
   const openPeriods = mergeSlots(slots);
   const [configuredStaffRules, configuredStaffOverrides] = hasSelectedEmployee && selected && selectedLocation
     ? await Promise.all([
-        db<AvailabilityRuleInput[]>`SELECT rrule,start_time AS "startTime",end_time AS "endTime",timezone,valid_from AS "validFrom",valid_until AS "validUntil" FROM availability_rules WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id}`,
-        db<AvailabilityOverrideInput[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date,start_time AS "startTime",end_time AS "endTime",is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id} AND local_date >= ${visibleRangeStart}::date AND local_date < ${visibleRangeEnd}::date`,
+        db<ScheduleRule[]>`SELECT rrule,start_time AS "startTime",end_time AS "endTime",timezone,valid_from AS "validFrom",valid_until AS "validUntil" FROM availability_rules WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id}`,
+        db<ScheduleOverride[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date,start_time AS "startTime",end_time AS "endTime",is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id} AND local_date >= ${visibleRangeStart}::date AND local_date < ${visibleRangeEnd}::date`,
       ])
-    : [[], []] as [AvailabilityRuleInput[], AvailabilityOverrideInput[]];
+    : [[], []] as [ScheduleRule[], ScheduleOverride[]];
   // This expands the persisted recurring rules before occupancy is subtracted.
   // It is therefore the configured working canvas even if every slot is booked.
   const configuredWorkingPeriods = hasSelectedEmployee && configuredStaffRules.length
-    ? mergeSlots(getAvailableSlots(
+    ? mergeSlots(calculateStaffSlots(
         configuredStaffRules,
         configuredStaffOverrides,
         [],

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAvailableSlots, type AvailabilityOverrideInput, type AvailabilityRuleInput, type BookingInput } from "@waybook/core";
+import { calculateStaffSlots, type OccupiedInterval, type ScheduleOverride, type ScheduleRule } from "./availability";
 import { withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
 import { createHash, randomBytes } from "node:crypto";
 import type { TenantRecord } from "./database";
@@ -49,9 +49,9 @@ export async function availableSlots(tenant: TenantRecord, serviceSlug: string, 
   // Fetch each schedule component once per service, rather than serially once
   // per member. Keep tenant and member scoping explicit for every query.
   const [allRules, allOverrides, allOccupied] = await Promise.all([
-    db<Array<AvailabilityRuleInput & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", rrule, start_time AS "startTime", end_time AS "endTime", timezone, valid_from AS "validFrom", valid_until AS "validUntil" FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[])`,
-    db<Array<AvailabilityOverrideInput & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", (local_date::timestamp AT TIME ZONE 'UTC') AS date, start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[]) AND local_date >= ${occupiedStart.toISOString().slice(0, 10)}::date AND local_date <= ${occupiedEnd.toISOString().slice(0, 10)}::date`,
-    db<Array<BookingInput & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", starts_at AS "startsAt", ends_at AS "endsAt", 'confirmed' AS status FROM booking_blocks WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[]) AND state IN ('held', 'confirmed') AND ends_at > ${occupiedStart} AND starts_at < ${occupiedEnd} AND (${options?.excludeBookingBlockId ?? null}::uuid IS NULL OR id <> ${options?.excludeBookingBlockId ?? null}::uuid)`,
+    db<Array<ScheduleRule & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", rrule, start_time AS "startTime", end_time AS "endTime", timezone, valid_from AS "validFrom", valid_until AS "validUntil" FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[])`,
+    db<Array<ScheduleOverride & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", (local_date::timestamp AT TIME ZONE 'UTC') AS date, start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[]) AND local_date >= ${occupiedStart.toISOString().slice(0, 10)}::date AND local_date <= ${occupiedEnd.toISOString().slice(0, 10)}::date`,
+    db<Array<OccupiedInterval & { teamMemberId: string }>>`SELECT team_member_id AS "teamMemberId", starts_at AS "startsAt", ends_at AS "endsAt" FROM booking_blocks WHERE tenant_id = ${tenant.id} AND team_member_id = ANY(${memberIds}::uuid[]) AND state IN ('held', 'confirmed') AND ends_at > ${occupiedStart} AND starts_at < ${occupiedEnd} AND (${options?.excludeBookingBlockId ?? null}::uuid IS NULL OR id <> ${options?.excludeBookingBlockId ?? null}::uuid)`,
   ]);
   const byMember = <T extends { teamMemberId: string }>(rows: T[]) => {
     const groups = new Map<string, T[]>();
@@ -67,7 +67,7 @@ export async function availableSlots(tenant: TenantRecord, serviceSlug: string, 
   for (const member of members) {
     const rules = rulesByMember.get(member.id) ?? [];
     // `local_date` is a calendar date, not an instant. Construct midnight UTC explicitly so
-    // core compares its UTC date components to the provider-local slot date consistently.
+    // availability compares its UTC date components to the provider-local slot date consistently.
     const overrides = overridesByMember.get(member.id) ?? [];
     // Waybook reserves exactly the customer-facing appointment interval. Setup
     // or cleanup must never make a neighbouring customer slot disappear.
@@ -79,14 +79,10 @@ export async function availableSlots(tenant: TenantRecord, serviceSlug: string, 
     // interval is the entire capacity reservation: 08:00–09:00 and 10:00–11:00
     // may sit beside a 09:00–10:00 appointment, while 08:30–09:30 correctly
     // remains unavailable because it genuinely overlaps that appointment.
-    const slots = getAvailableSlots(rules, overrides, occupied, { start: startsAt, end: endsAt }, tenant.timezone, {
+    const slots = calculateStaffSlots(rules, overrides, occupied, { start: startsAt, end: endsAt }, tenant.timezone, {
       duration: durationMinutes,
       slotInterval: options?.slotInterval,
-      bufferBefore: 0,
-      bufferAfter: 0,
     })
-      // An extra-hours override can add windows outside the recurrence range.
-      // Never expose them without the corresponding range's occupied blocks.
       .filter((slot) => new Date(slot.startTime) >= startsAt && new Date(slot.endTime) <= endsAt && !closedDates.has(localDateAndMinutes(new Date(slot.startTime), location.timezone).localDate) && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, location.timezone))
       // Resource allocation is deliberately post-booking. Staff time is the
       // sole availability reservation, so a room/equipment conflict never
