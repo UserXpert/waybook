@@ -23,6 +23,7 @@ import {
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 import {
   getRescheduleBookingAvailability,
 } from "./actions";
@@ -917,7 +918,7 @@ export default async function CalendarsPage({
                           })}
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
-                          draggable={canManage}
+                          draggable={canManage && isMovableAppointmentStatus(booking.status)}
                           style={teamPosition(booking)}
                         >
                           <strong>{booking.customerName}</strong>
@@ -1143,7 +1144,7 @@ export default async function CalendarsPage({
                           })}
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
-                          draggable={canManage}
+                          draggable={canManage && isMovableAppointmentStatus(booking.status)}
                           style={staffWeekPosition({
                             startTime: booking.startsAt.toISOString(),
                             endTime: booking.endsAt.toISOString(),
