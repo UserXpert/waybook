@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createWaybookSql } from "@waybook/db";
+import { connectWaybookPostgres } from "./sql";
 import { workspaceHostname, workspaceMembershipQuery } from "./workspace-lookup-query";
 
 const localUrl = (name: string) => {
@@ -9,7 +9,7 @@ const localUrl = (name: string) => {
   return `postgresql://waybook@127.0.0.1:${Number(port)}/${name}`;
 };
 const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL ?? localUrl("waybook_control");
-type WaybookSql = ReturnType<typeof createWaybookSql>;
+type WaybookSql = ReturnType<typeof connectWaybookPostgres>;
 
 /**
  * Next development reloads server modules without ending their module-scoped
@@ -21,7 +21,7 @@ const globalConnections = globalThis as typeof globalThis & {
   __waybookTenantClients?: Map<string, WaybookSql>;
 };
 
-export const controlDb = globalConnections.__waybookControlDb ?? createWaybookSql(controlUrl);
+export const controlDb = globalConnections.__waybookControlDb ?? connectWaybookPostgres(controlUrl);
 globalConnections.__waybookControlDb = controlDb;
 
 const tenantUrls: Record<string, string> = {
@@ -39,7 +39,7 @@ export function tenantDb(tenant: TenantRecord) {
   if (!url) throw new Error(`Tenant ${tenant.slug} has no approved database connection.`);
   const existing = tenantClients.get(tenant.databaseEnvKey);
   if (existing) return existing;
-  const client = createWaybookSql(url);
+  const client = connectWaybookPostgres(url);
   tenantClients.set(tenant.databaseEnvKey, client);
   return client;
 }
