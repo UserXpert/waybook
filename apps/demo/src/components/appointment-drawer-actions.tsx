@@ -30,7 +30,7 @@ export function AppointmentStatusActions({ bookingId, status, updateStatus }: St
     const label = status === "no_show" ? "No show" : status[0]?.toUpperCase() + status.slice(1);
     const explanation = status === "cancelled"
       ? "This appointment has been cancelled. Its customer and audit history remain available, but it can no longer be edited, rescheduled, or paid."
-      : "This appointment has a final status and can no longer be changed.";
+      : "This appointment’s status is final and cannot be changed.";
     return <section className="appointment-drawer__history"><h3>Appointment status</h3><p className="appointment-drawer__status-readonly">{label}</p><p className="appointment-drawer__readonly">{explanation}</p></section>;
   }
 
