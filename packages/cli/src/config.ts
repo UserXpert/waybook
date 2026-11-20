@@ -1,5 +1,5 @@
 /**
- * Config file and env template generation for The Booking Kit projects.
+ * Config and environment template generation for the Waybook CLI.
  */
 
 // ---------------------------------------------------------------------------
@@ -60,11 +60,13 @@ function sanitizePath(value: string, fieldName: string): string {
   return value;
 }
 
-/** Generate the content of thebookingkit.config.ts */
-export function generateThebookingkitConfig(config: Partial<BookingKitConfig>): string {
+function generateConfig(
+  config: Partial<BookingKitConfig>,
+  defaults: Pick<BookingKitConfig, "componentsDir" | "typesOutput">,
+): string {
   const {
-    componentsDir: rawComponentsDir = "src/components/thebookingkit",
-    typesOutput: rawTypesOutput = "src/types/thebookingkit.ts",
+    componentsDir: rawComponentsDir = defaults.componentsDir,
+    typesOutput: rawTypesOutput = defaults.typesOutput,
     authAdapter = "nextauth",
     jobAdapter = "inngest",
     emailAdapter = "resend",
@@ -105,6 +107,22 @@ const config: BookingKitConfig = {
 
 export default config;
 `;
+}
+
+/** Generate the content of waybook.config.ts. */
+export function generateWaybookConfig(config: Partial<BookingKitConfig>): string {
+  return generateConfig(config, {
+    componentsDir: "src/components/waybook",
+    typesOutput: "src/types/waybook.ts",
+  });
+}
+
+/** @deprecated Generates the legacy thebookingkit.config.ts format. */
+export function generateThebookingkitConfig(config: Partial<BookingKitConfig>): string {
+  return generateConfig(config, {
+    componentsDir: "src/components/thebookingkit",
+    typesOutput: "src/types/thebookingkit.ts",
+  });
 }
 
 /** Generate a .env.local template */

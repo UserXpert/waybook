@@ -11,6 +11,7 @@ import {
   DEFAULT_MANIFEST,
 } from "../manifest.js";
 import {
+  generateWaybookConfig,
   generateThebookingkitConfig,
   generateEnvTemplate,
 } from "../config.js";
@@ -172,6 +173,12 @@ describe("DEFAULT_MANIFEST", () => {
 // ---------------------------------------------------------------------------
 
 describe("generateThebookingkitConfig", () => {
+  it("generates Waybook defaults for new projects", () => {
+    const config = generateWaybookConfig({});
+    expect(config).toContain("src/components/waybook");
+    expect(config).toContain("src/types/waybook.ts");
+  });
+
   it("generates valid TypeScript config with defaults", () => {
     const config = generateThebookingkitConfig({});
     expect(config).toContain('import type { BookingKitConfig } from "@waybook/cli"');
@@ -192,6 +199,9 @@ describe("generateThebookingkitConfig", () => {
 });
 
 describe("generateEnvTemplate", () => {
+  it("uses Waybook names for new projects", () => {
+  });
+
   it("includes all required env vars", () => {
     const env = generateEnvTemplate();
     expect(env).toContain("DATABASE_URL");

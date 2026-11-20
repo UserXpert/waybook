@@ -947,14 +947,6 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* ---------------------------------------------------------------------------
-   Booking Section
-   --------------------------------------------------------------------------- */
-.booking-section {
-  background: var(--surface);
-  border-radius: var(--radius);
-}
-
 .btn-back {
   background: none;
   border: none;
