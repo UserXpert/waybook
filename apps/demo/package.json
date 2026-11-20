@@ -10,9 +10,7 @@
     "start": "next start --port 3333",
     "test": "tsx --test src/lib/waybook/*.test.ts",
     "e2e": "playwright test --config e2e/waybook.config.ts",
-    "e2e:ui": "playwright test --config e2e/waybook.config.ts --ui",
-    "e2e:legacy": "playwright test --config e2e/playwright.config.ts",
-    "e2e:db": "E2E_WITH_DB=1 playwright test --config e2e/playwright.config.ts"
+    "e2e:ui": "playwright test --config e2e/waybook.config.ts --ui"
   },
   "dependencies": {
     "@waybook/core": "*",
@@ -24,6 +22,7 @@
     "lucide-react": "^1.69.0",
     "next": "^15.5.27",
     "pg": "^8.23.1",
+    "postgres": "^3.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.35.5"

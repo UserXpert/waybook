@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
 /**
- * The Booking Kit CLI — add components, scaffold configs, run migrations.
+ * Waybook CLI — add components, scaffold configs, run migrations.
  *
  * Usage:
- *   npx thebookingkit init          Scaffold thebookingkit.config.ts and .env.local
- *   npx thebookingkit add <name>    Add one or more components to your project
- *   npx thebookingkit list          List all available components
- *   npx thebookingkit diff          Show locally modified components
- *   npx thebookingkit update        Re-fetch components from the registry
- *   npx thebookingkit doctor        Health-check your Booking Kit setup
- *   npx thebookingkit migrate       Run pending database migrations
+ *   waybook init          Scaffold waybook.config.ts and .env.local
+ *   waybook add <name>    Add one or more components to your project
+ *   waybook list          List all available components
+ *   waybook diff          Show locally modified components
+ *   waybook update        Re-fetch components from the registry
+ *   waybook doctor        Health-check your Waybook setup
+ *   waybook migrate       Run pending database migrations
  */
 
 import { createHash } from "node:crypto";
@@ -34,17 +34,21 @@ import {
   validateManifest,
   type BookingKitManifest,
 } from "./manifest.js";
-import { generateThebookingkitConfig, generateEnvTemplate } from "./config.js";
+import { generateWaybookConfig, generateEnvTemplate } from "./config.js";
 
-const MANIFEST_FILE = ".thebookingkit-manifest.json";
-const DEFAULT_COMPONENTS_DIR = "src/components/thebookingkit";
-const REGISTRY_BASE_URL = "https://docs.thebookingkit.dev/registry";
+const CLI_NAME = "waybook";
+const CONFIG_FILE = "waybook.config.ts";
+const LEGACY_CONFIG_FILE = "thebookingkit.config.ts";
+const MANIFEST_FILE = ".waybook-manifest.json";
+const LEGACY_MANIFEST_FILE = ".thebookingkit-manifest.json";
+const DEFAULT_COMPONENTS_DIR = "src/components/waybook";
+const LEGACY_COMPONENTS_DIR = "src/components/thebookingkit";
 
 const program = new Command();
 
 program
-  .name("thebookingkit")
-  .description("The Booking Kit CLI — The Headless Booking Primitive")
+  .name(CLI_NAME)
+  .description("Waybook CLI — scaffold booking components and manage migrations")
   .version(pkg.version);
 
 // ---------------------------------------------------------------------------
@@ -145,6 +149,16 @@ function readManifest(manifestPath: string): BookingKitManifest {
   return result.manifest;
 }
 
+function existingPath(primary: string, legacy: string): string {
+  return existsSync(primary) ? primary : existsSync(legacy) ? legacy : primary;
+}
+
+function defaultComponentsDirectory(manifestPath: string): string {
+  const legacyManifest = manifestPath === resolve(LEGACY_MANIFEST_FILE);
+  const legacyConfig = existingPath(resolve(CONFIG_FILE), resolve(LEGACY_CONFIG_FILE)) === resolve(LEGACY_CONFIG_FILE);
+  return legacyManifest || legacyConfig ? LEGACY_COMPONENTS_DIR : DEFAULT_COMPONENTS_DIR;
+}
+
 /**
  * Persist the manifest to disk, wrapped in a try/catch for permission errors.
  *
@@ -169,7 +183,7 @@ function writeManifest(manifestPath: string, manifest: BookingKitManifest): void
 
 program
   .command("init")
-  .description("Scaffold thebookingkit.config.ts and .env.local in your project")
+  .description("Scaffold waybook.config.ts and .env.local in your project")
   .option("--auth <adapter>", "Auth adapter (nextauth, clerk, supabase, lucia)")
   .option("--jobs <adapter>", "Job adapter (inngest, trigger, bullmq, none)")
   .option("--email <adapter>", "Email adapter (resend, sendgrid, ses, none)")
@@ -186,7 +200,7 @@ program
       const question = (q: string): Promise<string> =>
         new Promise((resolve) => rl.question(q, resolve));
 
-      console.log("The Booking Kit — interactive setup\n");
+      console.log("Waybook — interactive setup\n");
 
       const authInput = await question(
         "Auth adapter [nextauth, clerk, supabase, lucia] (default: nextauth): ",
@@ -207,16 +221,19 @@ program
       console.log();
     }
 
-    const configPath = resolve("thebookingkit.config.ts");
+    const manifestPath = existingPath(resolve(MANIFEST_FILE), resolve(LEGACY_MANIFEST_FILE));
+    const componentDirectory = defaultComponentsDirectory(manifestPath);
+    const configPath = existingPath(resolve(CONFIG_FILE), resolve(LEGACY_CONFIG_FILE));
     if (existsSync(configPath)) {
-      console.log("thebookingkit.config.ts already exists, skipping.");
+      console.log(`${relative(resolve("."), configPath)} already exists, skipping.`);
     } else {
       let content: string;
       try {
-        content = generateThebookingkitConfig({
-          authAdapter: auth as Parameters<typeof generateThebookingkitConfig>[0]["authAdapter"],
-          jobAdapter: jobs as Parameters<typeof generateThebookingkitConfig>[0]["jobAdapter"],
-          emailAdapter: email as Parameters<typeof generateThebookingkitConfig>[0]["emailAdapter"],
+        content = generateWaybookConfig({
+          componentsDir: componentDirectory,
+          authAdapter: auth as Parameters<typeof generateWaybookConfig>[0]["authAdapter"],
+          jobAdapter: jobs as Parameters<typeof generateWaybookConfig>[0]["jobAdapter"],
+          emailAdapter: email as Parameters<typeof generateWaybookConfig>[0]["emailAdapter"],
         });
       } catch (err) {
         console.error(`Config generation failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -226,12 +243,12 @@ program
         writeFileSync(configPath, content);
       } catch (err) {
         console.error(
-          `Failed to write thebookingkit.config.ts: ${err instanceof Error ? err.message : String(err)}\n` +
+          `Failed to write ${CONFIG_FILE}: ${err instanceof Error ? err.message : String(err)}\n` +
           `Check that you have write permission in this directory.`,
         );
         process.exit(1);
       }
-      console.log("Created thebookingkit.config.ts");
+      console.log(`Created ${CONFIG_FILE}`);
     }
 
     const envPath = resolve(".env.local");
@@ -278,30 +295,29 @@ program
       }
     }
 
-    const componentsDir = resolve(DEFAULT_COMPONENTS_DIR);
+    const componentsDir = resolve(componentDirectory);
     if (!existsSync(componentsDir)) {
       try {
         mkdirSync(componentsDir, { recursive: true });
       } catch (err) {
         console.error(
-          `Failed to create ${DEFAULT_COMPONENTS_DIR}/: ${err instanceof Error ? err.message : String(err)}\n` +
+          `Failed to create ${componentDirectory}/: ${err instanceof Error ? err.message : String(err)}\n` +
           `Check that you have write permission in this directory.`,
         );
         process.exit(1);
       }
-      console.log(`Created ${DEFAULT_COMPONENTS_DIR}/`);
+      console.log(`Created ${componentDirectory}/`);
     }
 
-    const manifestPath = resolve(MANIFEST_FILE);
     if (!existsSync(manifestPath)) {
       writeManifest(manifestPath, getDefaultManifest());
       console.log(`Created ${MANIFEST_FILE}`);
     }
 
-    console.log("\nThe Booking Kit initialized! Next steps:");
+    console.log("\nWaybook initialized! Next steps:");
     console.log("  1. Update .env.local with your database URL");
-    console.log("  2. Run: npx thebookingkit add booking-calendar");
-    console.log("  3. Run: npx thebookingkit migrate");
+    console.log(`  2. Run: ${CLI_NAME} add booking-calendar`);
+    console.log(`  3. Run: ${CLI_NAME} migrate`);
   });
 
 // ---------------------------------------------------------------------------
@@ -311,17 +327,17 @@ program
 program
   .command("add")
   .argument("<components...>", "Component name(s) (e.g., booking-calendar time-slot-picker)")
-  .description("Add one or more Booking Kit components to your project")
-  .option("-d, --dir <path>", "Components directory", DEFAULT_COMPONENTS_DIR)
+  .description("Add one or more Waybook components to your project")
+  .option("-d, --dir <path>", "Override the project’s default components directory")
   .option("-f, --force", "Overwrite existing files", false)
-  .option("--registry <url>", "Registry URL", REGISTRY_BASE_URL)
+  .option("--registry <url>", "Optional HTTPS registry URL when local source is unavailable")
   .option("--dry-run", "Show what would be written without writing any files", false)
   .action(async (componentNames: string[], options) => {
     const isDryRun: boolean = options.dryRun as boolean;
 
     // Validate registry URL — only https:// is permitted.
-    const registryUrl: string = options.registry as string;
-    if (!registryUrl.startsWith("https://")) {
+    const registryUrl = options.registry as string | undefined;
+    if (registryUrl && !registryUrl.startsWith("https://")) {
       console.error(
         `Invalid --registry URL "${registryUrl}": only https:// URLs are permitted.`,
       );
@@ -333,7 +349,7 @@ program
       const entry = findComponent(componentName);
       if (!entry) {
         console.error(`Unknown component: "${componentName}"`);
-        console.error("Run 'npx thebookingkit list' to see available components.");
+        console.error(`Run '${CLI_NAME} list' to see available components.`);
         process.exit(1);
       }
     }
@@ -359,14 +375,15 @@ program
     }
 
     // Load manifest
-    const manifestPath = resolve(MANIFEST_FILE);
+    const manifestPath = existingPath(resolve(MANIFEST_FILE), resolve(LEGACY_MANIFEST_FILE));
     const manifest: BookingKitManifest = readManifest(manifestPath);
 
-    const componentsDir = resolve(options.dir as string);
+    const componentsPath = (options.dir as string | undefined) ?? defaultComponentsDirectory(manifestPath);
+    const componentsDir = resolve(componentsPath);
     const cwd = resolve(".");
     if (!componentsDir.startsWith(cwd + "/") && componentsDir !== cwd) {
       console.error(
-        `Invalid --dir path: "${options.dir as string}" resolves outside the current working directory.`,
+        `Invalid --dir path: "${componentsPath}" resolves outside the current working directory.`,
       );
       process.exit(1);
     }
@@ -458,10 +475,10 @@ program
           // Persist what we have so far before bailing.
           writeManifest(manifestPath, manifest);
           const suggestion = result.error.message.includes("404")
-            ? "Run 'npx thebookingkit list' to verify the component name."
+            ? `Run '${CLI_NAME} list' to verify the component name.`
             : result.error.message.includes("fetch") || result.error.message.toLowerCase().includes("network")
             ? "Check your internet connection and retry."
-            : "Check your internet connection or retry. Run 'npx thebookingkit list' to verify the component name.";
+            : `Check your internet connection or retry. Run '${CLI_NAME} list' to verify the component name.`;
           console.error(`Failed to fetch ${result.name}: ${result.error.message}`);
           console.error(`Suggestion: ${suggestion}`);
           process.exit(1);
@@ -521,14 +538,12 @@ program
     const pm = detectPackageManager(cwd);
     const installCmd = installCommand(pm);
     const depsToInstall = Object.entries(allNpmDeps);
+    console.log("\nUse @waybook/core from the local Waybook workspace.");
     if (depsToInstall.length > 0) {
-      console.log("\nInstall required dependencies:");
+      console.log("Install public dependencies:");
       console.log(
-        `  ${installCmd} @waybook/core ${depsToInstall.map(([n, v]) => `${n}@${v}`).join(" ")}`,
+        `  ${installCmd} ${depsToInstall.map(([n, v]) => `${n}@${v}`).join(" ")}`,
       );
-    } else {
-      console.log("\nInstall required dependency:");
-      console.log(`  ${installCmd} @waybook/core`);
     }
   });
 
@@ -538,7 +553,7 @@ program
 
 program
   .command("list")
-  .description("List all available Booking Kit components")
+  .description("List all available Waybook components")
   .option("-c, --category <category>", "Filter by category")
   .option("--json", "Output registry as JSON", false)
   .action((options) => {
@@ -575,7 +590,7 @@ program
     }
 
     console.log(`\n${components.length} components available`);
-    console.log("Run 'npx thebookingkit add <name>' to add a component.");
+    console.log(`Run '${CLI_NAME} add <name>' to add a component.`);
   });
 
 // ---------------------------------------------------------------------------
@@ -586,13 +601,13 @@ program
   .command("diff")
   .description("Show which installed components have been locally modified")
   .action(() => {
-    const manifestPath = resolve(MANIFEST_FILE);
+    const manifestPath = existingPath(resolve(MANIFEST_FILE), resolve(LEGACY_MANIFEST_FILE));
     const manifest = readManifest(manifestPath);
     const cwd = resolve(".");
 
     const entries = Object.values(manifest.components);
     if (entries.length === 0) {
-      console.log("No components installed yet. Run 'npx thebookingkit add <name>' first.");
+      console.log(`No components installed yet. Run '${CLI_NAME} add <name>' first.`);
       return;
     }
 
@@ -635,25 +650,25 @@ program
   .argument("[components...]", "Component name(s) to update (defaults to all installed)")
   .description("Re-fetch component source from the registry")
   .option("-f, --force", "Overwrite even locally modified components", false)
-  .option("--registry <url>", "Registry URL", REGISTRY_BASE_URL)
+  .option("--registry <url>", "Optional HTTPS registry URL when local source is unavailable")
   .option("--dry-run", "Show what would be updated without writing files", false)
   .action(async (componentArgs: string[], options) => {
     const isDryRun: boolean = options.dryRun as boolean;
-    const registryUrl: string = options.registry as string;
-    if (!registryUrl.startsWith("https://")) {
+    const registryUrl = options.registry as string | undefined;
+    if (registryUrl && !registryUrl.startsWith("https://")) {
       console.error(
         `Invalid --registry URL "${registryUrl}": only https:// URLs are permitted.`,
       );
       process.exit(1);
     }
 
-    const manifestPath = resolve(MANIFEST_FILE);
+    const manifestPath = existingPath(resolve(MANIFEST_FILE), resolve(LEGACY_MANIFEST_FILE));
     const manifest = readManifest(manifestPath);
     const cwd = resolve(".");
 
     const installedNames = Object.keys(manifest.components);
     if (installedNames.length === 0) {
-      console.log("No components installed yet. Run 'npx thebookingkit add <name>' first.");
+      console.log(`No components installed yet. Run '${CLI_NAME} add <name>' first.`);
       return;
     }
 
@@ -662,7 +677,7 @@ program
     if (componentArgs.length > 0) {
       for (const name of componentArgs) {
         if (!manifest.components[name]) {
-          console.error(`"${name}" is not installed. Run 'npx thebookingkit add ${name}' first.`);
+          console.error(`"${name}" is not installed. Run '${CLI_NAME} add ${name}' first.`);
           process.exit(1);
         }
       }
@@ -710,7 +725,7 @@ program
         spinner.stop();
         const msg = err instanceof Error ? err.message : String(err);
         const suggestion = msg.includes("404")
-          ? "Run 'npx thebookingkit list' to verify the component name."
+          ? `Run '${CLI_NAME} list' to verify the component name.`
           : "Check your internet connection and retry.";
         console.error(`Failed to fetch ${name}: ${msg}`);
         console.error(`Suggestion: ${suggestion}`);
@@ -767,7 +782,7 @@ program
 
 program
   .command("doctor")
-  .description("Health-check your Booking Kit setup")
+  .description("Health-check your Waybook setup")
   .action(() => {
     const cwd = resolve(".");
     let passed = 0;
@@ -783,13 +798,13 @@ program
       }
     }
 
-    console.log("The Booking Kit — doctor\n");
+    console.log("Waybook — doctor\n");
 
     // 1. Config file present?
     check(
-      "thebookingkit.config.ts exists",
-      existsSync(resolve("thebookingkit.config.ts")),
-      "Run 'npx thebookingkit init' to create it.",
+      `${CONFIG_FILE} or ${LEGACY_CONFIG_FILE} exists`,
+      existsSync(resolve(CONFIG_FILE)) || existsSync(resolve(LEGACY_CONFIG_FILE)),
+      `Run '${CLI_NAME} init' to create it.`,
     );
 
     // 2. @waybook/core in package.json?
@@ -815,11 +830,11 @@ program
     );
 
     // 3. Manifest and installed files.
-    const manifestPath = resolve(MANIFEST_FILE);
+    const manifestPath = existingPath(resolve(MANIFEST_FILE), resolve(LEGACY_MANIFEST_FILE));
     check(
       `${MANIFEST_FILE} exists`,
       existsSync(manifestPath),
-      "Run 'npx thebookingkit init' to create it.",
+      `Run '${CLI_NAME} init' to create it.`,
     );
 
     if (existsSync(manifestPath)) {
@@ -839,7 +854,7 @@ program
         check(
           `${entry.name} file present (${entry.installedPath})`,
           fileExists,
-          `Run 'npx thebookingkit add ${entry.name}' to reinstall.`,
+          `Run '${CLI_NAME} add ${entry.name}' to reinstall.`,
         );
 
         if (fileExists) {
@@ -848,7 +863,7 @@ program
           check(
             `${entry.name} checksum clean`,
             !modified,
-            "File has local modifications. This is fine but 'npx thebookingkit update' may overwrite your changes.",
+            `File has local modifications. This is fine but '${CLI_NAME} update' may overwrite your changes.`,
           );
         }
       }
@@ -864,7 +879,7 @@ program
 
 program
   .command("migrate")
-  .description("Run pending Booking Kit database migrations")
+  .description("Run pending Waybook database migrations")
   .action(() => {
     console.log("Migration support requires @waybook/db.");
     console.log("Run: npx drizzle-kit push");
@@ -876,9 +891,8 @@ program
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch a component's source file from the local registry (development) or
- * the remote registry URL (production). A 10-second network timeout is applied
- * via `AbortSignal.timeout`.
+ * Fetch a component from the workspace registry or an explicitly configured
+ * remote registry. Remote requests use a 10-second timeout.
  *
  * @param sourcePath - Relative path within the registry (e.g., "components/foo.tsx")
  * @param registryBaseUrl - Base URL of the remote component registry
@@ -886,7 +900,7 @@ program
  */
 async function fetchComponentSource(
   sourcePath: string,
-  registryBaseUrl: string,
+  registryBaseUrl: string | undefined,
 ): Promise<string> {
   // Guard against path traversal in registry-supplied sourcePath values.
   const normalised = sourcePath.replace(/\\/g, "/");
@@ -896,20 +910,24 @@ async function fetchComponentSource(
     );
   }
 
-  // In development: try to read from local registry/ui/src/
-  const localPath = resolve("registry", "ui", "src", sourcePath);
+  // Prefer the registry shipped in this workspace, independent of the caller’s directory.
+  const localPath = resolve(__cliDir, "../../../registry/ui/src", normalised);
   if (existsSync(localPath)) {
     return readFileSync(localPath, "utf-8");
   }
 
-  // In production: fetch from registry URL with a 10-second timeout.
+  if (!registryBaseUrl) {
+    throw new Error("Component source is unavailable locally. Supply an HTTPS --registry URL.");
+  }
+
+  // Fetch from an explicitly configured registry with a 10-second timeout.
   const url = `${registryBaseUrl}/${sourcePath}`;
   const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error(
         `HTTP 404 fetching ${url} — component not found in the registry.\n` +
-        `Suggestion: Run 'npx thebookingkit list' to verify the component name.`,
+        `Suggestion: Run '${CLI_NAME} list' to verify the component name.`,
       );
     }
     throw new Error(`HTTP ${response.status} fetching ${url}`);

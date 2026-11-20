@@ -5,75 +5,11 @@ description: Real-world examples of how The Booking Kit powers different types o
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-The Booking Kit is a general-purpose scheduling primitive. The same core APIs power very different booking experiences depending on how you configure them. The examples below show eight real use cases with the key API calls for each: five provider-based (appointments with people) and three resource-based (reservations for spaces).
+The Booking Kit is a general-purpose scheduling primitive. The same core APIs power very different booking experiences depending on how you configure them. The examples below show seven examples with the key API calls for each: four provider-based (appointments with people) and three resource-based (reservations for spaces).
 
 ---
 
-## 1. Barber Shop — Multi-Location with Walk-Ins
-
-A barber shop with multiple locations and individual barber schedules. Each barber has their own weekly availability stored as simple JSON in Cloudflare D1. The `@waybook/d1` adapter converts these into the RRULE-based rules that `@waybook/core` expects.
-
-**Stack:** TanStack Start (or Next.js), Cloudflare D1 (or Postgres), `@waybook/core`, `@waybook/d1`, Drizzle ORM.
-
-```typescript
-import { toWeeklyAvailabilityRules } from '@waybook/d1';
-import { getAvailableSlots } from '@waybook/core';
-
-// Each barber stores their schedule as a simple JSON object in D1.
-// The adapter converts this to RRULE-based AvailabilityRuleInput[] that
-// @waybook/core understands.
-const barberSchedule = {
-  monday:    { startTime: '09:00', endTime: '18:00', isOff: false },
-  tuesday:   { startTime: '09:00', endTime: '18:00', isOff: false },
-  wednesday: { startTime: '09:00', endTime: '18:00', isOff: false },
-  thursday:  { startTime: '09:00', endTime: '21:00', isOff: false },
-  friday:    { startTime: '09:00', endTime: '18:00', isOff: false },
-  saturday:  { startTime: '08:00', endTime: '16:00', isOff: false },
-  sunday:    { startTime: null,    endTime: null,    isOff: true  },
-};
-
-const availabilityRules = toWeeklyAvailabilityRules(
-  barberSchedule,
-  'Australia/Sydney',
-);
-
-// Compute available 30-minute slots for a given barber on a given day.
-const slots = getAvailableSlots({
-  date: new Date('2025-06-15'),
-  durationMinutes: 30,          // Classic Haircut
-  availabilityRules,
-  existingBookings: barberBookings,  // fetched from D1
-  bufferMinutes: 5,
-  timezone: 'Australia/Sydney',
-});
-```
-
-The kiosk view uses the walk-in queue API to accept walk-in customers alongside scheduled appointments:
-
-```typescript
-import { addWalkIn, estimateWaitTime } from '@waybook/core';
-
-// Receptionist adds a walk-in at the desk.
-const entry = addWalkIn({
-  queue: currentQueue,
-  barber: selectedBarber,
-  service: { durationMinutes: 30 },
-  existingBookings: todaysBookings,
-  walkedInAt: new Date(),
-});
-
-// Display estimated wait time on the public queue screen.
-// See the [Walk-In Queue](/features/walk-in) guide for details
-const { estimatedWaitMinutes } = estimateWaitTime({
-  queue: currentQueue,
-  position: entry.queuePosition,
-  averageServiceMinutes: 32,
-});
-```
-
----
-
-## 2. Medical Clinic — Round-Robin Doctor Assignment
+## 1. Medical Clinic — Round-Robin Doctor Assignment
 
 A medical clinic needs to route appointment requests to available doctors using round-robin assignment, and requires manual approval before confirming any appointment. Patients book a type of appointment (GP visit, specialist review) and the system assigns a doctor — the patient does not pick one directly.
 
@@ -120,7 +56,7 @@ const booking = await createBooking({
 
 ---
 
-## 3. Fitness Studio — Seat-Based Group Classes
+## 2. Fitness Studio — Seat-Based Group Classes
 
 A fitness studio runs group classes with a fixed capacity. Multiple participants can book the same time slot up to the seat limit. Classes repeat on the same days each week via a recurring schedule.
 
@@ -164,7 +100,7 @@ if (!available) {
 
 ---
 
-## 4. Tutoring Platform — Multi-Timezone Routing Forms
+## 3. Tutoring Platform — Multi-Timezone Routing Forms
 
 A tutoring marketplace connects students with tutors across multiple countries. A routing form first asks the student what subject they need, then routes them to tutors who teach that subject. Slots are displayed in the student's local timezone regardless of where the tutor is located.
 
@@ -216,7 +152,7 @@ const sortedSlots = allSlots.flat().sort(
 
 ---
 
-## 5. Salon with Walk-Ins — Hybrid Appointment + Queue
+## 4. Salon with Walk-Ins — Hybrid Appointment + Queue
 
 A hair salon accepts both pre-booked appointments and walk-in customers. Walk-ins are added to a queue; the system finds the next available gap in the stylist's schedule and slots them in. The public queue display updates in real time so walk-ins can see their estimated wait without asking staff.
 
@@ -270,7 +206,7 @@ const metrics = getQueueMetrics({
 
 ---
 
-## 6. Restaurant Reservations — Table Pool with Party Size
+## 5. Restaurant Reservations — Table Pool with Party Size
 
 A restaurant manages multiple dining tables with varying capacities. Customers book tables based on party size, and the system auto-assigns the best-fit table (smallest table that fits their party).
 
@@ -359,7 +295,7 @@ console.log(`Assigned ${assignment.resourceName} (${assignment.reason})`);
 
 ---
 
-## 7. Hotel Room Booking — Multi-Type Resource Pool
+## 6. Hotel Room Booking — Multi-Type Resource Pool
 
 A hotel manages multiple room types (standard, deluxe, suite) with varying capacities. A booking spans check-in to check-out, and the system ensures each room is assigned to only one guest at a time.
 
@@ -444,7 +380,7 @@ const roomAssignment = assignResource(
 
 ---
 
-## 8. Coworking Space — Multi-Resource Types
+## 7. Coworking Space — Multi-Resource Types
 
 A coworking space manages desks, meeting rooms, and phone booths. Members book by resource type; the system handles per-resource capacity and availability.
 
@@ -551,6 +487,6 @@ console.log(`Desks available right now: ${deskUtilization[0]?.availableResources
 
 ## What to Build Next
 
-All eight examples above use the same underlying APIs from `@waybook/core`. Provider booking uses `getAvailableSlots` and `getTeamSlots`; resource booking uses `getResourceAvailableSlots`, `assignResource`, and `getResourcePoolSummary`. The difference is configuration: which scheduling algorithm, what capacity model, which timezone, whether confirmation is automatic or manual.
+All seven examples above use the same underlying APIs from `@waybook/core`. Provider booking uses `getAvailableSlots` and `getTeamSlots`; resource booking uses `getResourceAvailableSlots`, `assignResource`, and `getResourcePoolSummary`. The difference is configuration: which scheduling algorithm, what capacity model, which timezone, whether confirmation is automatic or manual.
 
 To start integrating The Booking Kit into your own application, follow the [Quick Start](/getting-started/quick-start) guide or review the [Architecture](/getting-started/architecture) page for a full picture of how the packages fit together.
