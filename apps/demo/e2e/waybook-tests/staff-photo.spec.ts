@@ -171,7 +171,7 @@ test("status-only staff cannot see appointment management controls", async ({ pa
     await page.getByRole('button', { name: 'Completed' }).click();
     await expect.poll(async () => (await tenant<{ status: string }[]>`SELECT status FROM bookings WHERE id=${booking.id}`)[0]?.status).toBe('completed');
     await page.reload();
-    await expect(page.getByText('This appointment has a final status and can no longer be changed.')).toBeVisible();
+    await expect(page.getByText('This appointment’s status is final and cannot be changed.')).toBeVisible();
     for (const label of ['Arrived', 'Completed', 'No show']) await expect(page.getByRole('button', { name: label })).toHaveCount(0);
   } finally { await control.end(); await tenant.end(); }
 });
