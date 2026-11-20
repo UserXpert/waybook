@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 
 // This verifier creates real holds. Use only a disposable local server/database
-// seeded with the dedicated one-staff service below; it removes its own rows.
+// seeded with an active location and public service; it creates and removes its own rows.
 const databaseUrl = process.env.WAYBOOK_LOCAL_PERF_DB_URL;
 const appUrl = process.env.WAYBOOK_ISOLATED_APP_URL;
 const localHosts = ["localhost", "127.0.0.1", "::1", "[::1]"];
@@ -24,6 +24,7 @@ const service = randomUUID();
 const member = randomUUID();
 const functionName = `wb_hold_delay_f_${runId.replaceAll("-", "")}`;
 const triggerName = `wb_hold_delay_t_${runId.replaceAll("-", "")}`;
+let functionInstalled = false;
 let delayInstalled = false;
 try {
   const preflight = new URL(`/${tenantRoute}/api/public/availability`, appAddress);
@@ -32,14 +33,14 @@ try {
   const [seed] = await db<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id=${fixtureTenantId} AND id=${fixtureLocationId} AND is_active=TRUE AND is_online_bookable=TRUE`;
   if (!seed) throw new Error("explicit fixture location must be active, online, and belong to the explicit tenant");
   await db.begin(async (tx) => {
-    await tx`INSERT INTO services (id,tenant_id,slug,title,duration_minutes,price_cents,is_active) VALUES (${service},${fixtureTenantId},'isolated-concurrency-test','Isolated concurrency test',60,0,TRUE)`;
+    await tx`INSERT INTO services (id,tenant_id,slug,title,duration_minutes,price_cents,is_active) VALUES (${service},${fixtureTenantId},${`isolated-concurrency-${runId}`},'Isolated concurrency test',60,0,TRUE)`;
     await tx`INSERT INTO team_members (id,tenant_id,role,name,email,is_active) VALUES (${member},${fixtureTenantId},'staff','Isolated verifier',${`isolated-verifier-${runId}@example.test`},TRUE)`;
     await tx`INSERT INTO service_locations (tenant_id,service_id,location_id) VALUES (${fixtureTenantId},${service},${fixtureLocationId})`;
     await tx`INSERT INTO service_team_members (tenant_id,service_id,team_member_id) VALUES (${fixtureTenantId},${service},${member})`;
     await tx`INSERT INTO team_member_locations (tenant_id,team_member_id,location_id) VALUES (${fixtureTenantId},${member},${fixtureLocationId})`;
     await tx`INSERT INTO availability_rules (tenant_id,team_member_id,rrule,start_time,end_time,timezone) VALUES (${fixtureTenantId},${member},'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU','09:00','17:00','Europe/Copenhagen')`;
   });
-  const fixture = { locationId: fixtureLocationId, slug: "isolated-concurrency-test" };
+  const fixture = { locationId: fixtureLocationId };
   const start = new Date(Date.now() + 2 * 86_400_000), end = new Date(Date.now() + 5 * 86_400_000);
   const params = new URLSearchParams({ service, location: fixture.locationId, start: start.toISOString(), end: end.toISOString() });
   const availabilityResponse = await fetch(new URL(`/${tenantRoute}/api/public/availability?${params}`, appAddress));
@@ -57,6 +58,7 @@ try {
         THEN PERFORM pg_sleep(0.15); END IF;
         RETURN NEW;
       END $$`);
+    functionInstalled = true;
     await db.unsafe(`CREATE TRIGGER ${triggerName} BEFORE INSERT ON booking_blocks FOR EACH ROW EXECUTE FUNCTION ${functionName}()`);
     delayInstalled = true;
   }
@@ -97,6 +99,8 @@ try {
 } finally {
   if (delayInstalled) {
     await db.unsafe(`DROP TRIGGER IF EXISTS ${triggerName} ON booking_blocks`);
+  }
+  if (functionInstalled) {
     await db.unsafe(`DROP FUNCTION IF EXISTS ${functionName}()`);
   }
   if (fixtureTenantId) {
