@@ -122,10 +122,29 @@ export async function getCalendarAppointment(bookingId: string) {
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [];
   const today = localDateKey(new Date(), tenant.timezone);
-  const days = Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); });
+  const days = permissions.isManager
+    ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
+    : [];
   const slots = permissions.isManager && !["cancelled", "completed"].includes(booking.status)
     ? (await getRescheduleBookingAvailability({ bookingId, startDate: today })).slots : [];
-  return { ...booking, startsAt: booking.startsAt.toISOString(), endsAt: booking.endsAt.toISOString(), canManage: permissions.isManager, resources, days, slots, timezone: tenant.timezone };
+  return {
+    ...booking,
+    // Status-only staff need the appointment identity and current state, but
+    // never contact or resource data used by the manager editing surface.
+    customerEmail: permissions.isManager ? booking.customerEmail : "",
+    customerPhone: permissions.isManager ? booking.customerPhone : null,
+    resourceId: permissions.isManager ? booking.resourceId : null,
+    serviceId: permissions.isManager ? booking.serviceId : "",
+    locationId: permissions.isManager ? booking.locationId : "",
+    startsAt: booking.startsAt.toISOString(),
+    endsAt: booking.endsAt.toISOString(),
+    canManage: permissions.isManager,
+    canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
+    resources,
+    days,
+    slots,
+    timezone: tenant.timezone,
+  };
 }
 
 /** Availability used by the operator appointment drawer. The write action
