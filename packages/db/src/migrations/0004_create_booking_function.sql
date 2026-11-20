@@ -1,1 +1,0 @@
--- Function definition moved to 0005_resources.sql. This file retained for migration ordering.

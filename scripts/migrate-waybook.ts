@@ -1,4 +1,4 @@
-import { migrateWaybookDatabase } from "../packages/db/src/waybook/migrate.ts";
+import { migrateWaybookDatabase } from "../database/waybook/migrate.ts";
 import { migrationTargets } from "./waybook-migration-targets.ts";
 
 async function main() {

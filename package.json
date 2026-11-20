@@ -2,7 +2,6 @@
   "name": "waybook",
   "private": true,
   "workspaces": [
-    "packages/*",
     "apps/*"
   ],
   "scripts": {
@@ -11,10 +10,6 @@
     "test": "turbo test",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "db:push": "npm -w @waybook/db run db:push",
-    "db:migrate": "npm -w @waybook/db run db:migrate",
-    "db:seed": "npm -w @waybook/db run db:seed",
-    "db:generate": "npm -w @waybook/db run db:generate",
     "waybook:db:start": "bash scripts/waybook-local-db.sh",
     "waybook:db:migrate": "tsx scripts/migrate-waybook.ts",
     "waybook:db:seed": "tsx scripts/seed-waybook.ts",
@@ -24,15 +19,15 @@
     "waybook:test:booking-product-addons": "tsx scripts/verify-waybook-booking-product-addons.ts",
     "waybook:test:booking-package-redemption": "tsx scripts/verify-waybook-booking-package-redemption.ts",
     "waybook:build": "npm --prefix apps/demo run build",
-    "check:node-esm": "node scripts/check-node-esm.mjs",
     "waybook:release:check": "node scripts/check-waybook-release.mjs",
     "waybook:db:status": "tsx scripts/check-waybook-schema.mts",
     "waybook:dev": "npm run waybook:db:status -- --local --allow-pending && npm run waybook:db:migrate -- --local && npm run dev --workspace=@waybook/app"
   },
   "devDependencies": {
-    "@changesets/cli": "^3.0.3",
+    "postgres": "^3.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tsx": "^4.23.15",
     "turbo": "^2.11.7",
     "typescript": "~7.0.2"
   },
