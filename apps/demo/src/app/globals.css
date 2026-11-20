@@ -6508,6 +6508,18 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-template-preview strong { display:block; margin-top:1rem; font-size:.88rem; }
 .tenant-dashboard-page .email-template-preview div { margin-top:.65rem; white-space:pre-wrap; font-size:.85rem; line-height:1.6; }
 .tenant-dashboard-page .email-provider-settings { display:grid; gap:1.4rem; max-width:42rem; }
+.tenant-dashboard-page .email-provider-brand { display:grid; gap:.8rem; padding:1.1rem; border:1px solid #dedee3; border-radius:.65rem; background:#fafafa; }
+.tenant-dashboard-page .email-provider-brand__logo { display:block; width:7rem; height:auto; }
+.tenant-dashboard-page .email-provider-brand__logo--dark { display:none; }
+.tenant-dashboard-page .email-provider-brand p { margin:0 0 .65rem; color:#6c6c74; font-size:.82rem; line-height:1.5; }
+.tenant-dashboard-page .email-provider-brand__links { display:flex; flex-wrap:wrap; gap:.55rem 1rem; }
+.tenant-dashboard-page .email-provider-brand a { color:#252529; font-size:.8rem; font-weight:600; text-underline-offset:.2em; }
+.tenant-dashboard-page .email-provider-settings .email-template-editor > button:disabled { opacity:.5; cursor:not-allowed; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-provider-brand { background:#202023; border-color:#414148; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-provider-brand__logo--light { display:none; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-provider-brand__logo--dark { display:block; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-provider-brand p { color:#b6b6bc; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-provider-brand a { color:#f2f2f3; }
 .tenant-dashboard-page .email-reminder-settings { display:grid; justify-items:start; gap:1.3rem; max-width:38rem; margin-top:1.5rem; }
 .tenant-dashboard-page .email-reminder-settings .waybook-form-toggle { display:flex; align-items:center; gap:.75rem; }
 .tenant-dashboard-page .email-reminder-settings .waybook-form-toggle > span:last-child { display:grid; gap:.25rem; }
