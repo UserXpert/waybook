@@ -1,0 +1,25 @@
+---
+const { template } = Astro.locals.starlightRoute.entry.data;
+---
+
+{template !== 'splash' && (
+  <aside class="archive-banner" aria-label="Documentation status">
+    Historical Booking Kit reference. For current Waybook setup and supported behavior,
+    see the <a href="https://github.com/UserXpert/waybook/blob/main/docs/README.md">Waybook documentation</a>.
+  </aside>
+)}
+
+<style>
+  .archive-banner {
+    padding: 0.75rem var(--sl-nav-pad-x);
+    background: var(--sl-color-bg-accent);
+    color: var(--sl-color-text-invert);
+    text-align: center;
+    text-wrap: balance;
+  }
+
+  .archive-banner a {
+    color: inherit;
+    text-decoration: underline;
+  }
+</style>

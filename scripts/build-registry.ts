@@ -4,7 +4,7 @@
  * Registry Generator
  *
  * 1. Copies raw component/hook/util source files to apps/docs/public/registry/
- *    so the CLI can fetch them from https://thebookingkit.dev/registry/components/<name>.tsx
+ *    for the reference site and explicitly configured registry consumers.
  *
  * 2. Generates apps/docs/public/registry/index.json with metadata and inline source
  *    for documentation browsing.

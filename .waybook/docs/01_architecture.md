@@ -36,7 +36,9 @@ waybook_copenhagen_physio
 The local Next development server keeps its process-local Control and tenant
 `postgres.js` clients on `globalThis`. This prevents hot-reloaded server
 modules from creating abandoned pools during a long local session; each client
-remains bounded by the shared five-connection factory limit.
+has a five-connection pool. The app connects directly with `postgres.js` and
+requires TLS for hosted database URLs. The legacy database workspace and
+migration files remain separate from the runtime client.
 
 The hosted Vercel test environment uses isolated Neon databases for the same three logical databases. It is not client production.
 

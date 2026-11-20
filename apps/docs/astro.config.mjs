@@ -6,8 +6,11 @@ import react from '@astrojs/react';
 
 export default defineConfig({
     integrations: [starlight({
-        title: 'Waybook documentation',
-        description: 'Technical notes for the Waybook booking-operations application.',
+        title: 'Waybook reference archive',
+        description: 'Historical Booking Kit reference and links to current Waybook documentation.',
+        components: {
+            Banner: './src/components/ArchiveBanner.astro',
+        },
         social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/UserXpert/waybook' }],
         editLink: {
             baseUrl: 'https://github.com/UserXpert/waybook/edit/main/apps/docs/',
