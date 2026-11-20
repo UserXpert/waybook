@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, updateBookingStatus, cancelAppointment } from "@/app/app/calendars/actions";
-import { AppointmentDrawerActions } from "@/components/appointment-drawer-actions";
+import { AppointmentDrawerActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
+import { appointmentDrawerCapabilities } from "@/lib/waybook/appointment-drawer-capabilities";
 
 type Detail = Awaited<ReturnType<typeof getCalendarAppointment>>;
 export type CalendarAppointmentSummary = Pick<Detail, "id" | "bookingNumber" | "customerName" | "serviceTitle" | "teamMemberName" | "startsAt" | "endsAt" | "status">;
@@ -61,6 +62,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone }
   }, [load]);
 
   if (!selected) return null;
+  const capabilities = detail ? appointmentDrawerCapabilities(detail) : null;
   const date = selected.startsAt ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" }).format(new Date(selected.startsAt)) : "";
   const clock = (value: string) => value ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "";
   return <div className="tenant-drawer-layer" role="presentation">
@@ -74,9 +76,11 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone }
           <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(selected.startsAt)}–{clock(selected.endsAt)}</dd></div>
           <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>Staff</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
-        {error ? <p role="alert">{error}</p> : !detail ? <p role="status">Loading appointment details…</p> : detail.canManage ? <>
+        {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : capabilities.canEdit ? <>
           <AppointmentDrawerActions key={detail.id} bookingId={detail.id} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
-          {detail.status !== "cancelled" && detail.status !== "completed" ? <CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /> : null}
+          {capabilities.canCancel && detail.status !== "cancelled" && detail.status !== "completed" ? <CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /> : null}
+        </> : capabilities.canUpdateStatus ? <>
+          <AppointmentStatusActions bookingId={detail.id} status={detail.status} updateStatus={updateBookingStatus} />
         </> : <p className="tenant-drawer-note">Read-only access: appointment changes require an owner or manager.</p>}
       </div>
     </aside>

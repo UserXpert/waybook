@@ -230,6 +230,7 @@ export default async function CalendarsPage({
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requireFeature(tenant.id, "calendars");
   const permissions = await staffPermissionContext(tenant, membership);
+  const canManage = permissions.isManager;
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) {
     throw new Error("You do not have permission to view this calendar.");
@@ -414,7 +415,7 @@ export default async function CalendarsPage({
       ORDER BY s.title
     `
     : calendarServices;
-  const eligibleResources = selectedBooking ? await db<ResourceChoice[]>`
+  const eligibleResources = selectedBooking && canManage ? await db<ResourceChoice[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive"
     FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${selectedBooking.locationId}
@@ -541,11 +542,10 @@ export default async function CalendarsPage({
     allIntervals,
     tenant.timezone,
   );
-  const canManage = ["owner", "manager"].includes(membership.role);
   const rescheduleDays = Array.from({ length: 7 }, (_, index) =>
     addDays(localDateKey(new Date(), tenant.timezone), index),
   );
-  const rescheduleSlots = selectedBooking?.teamMemberId
+  const rescheduleSlots = canManage && selectedBooking?.teamMemberId
     ? (await getRescheduleBookingAvailability({ bookingId: selectedBooking.id, startDate: rescheduleDays[0] })).slots
     : [];
   const calendarDate = new Intl.DateTimeFormat("en-GB", {
@@ -1181,12 +1181,14 @@ export default async function CalendarsPage({
           startsAt: item.startsAt.toISOString(), endsAt: item.endsAt.toISOString(), status: item.status,
         }))}
         initialDetail={selectedBooking && selectedBookingMember ? {
-          id: selectedBooking.id, bookingNumber: selectedBooking.bookingNumber, serviceId: selectedBooking.serviceId,
-          locationId: selectedBooking.locationId ?? "", resourceId: selectedBooking.resourceId,
+          id: selectedBooking.id, bookingNumber: selectedBooking.bookingNumber, serviceId: canManage ? selectedBooking.serviceId : "",
+          locationId: canManage ? selectedBooking.locationId ?? "" : "",
           startsAt: selectedBooking.startsAt.toISOString(), endsAt: selectedBooking.endsAt.toISOString(), status: selectedBooking.status,
-          customerName: selectedBooking.customerName, customerEmail: selectedBooking.customerEmail, customerPhone: selectedBooking.customerPhone,
+          customerName: selectedBooking.customerName, customerEmail: canManage ? selectedBooking.customerEmail : "", customerPhone: canManage ? selectedBooking.customerPhone : null,
           serviceTitle: selectedBooking.serviceTitle, teamMemberName: selectedBookingMember.name,
-          canManage, resources: eligibleResources, days: rescheduleDays, slots: rescheduleSlots, timezone: tenant.timezone,
+          canManage, canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
+          resourceId: canManage ? selectedBooking.resourceId : null,
+          resources: eligibleResources, days: canManage ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
         } : null}
       />
       {requestedAppointment && (requestedCreateMember ?? selected) && services.length && canManage ? (
