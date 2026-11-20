@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "WAYBOOK_NEXT_DIST_DIR=.next-dev next dev --port 3333",
-    "prebuild": "npm run build --workspace=@waybook/core && npm run build --workspace=@waybook/db && npm run build --workspace=@waybook/server",
     "build": "next build",
     "start": "next start --port 3333",
     "test": "tsx --test src/lib/waybook/*.test.ts",
@@ -13,9 +12,6 @@
     "e2e:ui": "playwright test --config e2e/waybook.config.ts --ui"
   },
   "dependencies": {
-    "@waybook/core": "*",
-    "@waybook/db": "*",
-    "@waybook/server": "*",
     "better-auth": "^1.7.17",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
@@ -25,6 +21,7 @@
     "postgres": "^3.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "rrule": "^2.8.0",
     "sharp": "^0.35.5"
   },
   "devDependencies": {

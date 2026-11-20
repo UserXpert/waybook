@@ -4,7 +4,6 @@ const nextConfig = {
   // this, `next build` can replace `.next` while `next dev` is still serving it,
   // leaving open browser tabs with CSS URLs that no longer exist.
   distDir: process.env.WAYBOOK_NEXT_DIST_DIR ?? ".next",
-  transpilePackages: ["@waybook/core"],
 };
 
 export default nextConfig;
