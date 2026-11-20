@@ -1,11 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
-import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { withSuccessToast } from "@/lib/waybook/toast";
 
 export async function saveResource(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -43,4 +46,6 @@ export async function saveResource(formData: FormData) {
     await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,$3,'resource',$4,$5::jsonb)", [tenant.id, identity.id, resourceId ? 'resource.updated' : 'resource.created', id, JSON.stringify({ name, resourceType, capacity, isMutuallyExclusive, locationIds, serviceIds })]);
   });
   revalidatePath('/app/resources'); revalidatePath('/app/calendars'); revalidatePath('/app/services');
+  const slug = await currentTenantRouteSlug(tenant.slug);
+  redirect(withSuccessToast(`${tenantPath(slug, "/app/resources")}?resource=${id}`, "Resource saved."));
 }

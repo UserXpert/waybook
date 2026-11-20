@@ -97,6 +97,56 @@ function localDateTimeKey(date: Date, timezone: string) {
   return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }
 
+/** Load one visible appointment without rebuilding the calendar. */
+export async function getCalendarAppointment(bookingId: string) {
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) throw new Error("Booking is unavailable.");
+  const { tenant, permissions } = await calendarPermissionContext();
+  const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
+  if (!canViewTeam && !permissions.teamMemberId) throw new Error("You do not have permission to view this calendar.");
+  const db = tenantDb(tenant);
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string }[]>`
+    SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
+      bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,
+      c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName"
+    FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
+    JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
+    JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
+    LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
+    WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND (${canViewTeam} OR b.team_member_id=${permissions.teamMemberId ?? null}::uuid) LIMIT 1
+  `;
+  if (!booking) throw new Error("Booking is unavailable.");
+  const resources = permissions.isManager ? await db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
+    SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
+    JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
+    JOIN service_resources sr ON sr.tenant_id=r.tenant_id AND sr.resource_id=r.id AND sr.service_id=${booking.serviceId}
+    WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
+  ` : [];
+  const today = localDateKey(new Date(), tenant.timezone);
+  const days = permissions.isManager
+    ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
+    : [];
+  const slots = permissions.isManager && !["cancelled", "completed"].includes(booking.status)
+    ? (await getRescheduleBookingAvailability({ bookingId, startDate: today })).slots : [];
+  return {
+    ...booking,
+    // Status-only staff need the appointment identity and current state, but
+    // never contact or resource data used by the manager editing surface.
+    customerEmail: permissions.isManager ? booking.customerEmail : "",
+    customerPhone: permissions.isManager ? booking.customerPhone : null,
+    resourceId: permissions.isManager ? booking.resourceId : null,
+    serviceId: permissions.isManager ? booking.serviceId : "",
+    locationId: permissions.isManager ? booking.locationId : "",
+    startsAt: booking.startsAt.toISOString(),
+    endsAt: booking.endsAt.toISOString(),
+    canManage: permissions.isManager,
+    canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
+    resources,
+    days,
+    slots,
+    timezone: tenant.timezone,
+  };
+}
+
 /** Availability used by the operator appointment drawer. The write action
  * repeats this check inside its transaction, so this is guidance—not trust. */
 export async function getManualBookingAvailability(input: {

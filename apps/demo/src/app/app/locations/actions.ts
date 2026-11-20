@@ -1,10 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { withSuccessToast } from "@/lib/waybook/toast";
 
 function slug(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 56) || "location"; }
 
@@ -62,6 +65,8 @@ export async function saveLocation(formData: FormData) {
   });
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${id ? 'location.updated' : 'location.created'}, 'location', ${locationId}, ${JSON.stringify({ name, locationType, online, active })}::jsonb)`;
   revalidatePath('/app'); revalidatePath('/app/locations'); revalidatePath('/app/team'); revalidatePath('/app/services'); revalidatePath('/app/calendars'); revalidatePath('/book');
+  const tenantSlug = await currentTenantRouteSlug(tenant.slug);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/locations")}?location=${locationId}`, "Location saved."));
 }
 
 async function editableLocation(locationId: string) {
@@ -88,6 +93,8 @@ export async function addLocationClosedDate(formData: FormData) {
   await db`INSERT INTO location_closed_dates (tenant_id, location_id, local_date, reason) VALUES (${tenant.id}, ${locationId}, ${localDate}, ${reason}) ON CONFLICT (location_id, local_date) DO UPDATE SET reason=EXCLUDED.reason`;
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, 'location.closed_date.saved', 'location', ${locationId}, ${JSON.stringify({ localDate, reason })}::jsonb)`;
   revalidateLocations();
+  const tenantSlug = await currentTenantRouteSlug(tenant.slug);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/locations")}?location=${locationId}`, "Closed date saved."));
 }
 
 export async function removeLocationClosedDate(formData: FormData) {
@@ -98,4 +105,6 @@ export async function removeLocationClosedDate(formData: FormData) {
   if (!removed) throw new Error('Closed date is unavailable.');
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, 'location.closed_date.removed', 'location', ${locationId}, ${JSON.stringify({ localDate: removed.localDate })}::jsonb)`;
   revalidateLocations();
+  const tenantSlug = await currentTenantRouteSlug(tenant.slug);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/locations")}?location=${locationId}`, "Closed date removed."));
 }

@@ -19,14 +19,42 @@ const run = (command, args, options = {}) => execFileSync(command, args, { encod
 const json = (command, args) => JSON.parse(run(command, args));
 const labelNames = (pull) => new Set((pull.labels ?? []).map((label) => typeof label === "string" ? label : label.name));
 const sameRepository = (pull, repository) => pull.head?.repo?.full_name === repository;
+const successfulGitHubActionsCheck = (check) => check?.app?.slug === "github-actions" && check.status === "completed" && String(check.conclusion ?? "").toUpperCase() === "SUCCESS";
+
+export function checkRunsFromResponse(response) {
+  const checks = response?.check_runs;
+  if (!Array.isArray(checks) || !Number.isInteger(response?.total_count)) throw new Error("Expected a complete check-runs response.");
+  if (response.total_count !== checks.length) throw new Error("Refusing an incomplete check-runs response.");
+  return checks;
+}
+
+export function loadCandidateChecks(pulls, fetchChecks) {
+  const checksBySha = {};
+  for (const pull of pulls) {
+    const sha = pull.head?.sha;
+    if (!sha || Object.hasOwn(checksBySha, sha)) continue;
+    try {
+      checksBySha[sha] = fetchChecks(sha);
+    } catch {
+      process.stdout.write(`${JSON.stringify({ number: pull.number, action: "skip", reason: "check-runs-unavailable" })}\n`);
+      checksBySha[sha] = null;
+    }
+  }
+  return checksBySha;
+}
 
 export function evaluatePullRequest(pull, checks, repository) {
   if (pull.draft) return { eligible: false, reason: "draft" };
   if (pull.base?.ref !== "main") return { eligible: false, reason: "base-not-main" };
   if (!sameRepository(pull, repository)) return { eligible: false, reason: "not-same-repository" };
   if (!labelNames(pull).has("release-ready")) return { eligible: false, reason: "missing-release-ready-label" };
-  const byName = new Map(checks.map((check) => [check.name, check.conclusion ?? check.status]));
-  const missing = REQUIRED_CHECKS.filter((name) => byName.get(name) !== "SUCCESS");
+  // Only an unambiguous completed GitHub Actions run can satisfy a required
+  // check. This prevents a same-name external, stale, or pending run from
+  // being selected by API response ordering.
+  const missing = REQUIRED_CHECKS.filter((name) => {
+    const matching = checks.filter((check) => check.name === name);
+    return matching.length !== 1 || !successfulGitHubActionsCheck(matching[0]);
+  });
   if (missing.length) return { eligible: false, reason: "required-check-not-success", missing };
   return { eligible: true, sha: pull.head.sha };
 }
@@ -34,6 +62,7 @@ export function evaluatePullRequest(pull, checks, repository) {
 export function planCollection(pulls, checksBySha, repository) {
   const seen = new Set();
   return pulls.map((pull) => {
+    if (checksBySha[pull.head?.sha] === null) return { number: pull.number, action: "skip", eligible: false, reason: "check-runs-unavailable" };
     const evaluated = evaluatePullRequest(pull, checksBySha[pull.head?.sha] ?? [], repository);
     if (!evaluated.eligible) return { number: pull.number, action: "skip", ...evaluated };
     if (seen.has(evaluated.sha)) return { number: pull.number, action: "skip", eligible: false, reason: "duplicate-head", sha: evaluated.sha };
@@ -70,8 +99,8 @@ function ghApi(path) {
 }
 
 function checkRuns(repository, sha) {
-  const response = json("gh", ["api", "-H", "Accept: application/vnd.github+json", `repos/${repository}/commits/${sha}/check-runs?per_page=100`]);
-  return response.check_runs ?? [];
+  const response = json("gh", ["api", "-H", "Accept: application/vnd.github+json", `repos/${repository}/commits/${sha}/check-runs?filter=latest&per_page=100`]);
+  return checkRunsFromResponse(response);
 }
 
 function releasePullExists(repository, owner, releaseBranch) {
@@ -133,11 +162,10 @@ export function collect({ repository, owner, releaseBranch, pulls, checksBySha, 
   return results;
 }
 
-function dispatchReleaseValidation(releaseBranch, releaseSha, baseSha) {
-  // GitHub's workflow-dispatch API accepts a branch or tag reference, not an
-  // arbitrary commit SHA. The validation workflow checks out and verifies this
-  // immutable input before it runs any project command.
-  run("gh", ["workflow", "run", "release-validation.yml", "--ref", releaseBranch, "-f", `release_sha=${releaseSha}`, "-f", `base_sha=${baseSha}`]);
+function dispatchReleaseValidation(releaseSha, baseSha) {
+  // Load the workflow from main, never from the candidate-controlled release
+  // branch. The workflow separately checks out and verifies the exact input.
+  run("gh", ["workflow", "run", "release-validation.yml", "--ref", "main", "-f", `release_sha=${releaseSha}`, "-f", `base_sha=${baseSha}`]);
   process.stdout.write(`Dispatched release validation for ${releaseSha} against ${baseSha}. Completion is not implied by this dispatch.\n`);
 }
 
@@ -171,7 +199,7 @@ function main() {
   const advancedReleaseBase = branchDecision.action === "fast-forward-to-main" && releaseSha !== baseSha;
   if (advancedReleaseBase) git(["merge", "--ff-only", "origin/main"]);
   const pulls = ghApi(`repos/${repository}/pulls?state=open&base=main&per_page=100`);
-  const checksBySha = Object.fromEntries(pulls.map((pull) => [pull.head.sha, checkRuns(repository, pull.head.sha)]));
+  const checksBySha = loadCandidateChecks(pulls, (sha) => checkRuns(repository, sha));
   const results = collect({ repository, owner, releaseBranch, pulls, checksBySha, execute: true });
   const summary = advancedReleaseBase ? [{ action: "advanced-release-base", sha: baseSha }, ...results] : results;
   writeFileSync(process.env.GITHUB_STEP_SUMMARY ?? "/tmp/release-collection.json", `${JSON.stringify(summary, null, 2)}\n`);
@@ -179,7 +207,7 @@ function main() {
   if (advancedReleaseBase || collected) {
     const collectedReleaseSha = git(["rev-parse", "HEAD"]);
     git(["push", "origin", `HEAD:refs/heads/${releaseBranch}`]);
-    if (collected) dispatchReleaseValidation(releaseBranch, collectedReleaseSha, baseSha);
+    if (collected) dispatchReleaseValidation(collectedReleaseSha, baseSha);
   }
 }
 

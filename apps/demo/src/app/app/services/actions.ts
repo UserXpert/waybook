@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { withSuccessToast } from "@/lib/waybook/toast";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 
@@ -51,4 +54,6 @@ export async function saveService(formData: FormData) {
   revalidatePath("/app/team");
   revalidatePath("/app/calendars");
   revalidatePath("/book");
+  const slug = await currentTenantRouteSlug(tenant.slug);
+  redirect(withSuccessToast(`${tenantPath(slug, "/app/services")}?service=${serviceId}`, "Service saved."));
 }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Sql } from "postgres";
 import { activeEmailCredential } from "./email-provider-connection";
 import { sendWithResend } from "./resend-delivery";
+import { resendOnboardingTestSender } from "./resend-onboarding-test";
 
 type Send = typeof sendWithResend;
 type Claimed = { id: string; attemptId: string; startedAt: Date; sender: string };
@@ -14,11 +15,11 @@ export async function sendEmailProviderTest(db: Sql, tenantId: string, resolveKe
       verification_attempt_id=CASE WHEN verification_started_at IS NULL OR verification_started_at<now()-interval '23 hours' THEN $3 ELSE verification_attempt_id END,
       verification_started_at=CASE WHEN verification_started_at IS NULL OR verification_started_at<now()-interval '23 hours' THEN now() ELSE verification_started_at END,
       verification_claim_token=$2,verification_claim_until=now()+interval '2 minutes'
-    WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NULL
+    WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NULL AND lower(sender_email)<>$4
       AND (verification_claim_until IS NULL OR verification_claim_until<=now())
-    RETURNING id,verification_attempt_id AS "attemptId",verification_started_at AS "startedAt",sender_email AS sender`, [tenantId, claim, newAttempt]);
+    RETURNING id,verification_attempt_id AS "attemptId",verification_started_at AS "startedAt",sender_email AS sender`, [tenantId, claim, newAttempt, resendOnboardingTestSender]);
   if (!row) {
-    const [existing] = await db.unsafe<{ busy: boolean }[]>(`SELECT verification_claim_until>now() AS busy FROM email_provider_connections WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NULL`, [tenantId]);
+    const [existing] = await db.unsafe<{ busy: boolean }[]>(`SELECT verification_claim_until>now() AS busy FROM email_provider_connections WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NULL AND lower(sender_email)<>$2`, [tenantId, resendOnboardingTestSender]);
     return existing?.busy ? "busy" : "not_available";
   }
   let result: Awaited<ReturnType<Send>>;
@@ -39,7 +40,7 @@ export async function sendEmailProviderTest(db: Sql, tenantId: string, resolveKe
 export async function confirmEmailProviderTest(db: Sql, tenantId: string, actorId: string): Promise<boolean> {
   return db.begin(async (tx) => {
     const [row] = await tx.unsafe<{ id: string }[]>(`UPDATE email_provider_connections SET verified_at=now()
-      WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NOT NULL RETURNING id`, [tenantId]);
+      WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NOT NULL AND lower(sender_email)<>$3 RETURNING id`, [tenantId, resendOnboardingTestSender]);
     if (!row) return false;
     await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'email_provider.verified','email_provider',$3,$4::text::jsonb)", [tenantId, actorId, row.id, JSON.stringify({ provider: "resend" })]);
     return true;

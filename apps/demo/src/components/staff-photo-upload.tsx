@@ -2,6 +2,7 @@
 
 import { Camera } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
+import { showSuccessToast } from "@/lib/waybook/toast";
 
 export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { memberId: string; name: string; photoDataUrl: string | null; action: (data: FormData) => Promise<void> }) {
   const input = useRef<HTMLInputElement>(null);
@@ -16,7 +17,7 @@ export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { mem
     data.set("memberId", memberId);
     data.set("photo", file);
     startTransition(async () => {
-      try { await action(data); }
+      try { await action(data); showSuccessToast("Profile photo saved."); }
       catch { setError("Could not upload photo. Use a JPG, PNG or WebP up to 250 KB and 2,400 × 2,400 pixels."); }
       finally { if (input.current) input.current.value = ""; }
     });

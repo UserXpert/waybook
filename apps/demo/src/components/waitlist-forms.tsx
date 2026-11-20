@@ -6,6 +6,7 @@ import { useActionState, useEffect, useState } from "react";
 import { addWaitlistEntry, saveWaitlistStatus } from "@/app/app/waitlist/actions";
 import { ClientPicker } from "@/components/client-picker";
 import { OperationalTimeRange } from "@/components/operational-time-range";
+import { showSuccessToast } from "@/lib/waybook/toast";
 
 type Location = { id: string; name: string };
 type Staff = { id: string; name: string };
@@ -34,6 +35,9 @@ export function WaitlistForm() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
+  useEffect(() => {
+    if (state.success) showSuccessToast(state.success);
+  }, [state]);
   useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { fetch(`${tenantApiPrefix()}/api/app/locations?q=${encodeURIComponent(locationQuery)}&limit=20`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Location[] }) => { if (!cancelled) setLocations(data.items); }).catch(() => { if (!cancelled) setLocations([]); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [locationQuery]);
   useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { const params = new URLSearchParams({ q: serviceQuery, limit: "20" }); if (locationId) params.set("locationId", locationId); fetch(`${tenantApiPrefix()}/api/app/services?${params.toString()}`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Service[] }) => { if (!cancelled) setServices(data.items); }).catch(() => { if (!cancelled) setServices([]); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [locationId, serviceQuery]);
   useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { if (!locationId || !serviceId) { setStaff([]); return; } const params = new URLSearchParams({ locationId, serviceId, q: staffQuery, limit: "20" }); fetch(`${tenantApiPrefix()}/api/app/staff?${params.toString()}`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Staff[] }) => { if (!cancelled) setStaff(data.items); }).catch(() => { if (!cancelled) setStaff([]); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [locationId, serviceId, staffQuery]);
