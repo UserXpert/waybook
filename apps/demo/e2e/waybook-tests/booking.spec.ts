@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import postgres from "postgres";
 
 function localDayAfter(days: number) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Copenhagen", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -13,6 +15,249 @@ function localWeekdayAfter(days: number) {
   while ([0, 6].includes(day.getUTCDay())) day.setUTCDate(day.getUTCDate() + 1);
   return day.toISOString().slice(0, 10);
 }
+
+test("concurrent confirmation retries are idempotent without leaking another booking", async ({ request }) => {
+  test.setTimeout(90_000);
+  const raw = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
+  const database = new URL(raw);
+  if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(database.hostname) || !database.pathname.startsWith("/waybook_e2e_")) {
+    throw new Error("Confirmation concurrency tests require a disposable local database.");
+  }
+  const db = postgres(raw, { max: 1, ssl: false });
+  const suffix = randomUUID();
+  const email = `confirmation-${suffix}@example.test`;
+  const key = `confirmation-${suffix}`;
+  const conflictKey = `cross-hold-${suffix}`;
+  const triggerName = `confirmation_idempotency_delay_${suffix.replaceAll("-", "")}`;
+  let delayFunctionCreated = false;
+  let locationId: string | null = null;
+  let tenantId: string | null = null;
+  const rangeStart = new Date(Date.now() + 60_000);
+  const rangeEnd = new Date(rangeStart.getTime() + 4 * 86_400_000 - 60_000);
+  try {
+    // The seed creates services before tenant settings, so the migration's
+    // one-time primary-location backfill does not apply to a fresh fixture.
+    // Set up a test-only online location while retaining the actual public API
+    // request below as the booking path under test.
+    const [settings] = await db<{ tenantId: string }[]>`SELECT tenant_id AS "tenantId" FROM tenant_settings LIMIT 1`;
+    tenantId = settings!.tenantId;
+    const [service] = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id=${settings!.tenantId} AND slug='studio-session' LIMIT 1`;
+    const [member] = await db<{ id: string }[]>`
+      SELECT tm.id FROM team_members tm
+      JOIN service_team_members stm ON stm.tenant_id=tm.tenant_id AND stm.team_member_id=tm.id AND stm.service_id=${service!.id}
+      JOIN availability_rules ar ON ar.tenant_id=tm.tenant_id AND ar.team_member_id=tm.id
+      WHERE tm.tenant_id=${settings!.tenantId} AND tm.is_active=TRUE
+      ORDER BY tm.created_at,tm.id LIMIT 1
+    `;
+    expect(member).toBeTruthy();
+    const [location] = await db<{ id: string }[]>`INSERT INTO locations (tenant_id,slug,name,timezone) VALUES (${settings!.tenantId},${`idempotency-${suffix}`},'Idempotency test location','Europe/Copenhagen') RETURNING id`;
+    locationId = location!.id;
+    await db`INSERT INTO location_hours (tenant_id,location_id,day_of_week,start_time,end_time) SELECT ${settings!.tenantId},${location!.id},day,'00:00','23:59' FROM generate_series(0,6) AS day`;
+    await db`INSERT INTO team_member_locations (tenant_id,team_member_id,location_id) VALUES (${settings!.tenantId},${member!.id},${location!.id})`;
+    await db`INSERT INTO service_locations (tenant_id,service_id,location_id) VALUES (${settings!.tenantId},${service!.id},${location!.id})`;
+    const availability = await request.get(`/nordic/api/public/availability?service=${service!.id}&location=${location!.id}&start=${encodeURIComponent(rangeStart.toISOString())}&end=${encodeURIComponent(rangeEnd.toISOString())}`);
+    expect(availability.status()).toBe(200);
+    const distinctSlots = (await availability.json() as { availability: Array<{ slots: Array<{ startTime: string; endTime: string }> }> }).availability
+      .flatMap((provider) => provider.slots)
+      .filter((slot, index, all) => all.findIndex((candidate) => candidate.startTime === slot.startTime && candidate.endTime === slot.endTime) === index);
+    const slots = distinctSlots.reduce<Array<{ startTime: string; endTime: string }>>((selected, slot) => (
+      selected.some((other) => new Date(slot.startTime) < new Date(other.endTime) && new Date(slot.endTime) > new Date(other.startTime)) ? selected : [...selected, slot]
+    ), []);
+    expect(slots.length).toBeGreaterThanOrEqual(3);
+    const reserve = async (slot: { startTime: string; endTime: string }) => {
+      const response = await request.post("/nordic/api/public/holds", { data: { serviceId: service!.id, locationId: location!.id, startsAt: slot.startTime, endsAt: slot.endTime } });
+      expect(response.status()).toBe(201);
+      return (await response.json() as { holdId: string }).holdId;
+    };
+    const [primaryHold, firstConflictHold, secondConflictHold] = await Promise.all([reserve(slots[0]!), reserve(slots[1]!), reserve(slots[2]!)]);
+    const body = { holdId: primaryHold, idempotencyKey: key, customer: { name: "Concurrent confirmation", email } };
+    const responses = await Promise.all([request.post("/nordic/api/public/confirmations", { data: body }), request.post("/nordic/api/public/confirmations", { data: body })]);
+    expect(responses.map((response) => response.status()).sort()).toEqual([200, 201]);
+    const results = await Promise.all(responses.map(async (response) => response.json() as Promise<{ booking: { id: string; bookingNumber: string; startsAt: string; endsAt: string }; managementToken: string | null; idempotent: boolean }>));
+    expect(results[0]!.booking.id).toBe(results[1]!.booking.id);
+    const retry = results.find((result) => result.idempotent)!;
+    expect(retry).toEqual({ booking: { id: results[0]!.booking.id, bookingNumber: expect.any(String), startsAt: expect.any(String), endsAt: expect.any(String) }, managementToken: null, idempotent: true });
+
+    const [counts] = await db<{ bookings: number; confirmations: number; outbox: number; tokens: number; recipient: string }[]>`
+      SELECT
+        (SELECT count(*)::int FROM bookings WHERE id=${results[0]!.booking.id}) AS bookings,
+        (SELECT count(*)::int FROM booking_events WHERE booking_id=${results[0]!.booking.id} AND event_type='booking.confirmed') AS confirmations,
+        (SELECT count(*)::int FROM email_outbox WHERE booking_id=${results[0]!.booking.id} AND message_type='confirmation') AS outbox,
+        (SELECT count(*)::int FROM customer_management_tokens WHERE booking_id=${results[0]!.booking.id}) AS tokens,
+        (SELECT recipient FROM email_outbox WHERE booking_id=${results[0]!.booking.id} AND message_type='confirmation') AS recipient
+    `;
+    expect(counts).toEqual({ bookings: 1, confirmations: 1, outbox: 1, tokens: 1, recipient: email });
+
+    // Widen the insert window so the separate holds contend on the same key,
+    // rather than only exercising the already-committed collision path.
+    await db.unsafe(`CREATE FUNCTION ${triggerName}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.idempotency_key = '${conflictKey}' THEN PERFORM pg_sleep(0.35); END IF; RETURN NEW; END $$`);
+    delayFunctionCreated = true;
+    await db.unsafe(`CREATE TRIGGER ${triggerName} BEFORE INSERT ON bookings FOR EACH ROW EXECUTE FUNCTION ${triggerName}()`);
+    const firstConflictEmail = `first-${suffix}@example.test`;
+    const secondConflictEmail = `second-${suffix}@example.test`;
+    const conflicting = await Promise.all([
+      request.post("/nordic/api/public/confirmations", { data: { holdId: firstConflictHold, idempotencyKey: conflictKey, customer: { name: "First conflict", email: firstConflictEmail } } }),
+      request.post("/nordic/api/public/confirmations", { data: { holdId: secondConflictHold, idempotencyKey: conflictKey, customer: { name: "Second conflict", email: secondConflictEmail } } }),
+    ]);
+    expect(conflicting.map((response) => response.status()).sort()).toEqual([201, 409]);
+    const conflictBodies = await Promise.all(conflicting.map(async (response) => response.json() as Promise<{ booking?: { id: string }; error?: string; managementToken?: unknown }>));
+    const winner = conflictBodies.find((body) => body.booking)!;
+    const collision = conflictBodies.find((body) => body.error)!;
+    expect(collision).toEqual({ error: "This confirmation key is already in use. Please restart your booking." });
+    expect(JSON.stringify(collision)).not.toContain(firstConflictEmail);
+    expect(JSON.stringify(collision)).not.toContain(secondConflictEmail);
+    const [conflictCounts] = await db<{ bookings: number; confirmations: number; outbox: number; tokens: number }[]>`
+      SELECT
+        (SELECT count(*)::int FROM bookings WHERE id=${winner.booking!.id}) AS bookings,
+        (SELECT count(*)::int FROM booking_events WHERE booking_id=${winner.booking!.id} AND event_type='booking.confirmed') AS confirmations,
+        (SELECT count(*)::int FROM email_outbox WHERE booking_id=${winner.booking!.id} AND message_type='confirmation') AS outbox,
+        (SELECT count(*)::int FROM customer_management_tokens WHERE booking_id=${winner.booking!.id}) AS tokens
+    `;
+    expect(conflictCounts).toEqual({ bookings: 1, confirmations: 1, outbox: 1, tokens: 1 });
+  } finally {
+    try {
+      if (delayFunctionCreated) {
+        try {
+          await db.unsafe(`DROP TRIGGER IF EXISTS ${triggerName} ON bookings`);
+        } finally {
+          await db.unsafe(`DROP FUNCTION IF EXISTS ${triggerName}()`);
+        }
+      }
+    } finally {
+      try {
+        // Keep referenced booking records intact, but remove this synthetic
+        // location from future public availability and fixture joins.
+        if (locationId && tenantId) {
+          try {
+            await db`DELETE FROM team_member_locations WHERE tenant_id=${tenantId} AND location_id=${locationId}`;
+          } finally {
+            try {
+              await db`DELETE FROM service_locations WHERE tenant_id=${tenantId} AND location_id=${locationId}`;
+            } finally {
+              try {
+                await db`DELETE FROM location_hours WHERE tenant_id=${tenantId} AND location_id=${locationId}`;
+              } finally {
+                await db`UPDATE locations SET is_active=FALSE,is_online_bookable=FALSE WHERE id=${locationId} AND tenant_id=${tenantId}`;
+              }
+            }
+          }
+        }
+      } finally {
+        await db.end({ timeout: 5 });
+      }
+    }
+  }
+});
+
+test("confirmation rejects malformed embed context without blocking direct bookings", async ({ request }) => {
+  // A nonexistent hold exercises the route without creating a booking. A
+  // direct request reaches normal hold validation; malformed contexts do not.
+  const base = {
+    holdId: "00000000-0000-4000-8000-000000000000",
+    idempotencyKey: "embed-context-route-check",
+    customer: { name: "Route verifier", email: "route-verifier@example.test" },
+  };
+  const direct = await request.post("/nordic/api/public/confirmations", { data: base });
+  expect(direct.status()).toBe(409);
+  expect(await direct.json()).toEqual({ error: "This hold is no longer available." });
+
+  for (const context of [
+    { embedSource: null, embedToken: null },
+    { embedSource: 42, embedToken: false },
+    { embedSource: {}, embedToken: [] },
+    { embedSource: "", embedToken: "" },
+    { embedSource: "https://example.test" },
+    { embedToken: "invalid" },
+  ]) {
+    const response = await request.post("/nordic/api/public/confirmations", { data: { ...base, ...context } });
+    expect(response.status()).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("embedded booking session") });
+  }
+});
+
+test("a signed embed booking is confirmed with verified-source audit attribution", async ({ request }) => {
+  const raw = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
+  // Confirmation records append-only audit/event history. It therefore keeps
+  // its successful fixture only in this explicitly guarded disposable DB.
+  const db = postgres(raw, { max: 1, ssl: false });
+  const suffix = randomUUID();
+  const source = `https://embed-e2e-${suffix}.example.test`;
+  const idempotencyKey = `embed-e2e-${suffix}`;
+  const customerEmail = `embed-${suffix}@example.test`;
+  try {
+    const [settings] = await db<{ tenantId: string; bookingPage: Record<string, unknown> | string | null }[]>`SELECT tenant_id AS "tenantId",booking_page AS "bookingPage" FROM tenant_settings LIMIT 1`;
+    if (!settings) throw new Error('Nordic E2E tenant settings are missing.');
+    const originalBookingPage = settings.bookingPage;
+    const originalBookingPageJson = originalBookingPage == null ? null : typeof originalBookingPage === 'string' ? originalBookingPage : JSON.stringify(originalBookingPage);
+    const [service] = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id=${settings.tenantId} AND slug='studio-session' AND is_active=TRUE`;
+    if (!service) throw new Error('Nordic E2E studio-session service is missing.');
+    const parsedBookingPage = typeof originalBookingPage === 'string' ? JSON.parse(originalBookingPage) as unknown : originalBookingPage;
+    const bookingPage = parsedBookingPage && typeof parsedBookingPage === 'object' && !Array.isArray(parsedBookingPage) ? parsedBookingPage as Record<string, unknown> : {};
+    const configuredOrigins = Array.isArray(bookingPage.embedOrigins) ? bookingPage.embedOrigins.filter((value): value is string => typeof value === 'string') : [];
+    await db`UPDATE tenant_settings SET booking_page=${JSON.stringify({ ...bookingPage, embedOrigins: [...new Set([...configuredOrigins, source])] })}::jsonb WHERE tenant_id=${settings.tenantId}`;
+
+    try {
+      const embed = await request.get(`/nordic/embed?source=${encodeURIComponent(source)}`);
+      expect(embed.status()).toBe(200);
+      const html = await embed.text();
+      const iframeUrl = html.match(/<iframe[^>]+src="([^"]+)"/)?.[1];
+      expect(iframeUrl).toBeTruthy();
+      const signedBookingUrl = new URL(iframeUrl!);
+      expect(signedBookingUrl.searchParams.get('embedSource')).toBe(source);
+      const embedToken = signedBookingUrl.searchParams.get('embedToken');
+      expect(embedToken).toBeTruthy();
+      const token = embedToken!;
+
+      const firstDay = localWeekdayAfter(3);
+      const lastDay = new Date(`${firstDay}T12:00:00.000Z`);
+      lastDay.setUTCDate(lastDay.getUTCDate() + 3);
+      const availability = await request.get(`/nordic/api/public/availability?service=${service.id}&start=${encodeURIComponent(`${firstDay}T00:00:00.000Z`)}&end=${encodeURIComponent(`${lastDay.toISOString().slice(0, 10)}T23:59:59.999Z`)}`);
+      expect(availability.status()).toBe(200);
+      const payload = await availability.json() as { availability: Array<{ slots: Array<{ startTime: string; endTime: string }> }> };
+      const slot = payload.availability.flatMap((provider) => provider.slots)[0];
+      expect(slot).toBeTruthy();
+
+      const hold = await request.post('/nordic/api/public/holds', { data: { serviceId: service.id, startsAt: slot.startTime, endsAt: slot.endTime } });
+      expect(hold.status()).toBe(201);
+      const holdPayload = await hold.json() as { holdId: string };
+      const tamperedToken = `${token.slice(0, -1)}${token.endsWith('A') ? 'B' : 'A'}`;
+      const tampered = await request.post('/nordic/api/public/confirmations', { data: {
+        holdId: holdPayload.holdId,
+        idempotencyKey,
+        customer: { name: 'Embedded booking E2E', email: customerEmail },
+        embedSource: source,
+        embedToken: tamperedToken,
+      } });
+      expect(tampered.status()).toBe(400);
+      expect(await tampered.json()).toMatchObject({ error: expect.stringContaining('embedded booking session') });
+      const [afterTamper] = await db<{ bookings: number; audits: number; outbox: number }[]>`
+        SELECT
+          (SELECT count(*)::int FROM bookings WHERE tenant_id=${settings.tenantId} AND hold_id=${holdPayload.holdId}) AS bookings,
+          (SELECT count(*)::int FROM tenant_audit_events WHERE tenant_id=${settings.tenantId} AND action='booking.embed_source_verified' AND metadata->>'source'=${source}) AS audits,
+          (SELECT count(*)::int FROM email_outbox WHERE tenant_id=${settings.tenantId} AND recipient=${customerEmail}) AS outbox
+      `;
+      expect(afterTamper).toEqual({ bookings: 0, audits: 0, outbox: 0 });
+      const confirmation = await request.post('/nordic/api/public/confirmations', { data: {
+        holdId: holdPayload.holdId,
+        idempotencyKey,
+        customer: { name: 'Embedded booking E2E', email: customerEmail },
+        embedSource: source,
+        embedToken: token,
+      } });
+      expect(confirmation.status()).toBe(201);
+      const result = await confirmation.json() as { booking: { id: string } };
+      const [audit] = await db<{ metadata: { source?: string } | string }[]>`SELECT metadata FROM tenant_audit_events WHERE tenant_id=${settings.tenantId} AND action='booking.embed_source_verified' AND target_id=${result.booking.id}`;
+      expect(audit).toBeTruthy();
+      const metadata = typeof audit.metadata === 'string' ? JSON.parse(audit.metadata) as { source?: string } : audit.metadata;
+      expect(metadata).toEqual({ source });
+    } finally {
+      if (originalBookingPageJson === null) await db`UPDATE tenant_settings SET booking_page=NULL WHERE tenant_id=${settings.tenantId}`;
+      else await db`UPDATE tenant_settings SET booking_page=${originalBookingPageJson}::jsonb WHERE tenant_id=${settings.tenantId}`;
+    }
+  } finally {
+    await db.end();
+  }
+});
 
 test("customer books, reschedules and cancels without a stale confirmation", async ({ page }) => {
   test.setTimeout(120_000);
