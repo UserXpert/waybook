@@ -149,6 +149,116 @@ test("concurrent confirmation retries are idempotent without leaking another boo
   }
 });
 
+test("confirmation rejects malformed embed context without blocking direct bookings", async ({ request }) => {
+  // A nonexistent hold exercises the route without creating a booking. A
+  // direct request reaches normal hold validation; malformed contexts do not.
+  const base = {
+    holdId: "00000000-0000-4000-8000-000000000000",
+    idempotencyKey: "embed-context-route-check",
+    customer: { name: "Route verifier", email: "route-verifier@example.test" },
+  };
+  const direct = await request.post("/nordic/api/public/confirmations", { data: base });
+  expect(direct.status()).toBe(409);
+  expect(await direct.json()).toEqual({ error: "This hold is no longer available." });
+
+  for (const context of [
+    { embedSource: null, embedToken: null },
+    { embedSource: 42, embedToken: false },
+    { embedSource: {}, embedToken: [] },
+    { embedSource: "", embedToken: "" },
+    { embedSource: "https://example.test" },
+    { embedToken: "invalid" },
+  ]) {
+    const response = await request.post("/nordic/api/public/confirmations", { data: { ...base, ...context } });
+    expect(response.status()).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("embedded booking session") });
+  }
+});
+
+test("a signed embed booking is confirmed with verified-source audit attribution", async ({ request }) => {
+  const raw = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
+  // Confirmation records append-only audit/event history. It therefore keeps
+  // its successful fixture only in this explicitly guarded disposable DB.
+  const db = postgres(raw, { max: 1, ssl: false });
+  const suffix = randomUUID();
+  const source = `https://embed-e2e-${suffix}.example.test`;
+  const idempotencyKey = `embed-e2e-${suffix}`;
+  const customerEmail = `embed-${suffix}@example.test`;
+  try {
+    const [settings] = await db<{ tenantId: string; bookingPage: Record<string, unknown> | string | null }[]>`SELECT tenant_id AS "tenantId",booking_page AS "bookingPage" FROM tenant_settings LIMIT 1`;
+    if (!settings) throw new Error('Nordic E2E tenant settings are missing.');
+    const originalBookingPage = settings.bookingPage;
+    const originalBookingPageJson = originalBookingPage == null ? null : typeof originalBookingPage === 'string' ? originalBookingPage : JSON.stringify(originalBookingPage);
+    const [service] = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id=${settings.tenantId} AND slug='studio-session' AND is_active=TRUE`;
+    if (!service) throw new Error('Nordic E2E studio-session service is missing.');
+    const parsedBookingPage = typeof originalBookingPage === 'string' ? JSON.parse(originalBookingPage) as unknown : originalBookingPage;
+    const bookingPage = parsedBookingPage && typeof parsedBookingPage === 'object' && !Array.isArray(parsedBookingPage) ? parsedBookingPage as Record<string, unknown> : {};
+    const configuredOrigins = Array.isArray(bookingPage.embedOrigins) ? bookingPage.embedOrigins.filter((value): value is string => typeof value === 'string') : [];
+    await db`UPDATE tenant_settings SET booking_page=${JSON.stringify({ ...bookingPage, embedOrigins: [...new Set([...configuredOrigins, source])] })}::jsonb WHERE tenant_id=${settings.tenantId}`;
+
+    try {
+      const embed = await request.get(`/nordic/embed?source=${encodeURIComponent(source)}`);
+      expect(embed.status()).toBe(200);
+      const html = await embed.text();
+      const iframeUrl = html.match(/<iframe[^>]+src="([^"]+)"/)?.[1];
+      expect(iframeUrl).toBeTruthy();
+      const signedBookingUrl = new URL(iframeUrl!);
+      expect(signedBookingUrl.searchParams.get('embedSource')).toBe(source);
+      const embedToken = signedBookingUrl.searchParams.get('embedToken');
+      expect(embedToken).toBeTruthy();
+      const token = embedToken!;
+
+      const firstDay = localWeekdayAfter(3);
+      const lastDay = new Date(`${firstDay}T12:00:00.000Z`);
+      lastDay.setUTCDate(lastDay.getUTCDate() + 3);
+      const availability = await request.get(`/nordic/api/public/availability?service=${service.id}&start=${encodeURIComponent(`${firstDay}T00:00:00.000Z`)}&end=${encodeURIComponent(`${lastDay.toISOString().slice(0, 10)}T23:59:59.999Z`)}`);
+      expect(availability.status()).toBe(200);
+      const payload = await availability.json() as { availability: Array<{ slots: Array<{ startTime: string; endTime: string }> }> };
+      const slot = payload.availability.flatMap((provider) => provider.slots)[0];
+      expect(slot).toBeTruthy();
+
+      const hold = await request.post('/nordic/api/public/holds', { data: { serviceId: service.id, startsAt: slot.startTime, endsAt: slot.endTime } });
+      expect(hold.status()).toBe(201);
+      const holdPayload = await hold.json() as { holdId: string };
+      const tamperedToken = `${token.slice(0, -1)}${token.endsWith('A') ? 'B' : 'A'}`;
+      const tampered = await request.post('/nordic/api/public/confirmations', { data: {
+        holdId: holdPayload.holdId,
+        idempotencyKey,
+        customer: { name: 'Embedded booking E2E', email: customerEmail },
+        embedSource: source,
+        embedToken: tamperedToken,
+      } });
+      expect(tampered.status()).toBe(400);
+      expect(await tampered.json()).toMatchObject({ error: expect.stringContaining('embedded booking session') });
+      const [afterTamper] = await db<{ bookings: number; audits: number; outbox: number }[]>`
+        SELECT
+          (SELECT count(*)::int FROM bookings WHERE tenant_id=${settings.tenantId} AND hold_id=${holdPayload.holdId}) AS bookings,
+          (SELECT count(*)::int FROM tenant_audit_events WHERE tenant_id=${settings.tenantId} AND action='booking.embed_source_verified' AND metadata->>'source'=${source}) AS audits,
+          (SELECT count(*)::int FROM email_outbox WHERE tenant_id=${settings.tenantId} AND recipient=${customerEmail}) AS outbox
+      `;
+      expect(afterTamper).toEqual({ bookings: 0, audits: 0, outbox: 0 });
+      const confirmation = await request.post('/nordic/api/public/confirmations', { data: {
+        holdId: holdPayload.holdId,
+        idempotencyKey,
+        customer: { name: 'Embedded booking E2E', email: customerEmail },
+        embedSource: source,
+        embedToken: token,
+      } });
+      expect(confirmation.status()).toBe(201);
+      const result = await confirmation.json() as { booking: { id: string } };
+      const [audit] = await db<{ metadata: { source?: string } | string }[]>`SELECT metadata FROM tenant_audit_events WHERE tenant_id=${settings.tenantId} AND action='booking.embed_source_verified' AND target_id=${result.booking.id}`;
+      expect(audit).toBeTruthy();
+      const metadata = typeof audit.metadata === 'string' ? JSON.parse(audit.metadata) as { source?: string } : audit.metadata;
+      expect(metadata).toEqual({ source });
+    } finally {
+      if (originalBookingPageJson === null) await db`UPDATE tenant_settings SET booking_page=NULL WHERE tenant_id=${settings.tenantId}`;
+      else await db`UPDATE tenant_settings SET booking_page=${originalBookingPageJson}::jsonb WHERE tenant_id=${settings.tenantId}`;
+    }
+  } finally {
+    await db.end();
+  }
+});
+
 test("customer books, reschedules and cancels without a stale confirmation", async ({ page }) => {
   test.setTimeout(120_000);
   const check = expect.configure({ timeout: 30_000 });
