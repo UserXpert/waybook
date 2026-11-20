@@ -66,16 +66,13 @@ For a **new, disposable** local database only:
 
 ```sh
 npm ci
-npm run build --workspace=@waybook/core
-npm run build --workspace=@waybook/db
-npm run build --workspace=@waybook/server
 npm run waybook:db:start
 npm run waybook:db:migrate -- --local
 env -u WAYBOOK_CONTROL_DATABASE_URL -u WAYBOOK_NORDIC_STUDIO_DATABASE_URL -u WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL npm run waybook:db:seed
 npm run waybook:dev
 ```
 
-Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](.env.waybook.local.example). The three shared packages must be built after a clean install because the app imports their generated outputs. The seed command writes demo users and data; the example unsets the three configured database URLs for that command so it targets the local defaults. For a fresh seed, sign in as `owner@nordic.local` with the local-only default password `waybook-local-only`, unless `WAYBOOK_LOCAL_PASSWORD` was set when seeding. Do not use seed credentials in hosted environments.
+Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](.env.waybook.local.example). The seed command writes demo users and data; the example unsets the three configured database URLs for that command so it targets the local defaults. For a fresh seed, sign in as `owner@nordic.local` with the local-only default password `waybook-local-only`, unless `WAYBOOK_LOCAL_PASSWORD` was set when seeding. Do not use seed credentials in hosted environments.
 
 For an **existing** database, preserve its data and check its history first:
 
@@ -124,7 +121,7 @@ The application uses Next.js, React, TypeScript and PostgreSQL. Workspace packag
 
 ## Documentation
 
-Use the [documentation index](docs/README.md) to find architecture, booking, release, support and privacy guidance. The [manifest](.waybook/docs/00_manifest.md) routes implementation work to the authoritative topic documents. The [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) is required before reconciling changes or deploying. Historical inherited notes are kept separately in [the archive](docs/archive/README.md).
+Use the [documentation index](docs/README.md) to find architecture, booking, release, support and privacy guidance. The [manifest](.waybook/docs/00_manifest.md) routes implementation work to the authoritative topic documents. The [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) is required before reconciling changes or deploying. [Historical reference links](docs/archive/README.md) point to the earlier repository snapshot.
 
 ## License and attribution
 

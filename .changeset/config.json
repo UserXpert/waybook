@@ -6,8 +6,7 @@
     [
       "@waybook/core",
       "@waybook/db",
-      "@waybook/server",
-      "@waybook/cli"
+      "@waybook/server"
     ]
   ],
   "linked": [],

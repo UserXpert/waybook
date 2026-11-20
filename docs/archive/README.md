@@ -1,9 +1,9 @@
-# Historical notes
+# Historical reference
 
-These files are preserved for provenance and research. They describe inherited project work and may contain outdated plans, paths, names or feature claims. Do not treat them as current Waybook requirements or release evidence.
+These links point to the last revision containing the inherited reference materials. That revision includes their [attribution](https://github.com/UserXpert/waybook/blob/da91f753a1a1a72f48b3f23d68a04a933bfe2499/THIRD_PARTY_NOTICES.md).
 
-- [Earlier future plan](futureplan.md)
-- [Earlier monorepo audit](potentialProblems.md)
-- [Earlier E-23 QA notes](QA_FIXES_APPLIED_E23.md)
+- [Booking Kit reference site and examples](https://github.com/UserXpert/waybook/tree/da91f753a1a1a72f48b3f23d68a04a933bfe2499/apps/docs)
+- [Private CLI](https://github.com/UserXpert/waybook/tree/da91f753a1a1a72f48b3f23d68a04a933bfe2499/packages/cli) and [component registry](https://github.com/UserXpert/waybook/tree/da91f753a1a1a72f48b3f23d68a04a933bfe2499/registry/ui)
+- [Earlier planning and audit notes](https://github.com/UserXpert/waybook/tree/da91f753a1a1a72f48b3f23d68a04a933bfe2499/docs/archive)
 
-Use the [documentation index](../README.md), [delivery backlog](../../.waybook/docs/07_delivery_backlog.md) and [open GitHub issues](https://github.com/UserXpert/waybook/issues) for current work.
+For current Waybook setup, product behavior, and release guidance, see the [documentation index](../README.md).

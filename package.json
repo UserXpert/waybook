@@ -3,7 +3,6 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "registry/*",
     "apps/*"
   ],
   "scripts": {
@@ -25,7 +24,6 @@
     "waybook:test:booking-product-addons": "tsx scripts/verify-waybook-booking-product-addons.ts",
     "waybook:test:booking-package-redemption": "tsx scripts/verify-waybook-booking-package-redemption.ts",
     "waybook:build": "npm --prefix apps/demo run build",
-    "registry:build": "npx tsx scripts/build-registry.ts",
     "check:node-esm": "node scripts/check-node-esm.mjs",
     "waybook:release:check": "node scripts/check-waybook-release.mjs",
     "waybook:db:status": "tsx scripts/check-waybook-schema.mts",
