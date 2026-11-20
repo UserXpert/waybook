@@ -95,14 +95,25 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
       await expect(page.getByRole("heading", { name: "Edit" })).toBeVisible();
       return;
     }
+    await card.scrollIntoViewIfNeeded();
     const sourceBox = await card.boundingBox();
     expect(sourceBox).toBeTruthy();
     await page.mouse.move(sourceBox!.x + sourceBox!.width / 2, sourceBox!.y + sourceBox!.height / 2);
     await page.mouse.down();
     await page.mouse.move(sourceBox!.x + sourceBox!.width / 2 + 8, sourceBox!.y + sourceBox!.height / 2 + 8);
     await expect(page.locator(".calendar-drag-feedback")).toContainText("verified destination");
-    const destination = page.locator("[data-calendar-drop-cell='true'].is-drop-eligible").first();
-    await expect(destination).toBeVisible();
+    const candidates = page.locator("[data-calendar-drop-cell='true'].is-drop-eligible");
+    const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+    let destinationIndex = -1;
+    for (let index = 0; index < await candidates.count(); index++) {
+      const bounds = await candidates.nth(index).boundingBox();
+      if (bounds && bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= viewport.width && bounds.y + bounds.height <= viewport.height) {
+        destinationIndex = index;
+        break;
+      }
+    }
+    expect(destinationIndex).toBeGreaterThanOrEqual(0);
+    const destination = candidates.nth(destinationIndex);
     const destinationBox = await destination.boundingBox();
     expect(destinationBox).toBeTruthy();
 
