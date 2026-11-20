@@ -6,10 +6,9 @@ export const metadata: Metadata = {
   description: "Waybook control and client booking operations dashboards.",
   icons: {
     icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.ico?v=waybook", sizes: "16x16 32x32 48x48" },
+      { url: "/favicon.svg?v=waybook", type: "image/svg+xml", sizes: "any" },
     ],
-    shortcut: "/favicon.ico",
   },
 };
 
@@ -21,10 +20,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Favicon — SVG for modern browsers, ICO fallback for legacy */}
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="shortcut icon" href="/favicon.ico" />
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var theme=localStorage.getItem("waybook.theme");var tint=localStorage.getItem("waybook.tint");var resolved=theme==="dark"||theme!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.waybookTheme=resolved;document.documentElement.dataset.waybookTint=["blue","violet","rose","teal","coral","amber"].includes(tint||"")?tint:"neutral";}catch(e){}})();` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
