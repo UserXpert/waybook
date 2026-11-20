@@ -25,6 +25,8 @@ Reproduce the path inventory with `git ls-tree -r waybook-baseline` and `git ls-
 - PR #101 replaced live booking and calendar availability. The maintained app builds without the inherited core, server, and database workspaces. Its desktop and mobile release tests remain under `apps/demo/e2e/waybook-tests/`.
 - The inherited CLI, component registry, and Astro reference site have been retired together. The [historical reference index](archive/README.md) points to the preserved source and notes at their last revision. The standalone inherited core and server workspaces were also retired after live availability and retry handling moved into the app.
 
+- The browser icons use the Waybook mark from `apps/demo/public/brand/waybook-logo.svg`. The inherited icon art, preview assets and generator were retired.
+
 ## Replacement and verification
 
 - Keep current product setup and release guidance in the [Waybook documentation index](README.md).
