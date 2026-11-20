@@ -11,8 +11,8 @@ Waybook is a Denmark-first, multi-tenant booking operations application. It is i
 
 ## Code and verification
 
-The Next.js app is in `apps/demo`. Tenant and Control database logic and migrations are in `packages/db/src/waybook`; shared scheduling and server code is in `packages/core` and `packages/server`. PostgreSQL constraints and server-side authorization are part of booking safety: preserve tenant boundaries, concurrency protections, and transactional audit records.
+The Next.js app is in `apps/demo`. The app-owned availability, retry, and database connections live in `apps/demo/src/lib/waybook`. Migrations and their runner remain in `packages/db/src/waybook`. PostgreSQL constraints and server-side authorization are part of booking safety: preserve tenant boundaries, concurrency protections, and transactional audit records.
 
 Run a clean install, the affected package tests, and `npm run waybook:build` as appropriate. Database integration and browser tests use isolated databases as configured by `.github/workflows`. Verify actual desktop and mobile user flows for UI changes. Never seed or migrate production from a local development command.
 
-The workspace includes inherited components being reviewed under [issue #45](https://github.com/UserXpert/waybook/issues/45). Preserve applicable notices in [LICENSE](LICENSE); do not describe historical, unverified examples as current Waybook features.
+The workspace includes inherited components being reviewed under [issue #45](https://github.com/UserXpert/waybook/issues/45). Preserve applicable notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); do not describe historical, unverified examples as current Waybook features.

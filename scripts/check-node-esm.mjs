@@ -1,7 +1,7 @@
 // Imports each published package's built entry under plain Node ESM (no
 // bundler). Catches dependencies whose named exports only resolve inside a
 // bundler — e.g. rrule's UMD main — before they ship. Run after `turbo build`.
-const packages = ["core", "server", "db"];
+const packages = ["db"];
 
 let failed = false;
 for (const name of packages) {

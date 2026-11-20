@@ -63,10 +63,8 @@ jobs:
       - run: npx turbo build --filter='./packages/*'
       - run: npm run check:node-esm
       - run: npx turbo typecheck test lint --filter='./packages/*'
-      - name: StripeLike accepts a stripe 17 client
-        run: |
-          npm install --no-save stripe@17
-          npx tsc --noEmit -p packages/server/tsconfig.typetest.json
+      - name: Waybook app unit tests
+        run: npm test --workspace=@waybook/app
 
   schema-history:
     name: migration-history

@@ -77,15 +77,14 @@ The root post-login route sends a tenant member to `/{business}/app`; a platform
 - Audit records are append-only and record actor, tenant, target, action, request/correlation ID, timestamp, and structured metadata.
 - Versioned migrations run separately for Control and each tenant database and their state is recorded in Control.
 
-## Foundation packages
+## Application and database boundaries
 
-Approved adapted foundations:
-
-- `@waybook/core`: availability, RRULE, timezone, buffers, scheduling, resource handling, booking limits, validation.
-- `@waybook/server`: serializable retry, conflict translation, date/ICS, adapter patterns, selected cryptographic utilities.
-- `@waybook/db`: Drizzle + `postgres.js`, exclusion constraints, append-only audit patterns, useful tests.
-
-Must not be adopted as-is: Booking Kit organisation scoping/auth/schema, signed booking-management tokens, in-memory rate limits, D1/SQLite, demo data, payments, queues, kiosk, recurring bookings, embeds, webhooks, workflows, calendar sync, and SMS.
+The Waybook app owns its availability calculator, transaction retry, tenant
+routing, and direct PostgreSQL connector. Its build uses the application
+workspace and third-party libraries. The separate `@waybook/db` workspace
+still contains the existing migration runner, versioned Control and tenant
+SQL, and the inherited Drizzle toolkit. Keep database replacement work within
+the [migration and release safeguards](11_local_release_workflow.md).
 
 ## Verification record
 
