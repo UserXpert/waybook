@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { confirmBookingFromHold } from "@/lib/waybook/booking";
+import { BookingIdempotencyConflictError, confirmBookingFromHold } from "@/lib/waybook/booking";
 import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { tenantDb } from "@/lib/waybook/database";
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ booking: result.booking, managementToken: result.managementToken, idempotent: result.idempotent }, { status: result.idempotent ? 200 : 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "This hold is no longer available.") return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof BookingIdempotencyConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
     // Do not expose database or infrastructure error details to customers.
     console.error("public_booking_confirmation_failed", { tenant: tenant.slug });
     return NextResponse.json({ error: "Could not confirm this booking. Please try again." }, { status: 503 });
