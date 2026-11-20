@@ -32,6 +32,7 @@ export default defineConfig({
     command: "../../node_modules/.bin/next start -p 3336",
     port: 3336,
     cwd: path.resolve(here, ".."),
+    env: { WAYBOOK_EMBED_SIGNING_SECRET: process.env.WAYBOOK_EMBED_SIGNING_SECRET ?? "waybook-e2e-embed-secret" },
     reuseExistingServer: false,
     timeout: 60_000,
   },
