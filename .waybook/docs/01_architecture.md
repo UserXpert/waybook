@@ -81,10 +81,10 @@ The root post-login route sends a tenant member to `/{business}/app`; a platform
 
 The Waybook app owns its availability calculator, transaction retry, tenant
 routing, and direct PostgreSQL connector. Its build uses the application
-workspace and third-party libraries. The separate `@waybook/db` workspace
-still contains the existing migration runner, versioned Control and tenant
-SQL, and the inherited Drizzle toolkit. Keep database replacement work within
-the [migration and release safeguards](11_local_release_workflow.md).
+workspace and third-party libraries. `database/waybook/` contains the versioned
+Control and tenant SQL and the live runner. The SQL keeps its original filenames
+and content so applied history remains valid. Use the
+[migration and release safeguards](11_local_release_workflow.md) for schema changes.
 
 ## Verification record
 

@@ -60,11 +60,9 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
       - run: npm ci
-      - run: npx turbo build --filter='./packages/*'
-      - run: npm run check:node-esm
-      - run: npx turbo typecheck test lint --filter='./packages/*'
-      - name: Waybook app unit tests
-        run: npm test --workspace=@waybook/app
+      - run: npm run waybook:build
+      - run: npm test --workspace=@waybook/app
+      - run: node --import tsx --test scripts/waybook-migration-targets.test.ts
 
   schema-history:
     name: migration-history
@@ -93,7 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DATABASE_URL: postgresql://thebookingkit:thebookingkit@localhost:5432/thebookingkit
+      WAYBOOK_MIGRATION_TEST_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/postgres
       RELEASE_SHA: ${{ inputs.release_sha }}
       BASE_SHA: ${{ inputs.base_sha }}
     steps:
@@ -107,25 +105,17 @@ jobs:
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-node@v7
         with: { node-version: 24, cache: npm }
-      - run: docker run -d --name release-validation-db -e POSTGRES_DB=thebookingkit -e POSTGRES_USER=thebookingkit -e POSTGRES_PASSWORD=thebookingkit -p 5432:5432 postgres:15-alpine
-      - run: npm ci && npx turbo build
-      - run: echo yes | (cd packages/db && npx drizzle-kit push --verbose)
-      - name: Verify tables were created
-        working-directory: packages/db
+      - name: Start and wait for the disposable PostgreSQL container
         run: |
-          node -e "
-            const postgres = require('postgres');
-            const sql = postgres(process.env.DATABASE_URL);
-            sql\`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename\`
-              .then(rows => { if (rows.length === 0) process.exit(1); return sql.end(); })
-              .catch(err => { console.error(err.message); process.exit(1); });
-          "
-      - name: Run custom SQL migrations
-        working-directory: packages/db
-        run: node --import tsx/esm src/migrate.ts
-      - name: Run DB integration tests
-        working-directory: packages/db
-        run: npx vitest run src/__tests__/integration.test.ts
+          docker run -d --name release-validation-db -e POSTGRES_DB=postgres -e POSTGRES_USER=waybook -e POSTGRES_PASSWORD=waybook -p 5432:5432 postgres:15-alpine
+          for i in $(seq 1 30); do
+            if docker exec release-validation-db pg_isready -h 127.0.0.1 -U waybook -d postgres -q; then break; fi
+            sleep 1
+          done
+          docker exec release-validation-db pg_isready -h 127.0.0.1 -U waybook -d postgres -q
+      - run: npm ci
+      - name: Verify fresh, upgraded, and concurrent Waybook migration histories
+        run: node --import tsx scripts/verify-waybook-migrations.mts
       - if: always()
         run: docker rm -f release-validation-db || true
 

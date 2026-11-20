@@ -8,7 +8,7 @@ const args = process.argv.slice(2);
 if (new Set(args).size !== args.length || args.some((arg) => !["--local", "--allow-pending"].includes(arg))) throw new Error("Usage: npm run waybook:db:status [-- --local] [--allow-pending]");
 const allowPending = args.includes("--allow-pending");
 const targets = migrationTargets(process.env, args.includes("--local"));
-const root = join(dirname(fileURLToPath(import.meta.url)), "../packages/db/src/waybook/migrations");
+const root = join(dirname(fileURLToPath(import.meta.url)), "../database/waybook/migrations");
 let failed = false;
 for (const target of targets) {
   const files = readdirSync(join(root, target.kind)).filter((name) => name.endsWith(".sql")).sort();

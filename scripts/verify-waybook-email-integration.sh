@@ -21,7 +21,7 @@ control_created=true
 export WAYBOOK_NORDIC_STUDIO_DATABASE_URL="postgresql://waybook@127.0.0.1:5440/$tenant_db"
 export WAYBOOK_CONTROL_DATABASE_URL="postgresql://waybook@127.0.0.1:5440/$control_db"
 export WAYBOOK_EMAIL_INTEGRATION_TEST_DATABASE_URL="$WAYBOOK_NORDIC_STUDIO_DATABASE_URL"
-node --import tsx --input-type=module -e 'import {migrateWaybookDatabase} from "./packages/db/src/waybook/migrate.ts"; await migrateWaybookDatabase(process.env.WAYBOOK_CONTROL_DATABASE_URL,"control"); await migrateWaybookDatabase(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL,"tenant");'
+node --import tsx --input-type=module -e 'import {migrateWaybookDatabase} from "./database/waybook/migrate.ts"; await migrateWaybookDatabase(process.env.WAYBOOK_CONTROL_DATABASE_URL,"control"); await migrateWaybookDatabase(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL,"tenant");'
 psql -q -v ON_ERROR_STOP=1 -d "$control_db" <<'SQL'
 INSERT INTO tenants (id,slug,name,plan,lifecycle_status,database_env_key) VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','nordic-studio','Test Studio','growth','active','WAYBOOK_NORDIC_STUDIO_DATABASE_URL');
 INSERT INTO tenant_domains (tenant_id,hostname) VALUES ('459cd62f-caa8-406d-9b15-58c69feb95ec','nordic.localhost');

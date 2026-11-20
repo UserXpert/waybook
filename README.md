@@ -112,7 +112,7 @@ For the full checklist, see the [local-to-production workflow](.waybook/docs/11_
 ```text
 apps/demo/                       Waybook application and public booking routes
 apps/demo/src/lib/waybook/       Booking, identity and operations logic
-packages/db/src/waybook/         Control and tenant database clients and migrations
+database/waybook/                Versioned Control and tenant migrations and runner
 .waybook/docs/                   Architecture, decisions and delivery evidence
 scripts/                         Local setup, migrations and focused verification
 ```

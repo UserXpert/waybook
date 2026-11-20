@@ -28,6 +28,6 @@ Reproduce the path inventory with `git ls-tree -r waybook-baseline` and `git ls-
 ## Replacement and verification
 
 - Keep current product setup and release guidance in the [Waybook documentation index](README.md).
-- The package gate runs the retained database workspace checks and the app unit suite. PostgreSQL integration, browser E2E, and schema-history gates remain in place.
-- Keep the live Control and tenant migration runner, checked SQL history, and PostgreSQL tests together. Verify database setup and existing-schema upgrades on isolated data under the [release workflow](../.waybook/docs/11_local_release_workflow.md) before removing the legacy database workspace.
+- The package gate builds the app and runs its unit suite. PostgreSQL integration exercises the Waybook migration runner against disposable databases. Browser E2E and schema-history gates remain in place.
+- The legacy Drizzle workspace has been retired. The Waybook migration runner and all 56 Control and tenant SQL files moved to `database/waybook/` with unchanged filenames and Git blobs. The [release workflow](../.waybook/docs/11_local_release_workflow.md) governs migration and recovery operations.
 - Retain [the inherited notice](../THIRD_PARTY_NOTICES.md) during the transition. Notice removal and any ownership or licensing changes remain subject to the provenance and qualified legal review in #60.
