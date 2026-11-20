@@ -3,6 +3,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+function requireDisposableLocalDatabase(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required for Waybook E2E tests.`);
+  const url = new URL(value);
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname) || !url.pathname.startsWith('/waybook_e2e_')) {
+    throw new Error(`${name} must target a disposable local waybook_e2e_ database.`);
+  }
+}
+
+for (const name of ["WAYBOOK_CONTROL_DATABASE_URL", "WAYBOOK_NORDIC_STUDIO_DATABASE_URL", "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL"]) requireDisposableLocalDatabase(name);
+
 export default defineConfig({
   testDir: "./waybook-tests",
   fullyParallel: false,
