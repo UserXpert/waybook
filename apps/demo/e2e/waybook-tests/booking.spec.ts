@@ -14,6 +14,32 @@ function localWeekdayAfter(days: number) {
   return day.toISOString().slice(0, 10);
 }
 
+test("confirmation rejects malformed embed context without blocking direct bookings", async ({ request }) => {
+  // A nonexistent hold exercises the route without creating a booking. A
+  // direct request reaches normal hold validation; malformed contexts do not.
+  const base = {
+    holdId: "00000000-0000-4000-8000-000000000000",
+    idempotencyKey: "embed-context-route-check",
+    customer: { name: "Route verifier", email: "route-verifier@example.test" },
+  };
+  const direct = await request.post("/nordic/api/public/confirmations", { data: base });
+  expect(direct.status()).toBe(409);
+  expect(await direct.json()).toEqual({ error: "This hold is no longer available." });
+
+  for (const context of [
+    { embedSource: null, embedToken: null },
+    { embedSource: 42, embedToken: false },
+    { embedSource: {}, embedToken: [] },
+    { embedSource: "", embedToken: "" },
+    { embedSource: "https://example.test" },
+    { embedToken: "invalid" },
+  ]) {
+    const response = await request.post("/nordic/api/public/confirmations", { data: { ...base, ...context } });
+    expect(response.status()).toBe(400);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining("embedded booking session") });
+  }
+});
+
 test("customer books, reschedules and cancels without a stale confirmation", async ({ page }) => {
   test.setTimeout(120_000);
   const check = expect.configure({ timeout: 30_000 });
