@@ -139,6 +139,44 @@ export async function createBookingHold(input: { tenant: TenantRecord; serviceId
 }
 
 type ConfirmedBooking = { id: string; bookingNumber: string; startsAt: Date; endsAt: Date };
+type ExistingConfirmation = ConfirmedBooking & { holdId: string | null; customerEmail: string };
+type UnsafeSql = Pick<ReturnType<typeof tenantDb>, "unsafe">;
+
+/** A confirmation key belongs to one hold and customer; never disclose a different booking. */
+export class BookingIdempotencyConflictError extends Error {
+  constructor() {
+    super("This confirmation key is already in use. Please restart your booking.");
+    this.name = "BookingIdempotencyConflictError";
+  }
+}
+
+async function existingConfirmation(sql: UnsafeSql, tenantId: string, idempotencyKey: string) {
+  const [existing] = await sql.unsafe<ExistingConfirmation[]>(`
+    SELECT b.id, b.booking_number AS "bookingNumber", b.starts_at AS "startsAt", b.ends_at AS "endsAt",
+      b.hold_id AS "holdId",
+      COALESCE((SELECT o.recipient FROM email_outbox o WHERE o.tenant_id = b.tenant_id AND o.booking_id = b.id AND o.message_type = 'confirmation' ORDER BY o.created_at ASC LIMIT 1), c.email) AS "customerEmail"
+    FROM bookings b JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
+    WHERE b.tenant_id = $1 AND b.idempotency_key = $2
+  `, [tenantId, idempotencyKey]);
+  return existing;
+}
+
+function matchesConfirmationRequest(existing: ExistingConfirmation, holdId: string, normalizedEmail: string) {
+  return existing.holdId === holdId && existing.customerEmail.trim().toLowerCase() === normalizedEmail;
+}
+
+function uniqueViolation(error: unknown) {
+  const seen = new Set<object>();
+  let current = error;
+  for (let depth = 0; depth <= 8 && typeof current === "object" && current !== null; depth++) {
+    if (seen.has(current)) break;
+    seen.add(current);
+    const entry = current as { code?: unknown; cause?: unknown };
+    if (entry.code === "23505") return true;
+    current = entry.cause;
+  }
+  return false;
+}
 
 /** Confirms one valid hold atomically and queues a local confirmation email. */
 export async function confirmBookingFromHold(input: {
@@ -154,51 +192,75 @@ export async function confirmBookingFromHold(input: {
   const name = input.customer.name.trim();
   if (!name || !normalizedEmail || !input.idempotencyKey) throw new Error("Customer details and idempotency key are required.");
 
-  return withSerializableRetry(async () => db.begin(async (transaction) => {
-    const [existing] = await transaction.unsafe<ConfirmedBooking[]>(`
-      SELECT id, booking_number AS "bookingNumber", starts_at AS "startsAt", ends_at AS "endsAt"
-      FROM bookings WHERE tenant_id = $1 AND idempotency_key = $2
-    `, [input.tenant.id, input.idempotencyKey]);
-    if (existing) return { booking: existing, managementToken: null, idempotent: true, outboxId: null };
+  const idempotentResult = (booking: ConfirmedBooking) => ({
+    booking: { id: booking.id, bookingNumber: booking.bookingNumber, startsAt: booking.startsAt, endsAt: booking.endsAt },
+    managementToken: null,
+    idempotent: true as const,
+    outboxId: null,
+  });
+  const resolveExisting = async (sql: UnsafeSql) => {
+    const existing = await existingConfirmation(sql, input.tenant.id, input.idempotencyKey);
+    if (!existing) return null;
+    if (!matchesConfirmationRequest(existing, input.holdId, normalizedEmail)) throw new BookingIdempotencyConflictError();
+    return idempotentResult(existing);
+  };
 
-    const [hold] = await transaction.unsafe<{
+  try {
+    return await withSerializableRetry(async () => db.begin(async (transaction) => {
+      const beforeLock = await resolveExisting(transaction);
+      if (beforeLock) return beforeLock;
+
+      const [hold] = await transaction.unsafe<{
       id: string; bookingBlockId: string; serviceId: string; locationId: string; expiresAt: Date; startsAt: Date; endsAt: Date; teamMemberId: string | null; resourceId: string | null; blockState: string;
     }[]>(`
       SELECT h.id, h.booking_block_id AS "bookingBlockId", h.service_id AS "serviceId", h.location_id AS "locationId", h.expires_at AS "expiresAt",
         h.scheduled_starts_at AS "startsAt", h.scheduled_ends_at AS "endsAt", b.team_member_id AS "teamMemberId", b.resource_id AS "resourceId", b.state AS "blockState"
       FROM booking_holds h JOIN booking_blocks b ON b.id = h.booking_block_id
       WHERE h.id = $1 AND h.tenant_id = $2 FOR UPDATE OF h, b
-    `, [input.holdId, input.tenant.id]);
-    if (!hold || hold.blockState !== "held" || hold.expiresAt <= new Date() || !hold.startsAt || !hold.endsAt || !isPublicBookingStartAllowed(hold.startsAt)) {
-      throw new Error("This hold is no longer available.");
-    }
-    const [customer] = await transaction.unsafe<{ id: string }[]>(`
+      `, [input.holdId, input.tenant.id]);
+      // A concurrent retry waits for this lock until the first request commits.
+      // Check again before looking at the now-confirmed block state.
+      const afterLock = await resolveExisting(transaction);
+      if (afterLock) return afterLock;
+      if (!hold || hold.blockState !== "held" || hold.expiresAt <= new Date() || !hold.startsAt || !hold.endsAt || !isPublicBookingStartAllowed(hold.startsAt)) {
+        throw new Error("This hold is no longer available.");
+      }
+      const [customer] = await transaction.unsafe<{ id: string }[]>(`
       INSERT INTO customers (tenant_id, email, name, phone)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (tenant_id, email) DO UPDATE SET email = customers.email
       RETURNING id
-    `, [input.tenant.id, normalizedEmail, name, input.customer.phone?.trim() || null]);
-    await transaction.unsafe("UPDATE booking_blocks SET state = 'confirmed', expires_at = NULL WHERE id = $1 AND tenant_id = $2", [hold.bookingBlockId, input.tenant.id]);
-    const [service] = await transaction.unsafe<{ priceCents: number }[]>(`
+      `, [input.tenant.id, normalizedEmail, name, input.customer.phone?.trim() || null]);
+      await transaction.unsafe("UPDATE booking_blocks SET state = 'confirmed', expires_at = NULL WHERE id = $1 AND tenant_id = $2", [hold.bookingBlockId, input.tenant.id]);
+      const [service] = await transaction.unsafe<{ priceCents: number }[]>(`
       SELECT price_cents AS "priceCents" FROM services WHERE id = $1 AND tenant_id = $2 FOR SHARE
-    `, [hold.serviceId, input.tenant.id]);
-    if (!service) throw new Error("The selected service is unavailable.");
-    const [booking] = await transaction.unsafe<ConfirmedBooking[]>(`
+      `, [hold.serviceId, input.tenant.id]);
+      if (!service) throw new Error("The selected service is unavailable.");
+      const [booking] = await transaction.unsafe<ConfirmedBooking[]>(`
       INSERT INTO bookings (tenant_id, booking_block_id, hold_id, service_id, location_id, team_member_id, resource_id, customer_id, starts_at, ends_at, booked_price_cents, status, idempotency_key)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'confirmed', $12)
       RETURNING id, booking_number AS "bookingNumber", starts_at AS "startsAt", ends_at AS "endsAt"
-    `, [input.tenant.id, hold.bookingBlockId, hold.id, hold.serviceId, hold.locationId, hold.teamMemberId, hold.resourceId, customer.id, hold.startsAt, hold.endsAt, service.priceCents, input.idempotencyKey]);
-    const managementToken = randomBytes(32).toString("base64url");
-    const tokenHash = createHash("sha256").update(managementToken).digest("hex");
-    await transaction.unsafe(`
+      `, [input.tenant.id, hold.bookingBlockId, hold.id, hold.serviceId, hold.locationId, hold.teamMemberId, hold.resourceId, customer.id, hold.startsAt, hold.endsAt, service.priceCents, input.idempotencyKey]);
+      const managementToken = randomBytes(32).toString("base64url");
+      const tokenHash = createHash("sha256").update(managementToken).digest("hex");
+      await transaction.unsafe(`
       INSERT INTO customer_management_tokens (tenant_id, booking_id, token_hash, action_scope, expires_at)
       VALUES ($1, $2, $3, 'view', now() + interval '30 days')
-    `, [input.tenant.id, booking.id, tokenHash]);
-    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.confirmed', $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
-    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.confirmed', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
-    if (input.policyAcknowledgement) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.policy_acknowledged', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify(input.policyAcknowledgement)]);
-    if (input.verifiedEmbedSource) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.embed_source_verified', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ source: input.verifiedEmbedSource })]);
-    const [outbox] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::text::jsonb) RETURNING id", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, bookingNumber: booking.bookingNumber, startsAt: new Date(booking.startsAt).toISOString() })]);
-    return { booking, managementToken, idempotent: false, outboxId: outbox.id };
-  }));
+      `, [input.tenant.id, booking.id, tokenHash]);
+      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.confirmed', $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
+      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.confirmed', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ holdId: hold.id, source: "public" })]);
+      if (input.policyAcknowledgement) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.policy_acknowledged', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify(input.policyAcknowledgement)]);
+      if (input.verifiedEmbedSource) await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.embed_source_verified', 'booking', $2, $3::text::jsonb)", [input.tenant.id, booking.id, JSON.stringify({ source: input.verifiedEmbedSource })]);
+      const [outbox] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'confirmation', $3, $4::text::jsonb) RETURNING id", [input.tenant.id, booking.id, normalizedEmail, JSON.stringify({ bookingId: booking.id, bookingNumber: booking.bookingNumber, startsAt: new Date(booking.startsAt).toISOString() })]);
+      return { booking, managementToken, idempotent: false as const, outboxId: outbox.id };
+    }));
+  } catch (error) {
+    // Separate holds can race to insert the tenant-scoped key. The failed
+    // transaction cannot safely be reused, so inspect the committed booking
+    // on a fresh connection and only return it to its original requester.
+    if (!uniqueViolation(error)) throw error;
+    const existing = await resolveExisting(db);
+    if (existing) return existing;
+    throw error;
+  }
 }

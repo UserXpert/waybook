@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { confirmBookingFromHold } from "@/lib/waybook/booking";
+import { BookingIdempotencyConflictError, confirmBookingFromHold } from "@/lib/waybook/booking";
 import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { tenantDb } from "@/lib/waybook/database";
 import { requiresPolicyAgreement } from "@/lib/waybook/booking-policy";
-import { verifyEmbedSource } from "@/lib/waybook/embed-token";
+import { validatedEmbedSource } from "@/lib/waybook/embed-context";
 import { isCurrentBookingPolicy } from "@/lib/waybook/booking-policy-revision";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 
@@ -38,17 +38,19 @@ export async function POST(request: NextRequest) {
     const policyVersion = typeof page.policyVersion === "string" ? page.policyVersion : null;
     const policyUrl = typeof page.policyUrl === "string" ? page.policyUrl : null;
     const policyText = typeof page.policyText === "string" ? page.policyText.trim() : "";
-    const embedSource = typeof body?.embedSource === "string" ? body.embedSource : null;
-    const embedToken = typeof body?.embedToken === "string" ? body.embedToken : null;
+    const embedSource = body?.embedSource;
+    const embedToken = body?.embedToken;
     const embedOrigins = Array.isArray(page.embedOrigins) ? page.embedOrigins.filter((value): value is string => typeof value === "string") : [];
     if (!isCurrentBookingPolicy(page, body?.policyRevision)) return NextResponse.json({ error: "The booking policy has changed. Please refresh and review it before booking." }, { status: 409 });
     if (requiresPolicyAgreement(page) && body?.acceptedPolicy !== true) return NextResponse.json({ error: "Accept the current booking policy before confirming." }, { status: 400 });
-    if (embedSource && (!embedToken || !embedOrigins.includes(embedSource) || !verifyEmbedSource(tenant.id, embedSource, embedToken))) return NextResponse.json({ error: "This embedded booking session has expired. Please reopen it from the website." }, { status: 400 });
-    const result = await confirmBookingFromHold({ tenant, holdId, idempotencyKey, customer: { name, email, phone }, policyAcknowledgement: policyVersion && (policyUrl || policyText) ? { policyVersion, policyUrl, policyText: policyText || undefined } : undefined, verifiedEmbedSource: embedSource || undefined });
+    const embed = validatedEmbedSource({ tenantId: tenant.id, source: embedSource, token: embedToken, allowedOrigins: embedOrigins });
+    if (embed.error) return NextResponse.json({ error: embed.error }, { status: 400 });
+    const result = await confirmBookingFromHold({ tenant, holdId, idempotencyKey, customer: { name, email, phone }, policyAcknowledgement: policyVersion && (policyUrl || policyText) ? { policyVersion, policyUrl, policyText: policyText || undefined } : undefined, verifiedEmbedSource: embed.source || undefined });
     promptEmailDelivery(tenant, result.outboxId);
     return NextResponse.json({ booking: result.booking, managementToken: result.managementToken, idempotent: result.idempotent }, { status: result.idempotent ? 200 : 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "This hold is no longer available.") return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof BookingIdempotencyConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
     // Do not expose database or infrastructure error details to customers.
     console.error("public_booking_confirmation_failed", { tenant: tenant.slug });
     return NextResponse.json({ error: "Could not confirm this booking. Please try again." }, { status: 503 });
