@@ -23,4 +23,4 @@ The authoritative topic files remain under `.waybook/docs/` so existing links an
 
 ## Historical material
 
-The [archive](archive/README.md) contains inherited planning and audit notes. Their claims, examples and dates are historical and do not establish current Waybook functionality. The older [AWS/RDS cutover note](../.waybook/docs/06_aws_rds_cutover.md) is also historical; current hosting and pilot decisions are recorded in the manifest and readiness documents. The separate `apps/docs/` site contains inherited toolkit documentation under review; it is not the authority for current Waybook pilot status.
+The [historical reference index](archive/README.md) links to the retired Booking Kit site, component tooling, and earlier planning notes in Git history. Current hosting and pilot decisions are recorded in the manifest and readiness documents. The [AWS/RDS cutover note](../.waybook/docs/06_aws_rds_cutover.md) remains a historical Waybook decision record.

@@ -6,7 +6,7 @@ Waybook's [product identity work](https://github.com/UserXpert/waybook/issues/45
 
 The table compares tracked paths in `waybook-baseline` (`d2e03d7`) with the pre-cleanup release (`f700d90`). Shared paths exist at the same path in both trees. Identical paths have the same Git blob ID. Renamed and edited files still require provenance review.
 
-| Area | Baseline paths | Shared paths | Identical blobs | Current use |
+| Area | Baseline paths | Shared paths | Identical blobs | Use at `f700d90` |
 | --- | ---: | ---: | ---: | --- |
 | `apps/demo` | 57 | 40 | 24 | Maintained Waybook app and inherited demo material. |
 | `apps/docs` | 89 | 89 | 38 | Historical toolkit reference and static registry generation. |
@@ -19,13 +19,15 @@ The table compares tracked paths in `waybook-baseline` (`d2e03d7`) with the pre-
 
 Reproduce the path inventory with `git ls-tree -r waybook-baseline` and `git ls-tree -r f700d90`. Follow imports, workspace dependencies, tests, and registry-generation inputs before removing a group. An identical blob proves the file is unchanged at that path. A different blob can still contain inherited implementation.
 
-## Retirement covered by this review
+## Completed technical slices
 
-The old, unmounted demo gallery and its data, action, and Playwright fixtures were removed together. The application still uses `e2e/waybook.config.ts` for the supported desktop and mobile booking checks. The private CLI now reads the workspace registry by default and requires an explicit HTTPS registry for a remote fallback. Legacy CLI names and project files remain for compatibility.
+- PR #100 removed the unmounted demo gallery and D1 adapter and moved live database connections to the app-owned PostgreSQL connector.
+- PR #101 replaced live booking and calendar availability. The maintained app builds without the inherited core, server, and database workspaces. Its desktop and mobile release tests remain under `apps/demo/e2e/waybook-tests/`.
+- The inherited CLI, component registry, and Astro reference site have been retired together. The [historical reference index](archive/README.md) points to the preserved source and notes at their last revision. The standalone inherited core and server workspaces were also retired after live availability and retry handling moved into the app.
 
 ## Replacement and verification
 
-- Keep current product setup and release guidance in the [Waybook documentation index](README.md). The historical site retains existing reference URLs for review.
-- Start with disconnected examples. Keep the CLI, registry generator, and docs resources together until their consumers can be retired or mapped to replacements.
-- Before replacing live scheduling or transaction code, establish behavioral specifications and regression coverage for availability, daylight saving transitions, holds, retries, concurrency, tenant scope, migrations, and the desktop and mobile booking lifecycle. Use isolated data and the [release workflow](../.waybook/docs/11_local_release_workflow.md).
+- Keep current product setup and release guidance in the [Waybook documentation index](README.md).
+- The package gate runs the retained database workspace checks and the app unit suite. PostgreSQL integration, browser E2E, and schema-history gates remain in place.
+- Keep the live Control and tenant migration runner, checked SQL history, and PostgreSQL tests together. Verify database setup and existing-schema upgrades on isolated data under the [release workflow](../.waybook/docs/11_local_release_workflow.md) before removing the legacy database workspace.
 - Retain [the inherited notice](../THIRD_PARTY_NOTICES.md) during the transition. Notice removal and any ownership or licensing changes remain subject to the provenance and qualified legal review in #60.
