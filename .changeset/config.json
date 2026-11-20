@@ -6,7 +6,6 @@
     [
       "@waybook/core",
       "@waybook/db",
-      "@waybook/d1",
       "@waybook/server",
       "@waybook/cli"
     ]
