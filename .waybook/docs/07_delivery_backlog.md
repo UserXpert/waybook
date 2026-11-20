@@ -17,7 +17,7 @@ silent prerequisites for that decision.
 
 ## Current top priority
 
-Repository identity and inherited code cleanup is tracked in GitHub issue #45. Replace outdated product documentation and safely rename or remove inherited branding while preserving behavior and required attribution. The work is in progress; pilot safety and recovery gates remain in force.
+Product identity is tracked in GitHub issue #45. Inherited-code replacement and licensing review are tracked in #60. The inherited workspaces, browser icons, retired-screen styles and obsolete local setup have been removed. The inherited-code inventory records the remaining provenance and licensing review. Pilot safety and recovery gates remain in force.
 
 ## Approved implementation sequence
 
