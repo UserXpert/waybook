@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
     const policyVersion = typeof page.policyVersion === "string" ? page.policyVersion : null;
     const policyUrl = typeof page.policyUrl === "string" ? page.policyUrl : null;
     const policyText = typeof page.policyText === "string" ? page.policyText.trim() : "";
-    const embedSource = typeof body?.embedSource === "string" ? body.embedSource : null;
-    const embedToken = typeof body?.embedToken === "string" ? body.embedToken : null;
+    const embedSource = body?.embedSource;
+    const embedToken = body?.embedToken;
     const embedOrigins = Array.isArray(page.embedOrigins) ? page.embedOrigins.filter((value): value is string => typeof value === "string") : [];
     if (!isCurrentBookingPolicy(page, body?.policyRevision)) return NextResponse.json({ error: "The booking policy has changed. Please refresh and review it before booking." }, { status: 409 });
     if (requiresPolicyAgreement(page) && body?.acceptedPolicy !== true) return NextResponse.json({ error: "Accept the current booking policy before confirming." }, { status: 400 });

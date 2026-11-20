@@ -6,7 +6,7 @@ const base = { tenantId: "tenant-a", allowedOrigins: ["https://example.test"] };
 const valid = (_tenantId: string, source: string, token: string) => source === "https://example.test" && token === "signed";
 
 test("direct bookings remain valid when both embed fields are absent", () => {
-  assert.deepEqual(validatedEmbedSource({ ...base, source: null, token: null }, valid), { source: null, error: null });
+  assert.deepEqual(validatedEmbedSource({ ...base, source: undefined, token: undefined }, valid), { source: null, error: null });
 });
 
 test("partial or invalid embed contexts fail closed", () => {
@@ -14,6 +14,9 @@ test("partial or invalid embed contexts fail closed", () => {
     { source: "https://example.test", token: null },
     { source: null, token: "signed" },
     { source: "", token: "" },
+    { source: null, token: null },
+    { source: 42, token: false },
+    { source: {}, token: [] },
     { source: "https://unapproved.test", token: "signed" },
     { source: "https://example.test", token: "replayed" },
   ]) assert.match(validatedEmbedSource({ ...base, ...input }, valid).error ?? "", /embedded booking session has expired/i);
