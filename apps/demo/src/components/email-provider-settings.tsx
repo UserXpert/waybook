@@ -32,13 +32,18 @@ export function EmailProviderSettings({ configured, onboardingTestAvailable, sen
       {!verified && !testAccepted ? <form action={sendTest}><button type="submit">Send test email to {senderEmail}</button></form> : null}
       {!verified && testAccepted ? <form action={confirmTest}><p>Check your inbox for the test before confirming.</p><button type="submit">I received the test email</button></form> : null}
       <form action={disconnect}><button type="submit">Disconnect</button></form></section> : null}
-    {!configured ? <p>Email provider setup is not available yet. Contact your Waybook administrator.</p> : <form className="email-template-editor" action={save}>
+    <section className="email-provider-brand" aria-label="About Resend">
+      <div><img className="email-provider-brand__logo email-provider-brand__logo--light" src="/resend-wordmark-black.svg" alt="Resend" /><img className="email-provider-brand__logo email-provider-brand__logo--dark" src="/resend-wordmark-white.svg" alt="Resend" /></div>
+      <div><p>Connect your own Resend account to manage your business’s booking emails.</p><div className="email-provider-brand__links"><a href="https://resend.com/signup" target="_blank" rel="noopener noreferrer">Create a Resend account <span aria-hidden="true">↗</span></a><a href="https://resend.com/login" target="_blank" rel="noopener noreferrer">Sign in to Resend <span aria-hidden="true">↗</span></a></div></div>
+    </section>
+    <form className="email-template-editor" action={save}>
       <h2>{senderEmail ? "Replace connection" : "Connect Resend"}</h2>
-      <p>Verify your sending domain in Resend, then create a sending-only API key for that domain. Saving replaces any existing connection; the new connection remains unverified.</p>
-      <label>Sender email<input name="senderEmail" type="email" maxLength={254} defaultValue={senderEmail ?? ""} autoComplete="email" required /></label>
-      <label>Resend API key<input name="apiKey" type="password" autoComplete="off" maxLength={4096} required /></label>
+      <p>Verify your sending domain in Resend, then create a sending-only API key for that domain.{senderEmail ? " Saving replaces the existing connection; the new connection remains unverified." : " Your connection remains unverified until you send and confirm a test email."}</p>
+      {!configured ? <p role="status">Connection setup is temporarily unavailable. Contact your Waybook administrator to enable it.</p> : null}
+      <label>Sender email<input name="senderEmail" type="email" maxLength={254} defaultValue={senderEmail ?? ""} autoComplete="email" disabled={!configured} required /></label>
+      <label>Resend API key<input name="apiKey" type="password" autoComplete="off" maxLength={4096} disabled={!configured} required /></label>
       <p>The API key is encrypted and will not be shown again. Automatic booking emails are not enabled yet.</p>
-      <button type="submit">Save connection</button>
-    </form>}
+      <button type="submit" disabled={!configured}>Save connection</button>
+    </form>
   </div>;
 }
