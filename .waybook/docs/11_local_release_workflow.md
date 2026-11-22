@@ -9,6 +9,8 @@ Waybook's source code, databases and browser settings are separate. A successful
 3. Check the normal checkout and relevant worktrees for uncommitted changes and unpushed commits. Fetch GitHub `main`, compare its commit with the live Vercel deployment, and record differences. Review intended source changes; preserve them in coherent commits and push to an appropriate branch before beginning a new task. Reconcile overlapping work against current `main` with a three-way comparison. Preserve uncertain or unfinished work separately and report what still needs review. Never reset or discard user work, and do not blindly stage or push generated caches, credentials or local databases.
 4. For a new task, start a branch from current GitHub `main` without the `codex/` prefix. When continuing an existing task, reuse its appropriate existing branch. Never push directly to `main`; use the review and release steps below.
 
+The prior Lab was reconciled and retained as [`archive/lab-reconciled-20261121`](https://github.com/UserXpert/waybook/tree/archive/lab-reconciled-20261121) for [#52](https://github.com/UserXpert/waybook/issues/52). The tag records which changes matched released work and what remains available for reference. Next.js generates the app's `next-env.d.ts` for the running dev or build directory. Git ignores that generated file so starting the local server does not dirty the release checkout.
+
 ## Changes and review
 
 1. Implement a bounded change, update its GitHub issue and record migrations, environment changes and data effects separately.
