@@ -77,7 +77,7 @@ The following is a manual gate, not an automated deployment safeguard. A merge t
 5. Apply the reviewed migrations to explicitly identified hosted targets in a controlled maintenance operation. After each target, verify actual schema and history. A partial failure requires stopping the rollout, recording which targets changed, and assessing compatibility; never rerun blindly or assume multiple databases changed atomically.
 6. Merge the dependent application change only after all target checks pass. Verify the exact production deployment and read-only authenticated workflows; monitor errors. If verification fails, stop further changes and roll the app back only to a version known to be compatible with the current schema. A code rollback does not undo data changes; restore databases only through the tested incident recovery procedure, accounting for writes since the backup.
 
-Issue [#54](https://github.com/UserXpert/waybook/issues/54) tracks the release safeguards. Independent backup/retention and hosted recovery remain tracked in [#8](https://github.com/UserXpert/waybook/issues/8); do not enable unattended hosted migrations until those controls and a fail-closed deployment gate are implemented and verified.
+Issue [#54](https://github.com/UserXpert/waybook/issues/54) tracks the release safeguards. [#8](https://github.com/UserXpert/waybook/issues/8) records the hosted recovery rehearsal and the deferred seven-day retention target. Unattended hosted migrations require verified independent backup, retention, and a fail-closed deployment gate.
 
 ## Evidence to record
 
