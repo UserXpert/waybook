@@ -16,11 +16,10 @@ Start with the [main README](../README.md) for product context, setup and the re
 | Prioritize work or assess the pilot | [Delivery backlog](../.waybook/docs/07_delivery_backlog.md) and [pilot readiness](../.waybook/docs/08_pilot_readiness.md) |
 | Handle support, recovery or email operations | [Pilot support runbook](../.waybook/docs/09_pilot_support_runbook.md) and [email delivery operations](../.waybook/docs/email_delivery_operations.md) |
 | Review Denmark-first privacy requirements | [Privacy review](../.waybook/docs/10_denmark_privacy_review.md) |
-| Review inherited-code usage and attribution | [Inherited-code inventory](inherited-code.md) |
 | Contribute or work with coding agents | [Contributing](../CONTRIBUTING.md), [AGENTS.md](../AGENTS.md) and [CLAUDE.md](../CLAUDE.md) |
 
 The authoritative topic files remain under `.waybook/docs/` so existing links and workflows continue to work. Read only the files relevant to your task and update the owning document and GitHub issue when behavior or evidence changes.
 
 ## Historical material
 
-The [historical reference index](archive/README.md) links to the retired Booking Kit site, component tooling, and earlier planning notes in Git history. Current hosting and pilot decisions are recorded in the manifest and readiness documents. The [AWS/RDS cutover note](../.waybook/docs/06_aws_rds_cutover.md) remains a historical Waybook decision record.
+Current hosting and pilot decisions are recorded in the manifest and readiness documents. The [AWS/RDS cutover note](../.waybook/docs/06_aws_rds_cutover.md) remains a historical Waybook decision record.

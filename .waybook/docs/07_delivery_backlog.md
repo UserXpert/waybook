@@ -15,10 +15,6 @@ security/tenant isolation, recovery, billing/compliance choice, browser QA,
 and the first 5–10-client operating workflow. P2 items are deliberately not
 silent prerequisites for that decision.
 
-## Current top priority
-
-Product identity is tracked in GitHub issue #45. Inherited-code replacement and licensing review are tracked in #60. The inherited workspaces, browser icons, retired-screen styles and obsolete local setup have been removed. The inherited-code inventory records the remaining provenance and licensing review. Pilot safety and recovery gates remain in force.
-
 ## Approved implementation sequence
 
 This sequence controls feature work. The full priority inventory below remains

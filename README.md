@@ -117,12 +117,12 @@ database/waybook/                Versioned Control and tenant migrations and run
 scripts/                         Local setup, migrations and focused verification
 ```
 
-The application uses Next.js, React, TypeScript and PostgreSQL. Workspace packages use the `@waybook` scope. Other inherited branding and documentation are tracked in the [repository identity cleanup](https://github.com/UserXpert/waybook/issues/45).
+The application uses Next.js, React, TypeScript and PostgreSQL. Workspace packages use the `@waybook` scope.
 
 ## Documentation
 
-Use the [documentation index](docs/README.md) to find architecture, booking, release, support and privacy guidance. The [manifest](.waybook/docs/00_manifest.md) routes implementation work to the authoritative topic documents. The [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) is required before reconciling changes or deploying. [Historical reference links](docs/archive/README.md) point to the earlier repository snapshot.
+Use the [documentation index](docs/README.md) to find architecture, booking, release, support and privacy guidance. The [manifest](.waybook/docs/00_manifest.md) routes implementation work to the authoritative topic documents. The [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) is required before reconciling changes or deploying.
 
 ## License and attribution
 
-Amit Das’s original contributions to Waybook are reserved; see [LICENSE](LICENSE). Waybook also contains inherited code subject to its own license, recorded in [third-party notices](THIRD_PARTY_NOTICES.md). That notice applies to the inherited material, not to Waybook as a whole. The scope of inherited code is being reviewed in [issue #60](https://github.com/UserXpert/waybook/issues/60).
+Amit Das’s original contributions to Waybook are reserved under [LICENSE](LICENSE). Third-party dependencies and earlier distributions remain subject to their applicable licenses.

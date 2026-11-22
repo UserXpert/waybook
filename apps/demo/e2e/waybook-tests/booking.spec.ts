@@ -429,6 +429,11 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await check(page.getByRole("heading", { name: "Z E2E roster 21", exact: true })).toBeVisible();
   await check(page.locator(".waybook-week-calendar")).toBeVisible();
   await page.getByRole("link", { name: "Month", exact: true }).click();
+  // The Week-to-Month switch can land in a different month near a boundary.
+  await page.locator(".calendar-date-picker > button").click();
+  await chooseCalendarDate(page, monthDay);
+  await check(page).toHaveURL(new RegExp(`day=${monthDay}`));
+  expect(new URL(page.url()).searchParams.has("employee")).toBe(true);
   const scopedDay = page.locator(`a.waybook-month-calendar__day-link[href*="day=${monthDay}"]`).locator("..");
   await check(scopedDay).toContainText("1 booking");
   await check(scopedDay.locator(".waybook-month-calendar__appointment")).toContainText("Monthly calendar 15");
