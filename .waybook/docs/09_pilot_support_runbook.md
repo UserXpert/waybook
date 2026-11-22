@@ -35,11 +35,11 @@ This runbook supports a small, manually onboarded pilot after the release gates 
 
 The [19 November hosted rehearsal](https://github.com/UserXpert/waybook/issues/8) used an isolated Neon restoration branch and verified recovered Control and both tenant databases. The operator opened a copied Nordic appointment. The [23 November synthetic rehearsal](https://github.com/UserXpert/waybook/issues/8#issuecomment-7084831940) used separate PostgreSQL 16 clusters at `cd6b335`. It preserved all three migration histories and their timestamps, and Chrome opened a recovered appointment in each tenant at desktop and mobile widths after the source cluster stopped.
 
-### Hosted retention gate
+### Current hosted retention
 
-The selected approach uses Neon recovery points with a seven-day retention target. Vercel Marketplace reported the hosted resource on Neon Free on 23 November. That plan offers at most six hours of point-in-time history. Manually retained branches provide discrete same-provider recovery points. [Neon plan limits](https://neon.com/docs/introduction/plans#snapshots)
+The owner deferred seven-day retention and closed [#8](https://github.com/UserXpert/waybook/issues/8) after the recovery drills passed. On 23 November the live Neon console showed six hours of point-in-time history, two retained recovery branches and no snapshot schedule. Manually retained branches provide discrete same-provider recovery points. [Live console evidence](https://github.com/UserXpert/waybook/issues/8#issuecomment-7085596098) · [Neon plan limits](https://neon.com/docs/introduction/plans#snapshots)
 
-Before closing [#8](https://github.com/UserXpert/waybook/issues/8), record the provider's current window and branch/storage capacity, the retention period, cadence, maximum time between recoverable points, and the operator who checks creation and expiry failures. Verify the oldest recovery point against the chosen retention policy. The [hosted migration gate](11_local_release_workflow.md#hosted-migration-release-gate) separately requires independent backup evidence.
+Before adopting a longer retention policy, record the provider's window and branch/storage capacity, cadence, maximum time between recoverable points, and the operator responsible for checking expiry and failures. The [hosted migration gate](11_local_release_workflow.md#hosted-migration-release-gate) independently requires verified backup evidence.
 
 ## Manual onboarding checklist — not yet a provisioning procedure
 
