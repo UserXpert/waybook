@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { BookingDetailsResult } from "@/app/app/calendars/actions";
 import { useRouter } from "next/navigation";
 import { showSuccessToast } from "@/lib/waybook/toast";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
@@ -14,7 +16,7 @@ type Props = {
   bookingId: string; customerName: string; customerEmail: string; customerPhone: string | null; status: string;
   timezone: string; days: string[]; slots: Slot[];
   canChangeAttendanceNow: boolean;
-  saveDetails: ServerAction; reschedule: ServerAction; updateStatus: ServerAction;
+  saveDetails: (formData: FormData) => Promise<BookingDetailsResult>; reschedule: ServerAction; updateStatus: ServerAction;
   resourceId: string | null; resources: { id: string; name: string; isMutuallyExclusive: boolean }[];
 };
 
@@ -44,19 +46,74 @@ export function AppointmentStatusActions({ bookingId, status, updateStatus, canC
 
 export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, canChangeAttendanceNow, saveDetails, reschedule, updateStatus, resourceId, resources }: Props) {
   const router = useRouter();
+  const detailsFormId = useId();
+  const detailsFormRef = useRef<HTMLFormElement>(null);
+  const [saveTarget, setSaveTarget] = useState<HTMLElement | null>(null);
+
+  // Keep the Save control React-owned while the drawer updates or shows a save error.
+  useEffect(() => {
+    const target = detailsFormRef.current?.closest(".appointment-drawer")
+      ?.querySelector<HTMLElement>("[data-appointment-save-action]");
+    setSaveTarget(target ?? null);
+  }, [bookingId]);
   const [reschedulePending, setReschedulePending] = useState(false);
   const [rescheduleError, setRescheduleError] = useState("");
   const [details, setDetails] = useState({ name: customerName, email: customerEmail, phone: customerPhone ?? "" });
   const [savedDetails, setSavedDetails] = useState({ name: customerName, email: customerEmail, phone: customerPhone ?? "", resource: resourceId ?? "" });
   const [hasNewTime, setHasNewTime] = useState(false);
   const [resource, setResource] = useState(resourceId ?? "");
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  async function saveEdits(formData: FormData) {
+    setSavingDetails(true);
+    setSaveError("");
+    try {
+      const result = await saveDetails(formData);
+      if (result.error) {
+        setSaveError(result.error);
+        return;
+      }
+      setSavedDetails({ ...details, resource });
+      showSuccessToast("Changes saved");
+      router.refresh();
+    } catch {
+      setSaveError("Could not save changes. Please try again.");
+    } finally {
+      setSavingDetails(false);
+    }
+  }
   const detailsChanged = details.name !== savedDetails.name || details.email !== savedDetails.email || details.phone !== savedDetails.phone || resource !== savedDetails.resource;
   const attendance = <AppointmentStatusActions bookingId={bookingId} status={status} updateStatus={updateStatus} canChangeAttendanceNow={canChangeAttendanceNow} />;
   if (status === "cancelled") return attendance;
+  const saveButton = <button type="submit" form={detailsFormId} disabled={!detailsChanged || savingDetails}>
+    {savingDetails ? "Saving…" : "Save changes"}
+  </button>;
   return <>
     {attendance}
-    <section><h3>Edit</h3><form action={async (formData) => { setSaveState("saving"); try { await saveDetails(formData); setSavedDetails({ ...details, resource }); setSaveState("saved"); showSuccessToast("Changes saved"); router.refresh(); } catch { setSaveState("error"); } }} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><label>Customer name<input name="customerName" value={details.name} onChange={(event) => { setDetails({ ...details, name: event.target.value }); setSaveState("idle"); }} required /></label><label>Email<input name="customerEmail" type="email" value={details.email} onChange={(event) => { setDetails({ ...details, email: event.target.value }); setSaveState("idle"); }} required /></label><label>Phone<input name="customerPhone" type="tel" value={details.phone} onChange={(event) => { setDetails({ ...details, phone: event.target.value }); setSaveState("idle"); }} /></label><label>Resource<select name="resourceId" value={resource} onChange={event => { setResource(event.target.value); setSaveState("idle"); }}><option value="">Unassigned</option>{resources.map(item => <option key={item.id} value={item.id}>{item.name}{item.isMutuallyExclusive ? " · exclusive" : " · shared"}</option>)}</select></label>{saveState === "error" ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">Could not save changes. Please try again.</p> : null}<button type="submit" disabled={!detailsChanged || saveState === "saving"}>{saveState === "saving" ? "Saving…" : "Save changes"}</button></form></section>
+    <section>
+      <h3>Edit</h3>
+      <form id={detailsFormId} ref={detailsFormRef} action={saveEdits} className="tenant-drawer-form" data-drawer-submit-in-header>
+        <input type="hidden" name="bookingId" value={bookingId} />
+        <label>Customer name
+          <input name="customerName" value={details.name} onChange={(event) => { setDetails({ ...details, name: event.target.value }); setSaveError(""); }} required />
+        </label>
+        <label>Email
+          <input name="customerEmail" type="email" value={details.email} onChange={(event) => { setDetails({ ...details, email: event.target.value }); setSaveError(""); }} required />
+        </label>
+        <label>Phone
+          <input name="customerPhone" type="tel" value={details.phone} onChange={(event) => { setDetails({ ...details, phone: event.target.value }); setSaveError(""); }} />
+        </label>
+        <label>Resource
+          <select name="resourceId" value={resource} onChange={(event) => { setResource(event.target.value); setSaveError(""); }}>
+            <option value="">Unassigned</option>
+            {resources.map((item) => <option key={item.id} value={item.id}>{item.name}{item.isMutuallyExclusive ? " · exclusive" : " · shared"}</option>)}
+          </select>
+        </label>
+        {saveError ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{saveError}</p> : null}
+        {saveTarget ? createPortal(saveButton, saveTarget) : saveButton}
+      </form>
+    </section>
     {isMovableAppointmentStatus(status) ? <section><h3>Reschedule</h3><form action={async (formData) => { setReschedulePending(true); setRescheduleError(""); try { await reschedule(formData); showSuccessToast("Appointment rescheduled"); router.refresh(); } catch { setRescheduleError("Could not reschedule this appointment. Please try another time."); } finally { setReschedulePending(false); } }} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><RescheduleSlotPicker bookingId={bookingId} timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} />{rescheduleError ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{rescheduleError}</p> : null}<button type="submit" disabled={!hasNewTime || reschedulePending}>{reschedulePending ? "Rescheduling…" : "Reschedule appointment"}</button></form></section> : null}
     <section><h3>Sales ledger</h3><p className="appointment-status-current">Record payment received or a refund. Entries are immutable and feed paid-revenue reporting.</p><AppointmentPaymentForm bookingId={bookingId} outstandingCents={0} /></section>
   </>;

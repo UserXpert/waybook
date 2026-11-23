@@ -427,7 +427,9 @@ export async function getCalendarBookingMoveTargets(input: {
   }
 }
 
-export async function updateBookingDetails(formData: FormData) {
+export type BookingDetailsResult = { error: string | null };
+
+export async function updateBookingDetails(formData: FormData): Promise<BookingDetailsResult> {
   const bookingId = String(formData.get("bookingId") ?? "");
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
@@ -435,32 +437,41 @@ export async function updateBookingDetails(formData: FormData) {
   if (!name || !email.includes("@")) throw new Error("Enter the customer name and a valid email.");
   const { tenant, db, booking } = await editableBooking(bookingId, "manager");
   const identity = await requireIdentity();
-  await db.begin(async (transaction) => {
-    const [customer] = await transaction.unsafe<{ id: string; status: string }[]>("SELECT customer_id AS id, status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
-    if (!customer) throw new Error("Booking is unavailable.");
-    // The drawer intentionally permits edits for completed appointments and keeps
-    // their payment ledger available. Cancellation is the one explicit read-only state.
-    if (customer.status === "cancelled") throw new Error("Cancelled appointments cannot be edited.");
-    await transaction.unsafe("UPDATE customers SET name = $1, email = $2, phone = $3, updated_at = now() WHERE id = $4 AND tenant_id = $5", [name, email, phone, customer.id, tenant.id]);
-    if (formData.has("resourceId")) {
-      const resourceId = String(formData.get("resourceId") ?? "");
-      const [current] = await transaction.unsafe<{ resourceId: string }[]>("SELECT resource_id AS \"resourceId\" FROM booking_resource_assignments WHERE tenant_id=$1 AND booking_id=$2 AND released_at IS NULL FOR UPDATE", [tenant.id, booking.id]);
-      if ((current?.resourceId ?? "") !== resourceId) {
-        if (resourceId) {
-          await transaction.unsafe("INSERT INTO booking_resource_assignments (tenant_id,booking_id,resource_id,assigned_by_identity_id) VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,booking_id) DO UPDATE SET resource_id=EXCLUDED.resource_id,assigned_by_identity_id=EXCLUDED.assigned_by_identity_id,assigned_at=now(),released_at=NULL,release_reason=NULL", [tenant.id, booking.id, resourceId, identity.id]);
-        } else {
-          await transaction.unsafe("UPDATE booking_resource_assignments SET released_at=now(),release_reason='manual_unassign' WHERE tenant_id=$1 AND booking_id=$2 AND released_at IS NULL", [tenant.id, booking.id]);
+  try {
+    await db.begin(async (transaction) => {
+      const [customer] = await transaction.unsafe<{ id: string; status: string }[]>("SELECT customer_id AS id, status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
+      if (!customer) throw new Error("Booking is unavailable.");
+      // The drawer intentionally permits edits for completed appointments and keeps
+      // their payment ledger available. Cancellation is the one explicit read-only state.
+      if (customer.status === "cancelled") throw new Error("Cancelled appointments cannot be edited.");
+      await transaction.unsafe("UPDATE customers SET name = $1, email = $2, phone = $3, updated_at = now() WHERE id = $4 AND tenant_id = $5", [name, email, phone, customer.id, tenant.id]);
+      if (formData.has("resourceId")) {
+        const resourceId = String(formData.get("resourceId") ?? "");
+        const [current] = await transaction.unsafe<{ resourceId: string }[]>("SELECT resource_id AS \"resourceId\" FROM booking_resource_assignments WHERE tenant_id=$1 AND booking_id=$2 AND released_at IS NULL FOR UPDATE", [tenant.id, booking.id]);
+        if ((current?.resourceId ?? "") !== resourceId) {
+          if (resourceId) {
+            await transaction.unsafe("INSERT INTO booking_resource_assignments (tenant_id,booking_id,resource_id,assigned_by_identity_id) VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,booking_id) DO UPDATE SET resource_id=EXCLUDED.resource_id,assigned_by_identity_id=EXCLUDED.assigned_by_identity_id,assigned_at=now(),released_at=NULL,release_reason=NULL", [tenant.id, booking.id, resourceId, identity.id]);
+          } else {
+            await transaction.unsafe("UPDATE booking_resource_assignments SET released_at=now(),release_reason='manual_unassign' WHERE tenant_id=$1 AND booking_id=$2 AND released_at IS NULL", [tenant.id, booking.id]);
+          }
+          const metadata = JSON.stringify({ resourceId: resourceId || null });
+          const action = resourceId ? "resource.assigned" : "resource.unassigned";
+          await transaction.unsafe("INSERT INTO booking_events (tenant_id,booking_id,actor_identity_id,event_type,metadata) VALUES ($1,$2,$3,$4,$5::jsonb)", [tenant.id, booking.id, identity.id, action, metadata]);
+          await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,$3,'booking',$4,$5::jsonb)", [tenant.id, identity.id, action, booking.id, metadata]);
         }
-        const metadata = JSON.stringify({ resourceId: resourceId || null });
-        const action = resourceId ? "resource.assigned" : "resource.unassigned";
-        await transaction.unsafe("INSERT INTO booking_events (tenant_id,booking_id,actor_identity_id,event_type,metadata) VALUES ($1,$2,$3,$4,$5::jsonb)", [tenant.id, booking.id, identity.id, action, metadata]);
-        await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,$3,'booking',$4,$5::jsonb)", [tenant.id, identity.id, action, booking.id, metadata]);
       }
+      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.edited', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
+      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.edited', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
+    });
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "P0001"
+      && error.message === "exclusive resource is already assigned for this appointment time") {
+      return { error: "This resource is already assigned for this appointment time." };
     }
-    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.edited', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
-    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.edited', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
-  });
+    throw error;
+  }
   revalidateCalendars();
+  return { error: null };
 }
 
 export async function rescheduleBooking(formData: FormData) {

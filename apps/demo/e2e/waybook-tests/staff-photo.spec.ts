@@ -113,11 +113,14 @@ test("staff can change their own photo and read-only members cannot", async ({ p
   } finally { await control.end(); await tenant.end(); }
 });
 
-test("staff can complete past bookings and upcoming attendance is read-only", async ({ page }) => {
+for (const workspaceCase of [
+  { route: "nordic", slug: "nordic-studio", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
+  { route: "copenhagen", slug: "copenhagen-physio", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
+]) test(`staff can complete past bookings and upcoming attendance is read-only in ${workspaceCase.route}`, async ({ page }) => {
   const { default: postgres } = await import("postgres");
   const { randomUUID } = await import("node:crypto");
   const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL!;
-  const tenantUrl = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
+  const tenantUrl = process.env[workspaceCase.database]!;
   for (const raw of [controlUrl, tenantUrl]) {
     const url = new URL(raw);
     if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname) || !url.pathname.startsWith('/waybook_e2e_')) throw new Error('Status-only calendar tests require disposable local databases.');
@@ -127,8 +130,8 @@ test("staff can complete past bookings and upcoming attendance is read-only", as
   const suffix = randomUUID();
   const staffEmail = `status-only-${suffix}@example.test`;
   try {
-    const [workspace] = await control`SELECT id FROM tenants WHERE slug='nordic-studio'`;
-    const [owner] = await control`SELECT password_hash FROM identities WHERE email='owner@nordic.local'`;
+    const [workspace] = await control`SELECT id FROM tenants WHERE slug=${workspaceCase.slug}`;
+    const [owner] = await control`SELECT password_hash FROM identities WHERE email=${workspaceCase.owner}`;
     const [identity] = await control`INSERT INTO identities (email,password_hash,display_name) VALUES (${staffEmail},${owner.password_hash},'Status-only staff') RETURNING id`;
     await control`INSERT INTO tenant_memberships (tenant_id,identity_id,role) VALUES (${workspace.id},${identity.id},'staff')`;
     const [staff] = await tenant`INSERT INTO team_members (tenant_id,identity_id,role,name,email) VALUES (${workspace.id},${identity.id},'staff','Status-only staff',${staffEmail}) RETURNING id`;
@@ -159,16 +162,16 @@ test("staff can complete past bookings and upcoming attendance is read-only", as
       await page.getByLabel('Work email').fill(email);
       await page.getByPlaceholder('Enter your password').fill('waybook-local-only');
       await page.getByRole('button', { name: 'Sign in' }).click();
-      await expect(page).toHaveURL(/\/nordic\/app/);
+      await expect(page).toHaveURL((url) => url.pathname.startsWith(`/${workspaceCase.route}/app`));
     }
     await signIn(staffEmail);
 
-    await page.goto(`/nordic/app/calendars?day=${future.day}`);
+    await page.goto(`/${workspaceCase.route}/app/calendars?day=${future.day}`);
     await page.getByRole('link', { name: /Status-only customer/ }).click();
     await expect(page.getByText('Attendance can be updated once the appointment starts.')).toBeVisible();
     for (const label of attendanceLabels) await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
 
-    await page.goto(`/nordic/app/calendars?day=${past.day}`);
+    await page.goto(`/${workspaceCase.route}/app/calendars?day=${past.day}`);
     await page.getByRole('link', { name: /Status-only customer/ }).click();
     await expect(page.getByText('Current: no show')).toBeVisible();
     for (const heading of ['Edit', 'Reschedule', 'Sales ledger']) await expect(page.getByRole('heading', { name: heading })).toHaveCount(0);
@@ -181,12 +184,12 @@ test("staff can complete past bookings and upcoming attendance is read-only", as
     expect(audit?.metadata).toMatchObject({ previousStatus: 'no_show' });
 
     await page.context().clearCookies();
-    await signIn('owner@nordic.local');
-    await page.goto(`/nordic/app/bookings?booking=${future.id}`);
+    await signIn(workspaceCase.owner);
+    await page.goto(`/${workspaceCase.route}/app/bookings?booking=${future.id}`);
     await expect(page.getByText('Attendance can be updated once the appointment starts.')).toBeVisible();
     for (const label of attendanceLabels) await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /cancel appointment/i })).toBeVisible();
-    await page.goto(`/nordic/app/bookings?booking=${past.id}`);
+    await page.goto(`/${workspaceCase.route}/app/bookings?booking=${past.id}`);
     await expect(page.getByText('This appointment’s status is final and cannot be changed.')).toBeVisible();
   } finally { await control.end(); await tenant.end(); }
 });

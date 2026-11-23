@@ -70,7 +70,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone }
   return <div className="tenant-drawer-layer" role="presentation">
     <button type="button" className="tenant-drawer-scrim" aria-label="Close appointment" tabIndex={-1} onClick={close} />
     <aside className="tenant-drawer appointment-drawer manual-appointment-drawer" aria-label={`Appointment with ${selected.customerName}`}>
-      <header><div><p>APPOINTMENT</p><h2>{selected.customerName}</h2></div><div className="appointment-drawer__header-actions"><button type="button" className="tenant-drawer-close" aria-label="Close appointment" onClick={close}>×</button></div></header>
+      <header><div><p>APPOINTMENT</p><h2>{selected.customerName}</h2></div><div className="appointment-drawer__header-actions tenant-drawer-header-actions"><span data-appointment-save-action style={{ display: "contents" }} /><button type="button" className="tenant-drawer-close" aria-label="Close appointment" onClick={close}>×</button></div></header>
       <div className="appointment-drawer__body">
         <section className="appointment-drawer__details"><dl>
           <div className="appointment-drawer__detail--status"><dt>Status</dt><dd>{selected.status.replace("_", " ")}</dd></div>
