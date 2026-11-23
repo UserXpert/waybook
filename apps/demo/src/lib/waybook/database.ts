@@ -8,7 +8,7 @@ const localUrl = (name: string) => {
   if (!/^[0-9]+$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw new Error("WAYBOOK_POSTGRES_PORT must be a valid TCP port.");
   return `postgresql://waybook@127.0.0.1:${Number(port)}/${name}`;
 };
-const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL ?? localUrl("waybook_control");
+export const controlDatabaseUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL ?? localUrl("waybook_control");
 type WaybookSql = ReturnType<typeof connectWaybookPostgres>;
 
 /**
@@ -21,7 +21,7 @@ const globalConnections = globalThis as typeof globalThis & {
   __waybookTenantClients?: Map<string, WaybookSql>;
 };
 
-export const controlDb = globalConnections.__waybookControlDb ?? connectWaybookPostgres(controlUrl);
+export const controlDb = globalConnections.__waybookControlDb ?? connectWaybookPostgres(controlDatabaseUrl);
 globalConnections.__waybookControlDb = controlDb;
 
 const tenantUrls: Record<string, string> = {

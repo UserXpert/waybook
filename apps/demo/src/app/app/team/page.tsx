@@ -7,7 +7,9 @@ import { StaffAccessMenu } from "@/components/staff-access-menu";
 import { StaffTimeOffForm } from "@/components/staff-time-off-form";
 import { AsyncMultiSelect } from "@/components/async-multi-select";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { tenantDb } from "@/lib/waybook/database";
+import { currentIdentity } from "@/lib/waybook/auth";
+import { googleSignInAvailable } from "@/lib/waybook/google-auth";
+import { controlDb, tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
 import { defaultStaffCalendarColor, staffCalendarColors } from "@/lib/waybook/staff-calendar-colors";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -80,6 +82,16 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const staffPath = (memberId: string, targetTab = tab) => basePath + "?employee=" + memberId + "&tab=" + targetTab;
   const moreStaffHref = basePath + "?" + new URLSearchParams({ ...(search ? { q: search } : {}), after: members.at(-1)?.id ?? "" }).toString();
 
+  const [passwordAccess] = selected?.identityId && membership.role === "owner" ? await controlDb<{ available: boolean }[]>`
+    SELECT i.password_hash <> '' AND NOT i.is_platform_admin
+      AND NOT EXISTS (SELECT 1 FROM tenant_memberships m WHERE m.identity_id = i.id AND m.tenant_id <> ${tenant.id}) AS available
+    FROM identities i WHERE i.id = ${selected.identityId}
+  ` : [];
+
+  const canInviteWithGoogle = Boolean(selected?.isActive && !selected.archivedAt && membership.role === "owner"
+    && (selected.role !== "owner" || selected.identityId === (await currentIdentity())?.id)
+    && await googleSignInAvailable());
+
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="team" />
     <section className="staff-workspace">
@@ -108,7 +120,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           <header className="staff-workspace__profile-header">
             {photosAvailable && canEditStaffPhoto(membership.role, signedInPermissions.teamMemberId, selected.id) ? <StaffPhotoUpload key={selected.id} memberId={selected.id} name={selected.name} photoDataUrl={selected.photoDataUrl} action={saveStaffPhoto} /> : <span className="staff-workspace__avatar is-large" aria-hidden="true">{selected.photoDataUrl ? <img src={selected.photoDataUrl} alt="" /> : selected.name.slice(0, 1)}</span>}
             <div><p>STAFF PROFILE</p><h2>{selected.name}</h2><span>{selected.jobTitle ?? "Staff member"} · {selected.isActive ? "Active and bookable" : "Inactive"}</span></div>
-            <StaffAccessMenu memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} />
+            <StaffAccessMenu key={selected.id} memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} canInviteWithGoogle={canInviteWithGoogle} canManagePassword={!selected.identityId || passwordAccess?.available === true} />
           </header>
           <nav className="staff-workspace__tabs" aria-label="Staff profile sections">
             {([{ id: "details", label: "Details" }, { id: "hours", label: "Work hours" }, ...(canManage ? [{ id: "permissions" as const, label: "Permissions" }] : []), { id: "services", label: "Services & locations" }, { id: "time-off", label: "Time off" }] as const).map((item) => <Link key={item.id} href={staffPath(selected.id, item.id)} aria-current={tab === item.id ? "page" : undefined}>{item.label}</Link>)}

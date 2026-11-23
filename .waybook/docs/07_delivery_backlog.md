@@ -38,12 +38,13 @@ handled alongside this sequence, not deferred by it.
 
 Later P2: online-booking add-ons, self-waitlist, client verification, group
 bookings, forms, deposits/payments, memberships/wallet, payment-processor
-integration, automated provisioning, and SSO.
+integration, and automated provisioning.
 
 ## Full priority inventory
 
 | Priority | Bounded slice | Definition of done | Owner document | State |
 | --- | --- | --- | --- | --- |
+| P0 | Phase 1 identity and invitation claiming ([#34](https://github.com/UserXpert/waybook/issues/34)) | Verify Google OAuth and one-time, tenant-scoped staff invitation claims with role, expiry, revocation, session, and isolation checks. Preserve existing password access. | `02_auth_provisioning.md` | In progress |
 | P0 | Harden catalogue media | Decoded JPEG/PNG/WebP type and dimensions are verified before persistence; the shared manager mutation path rejects forged, oversized, corrupt, and extreme-dimension files. A private-S3 policy is designed; data URIs remain bounded until its external provisioning is approved. | `05_commerce_foundation.md` | Passed locally 2026-11-07 |
 | P0 | Booking-backed sale read model | One tenant-scoped `commerce_sales.booking_id` record is visible from an appointment and Sales; appointment payment history is read without duplicate financial entries. | `05_commerce_foundation.md` + `03_booking_engine.md` | Passed locally 2026-11-07 |
 | P0 | Operations-only data boundary and clinic-first pilot | Set the clinic launch jurisdiction and complete privacy/legal review, data map, processor/subprocessor terms, retention/export/deletion plan, access and audit requirements, incident process, and client-facing notices. The core is for operations only across every vertical: permit contact details, booking/service history, payments, versioned policy acknowledgement, and non-sensitive booking instructions; exclude diagnoses, professional/treatment notes, prescriptions, insurance claims, clinical images, and sensitive health intake. Make patient/client and practitioner/staff terminology tenant-configurable across staff-facing and public booking UI. Verify that notes/forms cannot become a workaround for regulated or sensitive records without a separately approved product and compliance programme. | `00_manifest.md` + `01_architecture.md` + `02_auth_provisioning.md` + `04_modules_ledger.md` | Designed — clinic-first decision recorded 2026-11-08 |
