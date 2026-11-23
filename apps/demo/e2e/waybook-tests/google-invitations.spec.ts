@@ -42,6 +42,7 @@ for (const workspaceCase of workspaces) test(`Google invitation claims exact ten
   const tenant = postgres(process.env[workspaceCase.database]!, { max: 1, ssl: false });
   const invitee = await browser.newContext({ baseURL, viewport: page.viewportSize() });
   const signIn = await invitee.newPage();
+  let createdStaffId: string | undefined;
   try {
     const [workspace] = await control<{ id: string }[]>`SELECT id FROM tenants WHERE slug = ${workspaceCase.slug}`;
     const suffix = randomUUID();
@@ -51,6 +52,7 @@ for (const workspaceCase of workspaces) test(`Google invitation claims exact ten
       INSERT INTO team_members (tenant_id, name, email, role)
       VALUES (${workspace.id}, ${name}, ${email}, 'read-only') RETURNING id
     `;
+    createdStaffId = staff.id;
 
     await page.goto("/login");
     await page.getByLabel("Work email").fill(workspaceCase.owner);
@@ -124,8 +126,11 @@ for (const workspaceCase of workspaces) test(`Google invitation claims exact ten
       FROM waybook_oauth_accounts WHERE "providerId" = 'google' AND "accountId" = ${suffix}`;
     expect(oauthAccount?.tokensDiscarded).toBe(true);
   } finally {
-    await invitee.close();
-    await tenant.end();
-    await control.end();
+    try {
+      await invitee.close();
+      if (createdStaffId) await tenant`DELETE FROM team_members WHERE id = ${createdStaffId}`;
+    } finally {
+      await Promise.all([tenant.end(), control.end()]);
+    }
   }
 });
