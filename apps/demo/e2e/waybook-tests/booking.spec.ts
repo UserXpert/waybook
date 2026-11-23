@@ -266,7 +266,7 @@ async function managementState(bookingNumber: string) {
     const [state] = await db<{ id: string; booking: { status: string } }[]>`
       SELECT b.id, to_jsonb(b) AS booking, to_jsonb(block) AS block,
         (SELECT jsonb_agg(to_jsonb(e) ORDER BY e.id) FROM booking_events e WHERE e.booking_id=b.id) AS events,
-        (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM tenant_audit_events a WHERE a.target_type='booking' AND a.target_id=b.id) AS audit,
+        (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM tenant_audit_events a WHERE a.tenant_id=b.tenant_id AND a.target_type='booking' AND a.target_id=b.id::text) AS audit,
         (SELECT jsonb_agg(to_jsonb(o) ORDER BY o.id) FROM email_outbox o WHERE o.booking_id=b.id) AS outbox
       FROM bookings b JOIN booking_blocks block ON block.id=b.booking_block_id AND block.tenant_id=b.tenant_id
       WHERE b.booking_number=${bookingNumber}
@@ -327,17 +327,19 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await findBooking();
   await page.getByRole("button", { name: "Reschedule booking" }).click();
   const rescheduleDay = localWeekdayAfter(8);
-  const dayStart = fromZonedTime(`${rescheduleDay}T00:00:00`, "Europe/Copenhagen").toISOString();
-  const timesResponse = page.waitForResponse(response =>
-    response.url().endsWith("/nordic/api/public/manage") &&
-    response.request().method() === "POST" &&
-    response.request().postDataJSON()?.action === "availability" &&
-    response.request().postDataJSON()?.start === dayStart
-  );
   await page.getByLabel("Day").fill(rescheduleDay);
   const rescheduleSlots = page.locator(".booking-manage-times button");
   await check(rescheduleSlots.first()).toBeVisible();
-  const { availability } = await (await timesResponse).json() as {
+  const timesResponse = await page.request.post("/nordic/api/public/manage", {
+    ...managementRequest,
+    data: {
+      ...managementRequest.data, action: "availability",
+      start: fromZonedTime(`${rescheduleDay}T00:00:00`, "Europe/Copenhagen").toISOString(),
+      end: fromZonedTime(`${rescheduleDay}T23:59:59.999`, "Europe/Copenhagen").toISOString(),
+    },
+  });
+  expect(timesResponse.status()).toBe(200);
+  const { availability } = await timesResponse.json() as {
     availability: { slots: { startTime: string }[] }[];
   };
   const startsAt = availability.flatMap(provider => provider.slots).map(slot => slot.startTime).sort()[0];
