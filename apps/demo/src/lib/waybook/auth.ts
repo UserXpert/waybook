@@ -43,10 +43,15 @@ export async function signIn(email: string, password: string) {
   `;
   const identity = rows[0];
   if (!identity || !passwordMatches(password, identity.passwordHash)) return false;
-  const token = randomBytes(32).toString("base64url");
-  await controlDb`INSERT INTO sessions (identity_id, token_hash, expires_at) VALUES (${identity.id}, ${hash(token)}, now() + interval '12 hours')`;
-  (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 12 });
+  await createWaybookSession(identity.id);
   return true;
+}
+
+/** Issues the same revocable application session after either sign-in path. */
+export async function createWaybookSession(identityId: string) {
+  const token = randomBytes(32).toString("base64url");
+  await controlDb`INSERT INTO sessions (identity_id, token_hash, expires_at) VALUES (${identityId}, ${hash(token)}, now() + interval '12 hours')`;
+  (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 12 });
 }
 
 export async function signOut() {

@@ -1,11 +1,14 @@
+import { googleSignInAvailable } from "@/lib/waybook/google-auth";
+import { startGoogleSignIn } from "./google-actions";
 import { login } from "./actions";
 
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; reset?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string; google?: string }>;
 }) {
-  const { error, reset } = await searchParams;
+  const { error, reset, google } = await searchParams;
+  const googleAvailable = await googleSignInAvailable();
 
   return (
     <main className="waybook-login-page">
@@ -35,18 +38,20 @@ export default async function Login({
             <h1 id="login-title">Sign in to Waybook</h1>
             <p className="waybook-login-intro">Your studio day is ready when you are.</p>
             {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
+            {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
+            {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
             <form action={login} className="waybook-login">
               <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>
               <label><span className="waybook-login-label-row">Password<a href="/login?reset=1">Forgot password?</a></span><input name="password" type="password" autoComplete="current-password" placeholder="Enter your password" required /></label>
               {error ? <span className="waybook-login-error" role="alert">Invalid email or password.</span> : null}
               <button type="submit">Sign in</button>
             </form>
-            <div className="waybook-login-divider"><span>or continue with</span></div>
-            <div className="waybook-login-providers" aria-describedby="provider-note">
-              <button type="button" disabled title="Google sign-in is not configured yet"><b>G</b> Continue with Google</button>
-              <button type="button" disabled title="Apple sign-in is not configured yet"><b aria-hidden="true">●</b> Continue with Apple</button>
-            </div>
-            <p className="waybook-login-provider-note" id="provider-note">Google and Apple sign-in will appear here once your workspace connects them.</p>
+            {googleAvailable ? <>
+              <div className="waybook-login-divider"><span>or continue with</span></div>
+              <form action={startGoogleSignIn} className="waybook-login-providers">
+                <button type="submit">Continue with Google</button>
+              </form>
+            </> : null}
           </div>
         </section>
       </section>

@@ -7,6 +7,8 @@ import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { hashPassword, requireIdentity } from "@/lib/waybook/auth";
 import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { getGoogleAuth, googleSignInAvailable } from "@/lib/waybook/google-auth";
+import { issueStaffInvitation, revokeStaffInvitation } from "@/lib/waybook/staff-invitations";
 import { requireFeature } from "@/lib/waybook/features";
 import { defaultStaffCalendarColor, staffCalendarColorValues } from "@/lib/waybook/staff-calendar-colors";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
@@ -161,6 +163,26 @@ export async function saveTeamMember(formData: FormData) {
   redirect(withSuccessToast(`${tenantPath(slug, "/app/team")}?employee=${member.id}`, "Staff member saved."));
 }
 
+export async function createStaffGoogleInvitation(formData: FormData) {
+  const tenant = await ownerStaffTenant();
+  const actor = await requireIdentity();
+  const configured = getGoogleAuth();
+  if (!configured || !(await googleSignInAvailable())) throw new Error("Google invitations are unavailable.");
+  const memberId = String(formData.get("memberId") ?? "");
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(memberId)) throw new Error("Staff member is unavailable.");
+  const token = await issueStaffInvitation(tenant, actor.id, memberId);
+  return new URL(`/join#${token}`, configured.origin).href;
+}
+
+export async function cancelStaffGoogleInvitation(formData: FormData) {
+  const tenant = await ownerStaffTenant();
+  const actor = await requireIdentity();
+  if (!(await googleSignInAvailable())) throw new Error("Google invitations are unavailable.");
+  const memberId = String(formData.get("memberId") ?? "");
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(memberId)) throw new Error("Staff member is unavailable.");
+  await revokeStaffInvitation(tenant.id, actor.id, memberId);
+}
+
 export async function provisionStaffLogin(formData: FormData) {
   const tenant = await ownerStaffTenant();
   const actor = await requireIdentity();
@@ -206,11 +228,22 @@ export async function resetStaffPassword(formData: FormData) {
   const db = await validStaffMember(tenant, memberId);
   const [member] = await db<{ id: string; identityId: string | null }[]>`SELECT id, identity_id AS "identityId" FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
   if (!member?.identityId) throw new Error("Create a staff login before changing its password.");
-  await controlDb`UPDATE identities SET password_hash = ${hashPassword(password)}, updated_at = now() WHERE id = ${member.identityId}`;
-  // A reset invalidates any prior login immediately.
-  await controlDb`UPDATE sessions SET revoked_at = now() WHERE identity_id = ${member.identityId} AND revoked_at IS NULL`;
+  await controlDb.begin(async (tx) => {
+    const [updated] = await tx.unsafe<{ id: string }[]>(`
+      UPDATE identities i SET password_hash = $1, updated_at = now()
+      WHERE i.id = $2 AND i.password_hash <> '' AND NOT i.is_platform_admin
+        AND EXISTS (SELECT 1 FROM tenant_memberships m WHERE m.identity_id = i.id AND m.tenant_id = $3)
+        AND NOT EXISTS (SELECT 1 FROM tenant_memberships m WHERE m.identity_id = i.id AND m.tenant_id <> $3)
+      RETURNING id
+    `, [hashPassword(password), member.identityId, tenant.id]);
+    if (!updated) throw new Error("This account does not support a workspace password reset.");
+    await tx.unsafe("UPDATE sessions SET revoked_at = now() WHERE identity_id = $1 AND revoked_at IS NULL", [member.identityId]);
+    await tx.unsafe(
+      "INSERT INTO platform_audit_events (actor_identity_id, tenant_id, action, target_type, target_id) VALUES ($1, $2, 'staff.login.password_reset', 'team_member', $3)",
+      [actor.id, tenant.id, member.id],
+    );
+  });
   await db`INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id) VALUES (${tenant.id}, ${actor.id}, 'staff.login.password_reset', 'team_member', ${member.id})`;
-  await controlDb`INSERT INTO platform_audit_events (actor_identity_id, tenant_id, action, target_type, target_id) VALUES (${actor.id}, ${tenant.id}, 'staff.login.password_reset', 'team_member', ${member.id})`;
   revalidateStaff();
 }
 

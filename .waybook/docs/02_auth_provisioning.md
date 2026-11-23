@@ -4,16 +4,15 @@
 
 **Current local auth: Database-backed / browser-verified.**
 
-**Google/Better Auth, invitations, and Create Business: Designed.** Do not represent onboarding as self-service until this document's definition of done is satisfied.
+**Google/Better Auth and staff invitations: implemented on the #34 branch, pending release.** Create Business provisioning remains a separate item.
 
 ## Current implementation
 
 - Local identities use password hashes and expiring, hash-stored sessions.
 - The local sign-in page uses the Waybook brand and keeps the working password
   form. Its **Forgot password?** option truthfully directs staff to their
-  workspace owner, who already owns the reset workflow. Google and Apple are
-  presented as unavailable provider choices until Better Auth/OAuth is wired;
-  neither is represented as live authentication.
+  workspace owner, who already owns the reset workflow. Google is available when
+  OAuth configuration and the Control migration are present.
 - Platform admin and tenant-owner routing work locally.
 - `admin@waybook.local` is a platform administrator and therefore lands on `/control` after login.
 - Tenant members land at `/{business}/app` through the root post-login route.
@@ -31,18 +30,20 @@ Other tenant-role UI and automated authorization coverage remain incomplete.
 
 ## Google / Better Auth rebuild
 
-The current local password-only sign-in must be replaced or extended with Google-backed Better Auth while retaining the Control database as the authority. Do not import the separate `/Users/amit/Documents/Waybook` repository's static dashboard, schema, or pool wiring.
+Better Auth validates the Google OAuth response and issues a short-lived exchange session. Waybook consumes it once and issues the same revocable Control session used by password sign-in. Google provider tokens are discarded. Platform admin password access stays in Control.
 
 ### OAuth configuration checkpoint — 2026-11-05
 
 - Google OAuth is centralized on `waybook-booking.vercel.app`.
 - Registered callbacks are the hosted callback and `localhost:3333` callback only; tenant hostnames are not registered individually.
 - Google client ID/secret and Better Auth signing secret are stored in Vercel-scoped configuration.
-- Better Auth packages are present, but application integration, migration, invitation claim, tests, and browser proof are still outstanding.
+- Google accepted both registered callback URLs and returned its account-selection page during the 24 November configuration check. A real Google account completed the localhost flow against disposable data. An uninvited account was denied, and an invited account received read-only access to Nordic Studio and was denied entry to Copenhagen. The localhost OAuth client uses a separate Keychain-held secret. Hosted Google sign-in remains a release check.
 
 ## Invitation-only workspace claiming
 
-Required design:
+An owner creates or revokes a 48-hour link from a staff profile’s **Google invitation** menu and shares the link through an approved channel. The link carries its secret in the URL fragment, and Control stores only its hash. Owners can link their own existing account. Claiming never creates an owner role. The Google subject is bound after the first verified, invited sign-in and can then be used at the normal login page.
+
+Claim flow:
 
 1. Accept only verified provider identity data.
 2. Validate a scoped, expiring invitation transactionally.
@@ -50,9 +51,9 @@ Required design:
 4. Record the event in immutable Control audit history.
 5. Resolve the approved tenant connection server-side after acceptance.
 
-No temporary password may be created or exposed during business onboarding.
+Google invitations create no temporary password. Existing password accounts keep their existing access. A workspace owner can reset an existing password for a single-workspace identity. A tenant-issued password cannot gain access to another workspace through an invitation.
 
-Required tests: acceptance, repeat acceptance, expiry, revocation, tenant isolation, role assignment, and browser checks for Nordic and Copenhagen.
+Desktop and mobile tests cover acceptance, repeat acceptance, expiry, revocation, role assignment, and tenant isolation in Nordic and Copenhagen using a synthetic provider. Production Control migration `0005` was restore-rehearsed against an encrypted backup and its six new tables were verified after application.
 
 ## Create Business provisioning pipeline
 
