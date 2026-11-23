@@ -113,7 +113,7 @@ test("staff can change their own photo and read-only members cannot", async ({ p
   } finally { await control.end(); await tenant.end(); }
 });
 
-test("status-only staff cannot see appointment management controls", async ({ page }) => {
+test("staff can complete past bookings and upcoming attendance is read-only", async ({ page }) => {
   const { default: postgres } = await import("postgres");
   const { randomUUID } = await import("node:crypto");
   const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL!;
@@ -139,39 +139,54 @@ test("status-only staff cannot see appointment management controls", async ({ pa
     await tenant`INSERT INTO team_member_locations (tenant_id,team_member_id,location_id) VALUES (${workspace.id},${staff.id},${location.id}) ON CONFLICT DO NOTHING`;
     await tenant`INSERT INTO service_team_members (tenant_id,service_id,team_member_id) VALUES (${workspace.id},${service.id},${staff.id}) ON CONFLICT DO NOTHING`;
     const [customer] = await tenant`INSERT INTO customers (tenant_id,name,email) VALUES (${workspace.id},'Status-only customer',${`status-customer-${suffix}@example.test`}) RETURNING id`;
-    const [slot] = await tenant<{ startsAt: Date; endsAt: Date }[]>`SELECT (((now() AT TIME ZONE ${settings.timezone})::date + 1 + '11:00'::time) AT TIME ZONE ${settings.timezone}) AS "startsAt", ((((now() AT TIME ZONE ${settings.timezone})::date + 1 + '11:00'::time) AT TIME ZONE ${settings.timezone}) + ${service.durationMinutes} * interval '1 minute') AS "endsAt"`;
-    const [block] = await tenant`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES (${workspace.id},${staff.id},${location.id},${slot.startsAt},${slot.endsAt},'confirmed') RETURNING id`;
-    const [booking] = await tenant`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,idempotency_key,booked_price_cents) VALUES (${workspace.id},${block.id},${service.id},${staff.id},${location.id},${customer.id},${slot.startsAt},${slot.endsAt},'confirmed','tenant',${`status-only-${suffix}`},0) RETURNING id`;
-    const dateParts = new Intl.DateTimeFormat('en-CA', { timeZone: settings.timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(slot.startsAt);
-    const datePart = (name: string) => dateParts.find((part) => part.type === name)!.value;
-    const day = `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
+    async function createBooking(dayOffset: number) {
+      const [slot] = await tenant<{ startsAt: Date; endsAt: Date; day: string }[]>`
+        SELECT local_day::text AS day, start_time AS "startsAt",
+          start_time + ${service.durationMinutes} * interval '1 minute' AS "endsAt"
+        FROM (SELECT local_day, (local_day + '11:00'::time) AT TIME ZONE ${settings.timezone} AS start_time
+              FROM (SELECT (now() AT TIME ZONE ${settings.timezone})::date + ${dayOffset}::int AS local_day) date_value) slot
+      `;
+      const [block] = await tenant`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES (${workspace.id},${staff.id},${location.id},${slot.startsAt},${slot.endsAt},'confirmed') RETURNING id`;
+      const [booking] = await tenant<{ id: string }[]>`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,idempotency_key,booked_price_cents) VALUES (${workspace.id},${block.id},${service.id},${staff.id},${location.id},${customer.id},${slot.startsAt},${slot.endsAt},'confirmed','tenant',${`status-only-${suffix}-${dayOffset}`},0) RETURNING id`;
+      return { id: booking.id, day: slot.day };
+    }
+    const past = await createBooking(-1);
+    const future = await createBooking(1);
+    const attendanceLabels = ['Arrived', 'Completed', 'No show'];
 
-    await page.goto('/login');
-    await page.getByLabel('Work email').fill(staffEmail);
-    await page.getByPlaceholder('Enter your password').fill('waybook-local-only');
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page).toHaveURL(/\/nordic\/app\/calendars/);
+    async function signIn(email: string) {
+      await page.goto('/login');
+      await page.getByLabel('Work email').fill(email);
+      await page.getByPlaceholder('Enter your password').fill('waybook-local-only');
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      await expect(page).toHaveURL(/\/nordic\/app/);
+    }
+    await signIn(staffEmail);
 
-    // Calendar links use the asynchronous getCalendarAppointment action.
-    await page.goto(`/nordic/app/calendars?day=${day}`);
+    await page.goto(`/nordic/app/calendars?day=${future.day}`);
     await page.getByRole('link', { name: /Status-only customer/ }).click();
-    await expect(page.getByRole('heading', { name: 'Appointment status' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Arrived' })).toBeVisible();
+    await expect(page.getByText('Attendance can be updated once the appointment starts.')).toBeVisible();
+    for (const label of attendanceLabels) await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+
+    await page.goto(`/nordic/app/calendars?day=${past.day}`);
+    await page.getByRole('link', { name: /Status-only customer/ }).click();
+    await expect(page.getByText('Current: no show')).toBeVisible();
     for (const heading of ['Edit', 'Reschedule', 'Sales ledger']) await expect(page.getByRole('heading', { name: heading })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /cancel appointment/i })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Arrived' }).click();
-    await expect.poll(async () => (await tenant<{ status: string }[]>`SELECT status FROM bookings WHERE id=${booking.id}`)[0]?.status).toBe('arrived');
-
-    // A direct URL is rendered by the server and must retain the limited scope.
-    await page.goto(`/nordic/app/calendars?day=${day}&booking=${booking.id}`);
-    await expect(page.getByRole('heading', { name: 'Appointment status' })).toBeVisible();
-    for (const heading of ['Edit', 'Reschedule', 'Sales ledger']) await expect(page.getByRole('heading', { name: heading })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Arrived' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Completed' })).toBeVisible();
-    await page.getByRole('button', { name: 'Completed' }).click();
-    await expect.poll(async () => (await tenant<{ status: string }[]>`SELECT status FROM bookings WHERE id=${booking.id}`)[0]?.status).toBe('completed');
-    await page.reload();
+    await expect(page.getByRole('button', { name: 'Arrived', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Completed', exact: true }).click();
+    await expect.poll(async () => (await tenant<{ status: string }[]>`SELECT status FROM bookings WHERE id=${past.id}`)[0]?.status).toBe('completed');
     await expect(page.getByText('This appointment’s status is final and cannot be changed.')).toBeVisible();
-    for (const label of ['Arrived', 'Completed', 'No show']) await expect(page.getByRole('button', { name: label })).toHaveCount(0);
+    const [audit] = await tenant`SELECT metadata FROM tenant_audit_events WHERE tenant_id=${workspace.id} AND target_id=${past.id} AND action='booking.completed'`;
+    expect(audit?.metadata).toMatchObject({ previousStatus: 'no_show' });
+
+    await page.context().clearCookies();
+    await signIn('owner@nordic.local');
+    await page.goto(`/nordic/app/bookings?booking=${future.id}`);
+    await expect(page.getByText('Attendance can be updated once the appointment starts.')).toBeVisible();
+    for (const label of attendanceLabels) await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /cancel appointment/i })).toBeVisible();
+    await page.goto(`/nordic/app/bookings?booking=${past.id}`);
+    await expect(page.getByText('This appointment’s status is final and cannot be changed.')).toBeVisible();
   } finally { await control.end(); await tenant.end(); }
 });

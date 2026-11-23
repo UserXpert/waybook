@@ -23,7 +23,7 @@ import {
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
-import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
+import { canChangeAttendanceNow, isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 import {
   getRescheduleBookingAvailability,
 } from "./actions";
@@ -1187,7 +1187,8 @@ export default async function CalendarsPage({
           startsAt: selectedBooking.startsAt.toISOString(), endsAt: selectedBooking.endsAt.toISOString(), status: selectedBooking.status,
           customerName: selectedBooking.customerName, customerEmail: canManage ? selectedBooking.customerEmail : "", customerPhone: canManage ? selectedBooking.customerPhone : null,
           serviceTitle: selectedBooking.serviceTitle, teamMemberName: selectedBookingMember.name,
-          canManage, canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
+          canManage, canChangeAttendanceNow: canChangeAttendanceNow(selectedBooking),
+          canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
           resourceId: canManage ? selectedBooking.resourceId : null,
           resources: eligibleResources, days: canManage ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
         } : null}

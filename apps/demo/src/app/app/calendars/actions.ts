@@ -13,6 +13,7 @@ import { canManageAppointment, staffPermissionContext, type StaffPermissionConte
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 import {
   assertMovableAppointmentStatus,
+  canChangeAttendanceNow,
   isMovableAppointmentStatus,
 } from "@/lib/waybook/appointment-lifecycle";
 
@@ -143,6 +144,7 @@ export async function getCalendarAppointment(bookingId: string) {
     startsAt: booking.startsAt.toISOString(),
     endsAt: booking.endsAt.toISOString(),
     canManage: permissions.isManager,
+    canChangeAttendanceNow: canChangeAttendanceNow(booking),
     canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
     resources,
     days,
@@ -549,19 +551,23 @@ export async function updateBookingStatus(formData: FormData) {
     );
     if (!block) throw new Error("Booking availability is unavailable.");
 
-    const [current] = await transaction.unsafe<{ status: string }[]>(
-      "SELECT status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+    const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
+      'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
       [booking.id, tenant.id],
     );
     if (!current) throw new Error("Booking is unavailable.");
     // A repeated click or an in-flight duplicate cancellation is a safe no-op.
     if (current.status === "cancelled" && status === "cancelled") return null;
-    if (["completed", "cancelled", "no_show"].includes(current.status)) {
+    if (["completed", "cancelled"].includes(current.status)) {
       throw new Error("This appointment has a final status and cannot be changed.");
+    }
+    if (status !== "cancelled" && !canChangeAttendanceNow(current)) {
+      throw new Error("Attendance cannot be updated before the appointment is eligible.");
     }
     const allowedTransitions: Record<string, string[]> = {
       confirmed: ["arrived", "completed", "no_show", "cancelled"],
       arrived: ["completed", "no_show", "cancelled"],
+      no_show: ["completed"],
     };
     if (!allowedTransitions[current.status]?.includes(status)) {
       throw new Error("That appointment status change is not allowed.");
