@@ -37,7 +37,7 @@ Better Auth validates the Google OAuth response and issues a short-lived exchang
 - Google OAuth is centralized on `waybook-booking.vercel.app`.
 - Registered callbacks are the hosted callback and `localhost:3333` callback only; tenant hostnames are not registered individually.
 - Google client ID/secret and Better Auth signing secret are stored in Vercel-scoped configuration.
-- Google accepted both registered callback URLs and returned its account-selection page during the 24 November configuration check. A completed sign-in with a real Google account remains a release check. The local example documents the required secret names without storing values.
+- Google accepted both registered callback URLs and returned its account-selection page during the 24 November configuration check. A real Google account completed the localhost flow against disposable data. An uninvited account was denied, and an invited account received read-only access to Nordic Studio and was denied entry to Copenhagen. The localhost OAuth client uses a separate Keychain-held secret. Hosted Google sign-in remains a release check.
 
 ## Invitation-only workspace claiming
 
@@ -53,7 +53,7 @@ Claim flow:
 
 Google invitations create no temporary password. Existing password accounts keep their existing access. A workspace owner can reset an existing password for a single-workspace identity. A tenant-issued password cannot gain access to another workspace through an invitation.
 
-Required tests: acceptance, repeat acceptance, expiry, revocation, tenant isolation, role assignment, and browser checks for Nordic and Copenhagen.
+Desktop and mobile tests cover acceptance, repeat acceptance, expiry, revocation, role assignment, and tenant isolation in Nordic and Copenhagen using a synthetic provider. Production Control migration `0005` was restore-rehearsed against an encrypted backup and its six new tables were verified after application.
 
 ## Create Business provisioning pipeline
 
