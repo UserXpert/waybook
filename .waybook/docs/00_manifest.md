@@ -89,6 +89,6 @@ must be reviewed before launch; see `10_denmark_privacy_review.md`.
 ## Phase 1 gates still open
 
 1. Better Auth + Google SSO, invitation claiming, and automated business provisioning.
-2. Automated coverage for tenant isolation, roles, DST, buffers, hold expiry, concurrency, token scope/revocation, migrations, and recovery.
+2. Automated coverage for tenant isolation, roles, DST, exact appointment intervals, hold expiry, concurrency, booking-management authorization, staff session revocation, and migrations. The pilot runbook records the separate recovery rehearsals.
 3. Copenhagen and entitlement-denied browser checks, remaining authenticated module checks, hosted canonical booking confirmation, and complete desktop/mobile end-to-end coverage.
 4. Rate-limit, backup/recovery, migration, and environment hardening.

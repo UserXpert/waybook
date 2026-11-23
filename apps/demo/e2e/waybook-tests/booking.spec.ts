@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import { fromZonedTime } from "date-fns-tz";
 import postgres from "postgres";
 
 function localDayAfter(days: number) {
@@ -259,6 +260,24 @@ test("a signed embed booking is confirmed with verified-source audit attribution
   }
 });
 
+async function managementState(bookingNumber: string) {
+  const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
+  try {
+    const [state] = await db<{ id: string; booking: { status: string } }[]>`
+      SELECT b.id, to_jsonb(b) AS booking, to_jsonb(block) AS block,
+        (SELECT jsonb_agg(to_jsonb(e) ORDER BY e.id) FROM booking_events e WHERE e.booking_id=b.id) AS events,
+        (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM tenant_audit_events a WHERE a.target_type='booking' AND a.target_id=b.id) AS audit,
+        (SELECT jsonb_agg(to_jsonb(o) ORDER BY o.id) FROM email_outbox o WHERE o.booking_id=b.id) AS outbox
+      FROM bookings b JOIN booking_blocks block ON block.id=b.booking_block_id AND block.tenant_id=b.tenant_id
+      WHERE b.booking_number=${bookingNumber}
+    `;
+    expect(state, "expected the test booking and its reserved block").toBeDefined();
+    return state!;
+  } finally {
+    await db.end();
+  }
+}
+
 test("customer books, reschedules and cancels without a stale confirmation", async ({ page }) => {
   test.setTimeout(120_000);
   const check = expect.configure({ timeout: 30_000 });
@@ -308,9 +327,51 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await findBooking();
   await page.getByRole("button", { name: "Reschedule booking" }).click();
   const rescheduleDay = localWeekdayAfter(8);
+  const dayStart = fromZonedTime(`${rescheduleDay}T00:00:00`, "Europe/Copenhagen").toISOString();
+  const timesResponse = page.waitForResponse(response =>
+    response.url().endsWith("/nordic/api/public/manage") &&
+    response.request().method() === "POST" &&
+    response.request().postDataJSON()?.action === "availability" &&
+    response.request().postDataJSON()?.start === dayStart
+  );
   await page.getByLabel("Day").fill(rescheduleDay);
   const rescheduleSlots = page.locator(".booking-manage-times button");
   await check(rescheduleSlots.first()).toBeVisible();
+  const { availability } = await (await timesResponse).json() as {
+    availability: { slots: { startTime: string }[] }[];
+  };
+  const startsAt = availability.flatMap(provider => provider.slots).map(slot => slot.startTime).sort()[0];
+  expect(startsAt).toBeTruthy();
+
+  const beforeDenials = await managementState(number!);
+  for (const action of ["cancel", "reschedule"] as const) {
+    const data = { ...managementRequest.data, action, ...(action === "reschedule" ? { startsAt } : {}) };
+    const mismatched = await page.request.post("/nordic/api/public/manage", {
+      ...managementRequest, data: { ...data, email: "different-customer@example.test" },
+    });
+    expect(mismatched.status()).toBe(409);
+    const crossTenant = await page.request.post("/copenhagen/api/public/manage", { ...managementRequest, data });
+    expect(crossTenant.status()).toBe(409);
+    const crossOrigin = await page.request.post("/nordic/api/public/manage", {
+      headers: { Origin: "https://other-site.example.test" }, data,
+    });
+    expect(crossOrigin.status()).toBe(403);
+  }
+  expect(await managementState(number!)).toEqual(beforeDenials);
+
+  // The supported UUID reference is fresh even after the requests using the public booking number.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const allowed = await page.request.post("/nordic/api/public/manage", {
+      ...managementRequest, data: { ...managementRequest.data, bookingId: beforeDenials.id },
+    });
+    expect(allowed.status()).toBe(200);
+  }
+  const throttled = await page.request.post("/nordic/api/public/manage", {
+    ...managementRequest, data: { ...managementRequest.data, bookingId: beforeDenials.id, action: "cancel" },
+  });
+  expect(throttled.status()).toBe(429);
+  expect(await managementState(number!)).toEqual(beforeDenials);
+
   await rescheduleSlots.first().click();
   await page.getByRole("button", { name: "Confirm new time" }).click();
   await check(page.getByText("Your booking has been rescheduled.")).toBeVisible();
@@ -337,6 +398,17 @@ test("customer books, reschedules and cancels without a stale confirmation", asy
   await page.getByRole("button", { name: "Cancel booking" }).click();
   await page.getByRole("button", { name: "Confirm cancellation" }).click();
   await check(page.getByText("Your booking has been cancelled.")).toBeVisible();
+  const cancelled = await managementState(number!);
+  expect(cancelled.booking.status).toBe("cancelled");
+  const terminalChange = await page.request.post("/nordic/api/public/manage", {
+    ...managementRequest, data: { ...managementRequest.data, action: "reschedule", startsAt },
+  });
+  expect(terminalChange.status()).toBe(409);
+  const repeatedCancellation = await page.request.post("/nordic/api/public/manage", {
+    ...managementRequest, data: { ...managementRequest.data, action: "cancel" },
+  });
+  expect(repeatedCancellation.status()).toBe(200);
+  expect(await managementState(number!)).toEqual(cancelled);
   await calendar.reload();
   await check(calendar.getByText(customerName, { exact: true })).toHaveCount(0);
   await calendar.close();

@@ -9,8 +9,8 @@ const appUrl = process.env.WAYBOOK_ISOLATED_APP_URL;
 const localHosts = ["localhost", "127.0.0.1", "::1", "[::1]"];
 if (!databaseUrl || !appUrl) throw new Error("Set WAYBOOK_LOCAL_PERF_DB_URL and WAYBOOK_ISOLATED_APP_URL to disposable local fixtures.");
 const dbAddress = new URL(databaseUrl), appAddress = new URL(appUrl);
-if (!localHosts.includes(dbAddress.hostname) || !localHosts.includes(appAddress.hostname) || !/^(perf_|waybook_test_)/.test(dbAddress.pathname.slice(1))) {
-  throw new Error("The app and a perf_/waybook_test_ database must both be local.");
+if (!localHosts.includes(dbAddress.hostname) || !localHosts.includes(appAddress.hostname) || !/^(perf_|waybook_(?:test|e2e)_)/.test(dbAddress.pathname.slice(1))) {
+  throw new Error("The app and a perf_, waybook_test_, or waybook_e2e_ database must both be local.");
 }
 const db = postgres(databaseUrl, { max: 1, ssl: false });
 const forceOverlap = process.env.WAYBOOK_TEST_FORCE_HOLD_RACE === "1";
