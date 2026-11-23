@@ -63,10 +63,18 @@ concept: a booking reserves its customer-facing interval exactly, so adjacent
 appointments are valid.
 
 Resources have a tenant-managed mutual-exclusivity setting. An exclusive room,
-chair, bay, or equipment unit admits only one overlapping hold/booking;
-turning the setting off makes it a shared room, so multiple staff can use it
-concurrently while its assignment remains visible on each booking. Existing
-resources default to exclusive.
+chair, bay, or equipment unit allows one active assignment per overlapping
+appointment interval. Holds and bookings reserve staff time, and resource
+assignment happens after booking. Shared resources allow concurrent assignments
+to different staff. Existing resources default to exclusive.
+
+Issue [#16](https://github.com/UserXpert/waybook/issues/16) verified second-location
+creation, staff-slot availability, and cancellation in Nordic and Copenhagen on
+isolated desktop and mobile browsers. Desktop used the team calendar drag action.
+Mobile used the appointment reschedule drawer. Two overlapping appointments
+competed for one exclusive resource. The winning assignment was retained and the
+losing save displayed the conflict without persisting other edits. Cancellation
+released the slot and any active resource assignment.
 
 Tenant operators can add a dated location closure (for example, a holiday or
 private event). A local UI/API proof added a Friday closure, returned zero
