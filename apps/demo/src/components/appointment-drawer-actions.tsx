@@ -13,31 +13,36 @@ type Slot = { startTime: string; endTime: string };
 type Props = {
   bookingId: string; customerName: string; customerEmail: string; customerPhone: string | null; status: string;
   timezone: string; days: string[]; slots: Slot[];
+  canChangeAttendanceNow: boolean;
   saveDetails: ServerAction; reschedule: ServerAction; updateStatus: ServerAction;
   resourceId: string | null; resources: { id: string; name: string; isMutuallyExclusive: boolean }[];
 };
 
-type StatusActionProps = Pick<Props, "bookingId" | "status" | "updateStatus">;
+type StatusActionProps = Pick<Props, "bookingId" | "status" | "updateStatus" | "canChangeAttendanceNow">;
 
-export function AppointmentStatusActions({ bookingId, status, updateStatus }: StatusActionProps) {
+export function AppointmentStatusActions({ bookingId, status, updateStatus, canChangeAttendanceNow }: StatusActionProps) {
   const statusOptions = status === "confirmed"
     ? [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const
     : status === "arrived"
       ? [["completed", "Completed"], ["no_show", "No show"]] as const
-      : [];
+      : status === "no_show"
+        ? [["completed", "Completed"]] as const
+        : [];
 
-  if (!statusOptions.length) {
+  if (!statusOptions.length || !canChangeAttendanceNow) {
     const label = status === "no_show" ? "No show" : status[0]?.toUpperCase() + status.slice(1);
     const explanation = status === "cancelled"
       ? "This appointment has been cancelled. Its customer and audit history remain available, but it can no longer be edited, rescheduled, or paid."
-      : "This appointment’s status is final and cannot be changed.";
+      : statusOptions.length
+        ? status === "no_show" ? "Completion can be recorded after the appointment ends." : "Attendance can be updated once the appointment starts."
+        : "This appointment’s status is final and cannot be changed.";
     return <section className="appointment-drawer__history"><h3>Appointment status</h3><p className="appointment-drawer__status-readonly">{label}</p><p className="appointment-drawer__readonly">{explanation}</p></section>;
   }
 
   return <section><h3>Appointment status</h3><p className="appointment-status-current">Current: {status.replace("_", " ")}</p><div className="appointment-drawer__status-actions">{statusOptions.map(([value, label]) => <form action={updateStatus} key={value}><input type="hidden" name="bookingId" value={bookingId} /><input type="hidden" name="status" value={value} /><button type="submit">{label}</button></form>)}</div></section>;
 }
 
-export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, saveDetails, reschedule, updateStatus, resourceId, resources }: Props) {
+export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, canChangeAttendanceNow, saveDetails, reschedule, updateStatus, resourceId, resources }: Props) {
   const router = useRouter();
   const [reschedulePending, setReschedulePending] = useState(false);
   const [rescheduleError, setRescheduleError] = useState("");
@@ -47,9 +52,10 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
   const [resource, setResource] = useState(resourceId ?? "");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const detailsChanged = details.name !== savedDetails.name || details.email !== savedDetails.email || details.phone !== savedDetails.phone || resource !== savedDetails.resource;
-  if (status === "cancelled") return <AppointmentStatusActions bookingId={bookingId} status={status} updateStatus={updateStatus} />;
+  const attendance = <AppointmentStatusActions bookingId={bookingId} status={status} updateStatus={updateStatus} canChangeAttendanceNow={canChangeAttendanceNow} />;
+  if (status === "cancelled") return attendance;
   return <>
-    <AppointmentStatusActions bookingId={bookingId} status={status} updateStatus={updateStatus} />
+    {attendance}
     <section><h3>Edit</h3><form action={async (formData) => { setSaveState("saving"); try { await saveDetails(formData); setSavedDetails({ ...details, resource }); setSaveState("saved"); showSuccessToast("Changes saved"); router.refresh(); } catch { setSaveState("error"); } }} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><label>Customer name<input name="customerName" value={details.name} onChange={(event) => { setDetails({ ...details, name: event.target.value }); setSaveState("idle"); }} required /></label><label>Email<input name="customerEmail" type="email" value={details.email} onChange={(event) => { setDetails({ ...details, email: event.target.value }); setSaveState("idle"); }} required /></label><label>Phone<input name="customerPhone" type="tel" value={details.phone} onChange={(event) => { setDetails({ ...details, phone: event.target.value }); setSaveState("idle"); }} /></label><label>Resource<select name="resourceId" value={resource} onChange={event => { setResource(event.target.value); setSaveState("idle"); }}><option value="">Unassigned</option>{resources.map(item => <option key={item.id} value={item.id}>{item.name}{item.isMutuallyExclusive ? " · exclusive" : " · shared"}</option>)}</select></label>{saveState === "error" ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">Could not save changes. Please try again.</p> : null}<button type="submit" disabled={!detailsChanged || saveState === "saving"}>{saveState === "saving" ? "Saving…" : "Save changes"}</button></form></section>
     {isMovableAppointmentStatus(status) ? <section><h3>Reschedule</h3><form action={async (formData) => { setReschedulePending(true); setRescheduleError(""); try { await reschedule(formData); showSuccessToast("Appointment rescheduled"); router.refresh(); } catch { setRescheduleError("Could not reschedule this appointment. Please try another time."); } finally { setReschedulePending(false); } }} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><RescheduleSlotPicker bookingId={bookingId} timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} />{rescheduleError ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{rescheduleError}</p> : null}<button type="submit" disabled={!hasNewTime || reschedulePending}>{reschedulePending ? "Rescheduling…" : "Reschedule appointment"}</button></form></section> : null}
     <section><h3>Sales ledger</h3><p className="appointment-status-current">Record payment received or a refund. Entries are immutable and feed paid-revenue reporting.</p><AppointmentPaymentForm bookingId={bookingId} outstandingCents={0} /></section>

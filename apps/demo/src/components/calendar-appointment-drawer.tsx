@@ -6,6 +6,8 @@ import { AppointmentDrawerActions, AppointmentStatusActions } from "@/components
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { appointmentDrawerCapabilities } from "@/lib/waybook/appointment-drawer-capabilities";
 
+import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
+
 type Detail = Awaited<ReturnType<typeof getCalendarAppointment>>;
 export type CalendarAppointmentSummary = Pick<Detail, "id" | "bookingNumber" | "customerName" | "serviceTitle" | "teamMemberName" | "startsAt" | "endsAt" | "status">;
 
@@ -77,10 +79,10 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone }
           <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>Staff</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : capabilities.canEdit ? <>
-          <AppointmentDrawerActions key={detail.id} bookingId={detail.id} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
-          {capabilities.canCancel && detail.status !== "cancelled" && detail.status !== "completed" ? <CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /> : null}
+          <AppointmentDrawerActions key={detail.id} bookingId={detail.id} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
+          {capabilities.canCancel && isMovableAppointmentStatus(detail.status) ? <CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /> : null}
         </> : capabilities.canUpdateStatus ? <>
-          <AppointmentStatusActions bookingId={detail.id} status={detail.status} updateStatus={updateBookingStatus} />
+          <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} updateStatus={updateBookingStatus} />
         </> : <p className="tenant-drawer-note">Read-only access: appointment changes require an owner or manager.</p>}
       </div>
     </aside>
