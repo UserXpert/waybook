@@ -73,5 +73,8 @@ export async function saveProduct(_: ProductSaveState, formData: FormData): Prom
   revalidatePath("/app/products");
   revalidatePath("/app/sales");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/products")}?product=${productId}`, "Product saved."));
+  const params = new URLSearchParams({ product: productId });
+  const catalogueQuery = String(formData.get("catalogueQuery") ?? "").trim().slice(0, 100);
+  if (catalogueQuery) params.set("q", catalogueQuery);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/products")}?${params}`, "Product saved."));
 }
