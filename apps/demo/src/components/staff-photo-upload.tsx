@@ -4,13 +4,13 @@ import { Camera } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
-export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { memberId: string; name: string; photoDataUrl: string | null; action: (data: FormData) => Promise<void> }) {
+export function useStaffPhotoUpload(memberId: string | null, action: (data: FormData) => Promise<void>) {
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
 
   function upload(file: File | undefined) {
-    if (!file) return;
+    if (!file || !memberId) return;
     setError("");
     if (file.size > 250_000) { setError("Choose an image smaller than 250 KB."); if (input.current) input.current.value = ""; return; }
     const data = new FormData();
@@ -23,6 +23,11 @@ export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { mem
     });
   }
 
+  return { input, error, pending, upload };
+}
+
+export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { memberId: string; name: string; photoDataUrl: string | null; action: (data: FormData) => Promise<void> }) {
+  const { input, error, pending, upload } = useStaffPhotoUpload(memberId, action);
   return <div className="staff-photo-upload">
     <button type="button" className="staff-workspace__avatar is-large staff-photo-upload__button" onClick={() => input.current?.click()} disabled={pending} aria-label={`${pending ? "Uploading photo for" : "Change photo for"} ${name}`} title="Change profile photo">
       {photoDataUrl ? <img src={photoDataUrl} alt="" /> : name.slice(0, 1)}

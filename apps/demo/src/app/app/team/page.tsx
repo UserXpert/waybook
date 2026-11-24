@@ -6,7 +6,7 @@ import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
 import { StaffPhotoUpload } from "@/components/staff-photo-upload";
 import { StaffHoursEditor } from "@/components/staff-hours-editor";
 import { StaffAccessMenu } from "@/components/staff-access-menu";
-import { OwnerProfileNameForm } from "@/components/owner-profile-name-form";
+import { OwnerProfileDetailsForm } from "@/components/owner-profile-details-form";
 import { StaffTimeOffForm } from "@/components/staff-time-off-form";
 import { AsyncMultiSelect } from "@/components/async-multi-select";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
@@ -135,10 +135,9 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </nav>
           {tab === "details" ? <section className="staff-workspace__panel">
             <PanelHeading title="Details" text="Contact and profile information used inside your workspace." />
-            {canManage && selected.role !== "owner" ? <ProfileForm terms={terms} key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <>
-              {isOwnOwnerProfile && selected.isActive ? <OwnerProfileNameForm key={selected.id} memberId={selected.id} name={selected.name} /> : null}
-              <ProfileFacts terms={terms} member={selected} />
-            </>}
+            {(canManage && selected.role !== "owner") || (isOwnOwnerProfile && selected.isActive)
+              ? <ProfileForm terms={terms} key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} ownOwner={isOwnOwnerProfile} />
+              : <ProfileFacts terms={terms} member={selected} />}
           </section> : null}
           {tab === "hours" ? <section className="staff-workspace__panel staff-workspace__panel--wide">
             <PanelHeading title="Working hours" text="A clear weekly schedule for when this person can be offered to customers." />
@@ -217,16 +216,40 @@ function StaffPermissionsForm({ memberId, initial, workspacePermissionsAvailable
   </form>;
 }
 
-function ProfileForm({ terms, member, selectedLocations, selectedServices, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager }: { terms: Awaited<ReturnType<typeof getTenantTerminology>>; member: StaffRow | null; selectedLocations: Selection[]; selectedServices: Selection[]; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean }) {
-  return <form action={saveTeamMember} className="staff-profile-form">
+function ProfileForm({ terms, member, selectedLocations, selectedServices, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager, ownOwner = false }: { terms: Awaited<ReturnType<typeof getTenantTerminology>>; member: StaffRow | null; selectedLocations: Selection[]; selectedServices: Selection[]; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean; ownOwner?: boolean }) {
+  const saveLabel = member ? assignmentsOnly ? "Save services & locations" : `Save ${terms.staff} details` : `Create ${terms.staffMember}`;
+  const fields = <>
     <input type="hidden" name="memberId" value={member?.id ?? ""} />
     {!assignmentsOnly ? <><div className="staff-profile-form__grid">
-      <label>Name<input name="name" defaultValue={member?.name ?? ""} required /></label><label>Email<input name="email" type="email" defaultValue={member?.email ?? ""} required /></label>
-      <label>Phone<input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label><label>Role<select name="role" defaultValue={member?.role ?? "staff"} disabled={!canAssignManager && member?.role === "manager"}>{!canAssignManager && member?.role === "manager" ? <option value="manager">Manager</option> : null}<option value="staff">{titleTerminology(terms.staff)}</option>{canAssignManager ? <option value="manager">Manager</option> : null}<option value="read-only">Read-only</option></select></label><fieldset className="staff-calendar-colour"><legend>Calendar colour</legend><div className="staff-calendar-colour__swatches">{staffCalendarColors.map((color) => <label key={color.value} title={color.label}><input type="radio" name="calendarColor" value={color.value} aria-label={color.label} defaultChecked={(member?.calendarColor ?? defaultStaffCalendarColor) === color.value} /><span style={{ backgroundColor: color.value }} aria-hidden="true" /></label>)}</div><small>Used for this person’s booking cards.</small></fieldset>
+      <label>Name<input name="name" defaultValue={member?.name ?? ""} maxLength={160} required /></label>
+      <label>Email<input name="email" type="email" defaultValue={member?.email ?? ""} maxLength={254} required /></label>
+      <label>Phone<input name="phone" type="tel" defaultValue={member?.phone ?? ""} maxLength={80} /></label>
+      <label>Role
+        {ownOwner
+          ? <select disabled defaultValue="owner"><option value="owner">Owner</option></select>
+          : <select name="role" defaultValue={member?.role ?? "staff"} disabled={!canAssignManager && member?.role === "manager"}>
+            {!canAssignManager && member?.role === "manager" ? <option value="manager">Manager</option> : null}
+            <option value="staff">{titleTerminology(terms.staff)}</option>
+            {canAssignManager ? <option value="manager">Manager</option> : null}
+            <option value="read-only">Read-only</option>
+          </select>}
+      </label>
+      <fieldset className="staff-calendar-colour">
+        <legend>Calendar colour</legend>
+        <div className="staff-calendar-colour__swatches">{staffCalendarColors.map((color) => (
+          <label key={color.value} title={color.label}>
+            <input type="radio" name="calendarColor" value={color.value} aria-label={color.label} defaultChecked={(member?.calendarColor ?? defaultStaffCalendarColor) === color.value} />
+            <span style={{ backgroundColor: color.value }} aria-hidden="true" />
+          </label>
+        ))}</div>
+        <small>Used for this person’s booking cards.</small>
+      </fieldset>
       {!compact ? <><label>{titleTerminology(terms.staff)} code<input name="staffCode" defaultValue={member?.staffCode ?? ""} /></label><label>Job title<input name="jobTitle" defaultValue={member?.jobTitle ?? ""} /></label><label>Specialty<input name="specialty" defaultValue={member?.specialty ?? ""} /></label><label>Work location<input name="workLocation" defaultValue={member?.workLocation ?? ""} /></label></> : null}
-    </div><label className="staff-status-toggle"><input type="checkbox" role="switch" name="isActive" defaultChecked={member?.isActive ?? true} /><span aria-hidden="true" /><b>Active and eligible for booking</b></label></> : null}
-    {!includeAssignments ? <><>{selectedLocations.map((location) => <input key={location.id} type="hidden" name="locationIds" value={location.id} />)}</><>{selectedServices.map((service) => <input key={service.id} type="hidden" name="serviceIds" value={service.id} />)}</></> : null}
+    </div><label className="staff-status-toggle"><input type="checkbox" role="switch" name="isActive" defaultChecked={member?.isActive ?? true} disabled={ownOwner} /><span aria-hidden="true" /><b>Active and eligible for booking</b></label></> : null}
+    {!includeAssignments && !ownOwner ? <><>{selectedLocations.map((location) => <input key={location.id} type="hidden" name="locationIds" value={location.id} />)}</><>{selectedServices.map((service) => <input key={service.id} type="hidden" name="serviceIds" value={service.id} />)}</></> : null}
     {includeAssignments ? member ? <><AsyncMultiSelect name="locationIds" label="Locations this person can serve" endpoint="/api/app/locations" initial={selectedLocations} /><AsyncMultiSelect name="serviceIds" label="Services this person can deliver" endpoint="/api/app/services" initial={selectedServices} /></> : <><input type="hidden" name="defaultAssignments" value="all" /><p className="staff-profile-form__assignment-note">New {terms.staffPlural} start bookable for all active locations and services. You can narrow this after creation.</p></> : null}
-    <button type="submit">{member ? assignmentsOnly ? "Save services & locations" : `Save ${terms.staff} details` : `Create ${terms.staffMember}`}</button>
-  </form>;
+  </>;
+  return ownOwner
+    ? <OwnerProfileDetailsForm saveLabel={saveLabel}>{fields}</OwnerProfileDetailsForm>
+    : <form action={saveTeamMember} className="staff-profile-form">{fields}<button type="submit">{saveLabel}</button></form>;
 }
