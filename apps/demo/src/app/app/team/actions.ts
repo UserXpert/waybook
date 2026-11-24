@@ -10,7 +10,7 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { getGoogleAuth, googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { issueStaffInvitation, revokeStaffInvitation } from "@/lib/waybook/staff-invitations";
 import { requireFeature } from "@/lib/waybook/features";
-import { defaultStaffCalendarColor, staffCalendarColorValues } from "@/lib/waybook/staff-calendar-colors";
+import { isStaffCalendarColor } from "@/lib/waybook/staff-calendar-colors";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -109,7 +109,7 @@ export async function saveTeamMember(formData: FormData) {
   const workLocation = optionalText(formData, "workLocation", 160);
   const staffCode = optionalText(formData, "staffCode", 80);
   const internalNotes = optionalText(formData, "internalNotes", 2_000);
-  const calendarColor = String(formData.get("calendarColor") ?? defaultStaffCalendarColor).trim();
+  const calendarColor = String(formData.get("calendarColor") ?? "").trim().toLowerCase() || null;
   const assignmentsOnly = Boolean(memberId) && !name && !email;
   if (!assignmentsOnly && (!name || name.length > 160 || !email.includes("@") || !["manager", "staff", "read-only"].includes(role))) throw new Error("Enter a name, valid email, and role.");
   if (!assignmentsOnly && memberId) {
@@ -121,7 +121,7 @@ export async function saveTeamMember(formData: FormData) {
   } else if (!assignmentsOnly && membership.role !== "owner" && role === "manager") {
     throw new Error("Only an owner can create or change a manager profile.");
   }
-  if (!assignmentsOnly && !staffCalendarColorValues.has(calendarColor)) throw new Error("Choose one of the available calendar colours.");
+  if (!assignmentsOnly && calendarColor && !isStaffCalendarColor(calendarColor)) throw new Error("Choose one of the available calendar colours.");
   const db = tenantDb(tenant);
   // Preserve the established new-staff default without sending an unbounded
   // directory to the browser. Existing profiles always submit explicit IDs.
@@ -140,7 +140,7 @@ export async function saveTeamMember(formData: FormData) {
   const [member] = assignmentsOnly
     ? await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`
     : memberId
-    ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = ${jobTitle}, specialty = ${specialty}, work_location = ${workLocation}, staff_code = ${staffCode}, internal_notes = ${internalNotes}, calendar_color = ${calendarColor}, updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} RETURNING id`
+    ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = ${jobTitle}, specialty = ${specialty}, work_location = ${workLocation}, staff_code = ${staffCode}, internal_notes = ${internalNotes}, calendar_color = COALESCE(${calendarColor}, calendar_color), updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} RETURNING id`
     : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, name, email, is_active, phone, job_title, specialty, work_location, staff_code, internal_notes, calendar_color) VALUES (${tenant.id}, ${role}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${internalNotes}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
   if (!member) throw new Error(memberId ? "Staff member is unavailable." : "A staff member already uses this email. Edit their existing profile instead.");
   // A staff profile may predate its login. Once linked, the Control-plane role

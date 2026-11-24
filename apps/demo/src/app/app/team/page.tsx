@@ -11,7 +11,7 @@ import { currentIdentity } from "@/lib/waybook/auth";
 import { googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { controlDb, tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
-import { defaultStaffCalendarColor, staffCalendarColors } from "@/lib/waybook/staff-calendar-colors";
+import { staffCalendarColors } from "@/lib/waybook/staff-calendar-colors";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
@@ -67,6 +67,15 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const tab: StaffTab = requestedTab === "permissions" && !canManage
     ? "details"
     : tabs.includes(requestedTab as StaffTab) ? requestedTab as StaffTab : "details";
+  const creatingStaff = createNew === "1";
+  const [calendarColours] = canManage && (creatingStaff || (!createNew && selected && tab === "details"))
+    ? await db<{ selected: string; occupied: string[] }[]>`
+        SELECT CASE WHEN ${creatingStaff} THEN staff_next_calendar_color(${tenant.id}) ELSE ${selected?.calendarColor ?? null} END AS selected,
+          ARRAY(SELECT calendar_color FROM team_members
+            WHERE tenant_id = ${tenant.id} AND id IS DISTINCT FROM ${creatingStaff ? null : selected?.id ?? null}::uuid
+            AND calendar_color = ANY(${staffCalendarColors.map(({ value }) => value)})) AS occupied
+      `
+    : [];
   const [rules, overrides, permissionRows, workspacePermissionsAvailable] = selected ? await Promise.all([
     db<Rule[]>`SELECT rrule, start_time AS "startTime", end_time AS "endTime" FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} ORDER BY created_at ASC`,
     db<Override[]>`SELECT id, local_date::text AS "localDate", start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable", reason FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} ORDER BY local_date DESC LIMIT 30`,
@@ -114,7 +123,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
       <section className="staff-workspace__content">
         {createNew === "1" ? <section className="staff-workspace__panel staff-workspace__new">
           <PanelHeading title="Create a staff profile" text="Save core details first, then add services and a weekly schedule." />
-          {canManage ? <ProfileForm member={null} selectedLocations={[]} selectedServices={[]} canAssignManager={membership.role === "owner"} /> : <p>Read-only access.</p>}
+          {canManage ? <ProfileForm calendarColours={calendarColours} member={null} selectedLocations={[]} selectedServices={[]} canAssignManager={membership.role === "owner"} /> : <p>Read-only access.</p>}
         </section> : null}
         {!createNew && selected ? <>
           <header className="staff-workspace__profile-header">
@@ -127,7 +136,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </nav>
           {tab === "details" ? <section className="staff-workspace__panel">
             <PanelHeading title="Details" text="Contact and profile information used inside your workspace." />
-            {canManage ? <ProfileForm key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
+            {canManage ? <ProfileForm key={selected.id} calendarColours={calendarColours} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
           </section> : null}
           {tab === "hours" ? <section className="staff-workspace__panel staff-workspace__panel--wide">
             <PanelHeading title="Working hours" text="A clear weekly schedule for when this person can be offered to customers." />
@@ -206,12 +215,34 @@ function StaffPermissionsForm({ memberId, initial, workspacePermissionsAvailable
   </form>;
 }
 
-function ProfileForm({ member, selectedLocations, selectedServices, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager }: { member: StaffRow | null; selectedLocations: Selection[]; selectedServices: Selection[]; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean }) {
+function CalendarColourField({ selected, occupied }: { selected: string; occupied: string[] }) {
+  const options: { value: string; label: string }[] = [...staffCalendarColors];
+  if (!options.some(({ value }) => value === selected)) {
+    options.push({ value: selected, label: `Additional colour (${selected})` });
+  }
+
+  return <fieldset className="staff-calendar-colour">
+    <legend>Calendar colour</legend>
+    <div className="staff-calendar-colour__swatches">
+      {options.map(({ value, label }) => {
+        const taken = occupied.includes(value);
+        const name = taken ? `${label} (in use)` : label;
+        return <label key={value} title={name}>
+          <input type="radio" name="calendarColor" value={value} aria-label={name} disabled={taken} defaultChecked={selected === value} />
+          <span style={{ backgroundColor: value }} aria-hidden="true" />
+        </label>;
+      })}
+    </div>
+    <small>Used for this person’s booking cards.</small>
+  </fieldset>;
+}
+
+function ProfileForm({ calendarColours, member, selectedLocations, selectedServices, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager }: { calendarColours?: { selected: string; occupied: string[] }; member: StaffRow | null; selectedLocations: Selection[]; selectedServices: Selection[]; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean }) {
   return <form action={saveTeamMember} className="staff-profile-form">
     <input type="hidden" name="memberId" value={member?.id ?? ""} />
     {!assignmentsOnly ? <><div className="staff-profile-form__grid">
       <label>Name<input name="name" defaultValue={member?.name ?? ""} required /></label><label>Email<input name="email" type="email" defaultValue={member?.email ?? ""} required /></label>
-      <label>Phone<input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label><label>Role<select name="role" defaultValue={member?.role ?? "staff"} disabled={!canAssignManager && member?.role === "manager"}>{!canAssignManager && member?.role === "manager" ? <option value="manager">Manager</option> : null}<option value="staff">Staff</option>{canAssignManager ? <option value="manager">Manager</option> : null}<option value="read-only">Read-only</option></select></label><fieldset className="staff-calendar-colour"><legend>Calendar colour</legend><div className="staff-calendar-colour__swatches">{staffCalendarColors.map((color) => <label key={color.value} title={color.label}><input type="radio" name="calendarColor" value={color.value} aria-label={color.label} defaultChecked={(member?.calendarColor ?? defaultStaffCalendarColor) === color.value} /><span style={{ backgroundColor: color.value }} aria-hidden="true" /></label>)}</div><small>Used for this person’s booking cards.</small></fieldset>
+      <label>Phone<input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label><label>Role<select name="role" defaultValue={member?.role ?? "staff"} disabled={!canAssignManager && member?.role === "manager"}>{!canAssignManager && member?.role === "manager" ? <option value="manager">Manager</option> : null}<option value="staff">Staff</option>{canAssignManager ? <option value="manager">Manager</option> : null}<option value="read-only">Read-only</option></select></label>{calendarColours ? <CalendarColourField {...calendarColours} /> : null}
       {!compact ? <><label>Staff code<input name="staffCode" defaultValue={member?.staffCode ?? ""} /></label><label>Job title<input name="jobTitle" defaultValue={member?.jobTitle ?? ""} /></label><label>Specialty<input name="specialty" defaultValue={member?.specialty ?? ""} /></label><label>Work location<input name="workLocation" defaultValue={member?.workLocation ?? ""} /></label></> : null}
     </div><label>Internal notes<textarea name="internalNotes" rows={3} defaultValue={member?.internalNotes ?? ""} placeholder="Private operational notes — never customer-facing." /></label><label className="staff-status-toggle"><input type="checkbox" role="switch" name="isActive" defaultChecked={member?.isActive ?? true} /><span aria-hidden="true" /><b>Active and eligible for booking</b></label></> : null}
     {!includeAssignments ? <><>{selectedLocations.map((location) => <input key={location.id} type="hidden" name="locationIds" value={location.id} />)}</><>{selectedServices.map((service) => <input key={service.id} type="hidden" name="serviceIds" value={service.id} />)}</></> : null}
