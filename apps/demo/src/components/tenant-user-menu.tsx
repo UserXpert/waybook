@@ -23,7 +23,13 @@ export function TenantUserMenu({ photo, photoMemberId, onSavePhoto, displayName,
   const menu = useRef<HTMLDivElement>(null);
   const { input, error, pending, upload } = useStaffPhotoUpload(photoMemberId, onSavePhoto);
   const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
-  useEffect(() => { applyStoredTenantAppearance(); }, []);
+  useEffect(() => {
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const applyAppearance = () => { applyStoredTenantAppearance(); };
+    applyAppearance();
+    systemTheme.addEventListener("change", applyAppearance);
+    return () => systemTheme.removeEventListener("change", applyAppearance);
+  }, []);
   useEffect(() => {
     if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
