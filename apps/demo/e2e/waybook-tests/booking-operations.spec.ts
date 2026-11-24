@@ -83,8 +83,26 @@ for (const workspace of workspaces) {
 
       for (const [index, member] of staff.entries()) {
         await page.goto(calendar);
-        await page.getByRole("link", { name: `New appointment ${member.name} ${day} 10:00`, exact: true }).click();
+        const slot = page.getByRole("link", { name: `New appointment ${member.name} ${day} 10:00`, exact: true });
+        await slot.focus();
+        await slot.press("Enter");
         const form = page.getByRole("complementary", { name: "New appointment" });
+        await expect(form.getByRole("link", { name: "Close new appointment" })).toBeFocused();
+        for (let step = 0; step < 8; step += 1) {
+          await page.keyboard.press("Tab");
+          await expect(form.locator(":focus")).toHaveCount(1);
+        }
+        const locationPicker = form.getByRole("combobox", { name: "Location" });
+        await locationPicker.fill("Unmatched location");
+        await expect(locationPicker).toHaveAttribute("aria-expanded", "true");
+        await page.keyboard.press("Escape");
+        await expect(locationPicker).toHaveAttribute("aria-expanded", "false");
+        await expect(locationPicker).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(form).toHaveCount(0);
+        await expect(page).toHaveURL((url) => !url.searchParams.has("create"));
+        await expect(slot).toBeFocused();
+        await slot.press("Enter");
         await form.getByLabel("Client name").fill(customerNames[index]);
         await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
         await form.getByRole("button", { name: "10:00", exact: true }).click();
@@ -112,7 +130,18 @@ for (const workspace of workspaces) {
       const secondDrawer = drawer(page, second);
       const firstNameField = firstDrawer.getByLabel("Customer name");
       await page.goto(calendar);
-      await page.locator(`a.waybook-week-calendar__entry[href*="booking=${first.id}"]`).click();
+      const firstCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${first.id}"]`);
+      await firstCard.focus();
+      await firstCard.press("Enter");
+      await expect(firstDrawer.getByRole("button", { name: "Close appointment" })).toBeFocused();
+      await expect(firstNameField).toHaveValue(first.name);
+      await page.keyboard.press("Shift+Tab");
+      await expect(firstDrawer.getByRole("button", { name: "Cancel appointment" })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(firstDrawer).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
+      await expect(firstCard).toBeFocused();
+      await firstCard.press("Enter");
       await expect(firstNameField).toHaveValue(first.name);
       await firstNameField.fill("Unsaved calendar name");
       await expect(firstDrawer.getByRole("button", { name: "Save changes" })).toBeEnabled();

@@ -12,6 +12,7 @@ import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
 import { CalendarAppointmentDrawer } from "@/components/calendar-appointment-drawer";
 import { ManualAppointmentForm } from "@/components/manual-appointment-form";
+import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { availableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
 import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
@@ -1228,13 +1229,7 @@ export default async function CalendarsPage({
         } : null}
       />
       {requestedAppointment && createMember && selectedLocation ? (
-        <div className="tenant-drawer-layer" role="presentation">
-          <Link
-            className="tenant-drawer-scrim"
-            aria-hidden="true"
-            tabIndex={-1}
-            href={href({})}
-          />
+        <TenantEditorDialog title="New appointment" closeHref={href({})} cycleFocus>
           <aside
             className="tenant-drawer appointment-drawer"
             aria-label="New appointment"
@@ -1248,13 +1243,9 @@ export default async function CalendarsPage({
                   {requestedAppointment.replace("T", " ")}
                 </span>
               </div>
-              <Link
-                className="tenant-drawer-close"
-                aria-label="Close new appointment"
-                href={href({})}
-              >
+              <TenantEditorClose label="Close new appointment" href={href({})}>
                 ×
-              </Link>
+              </TenantEditorClose>
             </header>
             <div className="appointment-drawer__body">
               {selectedCustomer ? (
@@ -1279,7 +1270,7 @@ export default async function CalendarsPage({
               /> : <p className="tenant-drawer-note">Choose a location with an active service before creating an appointment.</p>}
             </div>
           </aside>
-        </div>
+        </TenantEditorDialog>
       ) : null}
     </main>
   );

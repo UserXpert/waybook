@@ -123,6 +123,11 @@ for (const workspace of workspaces) {
         await ownPanel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) }).click();
         await ownPanel.getByRole("button", { name: "11:30", exact: true }).click();
         await ownPanel.getByRole("button", { name: "Reschedule appointment" }).click();
+        const confirmation = page.getByRole("dialog", { name: `Appointment with ${ownCustomer}` })
+          .getByRole("status").filter({ hasText: "Appointment rescheduled" });
+        await expect(confirmation).toBeVisible();
+        await confirmation.getByRole("button", { name: "Dismiss notification" }).click();
+        await expect(confirmation).toHaveCount(0);
         await expect.poll(() => getBooking(ownCustomer)).toMatchObject({ memberId: own.id, startsAt: startsAt("11:30"), blockState: "confirmed" });
 
         await setGrants({ viewTeam: true, manageOwn: false, manageTeam: true });

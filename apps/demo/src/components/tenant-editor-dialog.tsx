@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-export function TenantEditorDialog({ title, closeHref, initialField, centered = false, showScrim = true, cycleFocus = false, children }: {
+type DialogDismissal = { closeHref: string; onDismiss?: never } | { onDismiss: () => void; closeHref?: never };
+
+export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, centered = false, showScrim = true, cycleFocus = false, children }: DialogDismissal & {
   title: string;
-  closeHref: string;
   initialField?: "name" | "title" | "code" | "scopeType";
   centered?: boolean;
   showScrim?: boolean;
@@ -43,13 +44,21 @@ export function TenantEditorDialog({ title, closeHref, initialField, centered = 
     controls[(current + direction + controls.length) % controls.length]?.focus();
   }
 
+  const scrimClass = centered ? "client-form-modal__scrim" : "tenant-drawer-scrim";
+  function dismiss() {
+    dialog.current?.close();
+    if (onDismiss) onDismiss();
+    else router.push(closeHref, { scroll: false });
+  }
+
   return (
     <dialog ref={dialog} className={`tenant-editor-dialog ${centered ? "client-form-modal-layer" : "tenant-drawer-layer"}`} aria-label={title} onKeyDown={navigateControls} onCancel={(event) => {
       event.preventDefault();
-      dialog.current?.close();
-      router.push(closeHref, { scroll: false });
+      dismiss();
     }}>
-      {showScrim ? <Link className={centered ? "client-form-modal__scrim" : "tenant-drawer-scrim"} href={closeHref} tabIndex={-1} aria-hidden="true" scroll={false} onNavigate={() => dialog.current?.close()} /> : null}
+      {showScrim && (closeHref !== undefined
+        ? <Link className={scrimClass} href={closeHref} tabIndex={-1} aria-hidden="true" scroll={false} onNavigate={() => dialog.current?.close()} />
+        : <button type="button" className={scrimClass} tabIndex={-1} aria-hidden="true" onClick={dismiss} />)}
       {children}
     </dialog>
   );

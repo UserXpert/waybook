@@ -77,10 +77,11 @@ export function SearchPicker<T extends { id: string }>({
     onPick(item);
   };
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
-      setIsFocused(false);
+    if (event.key === "Escape" && isSearching) {
+      event.preventDefault();
+      setHasTyped(false);
+      setQuery(selectedLabel);
       setResults([]);
-      event.currentTarget.blur();
     }
     if (event.key === "Enter" && results[0]) {
       event.preventDefault();
