@@ -96,9 +96,9 @@ export async function saveStaffPhoto(formData: FormData) {
   revalidatePath(tenantPath(slug, "/app"), "layout");
 }
 
-export type OwnerProfileDetailsState = { error?: string; saved?: boolean };
+export type StaffDetailsState = { error?: string; saved?: boolean };
 
-export async function saveOwnerProfileDetails(_: OwnerProfileDetailsState, formData: FormData): Promise<OwnerProfileDetailsState> {
+export async function saveOwnerProfileDetails(_: StaffDetailsState, formData: FormData): Promise<StaffDetailsState> {
   const { tenant, membership } = await requireTenantWorkspace();
   if (membership.role !== "owner") return { error: "Only the workspace owner can edit their own details." };
   await requireFeature(tenant.id, "team");
@@ -116,19 +116,28 @@ export async function saveOwnerProfileDetails(_: OwnerProfileDetailsState, formD
     return { error: "Your workspace profile is unavailable." };
   }
 
+  const jobTitle = optionalText(formData, "jobTitle", 120);
+  const specialty = optionalText(formData, "specialty", 160);
+  const workLocation = optionalText(formData, "workLocation", 160);
+  const staffCode = optionalText(formData, "staffCode", 80);
   const actor = await requireIdentity();
   try {
     const [saved] = await tenantDb(tenant)<{ id: string }[]>`
       WITH profile AS (
         UPDATE team_members
-        SET name = ${name}, email = ${email}, phone = ${phone || null}, calendar_color = ${calendarColor}, updated_at = now()
+        SET name = ${name}, email = ${email}, phone = ${phone || null}, calendar_color = ${calendarColor},
+          job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END,
+          specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END,
+          work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END,
+          staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END,
+          updated_at = now()
         WHERE tenant_id = ${tenant.id} AND id = ${memberId} AND identity_id = ${actor.id}
           AND role = 'owner' AND is_active
         RETURNING id
       )
       INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
       SELECT ${tenant.id}, ${actor.id}, 'staff.updated', 'team_member', id,
-        '{"fields":["name","email","phone","calendarColor"]}'::jsonb FROM profile
+        '{"fields":["name","email","phone","calendarColor","jobTitle","specialty","workLocation","staffCode"]}'::jsonb FROM profile
       RETURNING target_id AS id
     `;
     if (!saved) return { error: "Your workspace profile is unavailable." };
@@ -145,9 +154,9 @@ export async function saveOwnerProfileDetails(_: OwnerProfileDetailsState, formD
   return { saved: true };
 }
 
-export async function saveTeamMember(formData: FormData) {
+export async function saveTeamMember(_: StaffDetailsState, formData: FormData): Promise<StaffDetailsState> {
   const { tenant, membership } = await requireTenantWorkspace();
-  if (!["owner", "manager"].includes(membership.role)) throw new Error("You do not have permission to manage staff.");
+  if (!["owner", "manager"].includes(membership.role)) return { error: "You do not have permission to manage staff." };
   await requireFeature(tenant.id, "team");
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -163,18 +172,20 @@ export async function saveTeamMember(formData: FormData) {
   const staffCode = optionalText(formData, "staffCode", 80);
   assertNoOperationalFreeText(formData, "internalNotes");
   const calendarColor = String(formData.get("calendarColor") ?? defaultStaffCalendarColor).trim();
-  const assignmentsOnly = Boolean(memberId) && !name && !email;
-  if (!assignmentsOnly && (!name || name.length > 160 || !email.includes("@") || !["manager", "staff", "read-only"].includes(role))) throw new Error("Enter a name, valid email, and role.");
+  const assignmentsOnly = formData.get("editMode") === "assignments";
+  const replaceAssignments = assignmentsOnly || !memberId;
+  if (assignmentsOnly && !memberId) return { error: "Staff member is unavailable." };
+  if (!assignmentsOnly && (!name || name.length > 160 || !email.includes("@") || !["manager", "staff", "read-only"].includes(role))) return { error: "Enter a name, valid email, and role." };
   if (!assignmentsOnly && memberId) {
     const [existing] = await tenantDb(tenant)<{ role: string }[]>`SELECT role FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
-    if (existing?.role === "owner") throw new Error("The workspace owner profile cannot be changed here.");
+    if (existing?.role === "owner") return { error: "The workspace owner profile cannot be changed here." };
     if (membership.role !== "owner" && (role === "manager" || existing?.role === "manager")) {
-      throw new Error("Only an owner can create or change a manager profile.");
+      return { error: "Only an owner can create or change a manager profile." };
     }
   } else if (!assignmentsOnly && membership.role !== "owner" && role === "manager") {
-    throw new Error("Only an owner can create or change a manager profile.");
+    return { error: "Only an owner can create or change a manager profile." };
   }
-  if (!assignmentsOnly && !staffCalendarColorValues.has(calendarColor)) throw new Error("Choose one of the available calendar colours.");
+  if (!assignmentsOnly && !staffCalendarColorValues.has(calendarColor)) return { error: "Choose one of the available calendar colours." };
   const db = tenantDb(tenant);
   // Preserve the established new-staff default without sending an unbounded
   // directory to the browser. Existing profiles always submit explicit IDs.
@@ -186,16 +197,24 @@ export async function saveTeamMember(formData: FormData) {
     serviceIds = services.map((service) => service.id);
     locationIds = locations.map((location) => location.id);
   }
-  const validServices = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id = ${tenant.id} AND id = ANY(${serviceIds})`;
-  if (validServices.length !== serviceIds.length) throw new Error("A selected service is unavailable.");
-  const validLocations = await db<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id = ${tenant.id} AND id = ANY(${locationIds}) AND is_active = TRUE`;
-  if (validLocations.length !== locationIds.length) throw new Error("A selected location is unavailable.");
-  const [member] = assignmentsOnly
-    ? await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`
-    : memberId
-    ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = ${jobTitle}, specialty = ${specialty}, work_location = ${workLocation}, staff_code = ${staffCode}, calendar_color = ${calendarColor}, updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} RETURNING id`
-    : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, name, email, is_active, phone, job_title, specialty, work_location, staff_code, calendar_color) VALUES (${tenant.id}, ${role}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
-  if (!member) throw new Error(memberId ? "Staff member is unavailable." : "A staff member already uses this email. Edit their existing profile instead.");
+  const validServices = replaceAssignments ? await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id = ${tenant.id} AND id = ANY(${serviceIds})` : [];
+  if (replaceAssignments && validServices.length !== serviceIds.length) return { error: "A selected service is unavailable." };
+  const validLocations = replaceAssignments ? await db<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id = ${tenant.id} AND id = ANY(${locationIds}) AND is_active = TRUE` : [];
+  if (replaceAssignments && validLocations.length !== locationIds.length) return { error: "A selected location is unavailable." };
+  let member: { id: string } | undefined;
+  try {
+    [member] = assignmentsOnly
+      ? await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`
+      : memberId
+      ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END, specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END, work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END, staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END, calendar_color = ${calendarColor}, updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND role <> 'owner' AND (${membership.role} = 'owner' OR role <> 'manager') RETURNING id`
+      : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, name, email, is_active, phone, job_title, specialty, work_location, staff_code, calendar_color) VALUES (${tenant.id}, ${role}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "23505") {
+      return { error: "A staff member already uses this email." };
+    }
+    throw error;
+  }
+  if (!member) return { error: memberId ? "Staff member is unavailable." : "A staff member already uses this email." };
   // A staff profile may predate its login. Once linked, the Control-plane role
   // is the authorization source of truth and must follow profile role changes.
   if (!assignmentsOnly) {
@@ -206,14 +225,17 @@ export async function saveTeamMember(formData: FormData) {
       ON CONFLICT (tenant_id, identity_id) DO UPDATE SET role = EXCLUDED.role
     `;
   }
-  await db`DELETE FROM service_team_members WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id}`;
-  for (const service of validServices) await db`INSERT INTO service_team_members (tenant_id, service_id, team_member_id) VALUES (${tenant.id}, ${service.id}, ${member.id})`;
-  await db`DELETE FROM team_member_locations WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id}`;
-  for (const location of validLocations) await db`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) VALUES (${tenant.id}, ${member.id}, ${location.id})`;
+  if (replaceAssignments) await db.begin(async (tx) => {
+    await tx.unsafe("SELECT id FROM team_members WHERE tenant_id = $1 AND id = $2 FOR UPDATE", [tenant.id, member.id]);
+    await tx.unsafe("DELETE FROM service_team_members WHERE tenant_id = $1 AND team_member_id = $2", [tenant.id, member.id]);
+    await tx.unsafe("INSERT INTO service_team_members (tenant_id, service_id, team_member_id) SELECT $1, unnest($2::uuid[]), $3", [tenant.id, validServices.map(({ id }) => id), member.id]);
+    await tx.unsafe("DELETE FROM team_member_locations WHERE tenant_id = $1 AND team_member_id = $2", [tenant.id, member.id]);
+    await tx.unsafe("INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) SELECT $1, $2, unnest($3::uuid[])", [tenant.id, member.id, validLocations.map(({ id }) => id)]);
+  });
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${memberId ? "staff.updated" : "staff.created"}, 'team_member', ${member.id}, ${JSON.stringify({ fields: ["name", "email", "role", "isActive", "phone", "jobTitle", "specialty", "workLocation", "staffCode", "calendarColor", "serviceIds", "locationIds"] })}::jsonb)`;
   revalidateStaff();
   const slug = await currentTenantRouteSlug(tenant.slug);
-  redirect(withSuccessToast(`${tenantPath(slug, "/app/team")}?employee=${member.id}`, "Staff member saved."));
+  redirect(withSuccessToast(`${tenantPath(slug, "/app/team")}?employee=${member.id}${assignmentsOnly ? "&tab=services" : ""}`, "Staff member saved."));
 }
 
 export async function createStaffGoogleInvitation(formData: FormData) {

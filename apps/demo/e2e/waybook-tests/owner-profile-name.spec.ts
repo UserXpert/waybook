@@ -47,6 +47,10 @@ test("both owners use the Staff Details form and share the saved photo with thei
       await expect(role).toBeDisabled();
       await expect(role).toHaveValue("owner");
       await expect(page.locator('[name="internalNotes"]')).toHaveCount(0);
+      await page.getByRole("link", { name: "Permissions", exact: true }).click();
+      await expect(page.getByText("Workspace owners have full access.", { exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Save permissions", exact: true })).toHaveCount(0);
+      await page.getByRole("link", { name: "Details", exact: true }).click();
       const grid = await page.locator(".staff-profile-form__grid").boundingBox();
       const saveBox = await save.boundingBox();
       expect(saveBox!.y - (grid!.y + grid!.height)).toBeGreaterThan(8);
