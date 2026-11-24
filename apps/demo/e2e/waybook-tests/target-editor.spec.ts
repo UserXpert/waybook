@@ -40,9 +40,15 @@ for (const workspace of workspaces) {
       await scope.selectOption("service");
       await search.fill(workspace.service);
       await expect(scopeId.getByRole("option", { name: workspace.service, exact: true })).toHaveAttribute("value", service.id);
+      await opener.evaluate((link) => {
+        link.addEventListener("focus", () => {
+          link.dataset.restoredFocusSearch = window.location.search;
+        }, { once: true });
+      });
       await page.keyboard.press("Escape");
       await expect(target).toHaveCount(0);
       await expect(opener).toBeFocused();
+      await expect(opener).toHaveAttribute("data-restored-focus-search", "");
 
       await opener.press("Enter");
       await expect(scope).toHaveValue("staff");

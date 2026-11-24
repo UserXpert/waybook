@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 export function cycleDialogTab(event: React.KeyboardEvent<HTMLDialogElement>) {
   if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -33,7 +33,7 @@ export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, 
 }) {
   const router = useRouter();
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const editor = dialog.current;
     if (!editor) return;
     editor.showModal();
@@ -46,9 +46,13 @@ export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, 
 
   const scrimClass = centered ? "client-form-modal__scrim" : "tenant-drawer-scrim";
   function dismiss() {
-    dialog.current?.close();
-    if (onDismiss) onDismiss();
-    else router.push(closeHref, { scroll: false });
+    if (onDismiss) {
+      dialog.current?.close();
+      onDismiss();
+    } else {
+      // Keep the opener inert until navigation removes the route-backed editor.
+      router.push(closeHref, { scroll: false });
+    }
   }
 
   return (
@@ -57,7 +61,7 @@ export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, 
       dismiss();
     }}>
       {showScrim && (closeHref !== undefined
-        ? <Link className={scrimClass} href={closeHref} tabIndex={-1} aria-hidden="true" scroll={false} onNavigate={() => dialog.current?.close()} />
+        ? <Link className={scrimClass} href={closeHref} tabIndex={-1} aria-hidden="true" scroll={false} />
         : <button type="button" className={scrimClass} tabIndex={-1} aria-hidden="true" onClick={dismiss} />)}
       {children}
     </dialog>
@@ -70,9 +74,8 @@ export function TenantEditorClose({ href, label, className = "tenant-drawer-clos
   className?: string;
   children: React.ReactNode;
 }) {
-  const link = useRef<HTMLAnchorElement>(null);
   return (
-    <Link ref={link} className={className} aria-label={label} href={href} scroll={false} onNavigate={() => link.current?.closest("dialog")?.close()}>
+    <Link className={className} aria-label={label} href={href} scroll={false}>
       {children}
     </Link>
   );
