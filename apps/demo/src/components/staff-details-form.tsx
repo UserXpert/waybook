@@ -11,6 +11,7 @@ export function StaffDetailsForm({ children, saveLabel, save }: {
   const [state, action, pending] = useActionState(save, {});
 
   return <form action={action} className="staff-profile-form" onSubmit={(event) => {
+    if (event.target !== event.currentTarget) return;
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     startTransition(() => action(data));

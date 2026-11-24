@@ -41,6 +41,7 @@ export default async function Login({
             {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
             {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
             {access === "inactive" ? <p className="waybook-login-error" role="alert">Your staff access is inactive. Ask your workspace owner to restore it.</p> : null}
+            {access === "role-pending" ? <p className="waybook-login-error" role="alert">Your workspace role change is pending. Ask your workspace owner to check your access.</p> : null}
             {access === "unavailable" ? <p className="waybook-login-error" role="alert">Your staff profile is unavailable. Ask your workspace owner to check your access.</p> : null}
             <form action={login} className="waybook-login">
               <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>

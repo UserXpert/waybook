@@ -10,8 +10,8 @@ import { findTenantByHostname, findTenantByRouteSlug, findTenantMembershipByRout
 export type TenantMembership = { tenantId: string; role: string };
 
 async function assertActiveStaffMembership(tenant: TenantRecord, identityId: string, membership: TenantMembership, isApiRequest: boolean) {
-  const [staff] = await tenantDb(tenant)<{ isActive: boolean }[]>`
-    SELECT is_active AS "isActive" FROM team_members
+  const [staff] = await tenantDb(tenant)<{ isActive: boolean; staffRoleId: string | null }[]>`
+    SELECT is_active AS "isActive", to_jsonb(tm)->>'staff_role_id' AS "staffRoleId" FROM team_members tm
     WHERE tenant_id = ${tenant.id} AND identity_id = ${identityId}
     LIMIT 1
   `;
@@ -21,6 +21,10 @@ async function assertActiveStaffMembership(tenant: TenantRecord, identityId: str
   if (staff?.isActive === false || unavailable) {
     if (isApiRequest) notFound();
     redirect(unavailable ? "/login?access=unavailable" : "/login?access=inactive");
+  }
+  if (staff?.staffRoleId && membership.role === "manager") {
+    if (isApiRequest) notFound();
+    redirect("/login?access=role-pending");
   }
 }
 

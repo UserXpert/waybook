@@ -65,7 +65,10 @@ test("both owners use the Staff Details form and share the saved photo with thei
       await name.fill(nextName);
       await email.fill(nextEmail);
       await phone.fill(nextPhone);
-      await page.getByRole("radio", { name: "Blue", exact: true }).check();
+      const colourGroup = page.getByRole("group", { name: "Calendar colour" });
+      const newColour = colourGroup.locator('input[type="radio"]:enabled:not(:checked)').first();
+      const nextColour = await newColour.inputValue({ timeout: 5000 });
+      await newColour.check();
       await save.click();
       await expect(page.getByRole("status")).toHaveText("Details saved.");
       const updatedMenu = page.getByRole("button", { name: `Account menu for ${nextName}` });
@@ -74,7 +77,7 @@ test("both owners use the Staff Details form and share the saved photo with thei
       await expect(name).toHaveValue(nextName);
       await expect(email).toHaveValue(nextEmail);
       await expect(phone).toHaveValue(nextPhone);
-      await expect(page.getByRole("radio", { name: "Blue", exact: true })).toBeChecked();
+      await expect(colourGroup.getByRole("radio", { checked: true })).toHaveValue(nextColour);
 
       const photoButton = page.getByRole("button", { name: `Change photo for ${nextName}` });
       const image = await sharp({ create: { width: 8, height: 8, channels: 3, background: tenant.background } }).png().toBuffer();
@@ -86,7 +89,7 @@ test("both owners use the Staff Details form and share the saved photo with thei
       photos.push(savedPhoto);
       await expect(photoButton.locator("img")).toHaveAttribute("src", savedPhoto);
       const [saved] = await db`SELECT id, name, email, phone, role, is_active AS "isActive", calendar_color AS color FROM team_members WHERE id = ${original.id}`;
-      expect(saved).toEqual({ id: original.id, name: nextName, email: nextEmail, phone: nextPhone, role: original.role, isActive: original.isActive, color: "#7baaf7" });
+      expect(saved).toEqual({ id: original.id, name: nextName, email: nextEmail, phone: nextPhone, role: original.role, isActive: original.isActive, color: nextColour });
 
       const fresh = await browser.newPage();
       try {
