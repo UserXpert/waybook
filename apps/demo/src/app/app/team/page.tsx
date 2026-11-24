@@ -60,14 +60,19 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const staffIdPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   const cursor = staffIdPattern.test(rawCursor) ? rawCursor : null;
   const archiveSelect = archiveAvailable ? "tm.archived_at::text AS \"archivedAt\"" : "NULL::text AS \"archivedAt\"";
-  const archiveOrder = archiveAvailable ? "tm.archived_at NULLS FIRST," : "";
+  const directoryKey = (alias: "tm" | "boundary") => [
+    ...(archiveAvailable ? [`${alias}.archived_at IS NOT NULL`, `COALESCE(${alias}.archived_at, '-infinity'::timestamptz)`] : []),
+    `NOT ${alias}.is_active`, `${alias}.name`, `${alias}.id`,
+  ].join(", ");
   const photoSelect = photosAvailable ? 'tm.photo_data_url' : 'NULL::text';
   const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.staff_role_id AS \"staffRoleId\",sr.name AS \"staffRoleName\",tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.calendar_color AS \"calendarColor\",${photoSelect} AS \"photoDataUrl\" FROM team_members tm LEFT JOIN staff_roles sr ON sr.tenant_id = tm.tenant_id AND sr.id = tm.staff_role_id`;
   const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1 AND ($2::uuid IS NULL OR tm.id=$2::uuid)
     AND ($3='' OR tm.name ILIKE $4 OR ($7::boolean AND tm.email ILIKE $4))
-    AND ($5::uuid IS NULL OR (tm.name,tm.id) > (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$5::uuid),''),$5::uuid))
+    AND COALESCE((${directoryKey("tm")}) > (
+      SELECT ${directoryKey("boundary")} FROM team_members boundary WHERE boundary.tenant_id=$1 AND boundary.id=$5::uuid
+    ), TRUE)
     AND (NOT $6::boolean OR tm.is_active)
-    ORDER BY ${archiveOrder}tm.is_active DESC,tm.name,tm.id LIMIT 51`;
+    ORDER BY ${directoryKey("tm")} LIMIT 51`;
   const memberRows = await db.unsafe<StaffRow[]>(staffDirectorySql, [
     tenant.id, canManage || canSelectTeamTimeOff ? null : signedInPermissions.teamMemberId, search, `%${search}%`, cursor, canSelectTeamTimeOff, !canSelectTeamTimeOff,
   ]);
