@@ -10,6 +10,7 @@ type ActiveFilters = {
   rosterSearch?: string;
   excludesOffShift?: boolean;
   dayFallback: string;
+  staffLabel?: string;
 };
 
 /** Shows only choices a person actively made. The automatically chosen working
@@ -21,6 +22,7 @@ export function CalendarActiveFilters({
   rosterSearch,
   excludesOffShift,
   dayFallback,
+  staffLabel = "Staff",
 }: ActiveFilters) {
   const pathname = usePathname();
   const router = useRouter();
@@ -50,7 +52,7 @@ export function CalendarActiveFilters({
 
   const chips = [
     location?.isExplicit ? { key: "location" as const, label: `Location: ${location.name}` } : null,
-    staff ? { key: "staff" as const, label: `Staff: ${staff.name}` } : null,
+    staff ? { key: "staff" as const, label: `${staffLabel}: ${staff.name}` } : null,
     service ? { key: "service" as const, label: `Service: ${service.name}` } : null,
     rosterSearch ? { key: "roster" as const, label: `Roster: ${rosterSearch}` } : null,
     excludesOffShift ? { key: "availability" as const, label: "Availability: on shift" } : null,

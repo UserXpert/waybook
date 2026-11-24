@@ -11,7 +11,7 @@ import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle"
 type Detail = Awaited<ReturnType<typeof getCalendarAppointment>>;
 export type CalendarAppointmentSummary = Pick<Detail, "id" | "bookingNumber" | "customerName" | "serviceTitle" | "teamMemberName" | "startsAt" | "endsAt" | "status">;
 
-export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone }: { summaries: CalendarAppointmentSummary[]; initialDetail: Detail | null; timezone: string }) {
+export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, staffLabel = "Staff" }: { summaries: CalendarAppointmentSummary[]; initialDetail: Detail | null; timezone: string; staffLabel?: string }) {
   const [selected, setSelected] = useState<CalendarAppointmentSummary | null>(initialDetail);
   const [detail, setDetail] = useState<Detail | null>(initialDetail);
   const [error, setError] = useState("");
@@ -76,7 +76,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone }
           <div className="appointment-drawer__detail--status"><dt>Status</dt><dd>{selected.status.replace("_", " ")}</dd></div>
           <div className="appointment-drawer__detail--date"><dt>Date</dt><dd>{date}</dd></div>
           <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(selected.startsAt)}–{clock(selected.endsAt)}</dd></div>
-          <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>Staff</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
+          <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>{staffLabel}</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : capabilities.canEdit ? <>
           <AppointmentDrawerActions key={detail.id} bookingId={detail.id} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />

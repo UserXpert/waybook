@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
 import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
 import { fromZonedTime } from "date-fns-tz";
 import { BookingConflictError, withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
@@ -621,18 +622,18 @@ export async function recordPayment(_previousState: PaymentState, formData: Form
     const kind = String(formData.get("kind") ?? "payment");
     const method = String(formData.get("method") ?? "card");
     const amount = Number(String(formData.get("amountDkk") ?? "").replace(",", "."));
-    const notes = String(formData.get("notes") ?? "").trim() || null;
-    if (!bookingId || !["payment", "refund"].includes(kind) || !["card", "cash", "bank_transfer", "other"].includes(method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000 || (notes?.length ?? 0) > 500) {
-      throw new Error("Enter a valid positive amount, payment method, and optional note.");
+    if (!bookingId || !["payment", "refund"].includes(kind) || !["card", "cash", "bank_transfer", "other"].includes(method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
+      throw new Error("Enter a valid positive amount and payment method.");
     }
     const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+    assertNoOperationalFreeText(formData, "notes");
     if (booking.status === "cancelled" && kind !== "refund") throw new Error("Cancelled appointments cannot receive a payment record.");
     const identity = await requireIdentity();
     const amountCents = Math.round(amount * 100);
     await db.begin(async (transaction) => {
       const [payment] = await transaction.unsafe<{ id: string }[]>(
-        "INSERT INTO payment_records (tenant_id, booking_id, kind, amount_cents, method, notes, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-        [tenant.id, booking.id, kind, amountCents, method, notes, identity.id],
+        "INSERT INTO payment_records (tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+        [tenant.id, booking.id, kind, amountCents, method, identity.id],
       );
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)", [tenant.id, booking.id, identity.id, `payment.${kind}`, JSON.stringify({ paymentId: payment.id, amountCents, method })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenant.id, identity.id, `payment.${kind}_recorded`, payment.id, JSON.stringify({ bookingId: booking.id, amountCents, method })]);

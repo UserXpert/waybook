@@ -1,3 +1,5 @@
+import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
+import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
 import { BarChart3, CalendarDays, LayoutDashboard, UsersRound } from "lucide-react";
 import { logout } from "@/app/actions";
@@ -34,10 +36,11 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     const [review] = permissions.isManager ? await tenantDb(tenant)<{ pending: boolean }[]>`SELECT EXISTS (SELECT 1 FROM bookings WHERE tenant_id=${tenant.id} AND status='arrived' AND ends_at <= now()) AS pending` : [];
     return { permissions, review };
   });
-  const [identity, features, { permissions, review }] = await Promise.all([
+  const [identity, features, { permissions, review }, terms] = await Promise.all([
     requireIdentity(),
     tenantFeatures(tenantId),
     permissionAndReview,
+    getTenantTerminology(tenant),
   ]);
   const enabled = new Set(features.filter((feature) => feature.isEnabled).map((feature) => feature.featureKey));
   const clientsEnabled = enabled.has("clients"), teamEnabled = enabled.has("team"), calendarsEnabled = enabled.has("calendars"), resourcesEnabled = enabled.has("resources"), notificationsEnabled = enabled.has("email-notifications");
@@ -60,7 +63,7 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     targets: permissions.isManager,
   };
   const toHref = (href: string) => resolvedTenantSlug ? tenantPath(resolvedTenantSlug, href) : href;
-  const primary = primaryLinks.filter((link) => canUse[link.id as keyof typeof canUse]).map((link) => ({ ...link, href: toHref(link.href) }));
+  const primary = primaryLinks.filter((link) => canUse[link.id as keyof typeof canUse]).map((link) => ({ ...link, href: toHref(link.href), label: link.id === "clients" ? titleTerminology(terms.clients) : link.label }));
   const appLinks: TenantAppLink[] = [
     canUse.bookings ? { id: "bookings", href: toHref("/app/bookings"), label: "Bookings", description: "All appointments", group: "Operations" } : null,
     canUse.sales ? { id: "sales", href: toHref("/app/sales"), label: "Sales", description: "Checkout and payment status", group: "Commerce" } : null,
@@ -69,9 +72,9 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     canUse.packages ? { id: "packages", href: toHref("/app/packages"), label: "Packages", description: "Client visit balances", group: "Commerce" } : null,
     canUse.calendars ? { id: "calendars", href: toHref("/app/calendars"), label: "Calendar", description: "Schedule and availability", group: "Operations" } : null,
     canUse.waitlist ? { id: "waitlist", href: toHref("/app/waitlist"), label: "Waitlist", description: "Fill open times", group: "Operations" } : null,
-    canUse.clients ? { id: "clients", href: toHref("/app/customers"), label: "Clients", description: "Client history", group: "Operations" } : null,
-    canUse.team ? { id: "team", href: toHref("/app/team"), label: "Staff", description: "Hours and eligibility", group: "Setup" } : null,
-    canUse.targets ? { id: "targets", href: toHref("/app/targets"), label: "Targets", description: "Monthly staff plans", group: "Insights" } : null,
+    canUse.clients ? { id: "clients", href: toHref("/app/customers"), label: titleTerminology(terms.clients), description: `${titleTerminology(terms.client)} history`, group: "Operations" } : null,
+    canUse.team ? { id: "team", href: toHref("/app/team"), label: titleTerminology(terms.staffPlural), description: "Hours and eligibility", group: "Setup" } : null,
+    canUse.targets ? { id: "targets", href: toHref("/app/targets"), label: "Targets", description: `Monthly ${terms.staff} plans`, group: "Insights" } : null,
     canUse.serviceSettings ? { id: "onlineBooking", href: toHref("/app/online-booking"), label: "Online booking", description: "Public page and catalogue", group: "Setup" } : null,
     canUse.serviceSettings ? { id: "services", href: toHref("/app/services"), label: "Services", description: "Prices and duration", group: "Setup" } : null,
     canUse.serviceSettings ? { id: "locations", href: toHref("/app/locations"), label: "Locations", description: "Where you operate", group: "Setup" } : null,
@@ -85,6 +88,6 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     <div className="tenant-dashboard-nav__workspace"><span className="tenant-dashboard-nav__brand"><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--light" src="/brand/waybook-logo.svg" alt="Waybook" /><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--dark" src="/brand/waybook-logo-white.svg" alt="" aria-hidden="true" /></span><strong>{tenantName}</strong></div>
     <nav aria-label="Primary navigation">{primary.map((link) => <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined}><link.Icon aria-hidden="true" />{link.label}</Link>)}</nav>
     <TenantAppMenu links={appLinks} active={active} />
-    <div className="tenant-nav-account-actions"><TenantNavTools searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : "Staff member"} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
+    <div className="tenant-nav-account-actions"><TenantNavTools searchLabel={`Search bookings or ${terms.clients}`} searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : titleTerminology(terms.staffMember)} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
   </header></>;
 }

@@ -1,3 +1,5 @@
+import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
+import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -228,6 +230,7 @@ export default async function CalendarsPage({
     showOffShift,
   } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
+  const terms = await getTenantTerminology(tenant);
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requireFeature(tenant.id, "calendars");
   const permissions = await staffPermissionContext(tenant, membership);
@@ -695,10 +698,10 @@ export default async function CalendarsPage({
         </section>
       ) : members.length === 0 ? (
         <section className="waybook-data-card">
-          <h2>Assign a staff member to {selectedLocation?.name}</h2>
+          <h2>Assign a {terms.staffMember} to {selectedLocation?.name}</h2>
           <p>
             Calendars show staff schedules for the selected location. Add the
-            assignment in Staff details.
+            assignment in {titleTerminology(terms.staff)} details.
           </p>
         </section>
       ) : (
@@ -711,16 +714,16 @@ export default async function CalendarsPage({
                     <div>
                       <p>MONTHLY SCHEDULE</p>
                       <h2>{new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))}</h2>
-                      <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : "All staff"} · {tenant.timezone}</span>
+                      <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : `All ${terms.staffPlural}`} · {tenant.timezone}</span>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
                       <details className="calendar-filter-panel">
                         <summary>Filters</summary>
                         <div className="calendar-filter-panel__content">
-                          <CalendarSelectors location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} fixedView="month" />
+                          <CalendarSelectors terminology={terms} location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} fixedView="month" />
                         </div>
                       </details>
-                      <CalendarActiveFilters
+                      <CalendarActiveFilters staffLabel={titleTerminology(terms.staffPlural)}
                         location={{ name: selectedLocation.name, isExplicit: Boolean(requestedLocation) }}
                         staff={hasSelectedEmployee && selected ? { name: selected.name, id: selected.id } : undefined}
                         service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
@@ -755,7 +758,7 @@ export default async function CalendarsPage({
                             <span className="waybook-month-calendar__date">{date.slice(-2).replace(/^0/, "")}</span>
                             {dayBookings.length > 0 ? <span className="waybook-month-calendar__count">{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}</span> : null}
                           </Link>
-                          {dayBookings.length > 0 ? <div className="waybook-month-calendar__preview" aria-label={`Bookings for ${label}`}><b>{label}</b><span>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"} · {staffCount} {staffCount === 1 ? "staff member" : "staff"}</span>{dayBookings.slice(0, 5).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })}>{clock.format(booking.startsAt)} · {booking.customerName}</Link>)}{dayBookings.length > 5 ? <Link href={dayHref}>+{dayBookings.length - 5} more · Open day</Link> : null}</div> : null}
+                          {dayBookings.length > 0 ? <div className="waybook-month-calendar__preview" aria-label={`Bookings for ${label}`}><b>{label}</b><span>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"} · {staffCount} {staffCount === 1 ? terms.staffMember : terms.staffPlural}</span>{dayBookings.slice(0, 5).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })}>{clock.format(booking.startsAt)} · {booking.customerName}</Link>)}{dayBookings.length > 5 ? <Link href={dayHref}>+{dayBookings.length - 5} more · Open day</Link> : null}</div> : null}
                           <div className="waybook-month-calendar__appointments">
                             {dayBookings.slice(0, 3).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })} className="waybook-month-calendar__appointment" style={{ borderLeftColor: booking.teamMemberColor }} title={`${clock.format(booking.startsAt)} · ${booking.customerName} · ${booking.teamMemberName}`}><span>{clock.format(booking.startsAt)}</span> {booking.customerName}</Link>)}
                             {dayBookings.length > 3 ? <Link className="waybook-month-calendar__more" href={dayHref}>+{dayBookings.length - 3} more</Link> : null}
@@ -770,7 +773,7 @@ export default async function CalendarsPage({
                   <div className="waybook-calendar-toolbar">
                     <div>
                       <p>
-                        <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible staff</span>
+                        <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible {terms.staffPlural}</span>
                       </p>
                       <h2>{calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}</h2>
                     </div>
@@ -778,17 +781,17 @@ export default async function CalendarsPage({
                       <details className="calendar-filter-panel">
                         <summary>Filters</summary>
                         <div className="calendar-filter-panel__content">
-                          <CalendarSelectors
+                          <CalendarSelectors terminology={terms}
                             location={selectedLocation!}
                             members={members}
                             services={calendarServices}
                             week={currentWeek}
                           />
-                          <CalendarRosterControls includeOffShift={showOffShift !== "0"} />
+                          <CalendarRosterControls staffPlural={terms.staffPlural} includeOffShift={showOffShift !== "0"} />
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
                         </div>
                       </details>
-                      <CalendarActiveFilters
+                      <CalendarActiveFilters staffLabel={titleTerminology(terms.staffPlural)}
                         location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
                         service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
                         rosterSearch={staffSearch || undefined}
@@ -844,7 +847,7 @@ export default async function CalendarsPage({
                         gridTemplateRows: `3rem repeat(${visibleTeamMembers.length}, 4.25rem)`,
                       }}
                     >
-                      <div className="waybook-week-calendar__corner">Staff</div>
+                      <div className="waybook-week-calendar__corner">{titleTerminology(terms.staffPlural)}</div>
                       {Array.from({ length: teamRowCount }, (_, index) => <div className="team-day-calendar__time-header" key={`team-time-${index}`} style={{ gridColumn: index + 2, gridRow: 1 }}>{index % 2 === 0 ? `${String(Math.floor((teamGridStart + index * 30) / 60)).padStart(2, "0")}:00` : ""}</div>)}
                       {visibleTeamMembers.flatMap((member, memberIndex) => [
                         <div key={`staff-${member.id}`} className="team-day-calendar__staff" aria-label={member.name} style={{ gridColumn: 1, gridRow: memberIndex + 2 }}><i aria-hidden>{member.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</i><strong>{member.name}</strong></div>,
@@ -932,9 +935,9 @@ export default async function CalendarsPage({
                     </div>
                   </div>
                   {staffBefore || staffAfter || hasMoreMembers ? (
-                    <nav className="calendar-row-filter__more" aria-label="Staff roster window">
-                      {staffBefore ? <Link className="waybook-secondary-link" href={href({ view: "team", before: members[0]?.id })}>Previous staff</Link> : null}
-                      {hasMoreMembers ? <Link className="waybook-secondary-link" href={href({ view: "team", after: members.at(-1)?.id })}>Next staff</Link> : null}
+                    <nav className="calendar-row-filter__more" aria-label={`${titleTerminology(terms.staff)} roster window`}>
+                      {staffBefore ? <Link className="waybook-secondary-link" href={href({ view: "team", before: members[0]?.id })}>Previous {terms.staffPlural}</Link> : null}
+                      {hasMoreMembers ? <Link className="waybook-secondary-link" href={href({ view: "team", after: members.at(-1)?.id })}>Next {terms.staffPlural}</Link> : null}
                     </nav>
                   ) : null}
                   {calendarServices.length || isHistoricalTeamDay ? (
@@ -953,8 +956,8 @@ export default async function CalendarsPage({
                     </>
                   ) : (
                     <div className="team-day-calendar__empty" role="status">
-                      <strong>No staff visible</strong>
-                      <span>No staff match the current filters. Adjust Filters to see more staff.</span>
+                      <strong>No {terms.staffPlural} visible</strong>
+                      <span>No {terms.staffPlural} match the current filters. Adjust Filters to see more {terms.staffPlural}.</span>
                     </div>
                   )}
                 </section>
@@ -962,7 +965,7 @@ export default async function CalendarsPage({
                 <section className="waybook-data-card waybook-week-calendar">
                   <div className="waybook-calendar-toolbar">
                     <div>
-                      <p>STAFF SCHEDULE</p>
+                      <p>{terms.staff.toUpperCase()} SCHEDULE</p>
                       <h2>{selected.name}</h2>
                       <span>
                         Confirmed bookings and live bookable periods in{" "}
@@ -973,7 +976,7 @@ export default async function CalendarsPage({
                       <details className="calendar-filter-panel">
                         <summary>Filters</summary>
                         <div className="calendar-filter-panel__content">
-                          <CalendarSelectors
+                          <CalendarSelectors terminology={terms}
                             location={selectedLocation!}
                             members={members}
                             services={services}
@@ -981,7 +984,7 @@ export default async function CalendarsPage({
                           />
                         </div>
                       </details>
-                      <CalendarActiveFilters
+                      <CalendarActiveFilters staffLabel={titleTerminology(terms.staffPlural)}
                         location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
                         staff={selected ? { name: selected.name, id: selected.id } : undefined}
                         service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
@@ -1032,7 +1035,7 @@ export default async function CalendarsPage({
                   </div>
                   {services.length === 0 ? (
                     <p className="waybook-permission-note">
-                      Assign a service to this staff member at{" "}
+                      Assign a service to this {terms.staffMember} at{" "}
                       {selectedLocation?.name} to calculate slots.
                     </p>
                   ) : null}
@@ -1174,7 +1177,7 @@ export default async function CalendarsPage({
           ) : null}
         </>
       )}
-      <CalendarAppointmentDrawer
+      <CalendarAppointmentDrawer staffLabel={titleTerminology(terms.staffPlural)}
         timezone={tenant.timezone}
         summaries={[...bookings, ...teamBookings, ...monthScopedBookings].map((item) => ({
           id: item.id, bookingNumber: item.bookingNumber, customerName: item.customerName,
@@ -1227,11 +1230,11 @@ export default async function CalendarsPage({
                 <div className="appointment-drawer__summary">
                   <strong>{selectedCustomer.name}</strong>
                   <span>
-                    Client details are prefilled from the selected profile.
+                    {titleTerminology(terms.client)} details are prefilled from the selected profile.
                   </span>
                 </div>
               ) : null}
-              {manualService ? <ManualAppointmentForm
+              {manualService ? <ManualAppointmentForm terminology={terms}
                 initialLocation={selectedLocation!}
                 initialMember={requestedCreateMember ?? selected}
                 initialService={manualService}

@@ -1,3 +1,5 @@
+import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
+import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
@@ -18,10 +20,10 @@ import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { addStaffTimeOff, deleteStaffTimeOff, saveStaffPermissions, saveStaffPhoto, saveTeamMember, updateStaffTimeOff } from "./actions";
 
-type StaffRow = { id: string; name: string; email: string; role: string; isActive: boolean; identityId: string | null; archivedAt: string | null; phone: string | null; jobTitle: string | null; specialty: string | null; workLocation: string | null; staffCode: string | null; internalNotes: string | null; calendarColor: string; photoDataUrl: string | null };
+type StaffRow = { id: string; name: string; email: string; role: string; isActive: boolean; identityId: string | null; archivedAt: string | null; phone: string | null; jobTitle: string | null; specialty: string | null; workLocation: string | null; staffCode: string | null; calendarColor: string; photoDataUrl: string | null };
 type Selection = { id: string; name: string };
 type Rule = { rrule: string; startTime: string; endTime: string };
-type Override = { id: string; localDate: string; startTime: string | null; endTime: string | null; isUnavailable: boolean; reason: string | null };
+type Override = { id: string; localDate: string; startTime: string | null; endTime: string | null; isUnavailable: boolean };
 type StaffPermissions = { canUpdateAppointmentStatus: boolean; canManageOwnAppointments: boolean; canViewTeamCalendar: boolean; canManageTeamAppointments: boolean; canManageOwnTimeOff: boolean; canManageTeamTimeOff: boolean; canManageWaitlist: boolean; canViewClients: boolean; canManageClients: boolean; canAccessReports: boolean; canManageResources: boolean; canManageServiceSettings: boolean };
 const tabs = ["details", "hours", "permissions", "services", "time-off"] as const;
 type StaffTab = (typeof tabs)[number];
@@ -40,7 +42,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "team");
   const canManage = ["owner", "manager"].includes(membership.role);
-  const signedInPermissions = await staffPermissionContext(tenant, membership);
+  const [signedInPermissions, terms] = await Promise.all([staffPermissionContext(tenant, membership), getTenantTerminology(tenant)]);
   if (!canManage && !signedInPermissions.teamMemberId) throw new Error("Your staff profile is unavailable for this workspace.");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const db = tenantDb(tenant);
@@ -53,13 +55,16 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const archiveSelect = archiveAvailable ? "tm.archived_at::text AS \"archivedAt\"" : "NULL::text AS \"archivedAt\"";
   const archiveOrder = archiveAvailable ? "tm.archived_at NULLS FIRST," : "";
   const photoSelect = photosAvailable ? 'tm.photo_data_url' : 'NULL::text';
-  const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.internal_notes AS \"internalNotes\",tm.calendar_color AS \"calendarColor\",${photoSelect} AS \"photoDataUrl\" FROM team_members tm`;
+  const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.calendar_color AS \"calendarColor\",${photoSelect} AS \"photoDataUrl\" FROM team_members tm`;
   const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1 AND ($2::uuid IS NULL OR tm.id=$2::uuid) AND ($3='' OR tm.name ILIKE $4 OR tm.email ILIKE $4) AND ($5::uuid IS NULL OR (tm.name,tm.id) > (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$5::uuid),''),$5::uuid)) ORDER BY ${archiveOrder}tm.is_active DESC,tm.name,tm.id LIMIT 51`;
   const memberRows = await db.unsafe<StaffRow[]>(staffDirectorySql, [tenant.id, canManage ? null : signedInPermissions.teamMemberId, search, `%${search}%`, cursor]);
   const hasMoreMembers = memberRows.length > 50;
   const members = memberRows.slice(0, 50);
-  const selectedFromDirectory = members.find((member) => member.id === employee) ?? null;
-  const selected = selectedFromDirectory ?? (employee && canManage ? (await db.unsafe<StaffRow[]>(staffColumns + " WHERE tm.tenant_id=$1 AND tm.id=$2::uuid", [tenant.id, employee]))[0] ?? null : null) ?? members[0] ?? null;
+  const selectedFromDirectory = members.find((member) => member.id === employee);
+  const selectedOutsideDirectory = !selectedFromDirectory && employee && canManage
+    ? (await db.unsafe<StaffRow[]>(staffColumns + " WHERE tm.tenant_id=$1 AND tm.id=$2::uuid", [tenant.id, employee])).at(0)
+    : undefined;
+  const selected = selectedFromDirectory ?? selectedOutsideDirectory ?? members.at(0);
   const [selectedServices, selectedLocations] = selected ? await Promise.all([
     db<Selection[]>`SELECT s.id,s.title AS name FROM service_team_members stm JOIN services s ON s.id=stm.service_id AND s.tenant_id=stm.tenant_id WHERE stm.tenant_id=${tenant.id} AND stm.team_member_id=${selected.id} ORDER BY s.title`,
     db<Selection[]>`SELECT l.id,l.name FROM team_member_locations tml JOIN locations l ON l.id=tml.location_id AND l.tenant_id=tml.tenant_id WHERE tml.tenant_id=${tenant.id} AND tml.team_member_id=${selected.id} ORDER BY l.name`,
@@ -69,7 +74,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
     : tabs.includes(requestedTab as StaffTab) ? requestedTab as StaffTab : "details";
   const [rules, overrides, permissionRows, workspacePermissionsAvailable] = selected ? await Promise.all([
     db<Rule[]>`SELECT rrule, start_time AS "startTime", end_time AS "endTime" FROM availability_rules WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} ORDER BY created_at ASC`,
-    db<Override[]>`SELECT id, local_date::text AS "localDate", start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable", reason FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} ORDER BY local_date DESC LIMIT 30`,
+    db<Override[]>`SELECT id, local_date::text AS "localDate", start_time AS "startTime", end_time AS "endTime", is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} ORDER BY local_date DESC LIMIT 30`,
     db<StaffPermissions[]>`SELECT can_update_appointment_status AS "canUpdateAppointmentStatus", can_manage_own_appointments AS "canManageOwnAppointments", can_view_team_calendar AS "canViewTeamCalendar", can_manage_team_appointments AS "canManageTeamAppointments", can_manage_own_time_off AS "canManageOwnTimeOff", can_manage_team_time_off AS "canManageTeamTimeOff", can_manage_waitlist AS "canManageWaitlist" FROM staff_permissions WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} LIMIT 1`,
     staffWorkspacePermissionsAvailable(tenant),
   ]) : [[], [], [], false] as [Rule[], Override[], StaffPermissions[], boolean];
@@ -95,39 +100,39 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="team" />
     <section className="staff-workspace">
-      <aside className="staff-workspace__directory" aria-label="Staff directory">
+      <aside className="staff-workspace__directory" aria-label={`${titleTerminology(terms.staff)} directory`}>
         <div className="staff-workspace__directory-heading">
-          <div><p>PEOPLE</p><h1>Staff</h1></div>
-          {canManage ? <Link className="waybook-primary-link" href={basePath + "?new=1"}>Add staff</Link> : null}
+          <div><p>PEOPLE</p><h1>{titleTerminology(terms.staffPlural)}</h1></div>
+          {canManage ? <Link className="waybook-primary-link" href={basePath + "?new=1"}>Add {terms.staff}</Link> : null}
         </div>
         <p className="staff-workspace__directory-copy">Select a person to manage their profile, schedule, services, and time off.</p>
-        {canManage ? <form method="get" className="waybook-list-filter"><label>Search staff<input name="q" type="search" defaultValue={search} placeholder="Name or email" /></label><button type="submit">Search</button></form> : null}
+        {canManage ? <form method="get" className="waybook-list-filter"><label>Search {terms.staffPlural}<input name="q" type="search" defaultValue={search} placeholder="Name or email" /></label><button type="submit">Search</button></form> : null}
         <nav>
           {members.map((member) => <Link key={member.id} href={staffPath(member.id)} aria-current={selected?.id === member.id ? "page" : undefined}>
             <span className="staff-workspace__avatar" aria-hidden="true">{member.photoDataUrl ? <img src={member.photoDataUrl} alt="" /> : member.name.slice(0, 1)}</span>
-            <span><strong>{member.name}</strong><small>{member.jobTitle ?? member.role}</small></span>
+            <span><strong>{member.name}</strong><small>{member.jobTitle ?? (member.role === "staff" ? terms.staff : member.role)}</small></span>
             <i className={member.isActive ? "is-active" : ""}>{member.isActive ? "Active" : "Inactive"}</i>
           </Link>)}
         </nav>
-        {hasMoreMembers ? <Link className="waybook-secondary-link" href={moreStaffHref}>Load more staff</Link> : null}
+        {hasMoreMembers ? <Link className="waybook-secondary-link" href={moreStaffHref}>Load more {terms.staffPlural}</Link> : null}
       </aside>
       <section className="staff-workspace__content">
         {createNew === "1" ? <section className="staff-workspace__panel staff-workspace__new">
-          <PanelHeading title="Create a staff profile" text="Save core details first, then add services and a weekly schedule." />
-          {canManage ? <ProfileForm member={null} selectedLocations={[]} selectedServices={[]} canAssignManager={membership.role === "owner"} /> : <p>Read-only access.</p>}
+          <PanelHeading title={`Create a ${terms.staff} profile`} text="Save core details first, then add services and a weekly schedule." />
+          {canManage ? <ProfileForm terms={terms} member={null} selectedLocations={[]} selectedServices={[]} canAssignManager={membership.role === "owner"} /> : <p>Read-only access.</p>}
         </section> : null}
         {!createNew && selected ? <>
           <header className="staff-workspace__profile-header">
             {photosAvailable && canEditStaffPhoto(membership.role, signedInPermissions.teamMemberId, selected.id) ? <StaffPhotoUpload key={selected.id} memberId={selected.id} name={selected.name} photoDataUrl={selected.photoDataUrl} action={saveStaffPhoto} /> : <span className="staff-workspace__avatar is-large" aria-hidden="true">{selected.photoDataUrl ? <img src={selected.photoDataUrl} alt="" /> : selected.name.slice(0, 1)}</span>}
-            <div><p>STAFF PROFILE</p><h2>{selected.name}</h2><span>{selected.jobTitle ?? "Staff member"} · {selected.isActive ? "Active and bookable" : "Inactive"}</span></div>
+            <div><p>{terms.staff.toUpperCase()} PROFILE</p><h2>{selected.name}</h2><span>{selected.jobTitle ?? titleTerminology(terms.staffMember)} · {selected.isActive ? "Active and bookable" : "Inactive"}</span></div>
             <StaffAccessMenu key={selected.id} memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} canInviteWithGoogle={canInviteWithGoogle} canManagePassword={!selected.identityId || passwordAccess?.available === true} />
           </header>
-          <nav className="staff-workspace__tabs" aria-label="Staff profile sections">
+          <nav className="staff-workspace__tabs" aria-label={`${titleTerminology(terms.staff)} profile sections`}>
             {([{ id: "details", label: "Details" }, { id: "hours", label: "Work hours" }, ...(canManage ? [{ id: "permissions" as const, label: "Permissions" }] : []), { id: "services", label: "Services & locations" }, { id: "time-off", label: "Time off" }] as const).map((item) => <Link key={item.id} href={staffPath(selected.id, item.id)} aria-current={tab === item.id ? "page" : undefined}>{item.label}</Link>)}
           </nav>
           {tab === "details" ? <section className="staff-workspace__panel">
             <PanelHeading title="Details" text="Contact and profile information used inside your workspace." />
-            {canManage ? <ProfileForm key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
+            {canManage ? <ProfileForm terms={terms} key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts terms={terms} member={selected} />}
           </section> : null}
           {tab === "hours" ? <section className="staff-workspace__panel staff-workspace__panel--wide">
             <PanelHeading title="Working hours" text="A clear weekly schedule for when this person can be offered to customers." />
@@ -139,15 +144,15 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </section> : null}
           {tab === "services" ? <section className="staff-workspace__panel">
             <PanelHeading title="Services & locations" text="Control where this person can be booked and what they can deliver." />
-            {canManage ? <ProfileForm key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} assignmentsOnly canAssignManager={membership.role === "owner"} /> : <ProfileFacts member={selected} />}
+            {canManage ? <ProfileForm terms={terms} key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} assignmentsOnly canAssignManager={membership.role === "owner"} /> : <ProfileFacts terms={terms} member={selected} />}
           </section> : null}
           {tab === "time-off" ? <section className="staff-workspace__panel">
             <PanelHeading title="Time off" text="Block one day, a date range, or specific hours for leave, breaks, meetings, or other time off." />
-            {canManage ? <>{editingOverride ? <div className="staff-timeoff-form__editing"><div><b>Editing time off</b><span>Update this one-day exception, then save or remove it.</span></div><Link href={staffPath(selected.id, "time-off")}>Cancel</Link></div> : null}<StaffTimeOffForm key={`${selected.id}:${editingOverride?.id ?? "new"}`} memberId={selected.id} timezone={tenant.timezone} action={editingOverride ? updateStaffTimeOff : addStaffTimeOff} deleteAction={editingOverride ? deleteStaffTimeOff : undefined} initial={editingOverride ? { id: editingOverride.id, localDate: editingOverride.localDate, startTime: editingOverride.startTime, endTime: editingOverride.endTime, reason: editingOverride.reason } : undefined} /></> : null}
-            <div className="staff-exception-list">{overrides.map((override) => <Link className="staff-exception-list__row" key={override.id} href={staffPath(selected.id, "time-off") + "&editTimeOff=" + override.id}><div><strong>{displayOverrideDate(override.localDate)}</strong><span>{displayOverride(override)}</span><small>{override.reason ?? "No reason provided"}</small></div><Pencil aria-hidden="true" /></Link>)}{overrides.length === 0 ? <p>No time off recorded yet.</p> : null}</div>
+            {canManage ? <>{editingOverride ? <div className="staff-timeoff-form__editing"><div><b>Editing time off</b><span>Update this one-day exception, then save or remove it.</span></div><Link href={staffPath(selected.id, "time-off")}>Cancel</Link></div> : null}<StaffTimeOffForm key={`${selected.id}:${editingOverride?.id ?? "new"}`} memberId={selected.id} timezone={tenant.timezone} action={editingOverride ? updateStaffTimeOff : addStaffTimeOff} deleteAction={editingOverride ? deleteStaffTimeOff : undefined} initial={editingOverride ? { id: editingOverride.id, localDate: editingOverride.localDate, startTime: editingOverride.startTime, endTime: editingOverride.endTime } : undefined} /></> : null}
+            <div className="staff-exception-list">{overrides.map((override) => <Link className="staff-exception-list__row" key={override.id} href={staffPath(selected.id, "time-off") + "&editTimeOff=" + override.id}><div><strong>{displayOverrideDate(override.localDate)}</strong><span>{displayOverride(override)}</span></div><Pencil aria-hidden="true" /></Link>)}{overrides.length === 0 ? <p>No time off recorded yet.</p> : null}</div>
           </section> : null}
         </> : null}
-        {!createNew && !selected ? <section className="staff-workspace__empty"><h2>No staff yet</h2><p>Add the first person to begin setting availability.</p></section> : null}
+        {!createNew && !selected ? <section className="staff-workspace__empty"><h2>No {terms.staffPlural} yet</h2><p>Add the first person to begin setting availability.</p></section> : null}
       </section>
     </section>
   </main>;
@@ -157,8 +162,8 @@ function PanelHeading({ title, text }: { title: string; text: string }) {
   return <div className="staff-workspace__panel-heading"><div><h3>{title}</h3><p>{text}</p></div></div>;
 }
 
-function ProfileFacts({ member }: { member: StaffRow }) {
-  return <dl className="staff-profile-facts"><div><dt>Email</dt><dd>{member.email}</dd></div><div><dt>Phone</dt><dd>{member.phone ?? "—"}</dd></div><div><dt>Role</dt><dd>{member.role}</dd></div><div><dt>Login</dt><dd>{member.identityId ? "Enabled" : "Not created"}</dd></div><div><dt>Specialty</dt><dd>{member.specialty ?? "—"}</dd></div></dl>;
+function ProfileFacts({ terms, member }: { terms: Awaited<ReturnType<typeof getTenantTerminology>>; member: StaffRow }) {
+  return <dl className="staff-profile-facts"><div><dt>Email</dt><dd>{member.email}</dd></div><div><dt>Phone</dt><dd>{member.phone ?? "—"}</dd></div><div><dt>Role</dt><dd>{member.role === "staff" ? terms.staff : member.role}</dd></div><div><dt>Login</dt><dd>{member.identityId ? "Enabled" : "Not created"}</dd></div><div><dt>Specialty</dt><dd>{member.specialty ?? "—"}</dd></div></dl>;
 }
 
 const permissionSections = [{
@@ -206,16 +211,16 @@ function StaffPermissionsForm({ memberId, initial, workspacePermissionsAvailable
   </form>;
 }
 
-function ProfileForm({ member, selectedLocations, selectedServices, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager }: { member: StaffRow | null; selectedLocations: Selection[]; selectedServices: Selection[]; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean }) {
+function ProfileForm({ terms, member, selectedLocations, selectedServices, compact = false, assignmentsOnly = false, includeAssignments = true, canAssignManager }: { terms: Awaited<ReturnType<typeof getTenantTerminology>>; member: StaffRow | null; selectedLocations: Selection[]; selectedServices: Selection[]; compact?: boolean; assignmentsOnly?: boolean; includeAssignments?: boolean; canAssignManager: boolean }) {
   return <form action={saveTeamMember} className="staff-profile-form">
     <input type="hidden" name="memberId" value={member?.id ?? ""} />
     {!assignmentsOnly ? <><div className="staff-profile-form__grid">
       <label>Name<input name="name" defaultValue={member?.name ?? ""} required /></label><label>Email<input name="email" type="email" defaultValue={member?.email ?? ""} required /></label>
-      <label>Phone<input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label><label>Role<select name="role" defaultValue={member?.role ?? "staff"} disabled={!canAssignManager && member?.role === "manager"}>{!canAssignManager && member?.role === "manager" ? <option value="manager">Manager</option> : null}<option value="staff">Staff</option>{canAssignManager ? <option value="manager">Manager</option> : null}<option value="read-only">Read-only</option></select></label><fieldset className="staff-calendar-colour"><legend>Calendar colour</legend><div className="staff-calendar-colour__swatches">{staffCalendarColors.map((color) => <label key={color.value} title={color.label}><input type="radio" name="calendarColor" value={color.value} aria-label={color.label} defaultChecked={(member?.calendarColor ?? defaultStaffCalendarColor) === color.value} /><span style={{ backgroundColor: color.value }} aria-hidden="true" /></label>)}</div><small>Used for this person’s booking cards.</small></fieldset>
-      {!compact ? <><label>Staff code<input name="staffCode" defaultValue={member?.staffCode ?? ""} /></label><label>Job title<input name="jobTitle" defaultValue={member?.jobTitle ?? ""} /></label><label>Specialty<input name="specialty" defaultValue={member?.specialty ?? ""} /></label><label>Work location<input name="workLocation" defaultValue={member?.workLocation ?? ""} /></label></> : null}
-    </div><label>Internal notes<textarea name="internalNotes" rows={3} defaultValue={member?.internalNotes ?? ""} placeholder="Private operational notes — never customer-facing." /></label><label className="staff-status-toggle"><input type="checkbox" role="switch" name="isActive" defaultChecked={member?.isActive ?? true} /><span aria-hidden="true" /><b>Active and eligible for booking</b></label></> : null}
+      <label>Phone<input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label><label>Role<select name="role" defaultValue={member?.role ?? "staff"} disabled={!canAssignManager && member?.role === "manager"}>{!canAssignManager && member?.role === "manager" ? <option value="manager">Manager</option> : null}<option value="staff">{titleTerminology(terms.staff)}</option>{canAssignManager ? <option value="manager">Manager</option> : null}<option value="read-only">Read-only</option></select></label><fieldset className="staff-calendar-colour"><legend>Calendar colour</legend><div className="staff-calendar-colour__swatches">{staffCalendarColors.map((color) => <label key={color.value} title={color.label}><input type="radio" name="calendarColor" value={color.value} aria-label={color.label} defaultChecked={(member?.calendarColor ?? defaultStaffCalendarColor) === color.value} /><span style={{ backgroundColor: color.value }} aria-hidden="true" /></label>)}</div><small>Used for this person’s booking cards.</small></fieldset>
+      {!compact ? <><label>{titleTerminology(terms.staff)} code<input name="staffCode" defaultValue={member?.staffCode ?? ""} /></label><label>Job title<input name="jobTitle" defaultValue={member?.jobTitle ?? ""} /></label><label>Specialty<input name="specialty" defaultValue={member?.specialty ?? ""} /></label><label>Work location<input name="workLocation" defaultValue={member?.workLocation ?? ""} /></label></> : null}
+    </div><label className="staff-status-toggle"><input type="checkbox" role="switch" name="isActive" defaultChecked={member?.isActive ?? true} /><span aria-hidden="true" /><b>Active and eligible for booking</b></label></> : null}
     {!includeAssignments ? <><>{selectedLocations.map((location) => <input key={location.id} type="hidden" name="locationIds" value={location.id} />)}</><>{selectedServices.map((service) => <input key={service.id} type="hidden" name="serviceIds" value={service.id} />)}</></> : null}
-    {includeAssignments ? member ? <><AsyncMultiSelect name="locationIds" label="Locations this person can serve" endpoint="/api/app/locations" initial={selectedLocations} /><AsyncMultiSelect name="serviceIds" label="Services this person can deliver" endpoint="/api/app/services" initial={selectedServices} /></> : <><input type="hidden" name="defaultAssignments" value="all" /><p className="staff-profile-form__assignment-note">New staff start bookable for all active locations and services. You can narrow this after creation.</p></> : null}
-    <button type="submit">{member ? assignmentsOnly ? "Save services & locations" : "Save staff details" : "Create staff member"}</button>
+    {includeAssignments ? member ? <><AsyncMultiSelect name="locationIds" label="Locations this person can serve" endpoint="/api/app/locations" initial={selectedLocations} /><AsyncMultiSelect name="serviceIds" label="Services this person can deliver" endpoint="/api/app/services" initial={selectedServices} /></> : <><input type="hidden" name="defaultAssignments" value="all" /><p className="staff-profile-form__assignment-note">New {terms.staffPlural} start bookable for all active locations and services. You can narrow this after creation.</p></> : null}
+    <button type="submit">{member ? assignmentsOnly ? "Save services & locations" : `Save ${terms.staff} details` : `Create ${terms.staffMember}`}</button>
   </form>;
 }

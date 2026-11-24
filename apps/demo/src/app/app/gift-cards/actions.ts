@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireIdentity } from "@/lib/waybook/auth";
+import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
@@ -22,9 +23,9 @@ export async function issueGiftCard(formData: FormData) {
   const code = normaliseGiftCardCode(String(formData.get("code") ?? ""));
   const ownerId = String(formData.get("ownerId") ?? "") || null;
   const amountCents = amountFrom(formData.get("amountDkk"));
-  const notes = String(formData.get("notes") ?? "").trim() || null;
-  if (!/^[A-Z0-9-]{8,40}$/.test(code) || !Number.isFinite(amountCents) || amountCents < 100 || amountCents > 10_000_000 || (notes?.length ?? 0) > 500) {
-    throw new Error("Enter an 8–40 character gift-card number, a balance from 1 to 100,000 kr., and an optional note under 500 characters.");
+  assertNoOperationalFreeText(formData, "notes");
+  if (!/^[A-Z0-9-]{8,40}$/.test(code) || !Number.isFinite(amountCents) || amountCents < 100 || amountCents > 10_000_000) {
+    throw new Error("Enter an 8–40 character gift-card number and a balance from 1 to 100,000 kr.");
   }
   const lastFour = code.replaceAll("-", "").slice(-4);
   if (lastFour.length !== 4) throw new Error("The gift-card number needs at least four letters or digits.");
@@ -36,7 +37,7 @@ export async function issueGiftCard(formData: FormData) {
     await db.begin(async (transaction) => {
       if (ownerId) {
         const [owner] = await transaction.unsafe<{ id: string }[]>("SELECT id FROM customers WHERE id=$1 AND tenant_id=$2", [ownerId, tenant.id]);
-        if (!owner) throw new Error("That client is no longer available.");
+        if (!owner) throw new Error("That contact is no longer available.");
       }
       const [settings] = await transaction.unsafe<{ currency: string }[]>("SELECT currency FROM tenant_settings WHERE tenant_id=$1", [tenant.id]);
       if (!settings) throw new Error("Tenant settings are unavailable.");
@@ -45,7 +46,7 @@ export async function issueGiftCard(formData: FormData) {
       if (existing) throw new Error("That gift-card number already exists in this workspace.");
       const [card] = await transaction.unsafe<{ id: string }[]>("INSERT INTO commerce_gift_cards (tenant_id,issued_to_customer_id,code_hash,code_hash_version,code_last_four,currency) VALUES ($1,$2,$3,2,$4,$5) RETURNING id", [tenant.id, ownerId, hash, lastFour, settings.currency]);
       cardId = card.id;
-      await transaction.unsafe("INSERT INTO commerce_gift_card_entries (tenant_id,gift_card_id,kind,direction,amount_cents,currency,reason,recorded_by_identity_id) VALUES ($1,$2,'issue','credit',$3,$4,$5,$6)", [tenant.id, card.id, amountCents, settings.currency, notes || "Gift card issued", identity.id]);
+      await transaction.unsafe("INSERT INTO commerce_gift_card_entries (tenant_id,gift_card_id,kind,direction,amount_cents,currency,reason,recorded_by_identity_id) VALUES ($1,$2,'issue','credit',$3,$4,$5,$6)", [tenant.id, card.id, amountCents, settings.currency, "Gift card issued", identity.id]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'gift_card.issued','commerce_gift_card',$3,$4::jsonb)", [tenant.id, identity.id, card.id, JSON.stringify({ ownerId, amountCents, lastFour })]);
     });
   } catch (error) {
@@ -65,29 +66,29 @@ export async function updateGiftCardDetails(formData: FormData) {
 
   const cardId = String(formData.get("cardId") ?? "");
   const ownerId = String(formData.get("ownerId") ?? "") || null;
-  const notes = String(formData.get("notes") ?? "").trim();
-  if (!cardId || notes.length > 500) throw new Error("Enter an internal note under 500 characters.");
+  assertNoOperationalFreeText(formData, "notes");
+  if (!cardId) throw new Error("Choose a gift card to edit.");
 
   const identity = await requireIdentity();
   const db = tenantDb(tenant);
   await db.begin(async (transaction) => {
     if (ownerId) {
       const [owner] = await transaction.unsafe<{ id: string }[]>("SELECT id FROM customers WHERE id=$1 AND tenant_id=$2", [ownerId, tenant.id]);
-      if (!owner) throw new Error("That client is no longer available.");
+      if (!owner) throw new Error("That contact is no longer available.");
     }
-    const [card] = await transaction.unsafe<{ metadata: { notes?: string; photoDataUrl?: string } }[]>(
+    const [card] = await transaction.unsafe<{ metadata: { photoDataUrl?: string } }[]>(
       "SELECT metadata FROM commerce_gift_cards WHERE id=$1 AND tenant_id=$2 FOR UPDATE",
       [cardId, tenant.id],
     );
     if (!card) throw new Error("That gift card is unavailable.");
     const photoDataUrl = await cataloguePhotoFromForm(formData, card.metadata?.photoDataUrl ?? null);
     await transaction.unsafe(
-      "UPDATE commerce_gift_cards SET issued_to_customer_id=$1,metadata=$2::jsonb WHERE id=$3 AND tenant_id=$4",
-      [ownerId, JSON.stringify({ ...card.metadata, notes, photoDataUrl }), cardId, tenant.id],
+      "UPDATE commerce_gift_cards SET issued_to_customer_id=$1,metadata=$2::text::jsonb WHERE id=$3 AND tenant_id=$4",
+      [ownerId, JSON.stringify({ ...card.metadata, photoDataUrl }), cardId, tenant.id],
     );
     await transaction.unsafe(
       "INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'gift_card.details_updated','commerce_gift_card',$3,$4::jsonb)",
-      [tenant.id, identity.id, cardId, JSON.stringify({ ownerId, notesChanged: notes !== (card.metadata?.notes ?? ""), photoChanged: photoDataUrl !== (card.metadata?.photoDataUrl ?? null) })],
+      [tenant.id, identity.id, cardId, JSON.stringify({ ownerId, photoChanged: photoDataUrl !== (card.metadata?.photoDataUrl ?? null) })],
     );
   });
   revalidatePath("/app/gift-cards");

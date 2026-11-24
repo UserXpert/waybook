@@ -1,6 +1,7 @@
 "use client";
 
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
+import { titleTerminology } from "@/lib/waybook/terminology-labels";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -10,7 +11,6 @@ type Client = {
   name: string;
   email: string;
   phone: string | null;
-  tags: string[];
   bookingCount: number;
   bookedValueCents: number;
   lastBookingAt: string | null;
@@ -23,11 +23,13 @@ type Props = {
   query: string;
   path: string;
   timeZone: string;
+  clientLabel: string;
+  clientsLabel: string;
 };
 
 const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
 
-export function ClientDirectoryList({ initialClients, initialNextCursor, query, path, timeZone }: Props) {
+export function ClientDirectoryList({ initialClients, initialNextCursor, query, path, timeZone, clientLabel, clientsLabel }: Props) {
   const [clients, setClients] = useState(initialClients);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
   const [loading, setLoading] = useState(false);
@@ -75,17 +77,17 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
 
   return <div className="waybook-table-wrap">
     <table>
-      <thead><tr><th>Client</th><th>Contact</th><th>Next appointment</th><th>Visits</th><th>Booked value</th></tr></thead>
+      <thead><tr><th>{titleTerminology(clientLabel)}</th><th>Contact</th><th>Next appointment</th><th>Visits</th><th>Booked value</th></tr></thead>
       <tbody>
         {clients.map((client) => <tr key={client.id} className="customer-table-row">
-          <td><Link href={clientHref(client.id)}><strong>{client.name}</strong>{client.tags.length ? <small>{client.tags.join(" · ")}</small> : <small>{client.lastBookingAt ? `Last visit ${date.format(new Date(client.lastBookingAt))}` : "New client"}</small>}</Link></td>
+          <td><Link href={clientHref(client.id)}><strong>{client.name}</strong><small>{client.lastBookingAt ? `Last visit ${date.format(new Date(client.lastBookingAt))}` : `New ${clientLabel}`}</small></Link></td>
           <td><Link href={clientHref(client.id)}>{client.email}{client.phone ? <small>{client.phone}</small> : null}</Link></td>
           <td><Link href={clientHref(client.id)}>{client.nextBookingAt ? date.format(new Date(client.nextBookingAt)) : "—"}</Link></td>
           <td><Link href={clientHref(client.id)}>{client.bookingCount}</Link></td>
           <td><Link href={clientHref(client.id)}>{money(client.bookedValueCents)}</Link></td>
         </tr>)}
-        {clients.length === 0 ? <tr><td colSpan={5}>No clients match this search.</td></tr> : null}
-        {nextCursor ? <tr ref={sentinelRef} className="client-directory-list__sentinel"><td colSpan={5}>{loading ? "Loading clients…" : ""}</td></tr> : null}
+        {clients.length === 0 ? <tr><td colSpan={5}>No {clientsLabel} match this search.</td></tr> : null}
+        {nextCursor ? <tr ref={sentinelRef} className="client-directory-list__sentinel"><td colSpan={5}>{loading ? `Loading ${clientsLabel}…` : ""}</td></tr> : null}
       </tbody>
     </table>
   </div>;

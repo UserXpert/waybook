@@ -1,5 +1,7 @@
 "use client";
 
+import { defaultTenantTerminology, titleTerminology, type TenantTerminology } from "@/lib/waybook/terminology-labels";
+
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 
 import { type KeyboardEvent, useCallback, useEffect, useId, useState } from "react";
@@ -126,7 +128,7 @@ export function SearchPicker<T extends { id: string }>({
 
 /** Calendar filters use compact async search instead of serialising large
  * location, staff, or service directories into native dropdowns. */
-export function CalendarSelectors({ location, members, services, week, teamMode = false, fixedView }: { location: Location; members: Member[]; services: Service[]; week: string; teamMode?: boolean; fixedView?: "month" }) {
+export function CalendarSelectors({ location, members, services, week, teamMode = false, fixedView, terminology = defaultTenantTerminology }: { location: Location; members: Member[]; services: Service[]; week: string; teamMode?: boolean; fixedView?: "month"; terminology?: TenantTerminology }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -169,9 +171,9 @@ export function CalendarSelectors({ location, members, services, week, teamMode 
         onPick={(item) => go(item.id, "", "")}
       />
       <SearchPicker<Member>
-        label="Staff"
+        label={titleTerminology(terminology.staffPlural)}
         selectedLabel={teamMode ? rosterSearch : (selectedEmployee?.name ?? "")}
-        placeholder="Search staff"
+        placeholder={`Search ${terminology.staffPlural}`}
         searchUrl={staffSearchUrl}
         resultsLabel={(item) => item.name}
         onPick={(item) => teamMode ? go(location.id, "", selectedServiceId, item.name) : go(location.id, item.id, "")}

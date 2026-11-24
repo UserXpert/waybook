@@ -1,5 +1,7 @@
 "use server";
 
+import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
@@ -108,7 +110,7 @@ export async function saveTeamMember(formData: FormData) {
   const specialty = optionalText(formData, "specialty", 160);
   const workLocation = optionalText(formData, "workLocation", 160);
   const staffCode = optionalText(formData, "staffCode", 80);
-  const internalNotes = optionalText(formData, "internalNotes", 2_000);
+  assertNoOperationalFreeText(formData, "internalNotes");
   const calendarColor = String(formData.get("calendarColor") ?? defaultStaffCalendarColor).trim();
   const assignmentsOnly = Boolean(memberId) && !name && !email;
   if (!assignmentsOnly && (!name || name.length > 160 || !email.includes("@") || !["manager", "staff", "read-only"].includes(role))) throw new Error("Enter a name, valid email, and role.");
@@ -140,8 +142,8 @@ export async function saveTeamMember(formData: FormData) {
   const [member] = assignmentsOnly
     ? await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`
     : memberId
-    ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = ${jobTitle}, specialty = ${specialty}, work_location = ${workLocation}, staff_code = ${staffCode}, internal_notes = ${internalNotes}, calendar_color = ${calendarColor}, updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} RETURNING id`
-    : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, name, email, is_active, phone, job_title, specialty, work_location, staff_code, internal_notes, calendar_color) VALUES (${tenant.id}, ${role}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${internalNotes}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
+    ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = ${jobTitle}, specialty = ${specialty}, work_location = ${workLocation}, staff_code = ${staffCode}, calendar_color = ${calendarColor}, updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} RETURNING id`
+    : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, name, email, is_active, phone, job_title, specialty, work_location, staff_code, calendar_color) VALUES (${tenant.id}, ${role}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
   if (!member) throw new Error(memberId ? "Staff member is unavailable." : "A staff member already uses this email. Edit their existing profile instead.");
   // A staff profile may predate its login. Once linked, the Control-plane role
   // is the authorization source of truth and must follow profile role changes.
@@ -157,7 +159,7 @@ export async function saveTeamMember(formData: FormData) {
   for (const service of validServices) await db`INSERT INTO service_team_members (tenant_id, service_id, team_member_id) VALUES (${tenant.id}, ${service.id}, ${member.id})`;
   await db`DELETE FROM team_member_locations WHERE tenant_id = ${tenant.id} AND team_member_id = ${member.id}`;
   for (const location of validLocations) await db`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) VALUES (${tenant.id}, ${member.id}, ${location.id})`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${memberId ? "staff.updated" : "staff.created"}, 'team_member', ${member.id}, ${JSON.stringify({ fields: ["name", "email", "role", "isActive", "phone", "jobTitle", "specialty", "workLocation", "staffCode", "internalNotes", "calendarColor", "serviceIds", "locationIds"] })}::jsonb)`;
+  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${memberId ? "staff.updated" : "staff.created"}, 'team_member', ${member.id}, ${JSON.stringify({ fields: ["name", "email", "role", "isActive", "phone", "jobTitle", "specialty", "workLocation", "staffCode", "calendarColor", "serviceIds", "locationIds"] })}::jsonb)`;
   revalidateStaff();
   const slug = await currentTenantRouteSlug(tenant.slug);
   redirect(withSuccessToast(`${tenantPath(slug, "/app/team")}?employee=${member.id}`, "Staff member saved."));
@@ -362,7 +364,7 @@ export async function addStaffTimeOff(formData: FormData) {
   const isUnavailable = true;
   const startTime = String(formData.get("startTime") ?? "") || null;
   const endTime = String(formData.get("endTime") ?? "") || null;
-  const reason = optionalText(formData, "reason", 500);
+  assertNoOperationalFreeText(formData, "reason");
   const hasPartialWindow = Boolean(startTime) && Boolean(endTime);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate) || endLocalDate < localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) throw new Error("Choose a valid date or date range, then either block the full day or enter a complete valid time range.");
   const dates = localDatesInRange(localDate, endLocalDate);
@@ -370,8 +372,8 @@ export async function addStaffTimeOff(formData: FormData) {
   const db = await validStaffMember(tenant, memberId);
   const existing = await db<{ localDate: string }[]>`SELECT local_date::text AS "localDate" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId} AND local_date >= ${localDate} AND local_date <= ${endLocalDate}`;
   if (existing.length > 0) throw new Error("One or more selected dates already have a time-off exception. Choose dates without an existing exception.");
-  for (const date of dates) await db`INSERT INTO availability_overrides (tenant_id, team_member_id, local_date, start_time, end_time, is_unavailable, reason) VALUES (${tenant.id}, ${memberId}, ${date}, ${startTime}, ${endTime}, ${isUnavailable}, ${reason})`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_added"}, 'team_member', ${memberId}, ${JSON.stringify({ localDate, endLocalDate, dateCount: dates.length, fullDay, isUnavailable, startTime, endTime, reason })}::jsonb)`;
+  for (const date of dates) await db`INSERT INTO availability_overrides (tenant_id, team_member_id, local_date, start_time, end_time, is_unavailable) VALUES (${tenant.id}, ${memberId}, ${date}, ${startTime}, ${endTime}, ${isUnavailable})`;
+  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_added"}, 'team_member', ${memberId}, ${JSON.stringify({ localDate, endLocalDate, dateCount: dates.length, fullDay, isUnavailable, startTime, endTime })}::jsonb)`;
   revalidateStaff();
 }
 
@@ -384,7 +386,7 @@ export async function updateStaffTimeOff(formData: FormData) {
   const fullDay = String(formData.get("fullDay") ?? "false") === "true";
   const startTime = String(formData.get("startTime") ?? "") || null;
   const endTime = String(formData.get("endTime") ?? "") || null;
-  const reason = optionalText(formData, "reason", 500);
+  assertNoOperationalFreeText(formData, "reason");
   const hasPartialWindow = Boolean(startTime) && Boolean(endTime);
   if (!overrideId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || endLocalDate !== localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) throw new Error("Choose one valid date and a complete valid time range when needed.");
   const db = await validStaffMember(tenant, memberId);
@@ -392,8 +394,8 @@ export async function updateStaffTimeOff(formData: FormData) {
   if (!override) throw new Error("That time-off entry is unavailable.");
   const conflicts = await db<{ id: string }[]>`SELECT id FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId} AND local_date = ${localDate} AND id <> ${overrideId}`;
   if (conflicts.length) throw new Error("Another time-off entry already exists on that date.");
-  await db`UPDATE availability_overrides SET local_date = ${localDate}, start_time = ${startTime}, end_time = ${endTime}, is_unavailable = TRUE, reason = ${reason} WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_updated"}, 'team_member', ${memberId}, ${JSON.stringify({ overrideId, localDate, fullDay, startTime, endTime, reason })}::jsonb)`;
+  await db`UPDATE availability_overrides SET local_date = ${localDate}, start_time = ${startTime}, end_time = ${endTime}, is_unavailable = TRUE WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
+  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_updated"}, 'team_member', ${memberId}, ${JSON.stringify({ overrideId, localDate, fullDay, startTime, endTime })}::jsonb)`;
   revalidateStaff();
 }
 

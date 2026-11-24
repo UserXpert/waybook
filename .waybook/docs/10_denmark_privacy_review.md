@@ -28,11 +28,24 @@ flow is enabled for every tenant, or that any legal obligation is met.
 | Flow | Observed collection, storage or presentation path | Operational gap still requiring a decision or verification |
 | --- | --- | --- |
 | Public booking | The maintained public booking form collects name, email and optional phone, plus a versioned policy acknowledgement when configured. It does not expose a free-text note or file input in that flow. | Confirm the approved booking fields and service naming for the actual pilot; a service or appointment can still reveal health information. |
-| Client records | Manager-authorized client forms collect contact details, tags and an `internal_notes` value. The client drawer displays those notes to authorized workspace users; the audit event records the changed field names rather than the note body. | Set permitted note content, access, retention, correction and deletion procedures. A UI label or warning would not technically prevent sensitive content. |
-| Waitlist and staff-entered operational context | A manager can store a bounded waitlist note (1,000 characters); payment and gift-card forms accept bounded internal notes (500 characters). These notes are displayed in relevant staff-facing lists and records. | Decide whether each free-text field is needed for the pilot, define the operational guidance and establish retention/deletion behaviour before real data use. |
-| Staff profiles | Staff details include contact fields, role/profile data and internal notes; staff photos are separately validated and access-controlled. | Verify actual users, access lifecycle, photo deletion and backup expiry. |
+| Client records | Client forms collect contact details. They reject submissions containing free-text notes or tags. The profile, directory and client lookup omit the historical notes and tags. | Decide how previously stored values should be inventoried, retained, corrected or deleted. |
+| Waitlist and checkout | Waitlist, appointment payment/refund, gift card and retail collection forms reject free-text notes. The workspace views omit the historical note fields. Appointment dates, service choices, waitlist availability and the payment ledger still use their existing operational fields. | Verify what references the pilot needs for accounting and reconcile any historical notes under the agreed retention procedure. |
+| Staff profiles and availability | Staff profile forms reject internal notes, and staff time-off forms collect dates and times without an open-text reason. Staff photos remain separately validated and access-controlled. | Verify actual users, photo and access lifecycle, and what to do with previously stored notes and absence reasons. |
 | Email delivery | The outbox can persist a rendered delivery snapshot containing recipient, sender, subject and message text once delivery is attempted. | Determine provider terms, delivery retention, retry visibility and removal from application, provider and backup copies. |
-| Tenant-facing reporting | Client names, services and selected payment notes can appear in staff-facing reports and sales/client records. | Define role visibility, reporting retention, export handling and the supported correction/deletion process. |
+| Tenant-facing reporting | Client names and services can appear in staff-facing reports and sales/client records. Those views omit historical internal payment notes. | Define role visibility, reporting retention, export handling and the supported correction/deletion process. |
+
+The note changes in issue #15 leave historical database values intact. Review
+those values, any historical audit payloads, and backup retention as part of the
+data-lifecycle decision in issue #13. Workspace-level content such as service
+names and descriptions, closure labels and booking policy text remains editable
+for its operational purpose. Review the actual pilot content and image use
+before admitting real client data.
+
+Workspace owners can select client or patient and staff or practitioner in
+Settings. Migration `0056_tenant_terminology.sql` stores those choices per
+tenant. The existing client and staff terms remain the default. The labels
+do not change access rules, data fields or how appointment information may be
+classified.
 
 ### Source-review boundaries
 
@@ -40,10 +53,9 @@ flow is enabled for every tenant, or that any legal obligation is met.
   route in the maintained application pages and public API directories. That is
   a gap to resolve, not proof that a separate administrative process does not
   exist.
-- The current operational boundary excludes clinical records, but ordinary
-  free-text fields remain capable of receiving sensitive information. Do not
-  represent wording, character limits or the operations-only scope as a
-  technical sensitive-data prevention control.
+- General notes on the affected record forms are blocked at submission. Other
+  fields, including names and editable catalogue text, can still be misused to
+  include sensitive information. Check how those fields are used in the pilot.
 - Backups, provider copies, runtime logs and support material are outside the
   application schema review. Their actual retention and deletion behaviour must
   be verified from the deployed providers and agreed operating procedures.

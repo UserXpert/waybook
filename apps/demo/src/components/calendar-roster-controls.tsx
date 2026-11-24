@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 /** Team-only availability preference. Staff scope belongs to the main staff
  * picker, so this intentionally does not duplicate it with a roster search. */
-export function CalendarRosterControls({ includeOffShift }: { includeOffShift: boolean }) {
+export function CalendarRosterControls({ includeOffShift, staffPlural = "staff" }: { includeOffShift: boolean; staffPlural?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -21,7 +21,7 @@ export function CalendarRosterControls({ includeOffShift }: { includeOffShift: b
       <label className="calendar-off-shift-toggle">
         <input type="checkbox" role="switch" checked={includeOffShift} onChange={(event) => toggleOffShift(event.target.checked)} />
         <span aria-hidden="true" />
-        <span className="calendar-off-shift-toggle__text">Include off-shift staff</span>
+        <span className="calendar-off-shift-toggle__text">Include off-shift {staffPlural}</span>
       </label>
     </div>
   );
