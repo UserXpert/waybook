@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import postgres from "postgres";
 import sharp from "sharp";
 
 test("an owner can select a profile photo and oversized files are rejected", async ({ page }) => {
@@ -35,6 +37,68 @@ test("an owner can select a profile photo and oversized files are rejected", asy
     const photo = profile.getByRole("button", { name: `Change photo for ${name}`, exact: true }).locator("img");
     if (name === "Sofie Andersen") await expect(photo).toHaveAttribute("src", /^data:image\/png;base64,/);
     else await expect(photo).toHaveCount(0);
+  }
+});
+
+test("owner profile photos stay in their workspace when the owner uses one login", async ({ page }) => {
+  const workspaces = [
+    { route: "nordic", slug: "nordic-studio", url: process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL! },
+    { route: "copenhagen", slug: "copenhagen-physio", url: process.env.WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL! },
+  ];
+  // The Waybook E2E config requires all three URLs to target disposable local databases.
+  const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
+  const email = `shared-owner-${randomUUID()}@example.test`;
+  const name = "Shared test owner";
+  const profiles: { url: string; tenantId: string; staffId: string }[] = [];
+  const tenants = workspaces.map(({ url }) => postgres(url, { max: 1, ssl: false }));
+  try {
+    const [identity] = await control<{ id: string }[]>`
+      INSERT INTO identities (email, password_hash, display_name)
+      SELECT ${email}, password_hash, ${name} FROM identities WHERE email = 'owner@nordic.local'
+      RETURNING id
+    `;
+    for (const [index, { route, slug }] of workspaces.entries()) {
+      const [workspace] = await control<{ id: string }[]>`SELECT id FROM tenants WHERE slug = ${slug}`;
+      await control`INSERT INTO tenant_memberships (tenant_id, identity_id, role) VALUES (${workspace.id}, ${identity.id}, 'owner')`;
+      const [staff] = await tenants[index]<{ id: string }[]>`
+        INSERT INTO team_members (tenant_id, identity_id, role, name, email)
+        VALUES (${workspace.id}, ${identity.id}, 'owner', ${name}, ${email}) RETURNING id
+      `;
+      profiles.push({ url: `/${route}/app/team?employee=${staff.id}`, tenantId: workspace.id, staffId: staff.id });
+    }
+
+    await page.goto("/login");
+    await page.getByLabel("Work email").fill(email);
+    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/(nordic|copenhagen)\/app/);
+
+    const profile = page.locator(".staff-workspace__profile-header");
+    const photo = profile.getByRole("button", { name: `Change photo for ${name}`, exact: true }).locator("img");
+    const savedPhotos: string[] = [];
+    for (const [index, { url }] of profiles.entries()) {
+      await page.goto(url);
+      await expect(profile.getByRole("heading", { name, exact: true })).toBeVisible();
+      await expect(photo).toHaveCount(0);
+      const image = await sharp({ create: { width: 8, height: 8, channels: 3, background: index === 0 ? "#6c56ad" : "#267050" } }).png().toBuffer();
+      await profile.locator('input[type="file"]').setInputFiles({ name: "owner.png", mimeType: "image/png", buffer: image });
+      await expect(photo).toHaveAttribute("src", /^data:image\/png;base64,/);
+      savedPhotos.push((await photo.getAttribute("src"))!);
+    }
+    expect(savedPhotos[0]).not.toBe(savedPhotos[1]);
+    for (const [index, { url }] of profiles.entries()) {
+      await page.goto(url);
+      await expect(photo).toHaveAttribute("src", savedPhotos[index]);
+    }
+  } finally {
+    try {
+      for (const [index, { tenantId, staffId }] of profiles.entries()) {
+        await tenants[index]`DELETE FROM team_members WHERE tenant_id = ${tenantId} AND id = ${staffId}`;
+      }
+      await control`DELETE FROM identities WHERE email = ${email}`;
+    } finally {
+      await Promise.all([control.end(), ...tenants.map((db) => db.end())]);
+    }
   }
 });
 
