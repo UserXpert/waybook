@@ -40,6 +40,7 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     permissionAndReview,
   ]);
   const enabled = new Set(features.filter((feature) => feature.isEnabled).map((feature) => feature.featureKey));
+  const profilePhotoKey = `waybook.profile-photo.v2:${tenant.id}:${identity.id}`;
   const clientsEnabled = enabled.has("clients"), teamEnabled = enabled.has("team"), calendarsEnabled = enabled.has("calendars"), resourcesEnabled = enabled.has("resources"), notificationsEnabled = enabled.has("email-notifications");
   const canUse = {
     overview: permissions.isManager,
@@ -85,6 +86,6 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     <div className="tenant-dashboard-nav__workspace"><span className="tenant-dashboard-nav__brand"><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--light" src="/brand/waybook-logo.svg" alt="Waybook" /><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--dark" src="/brand/waybook-logo-white.svg" alt="" aria-hidden="true" /></span><strong>{tenantName}</strong></div>
     <nav aria-label="Primary navigation">{primary.map((link) => <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined}><link.Icon aria-hidden="true" />{link.label}</Link>)}</nav>
     <TenantAppMenu links={appLinks} active={active} />
-    <div className="tenant-nav-account-actions"><TenantNavTools searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : "Staff member"} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
+    <div className="tenant-nav-account-actions"><TenantNavTools searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu key={profilePhotoKey} profilePhotoKey={profilePhotoKey} displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : "Staff member"} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
   </header></>;
 }

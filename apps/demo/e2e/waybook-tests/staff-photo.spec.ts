@@ -102,6 +102,50 @@ test("owner profile photos stay in their workspace when the owner uses one login
   }
 });
 
+test("account menu photos stay with the signed-in owner in the same browser", async ({ page }) => {
+  await page.goto("/login");
+  const accounts = [
+    { email: "owner@nordic.local", name: "Sofie Andersen", home: /\/nordic\/app/, color: "#6c56ad" },
+    { email: "owner@copenhagen-physio.local", name: "Mikkel Holm", home: /\/copenhagen\/app/, color: "#267050" },
+  ];
+  for (const { email, name, home, color } of accounts) {
+    await page.getByLabel("Work email").fill(email);
+    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(home);
+    const accountButton = page.getByRole("button", { name: `Account menu for ${name}` });
+    await accountButton.click();
+    const menu = page.getByRole("menu", { name: "Account menu" });
+    const upload = menu.getByRole("button", { name: "Upload profile photo" });
+    await expect(upload).toHaveText(name.split(" ").map((part) => part[0]).join(""));
+    await expect(accountButton.locator("img")).toHaveCount(0);
+    const image = await sharp({ create: { width: 8, height: 8, channels: 3, background: color } }).png().toBuffer();
+    const chooser = page.waitForEvent("filechooser");
+    await upload.click();
+    await (await chooser).setFiles({ name: "avatar.png", mimeType: "image/png", buffer: image });
+    const expectedPhoto = `data:image/png;base64,${image.toString("base64")}`;
+    await expect(accountButton.locator("img")).toHaveAttribute("src", expectedPhoto);
+    await expect(upload.locator("img")).toHaveAttribute("src", expectedPhoto);
+    if (email === accounts[0].email) {
+      // Simulate a browser that still has a photo written by the previous release.
+      await page.evaluate((photo) => localStorage.setItem("waybook.profile-photo", photo), expectedPhoto);
+    }
+    await page.reload();
+    await expect(accountButton.locator("img")).toHaveAttribute("src", expectedPhoto);
+    await accountButton.click();
+    await menu.getByRole("menuitem", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login$/);
+  }
+
+  const nordic = accounts[0];
+  await page.getByLabel("Work email").fill(nordic.email);
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(nordic.home);
+  const original = await sharp({ create: { width: 8, height: 8, channels: 3, background: nordic.color } }).png().toBuffer();
+  await expect(page.getByRole("button", { name: `Account menu for ${nordic.name}` }).locator("img")).toHaveAttribute("src", `data:image/png;base64,${original.toString("base64")}`);
+});
+
 test("Apps menu groups, search, keyboard and navigation work", async ({ page }, testInfo) => {
   await page.goto("/login");
   await page.getByLabel("Work email").fill("owner@nordic.local");
