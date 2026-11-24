@@ -17,6 +17,8 @@ type Client = {
   nextBookingAt: string | null;
 };
 
+type ClientPage = { items: Client[]; nextCursor: string | null };
+
 type Props = {
   initialClients: Client[];
   initialNextCursor: string | null;
@@ -29,34 +31,78 @@ type Props = {
 
 const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
 
+async function loadClients(query: string, cursor: string, signal: AbortSignal): Promise<ClientPage> {
+  const params = new URLSearchParams({ q: query, cursor, limit: "50" });
+  const response = await fetch(`${tenantApiPrefix()}/api/app/clients?${params}`, { signal });
+  if (!response.ok) throw new Error("Could not load clients.");
+  return response.json();
+}
+
 export function ClientDirectoryList({ initialClients, initialNextCursor, query, path, timeZone, clientLabel, clientsLabel }: Props) {
   const [clients, setClients] = useState(initialClients);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
   const [loading, setLoading] = useState(false);
   const sentinelRef = useRef<HTMLTableRowElement>(null);
-  const inFlightRef = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const loadedPages = useRef(0);
   const date = new Intl.DateTimeFormat("en-GB", { timeZone, dateStyle: "medium" });
 
   useEffect(() => {
-    setClients(initialClients);
-    setNextCursor(initialNextCursor);
-    setLoading(false);
-    inFlightRef.current = false;
-  }, [initialClients, initialNextCursor]);
+    requestRef.current?.abort();
+    requestRef.current = null;
+    if (!loadedPages.current || !initialNextCursor) {
+      setClients(initialClients);
+      setNextCursor(initialNextCursor);
+      setLoading(false);
+      loadedPages.current = 0;
+      return;
+    }
+
+    // Drawer navigation also refreshes the first page. Keep the existing rows
+    // mounted while rebuilding the loaded window so the opener keeps its focus.
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setLoading(true);
+    async function refresh() {
+      const refreshed = new Map(initialClients.map((client) => [client.id, client]));
+      let cursor = initialNextCursor;
+      let pages = 0;
+      while (cursor && pages < loadedPages.current) {
+        const data = await loadClients(query, cursor, controller.signal);
+        for (const client of data.items) refreshed.set(client.id, client);
+        cursor = data.nextCursor;
+        pages++;
+      }
+      if (controller.signal.aborted) return;
+      loadedPages.current = pages;
+      setClients([...refreshed.values()]);
+      setNextCursor(cursor);
+    }
+    void refresh().catch(() => {
+      // Keep the current window visible when refresh is temporarily unavailable.
+    }).finally(() => {
+      if (requestRef.current !== controller) return;
+      requestRef.current = null;
+      setLoading(false);
+    });
+    return () => controller.abort();
+  }, [initialClients, initialNextCursor, query]);
+
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel || !nextCursor) return;
 
     const observer = new IntersectionObserver(([entry]) => {
-      if (!entry?.isIntersecting || inFlightRef.current) return;
-      inFlightRef.current = true;
+      if (!entry?.isIntersecting || requestRef.current) return;
+      const controller = new AbortController();
+      requestRef.current = controller;
       setLoading(true);
-      const params = new URLSearchParams({ q: query, cursor: nextCursor, limit: "50" });
-      void fetch(`${tenantApiPrefix()}/api/app/clients?${params}`)
-        .then((response) => response.ok ? response.json() as Promise<{ items: Client[]; nextCursor: string | null }> : null)
+      void loadClients(query, nextCursor, controller.signal)
         .then((data) => {
-          if (!data) return;
+          if (controller.signal.aborted) return;
+          loadedPages.current++;
           setClients((current) => [...current, ...data.items.filter((item) => !current.some((existing) => existing.id === item.id))]);
           setNextCursor(data.nextCursor);
         })
@@ -64,7 +110,8 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
           // Keep the sentinel in place so a later scroll can retry a transient request failure.
         })
         .finally(() => {
-          inFlightRef.current = false;
+          if (requestRef.current !== controller) return;
+          requestRef.current = null;
           setLoading(false);
         });
     }, { rootMargin: "320px 0px" });
@@ -80,11 +127,11 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
       <thead><tr><th>{titleTerminology(clientLabel)}</th><th>Contact</th><th>Next appointment</th><th>Visits</th><th>Booked value</th></tr></thead>
       <tbody>
         {clients.map((client) => <tr key={client.id} className="customer-table-row">
-          <td><Link href={clientHref(client.id)}><strong>{client.name}</strong><small>{client.lastBookingAt ? `Last visit ${date.format(new Date(client.lastBookingAt))}` : `New ${clientLabel}`}</small></Link></td>
-          <td><Link href={clientHref(client.id)} tabIndex={-1}>{client.email}{client.phone ? <small>{client.phone}</small> : null}</Link></td>
-          <td><Link href={clientHref(client.id)} tabIndex={-1}>{client.nextBookingAt ? date.format(new Date(client.nextBookingAt)) : "—"}</Link></td>
-          <td><Link href={clientHref(client.id)} tabIndex={-1}>{client.bookingCount}</Link></td>
-          <td><Link href={clientHref(client.id)} tabIndex={-1}>{money(client.bookedValueCents)}</Link></td>
+          <td><Link href={clientHref(client.id)} scroll={false}><strong>{client.name}</strong><small>{client.lastBookingAt ? `Last visit ${date.format(new Date(client.lastBookingAt))}` : `New ${clientLabel}`}</small></Link></td>
+          <td><Link href={clientHref(client.id)} scroll={false} tabIndex={-1}>{client.email}{client.phone ? <small>{client.phone}</small> : null}</Link></td>
+          <td><Link href={clientHref(client.id)} scroll={false} tabIndex={-1}>{client.nextBookingAt ? date.format(new Date(client.nextBookingAt)) : "—"}</Link></td>
+          <td><Link href={clientHref(client.id)} scroll={false} tabIndex={-1}>{client.bookingCount}</Link></td>
+          <td><Link href={clientHref(client.id)} scroll={false} tabIndex={-1}>{money(client.bookedValueCents)}</Link></td>
         </tr>)}
         {clients.length === 0 ? <tr><td colSpan={5}>No {clientsLabel} match this search.</td></tr> : null}
         {nextCursor ? <tr ref={sentinelRef} className="client-directory-list__sentinel"><td colSpan={5}>{loading ? `Loading ${clientsLabel}…` : ""}</td></tr> : null}
