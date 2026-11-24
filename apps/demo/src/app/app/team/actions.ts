@@ -94,6 +94,41 @@ export async function saveStaffPhoto(formData: FormData) {
   revalidateStaff();
 }
 
+export type OwnerProfileNameState = { error?: string; saved?: boolean };
+
+export async function saveOwnerProfileName(_: OwnerProfileNameState, formData: FormData): Promise<OwnerProfileNameState> {
+  const { tenant, membership } = await requireTenantWorkspace();
+  if (membership.role !== "owner") return { error: "Only the workspace owner can edit their own name." };
+  await requireFeature(tenant.id, "team");
+  const name = formData.get("name");
+  const memberId = formData.get("memberId");
+  if (typeof name !== "string" || !name.trim() || name.trim().length > 160) {
+    return { error: "Enter a name up to 160 characters." };
+  }
+  if (typeof memberId !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(memberId)) {
+    return { error: "Your workspace profile is unavailable." };
+  }
+
+  const actor = await requireIdentity();
+  const [saved] = await tenantDb(tenant)<{ id: string }[]>`
+    WITH profile AS (
+      UPDATE team_members SET name = ${name.trim()}, updated_at = now()
+      WHERE tenant_id = ${tenant.id} AND id = ${memberId} AND identity_id = ${actor.id}
+        AND role = 'owner' AND is_active
+      RETURNING id
+    )
+    INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
+    SELECT ${tenant.id}, ${actor.id}, 'staff.updated', 'team_member', id, '{"fields":["name"]}'::jsonb FROM profile
+    RETURNING target_id AS id
+  `;
+  if (!saved) return { error: "Your workspace profile is unavailable." };
+
+  revalidateStaff();
+  const slug = await currentTenantRouteSlug(tenant.slug);
+  revalidatePath(tenantPath(slug, "/app"), "layout");
+  return { saved: true };
+}
+
 export async function saveTeamMember(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
   if (!["owner", "manager"].includes(membership.role)) throw new Error("You do not have permission to manage staff.");

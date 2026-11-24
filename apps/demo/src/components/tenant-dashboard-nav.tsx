@@ -32,15 +32,25 @@ const primaryLinks = [
 export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, active }: TenantDashboardNavProps) {
   const resolvedTenantSlug = tenantSlug ?? await currentTenantRouteSlug("");
   const { tenant, membership } = await requireTenantWorkspace();
+  const identityResult = requireIdentity();
+  const ownerProfileResult = membership.role === "owner" ? identityResult.then(async (identity) => {
+    const [profile] = await tenantDb(tenant)<{ id: string; name: string }[]>`
+      SELECT id, name FROM team_members
+      WHERE tenant_id = ${tenant.id} AND identity_id = ${identity.id} AND role = 'owner' AND is_active
+      ORDER BY id LIMIT 1
+    `;
+    return profile;
+  }) : undefined;
   const permissionAndReview = staffPermissionContext(tenant, membership).then(async (permissions) => {
     const [review] = permissions.isManager ? await tenantDb(tenant)<{ pending: boolean }[]>`SELECT EXISTS (SELECT 1 FROM bookings WHERE tenant_id=${tenant.id} AND status='arrived' AND ends_at <= now()) AS pending` : [];
     return { permissions, review };
   });
-  const [identity, features, { permissions, review }, terms] = await Promise.all([
-    requireIdentity(),
+  const [identity, features, { permissions, review }, terms, ownerProfile] = await Promise.all([
+    identityResult,
     tenantFeatures(tenantId),
     permissionAndReview,
     getTenantTerminology(tenant),
+    ownerProfileResult,
   ]);
   const enabled = new Set(features.filter((feature) => feature.isEnabled).map((feature) => feature.featureKey));
   const clientsEnabled = enabled.has("clients"), teamEnabled = enabled.has("team"), calendarsEnabled = enabled.has("calendars"), resourcesEnabled = enabled.has("resources"), notificationsEnabled = enabled.has("email-notifications");
@@ -63,6 +73,7 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     targets: permissions.isManager,
   };
   const toHref = (href: string) => resolvedTenantSlug ? tenantPath(resolvedTenantSlug, href) : href;
+  const staffHref = canUse.team ? toHref("/app/team") + (ownerProfile ? `?employee=${ownerProfile.id}` : "") : undefined;
   const primary = primaryLinks.filter((link) => canUse[link.id as keyof typeof canUse]).map((link) => ({ ...link, href: toHref(link.href), label: link.id === "clients" ? titleTerminology(terms.clients) : link.label }));
   const appLinks: TenantAppLink[] = [
     canUse.bookings ? { id: "bookings", href: toHref("/app/bookings"), label: "Bookings", description: "All appointments", group: "Operations" } : null,
@@ -88,6 +99,6 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     <div className="tenant-dashboard-nav__workspace"><span className="tenant-dashboard-nav__brand"><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--light" src="/brand/waybook-logo.svg" alt="Waybook" /><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--dark" src="/brand/waybook-logo-white.svg" alt="" aria-hidden="true" /></span><strong>{tenantName}</strong></div>
     <nav aria-label="Primary navigation">{primary.map((link) => <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined}><link.Icon aria-hidden="true" />{link.label}</Link>)}</nav>
     <TenantAppMenu links={appLinks} active={active} />
-    <div className="tenant-nav-account-actions"><TenantNavTools searchLabel={`Search bookings or ${terms.clients}`} searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : titleTerminology(terms.staffMember)} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
+    <div className="tenant-nav-account-actions"><TenantNavTools searchLabel={`Search bookings or ${terms.clients}`} searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu displayName={ownerProfile?.name ?? identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : titleTerminology(terms.staffMember)} staffHref={staffHref} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
   </header></>;
 }

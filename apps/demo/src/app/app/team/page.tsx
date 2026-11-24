@@ -6,6 +6,7 @@ import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
 import { StaffPhotoUpload } from "@/components/staff-photo-upload";
 import { StaffHoursEditor } from "@/components/staff-hours-editor";
 import { StaffAccessMenu } from "@/components/staff-access-menu";
+import { OwnerProfileNameForm } from "@/components/owner-profile-name-form";
 import { StaffTimeOffForm } from "@/components/staff-time-off-form";
 import { AsyncMultiSelect } from "@/components/async-multi-select";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
@@ -93,8 +94,10 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
     FROM identities i WHERE i.id = ${selected.identityId}
   ` : [];
 
+  const isOwnOwnerProfile = selected?.role === "owner" && membership.role === "owner"
+    && selected.identityId === (await currentIdentity())?.id;
   const canInviteWithGoogle = Boolean(selected?.isActive && !selected.archivedAt && membership.role === "owner"
-    && (selected.role !== "owner" || selected.identityId === (await currentIdentity())?.id)
+    && (selected.role !== "owner" || isOwnOwnerProfile)
     && await googleSignInAvailable());
 
   return <main className="waybook-data-page tenant-dashboard-page">
@@ -132,7 +135,10 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </nav>
           {tab === "details" ? <section className="staff-workspace__panel">
             <PanelHeading title="Details" text="Contact and profile information used inside your workspace." />
-            {canManage ? <ProfileForm terms={terms} key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <ProfileFacts terms={terms} member={selected} />}
+            {canManage && selected.role !== "owner" ? <ProfileForm terms={terms} key={selected.id} member={selected} selectedLocations={selectedLocations} selectedServices={selectedServices} compact includeAssignments={false} canAssignManager={membership.role === "owner"} /> : <>
+              {isOwnOwnerProfile && selected.isActive ? <OwnerProfileNameForm key={selected.id} memberId={selected.id} name={selected.name} /> : null}
+              <ProfileFacts terms={terms} member={selected} />
+            </>}
           </section> : null}
           {tab === "hours" ? <section className="staff-workspace__panel staff-workspace__panel--wide">
             <PanelHeading title="Working hours" text="A clear weekly schedule for when this person can be offered to customers." />
