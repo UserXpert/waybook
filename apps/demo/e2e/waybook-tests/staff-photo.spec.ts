@@ -23,6 +23,19 @@ test("an owner can select a profile photo and oversized files are rejected", asy
   await expect(button.locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
   await page.reload();
   await expect(page.getByRole("button", { name: "Change photo for Sofie Andersen" }).locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
+
+  const directory = page.getByRole("complementary", { name: "Staff directory" });
+  const profile = page.locator(".staff-workspace__profile-header");
+  const photoControls = profile.getByRole("button", { name: /^Change photo for / });
+
+  for (const name of ["Z E2E roster 01", "Z E2E roster 02", "Sofie Andersen"]) {
+    await directory.getByRole("link", { name: new RegExp(name) }).click();
+    await expect(profile.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(photoControls).toHaveCount(1);
+    const photo = profile.getByRole("button", { name: `Change photo for ${name}`, exact: true }).locator("img");
+    if (name === "Sofie Andersen") await expect(photo).toHaveAttribute("src", /^data:image\/png;base64,/);
+    else await expect(photo).toHaveCount(0);
+  }
 });
 
 test("Apps menu groups, search, keyboard and navigation work", async ({ page }, testInfo) => {
