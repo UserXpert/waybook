@@ -12,6 +12,7 @@ import { issueStaffInvitation, revokeStaffInvitation } from "@/lib/waybook/staff
 import { requireFeature } from "@/lib/waybook/features";
 import { isStaffCalendarColor } from "@/lib/waybook/staff-calendar-colors";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
+import { staffRoleIdPattern } from "@/lib/waybook/staff-role-fields";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { withSuccessToast } from "@/lib/waybook/toast";
@@ -98,7 +99,9 @@ export async function saveTeamMember(formData: FormData) {
   await requireFeature(tenant.id, "team");
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const role = String(formData.get("role") ?? "staff");
+  const roleChoice = String(formData.get("role") ?? "staff");
+  const staffRoleId = roleChoice.startsWith("custom:") ? roleChoice.slice(7) : null;
+  const role = staffRoleId !== null ? "staff" : roleChoice;
   const memberId = String(formData.get("memberId") ?? "");
   let serviceIds = formData.getAll("serviceIds").map(String).filter(Boolean);
   let locationIds = formData.getAll("locationIds").map(String).filter(Boolean);
@@ -112,17 +115,23 @@ export async function saveTeamMember(formData: FormData) {
   const calendarColor = String(formData.get("calendarColor") ?? "").trim().toLowerCase() || null;
   const assignmentsOnly = Boolean(memberId) && !name && !email;
   if (!assignmentsOnly && (!name || name.length > 160 || !email.includes("@") || !["manager", "staff", "read-only"].includes(role))) throw new Error("Enter a name, valid email, and role.");
+  const db = tenantDb(tenant);
+  if (!assignmentsOnly && staffRoleId !== null) {
+    if (!staffRoleIdPattern.test(staffRoleId)) throw new Error("Choose an available role.");
+    const [customRole] = await db`SELECT id FROM staff_roles WHERE tenant_id = ${tenant.id} AND id = ${staffRoleId}`;
+    if (!customRole) throw new Error("Choose an available role.");
+  }
   if (!assignmentsOnly && memberId) {
-    const [existing] = await tenantDb(tenant)<{ role: string }[]>`SELECT role FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
+    const [existing] = await db<{ role: string; staffRoleId: string | null }[]>`SELECT role, staff_role_id AS "staffRoleId" FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
     if (existing?.role === "owner") throw new Error("The workspace owner profile cannot be changed here.");
     if (membership.role !== "owner" && (role === "manager" || existing?.role === "manager")) {
       throw new Error("Only an owner can create or change a manager profile.");
     }
-  } else if (!assignmentsOnly && membership.role !== "owner" && role === "manager") {
-    throw new Error("Only an owner can create or change a manager profile.");
+    if (existing && membership.role !== "owner" && staffRoleId !== existing.staffRoleId) throw new Error("Only an owner can change custom role assignments.");
+  } else if (!assignmentsOnly && membership.role !== "owner" && (role === "manager" || staffRoleId !== null)) {
+    throw new Error("Only an owner can assign manager or custom roles.");
   }
   if (!assignmentsOnly && calendarColor && !isStaffCalendarColor(calendarColor)) throw new Error("Choose one of the available calendar colours.");
-  const db = tenantDb(tenant);
   // Preserve the established new-staff default without sending an unbounded
   // directory to the browser. Existing profiles always submit explicit IDs.
   if (!memberId && String(formData.get("defaultAssignments") ?? "") === "all") {
@@ -140,8 +149,10 @@ export async function saveTeamMember(formData: FormData) {
   const [member] = assignmentsOnly
     ? await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`
     : memberId
-    ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = ${jobTitle}, specialty = ${specialty}, work_location = ${workLocation}, staff_code = ${staffCode}, internal_notes = ${internalNotes}, calendar_color = COALESCE(${calendarColor}, calendar_color), updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} RETURNING id`
-    : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, name, email, is_active, phone, job_title, specialty, work_location, staff_code, internal_notes, calendar_color) VALUES (${tenant.id}, ${role}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${internalNotes}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
+    ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, staff_role_id = ${staffRoleId}, is_active = ${isActive}, phone = ${phone}, job_title = ${jobTitle}, specialty = ${specialty}, work_location = ${workLocation}, staff_code = ${staffCode}, internal_notes = ${internalNotes}, calendar_color = COALESCE(${calendarColor}, calendar_color), updated_at = now()
+        WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND role <> 'owner'
+          AND (${membership.role === "owner"} OR (role <> 'manager' AND staff_role_id IS NOT DISTINCT FROM ${staffRoleId}::uuid)) RETURNING id`
+    : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, staff_role_id, name, email, is_active, phone, job_title, specialty, work_location, staff_code, internal_notes, calendar_color) VALUES (${tenant.id}, ${role}, ${staffRoleId}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${internalNotes}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
   if (!member) throw new Error(memberId ? "Staff member is unavailable." : "A staff member already uses this email. Edit their existing profile instead.");
   // A staff profile may predate its login. Once linked, the Control-plane role
   // is the authorization source of truth and must follow profile role changes.
@@ -287,7 +298,8 @@ export async function saveStaffPermissions(formData: FormData) {
   await requireFeature(tenant.id, 'team');
   const memberId = String(formData.get("memberId") ?? "");
   const db = await validStaffMember(tenant, memberId);
-  const [member] = await db<{ role: string }[]>`SELECT role FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
+  const [member] = await db<{ role: string; staffRoleId: string | null }[]>`SELECT role, staff_role_id AS "staffRoleId" FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
+  if (member?.staffRoleId) throw new Error("Manage permissions for this role in Settings.");
   if (member?.role === 'owner') throw new Error('Owner permissions cannot be changed from the staff directory.');
   if (membership.role !== 'owner' && member?.role === 'manager') throw new Error("Only an owner can change a manager's permissions.");
   const workspacePermissionsAvailable = await staffWorkspacePermissionsAvailable(tenant);
