@@ -78,10 +78,17 @@ for (const workspace of [
     await checkViews(partial, { "10:30": true, "12:30": true });
     await page.goto(timeOffPath);
     const form = page.locator(".staff-timeoff-form");
-    const choose = (day: string, dateForm = form) => {
+    const choose = async (day: string, dateForm = form) => {
+      const date = new Date(`${day}T12:00:00Z`);
       const label = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
-        .format(new Date(`${day}T12:00:00Z`));
-      return dateForm.getByRole("button", { name: new RegExp(`^(Choose|Selected) ${label}$`) }).click();
+        .format(date);
+      const option = dateForm.getByRole("button", { name: new RegExp(`^(Choose|Selected) ${label}$`) });
+      if (!await option.isVisible()) {
+        const visibleMonth = await dateForm.locator(".staff-timeoff-form__month:visible h4").first().textContent();
+        const direction = date.getTime() < Date.parse(`1 ${visibleMonth} UTC`) ? "Previous month" : "Next month";
+        await dateForm.getByRole("button", { name: direction, exact: true }).click();
+      }
+      await option.click();
     };
     const fullDay = form.getByRole("switch", { name: /Full day/ });
     const save = form.getByRole("button", { name: "Save time off", exact: true });
