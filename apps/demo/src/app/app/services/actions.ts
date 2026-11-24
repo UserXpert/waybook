@@ -26,7 +26,7 @@ export async function saveService(formData: FormData) {
   const priceCents = Math.round(Number(formData.get("priceDkk")) * 100);
   const cadenceInput = String(formData.get("recommendedRebookDays") ?? "").trim();
   const recommendedRebookDays = cadenceInput ? Number(cadenceInput) : null;
-  const isActive = String(formData.get("isActive") ?? "on") === "on";
+  const isActive = formData.get("isActive") === "on";
   const memberIds = formData.getAll("memberIds").map(String).filter(Boolean);
   const locationIds = formData.getAll("locationIds").map(String).filter(Boolean);
   if (!title || !Number.isInteger(durationMinutes) || durationMinutes <= 0 || !Number.isInteger(priceCents) || priceCents < 0 || (recommendedRebookDays !== null && (!Number.isInteger(recommendedRebookDays) || recommendedRebookDays < 1 || recommendedRebookDays > 730))) throw new Error("Enter a name, duration, valid DKK price, and an optional return interval from 1 to 730 days.");
@@ -37,7 +37,7 @@ export async function saveService(formData: FormData) {
   if (validLocations.length !== locationIds.length) throw new Error("One or more selected locations are unavailable.");
   let serviceId = id;
   if (id) {
-    const [service] = await db<{ id: string }[]>`UPDATE services SET title = ${title}, description = ${description}, duration_minutes = ${durationMinutes}, buffer_before_minutes = 0, buffer_after_minutes = 0, price_cents = ${priceCents}, recommended_rebook_days = ${recommendedRebookDays}, is_active = ${isActive}, updated_at = now() WHERE id = ${id} AND tenant_id = ${tenant.id} RETURNING id`;
+    const [service] = await db<{ id: string }[]>`UPDATE services SET title = ${title}, description = ${description}, duration_minutes = ${durationMinutes}, price_cents = ${priceCents}, recommended_rebook_days = ${recommendedRebookDays}, is_active = ${isActive}, updated_at = now() WHERE id = ${id} AND tenant_id = ${tenant.id} RETURNING id`;
     if (!service) throw new Error("Service is unavailable.");
   } else {
     const baseSlug = slugify(title);

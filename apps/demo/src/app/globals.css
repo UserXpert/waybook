@@ -2051,8 +2051,15 @@ body {
   .tenant-dashboard-page .tenant-dashboard-nav__workspace {
     grid-column: 1;
     grid-row: 1;
+    display: grid;
+    align-content: center;
+    gap: .15rem;
     min-width: 0;
+    max-width: 100%;
     margin: 0;
+  }
+  .tenant-dashboard-page .tenant-dashboard-nav__workspace strong {
+    font-size: .75rem;
   }
   .tenant-dashboard-page .tenant-app-menu {
     grid-column: 2;

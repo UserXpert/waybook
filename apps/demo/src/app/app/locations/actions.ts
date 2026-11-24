@@ -22,8 +22,8 @@ export async function saveLocation(formData: FormData) {
   if (!name || !['fixed', 'mobile'].includes(locationType)) throw new Error('Enter a location name and valid type.');
   const db = tenantDb(tenant);
   const fields = [String(formData.get('phone') ?? '').trim() || null, String(formData.get('addressLine1') ?? '').trim() || null, String(formData.get('addressLine2') ?? '').trim() || null, String(formData.get('city') ?? '').trim() || null, String(formData.get('region') ?? '').trim() || null, String(formData.get('postalCode') ?? '').trim() || null];
-  const online = String(formData.get('isOnlineBookable') ?? 'on') === 'on';
-  const active = String(formData.get('isActive') ?? 'on') === 'on';
+  const online = formData.get('isOnlineBookable') === 'on';
+  const active = formData.get('isActive') === 'on';
   type OpeningHour = { day: number; start: string; end: string };
   const legacyOpeningHours: OpeningHour[] = [1, 2, 3, 4, 5, 6, 0].flatMap((day) => {
     if (String(formData.get(`open-${day}`)) !== 'on') return [];

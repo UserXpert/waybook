@@ -20,7 +20,7 @@ export async function saveResource(formData: FormData) {
   const resourceType = String(formData.get('resourceType') ?? '').trim();
   const capacity = Number(formData.get('capacity'));
   const isMutuallyExclusive = String(formData.get('isMutuallyExclusive') ?? '') === 'on';
-  const isActive = String(formData.get('isActive') ?? 'on') === 'on';
+  const isActive = formData.get('isActive') === 'on';
   const locationIds = formData.getAll('locationIds').map(String).filter(Boolean);
   const serviceIds = formData.getAll('serviceIds').map(String).filter(Boolean);
   if (!name || name.length > 120 || !resourceType || resourceType.length > 80 || capacity !== 1) throw new Error('Each resource is one exclusive capacity unit. Add another resource for another room, chair, or bay.');
