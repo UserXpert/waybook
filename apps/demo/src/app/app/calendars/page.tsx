@@ -205,6 +205,7 @@ export default async function CalendarsPage({
     booking?: string;
     create?: string;
     customer?: string;
+    waitlist?: string;
     staff?: string;
     after?: string;
     before?: string;
@@ -223,6 +224,7 @@ export default async function CalendarsPage({
     booking: bookingId,
     create,
     customer: customerId,
+    waitlist: waitlistEntryId,
     staff: staffFilter,
     after,
     before,
@@ -289,11 +291,23 @@ export default async function CalendarsPage({
     : undefined) ?? members[0];
   const selectedStaffBookingColor = selected?.calendarColor ?? "#67c7cf";
   const canManageSelectedSchedule = Boolean(selected && canManageSchedule(selected.id));
-  const [selectedCustomer] = customerId && (canManage || permissions.canViewClients || permissions.canManageClients)
+  const canViewClientDirectory = canManage || permissions.canViewClients || permissions.canManageClients;
+  const [directCustomer] = customerId && isMemberId(customerId) && canViewClientDirectory
     ? await db<
         Customer[]
       >`SELECT id, name, email, phone FROM customers WHERE tenant_id = ${tenant.id} AND id = ${customerId} LIMIT 1`
     : [];
+  const [waitlistCustomer] = !directCustomer && waitlistEntryId && isMemberId(waitlistEntryId) && service && isMemberId(service)
+    && selectedLocation && canManageSelectedSchedule && (canManage || permissions.canManageWaitlist)
+    ? await db<Customer[]>`
+      SELECT c.id,c.name,c.email,CASE WHEN ${canViewClientDirectory} THEN c.phone END AS phone
+      FROM waitlist_entries w
+      JOIN customers c ON c.tenant_id=w.tenant_id AND c.id=w.customer_id
+      WHERE w.tenant_id=${tenant.id} AND w.id=${waitlistEntryId} AND w.status IN ('waiting','offered')
+        AND w.location_id=${selectedLocation.id} AND w.service_id=${service}
+    `
+    : [];
+  const selectedCustomer = directCustomer ?? waitlistCustomer;
   const calendarNow = new Date();
   const tenantToday = localDateKey(calendarNow, tenant.timezone);
   // A selected staff member can sit outside the bounded roster window. The
@@ -610,8 +624,9 @@ export default async function CalendarsPage({
     if (next.monthDay) params.set("monthDay", next.monthDay);
     if (next.booking) params.set("booking", next.booking);
     if (next.create) params.set("create", next.create);
-    if (next.customer ?? selectedCustomer?.id)
-      params.set("customer", next.customer ?? selectedCustomer!.id);
+    const nextCustomer = next.customer ?? directCustomer?.id;
+    if (nextCustomer) params.set("customer", nextCustomer);
+    else if (waitlistCustomer && waitlistEntryId) params.set("waitlist", waitlistEntryId);
     if (next.staff ?? staffSearch) params.set("staff", next.staff ?? staffSearch);
     if (showOffShift === "0") params.set("showOffShift", "0");
     if (next.after) params.set("after", next.after);

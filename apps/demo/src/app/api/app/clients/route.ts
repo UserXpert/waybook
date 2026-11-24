@@ -11,18 +11,26 @@ export const dynamic = "force-dynamic";
 /** Tenant- and permission-scoped client lookup for operational selectors. */
 export async function GET(request: NextRequest) {
   const { tenant, membership } = await requireTenantWorkspace(request.headers);
-  await requireFeature(tenant.id, "booking-essentials");
+  const forWaitlist = request.nextUrl.searchParams.get("purpose") === "waitlist";
+  await requireFeature(tenant.id, forWaitlist ? "calendars" : "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership);
-  if (!permissions.isManager && !permissions.canViewClients && !permissions.canManageClients) return NextResponse.json({ error: "You do not have permission to search this directory." }, { status: 403 });
+  const canViewDirectory = permissions.isManager || permissions.canViewClients || permissions.canManageClients;
+  const canLookup = forWaitlist ? permissions.canManageWaitlist : canViewDirectory;
+  if (!permissions.isManager && !canLookup) return NextResponse.json({ error: "You do not have permission to search this directory." }, { status: 403 });
   const query = (request.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 100);
   const rawCursor = (request.nextUrl.searchParams.get("cursor") ?? "").trim();
   const cursor = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(rawCursor) ? rawCursor : null;
   const limit = Math.min(Math.max(Number(request.nextUrl.searchParams.get("limit") ?? 20) || 20, 1), 50);
   const db = tenantDb(tenant);
-  const rows = await db.unsafe<{ id: string; name: string; email: string; phone: string | null; bookingCount: number; bookedValueCents: number; lastBookingAt: Date | null; nextBookingAt: Date | null }[]>(
-    clientLookupQuery,
-    [tenant.id, query, `%${query}%`, cursor, limit + 1],
-  );
+  const lookupParams = [tenant.id, query, `%${query}%`, cursor, limit + 1];
+  const rows = forWaitlist
+    ? await db.unsafe<{ id: string; name: string; email: string }[]>(`
+      SELECT id, name, email FROM customers
+      WHERE tenant_id=$1 AND ($2='' OR name ILIKE $3 OR email ILIKE $3 OR ($6 AND coalesce(phone,'') ILIKE $3))
+        AND ($4::uuid IS NULL OR (name,id) > (SELECT name,id FROM customers WHERE tenant_id=$1 AND id=$4::uuid))
+      ORDER BY name,id LIMIT $5
+    `, [...lookupParams, canViewDirectory])
+    : await db.unsafe<{ id: string; name: string; email: string; phone: string | null; bookingCount: number; bookedValueCents: number; lastBookingAt: Date | null; nextBookingAt: Date | null }[]>(clientLookupQuery, lookupParams);
   const hasMore = rows.length > limit;
   const items = rows.slice(0, limit);
   return NextResponse.json({ items, nextCursor: hasMore ? items.at(-1)?.id ?? null : null }, { headers: { "Cache-Control": "private, no-store" } });

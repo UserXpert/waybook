@@ -3598,3 +3598,14 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   background: var(--wb-dark-text);
   color: var(--wb-dark-canvas);
 }
+.tenant-dashboard-page .waitlist-form select {
+  padding-block: 0;
+  font-weight: 400;
+}
+.tenant-dashboard-page .waitlist-form .waitlist-time-range__toggle .waitlist-time-range__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .12rem;
+  text-align: left;
+}
