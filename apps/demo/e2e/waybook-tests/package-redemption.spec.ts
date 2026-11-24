@@ -57,7 +57,7 @@ for (const tenant of [
     const expiredPackageId = await db.begin(async (tx) => {
       const [issued] = await tx<{ id: string }[]>`INSERT INTO commerce_packages
         (tenant_id,catalog_item_id,customer_id,expires_at,title_snapshot,price_cents_snapshot,currency_snapshot,service_title_snapshot)
-        VALUES (${workspace.id},${item.id},${client.id},now()+interval '2 seconds',${title},25000,${workspace.currency},${workspace.serviceTitle}) RETURNING id`;
+        VALUES (${workspace.id},${item.id},${client.id},now()+interval '2 seconds',${`${title} (expired fixture)`},25000,${workspace.currency},${workspace.serviceTitle}) RETURNING id`;
       await tx`INSERT INTO commerce_entitlement_entries (tenant_id,package_id,service_id,kind,direction,units,reason)
         VALUES (${workspace.id},${issued.id},${workspace.serviceId},'grant','credit',1,'Synthetic expiry fixture')`;
       return issued.id;
@@ -78,7 +78,6 @@ for (const tenant of [
     await page.getByRole("button", { name: "Create package", exact: true }).click();
     await expect(page.getByText("Package issued.", { exact: true })).toBeVisible();
     const packageId = new URL(page.url()).searchParams.get("package");
-    const detailsUrl = `${app}/packages?package=${packageId}`;
     const terms = await db`SELECT customer_id, title_snapshot, price_cents_snapshot,
         round(extract(epoch FROM expires_at-created_at)/86400)::int AS expiry_days
       FROM commerce_packages WHERE tenant_id=${workspace.id} AND id=${packageId}`;
@@ -108,9 +107,20 @@ for (const tenant of [
     await page.goto(`${app}/sales?sale=${later.saleId}`);
     await expect(page.getByText(/No eligible package can be redeemed/)).toBeVisible();
     await expect(redeem).toHaveCount(0);
-    await page.goto(detailsUrl);
-    const balance = page.locator(".appointment-drawer .client-record__overview").getByText("Visits remaining", { exact: true });
+    const packageList = `${app}/packages`;
+    await page.goto(packageList);
+    const detailsLink = page.getByRole("link", { name: `Open ${title} for ${clientName}`, exact: true });
+    await detailsLink.press("Enter");
+    const details = page.getByRole("dialog", { name: "Package details", exact: true });
+    const close = details.getByRole("link", { name: "Close package details", exact: true });
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(close).toBeFocused();
+    const balance = details.getByText("Visits remaining", { exact: true });
     await expect(balance.locator("..").getByText("0", { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL((url) => url.pathname === packageList && url.search === "");
+    await expect(detailsLink).toBeFocused();
 
     await page.goto(`/${tenant.route}/book`);
     await page.getByRole("button", { name: "Manage booking" }).click();

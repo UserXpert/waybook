@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-export function TenantEditorDialog({ title, closeHref, initialField, centered = false, showScrim = true, linkNavigation = false, children }: {
+export function TenantEditorDialog({ title, closeHref, initialField, centered = false, showScrim = true, cycleFocus = false, children }: {
   title: string;
   closeHref: string;
   initialField?: "name" | "title" | "code";
   centered?: boolean;
   showScrim?: boolean;
-  linkNavigation?: boolean;
+  cycleFocus?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -20,30 +20,30 @@ export function TenantEditorDialog({ title, closeHref, initialField, centered = 
     if (!editor) return;
     editor.showModal();
     const firstField = initialField ? `input[name="${initialField}"]` : 'form input:not([type="hidden"])';
-    const initialControl = editor.querySelector<HTMLElement>(linkNavigation ? ".tenant-drawer-close" : firstField);
+    const initialControl = editor.querySelector<HTMLElement>(cycleFocus ? ".tenant-drawer-close" : firstField);
     initialControl?.focus();
     return () => editor.close();
-  }, [initialField, linkNavigation]);
+  }, [initialField, cycleFocus]);
 
-  function navigateLinks(event: React.KeyboardEvent<HTMLDialogElement>) {
-    if (!linkNavigation || event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
-    const links = [...event.currentTarget.querySelectorAll<HTMLAnchorElement>('a[href]:not([tabindex="-1"])')]
-      .filter((link) => link.getClientRects().length > 0);
-    if (!links.length) return;
-    // WebKit can skip anchors in its native Tab order. This dialog's controls are links.
+  function navigateControls(event: React.KeyboardEvent<HTMLDialogElement>) {
+    if (!cycleFocus || event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
+    const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('a[href], button, input:not([type="hidden"]), select, textarea')]
+      .filter((control) => control.tabIndex >= 0 && !control.matches(":disabled") && control.getClientRects().length > 0);
+    if (!controls.length) return;
+    // WebKit can skip links in its native Tab order, including the only control in a details drawer.
     event.preventDefault();
-    const current = links.findIndex((link) => link === document.activeElement);
+    const current = controls.findIndex((control) => control === document.activeElement);
     if (current < 0) {
-      const edge = event.shiftKey ? links.at(-1) : links[0];
+      const edge = event.shiftKey ? controls.at(-1) : controls[0];
       edge?.focus();
       return;
     }
     const direction = event.shiftKey ? -1 : 1;
-    links[(current + direction + links.length) % links.length]?.focus();
+    controls[(current + direction + controls.length) % controls.length]?.focus();
   }
 
   return (
-    <dialog ref={dialog} className={`tenant-editor-dialog ${centered ? "client-form-modal-layer" : "tenant-drawer-layer"}`} aria-label={title} onKeyDown={navigateLinks} onCancel={(event) => {
+    <dialog ref={dialog} className={`tenant-editor-dialog ${centered ? "client-form-modal-layer" : "tenant-drawer-layer"}`} aria-label={title} onKeyDown={navigateControls} onCancel={(event) => {
       event.preventDefault();
       dialog.current?.close();
       router.push(closeHref, { scroll: false });

@@ -4,17 +4,22 @@ import postgres from "postgres";
 
 test.use({ actionTimeout: 6000 });
 
-test("gift-card issue masks the number and rejects a duplicate without adding credit", async ({ page }) => {
-  const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
+for (const tenant of [
+  { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
+  { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
+]) test(`gift-card issue masks the number and rejects duplicate credit in ${tenant.route}`, async ({ page }) => {
+  const db = postgres(process.env[tenant.database]!, { max: 1, ssl: false });
   const code = `QA-${randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase()}`;
   const suffix = code.slice(-4);
+  const app = `/${tenant.route}/app`;
+  const list = `${app}/gift-cards`;
   try {
     await page.goto("/login");
-    await page.getByLabel("Work email").fill("owner@nordic.local");
+    await page.getByLabel("Work email").fill(tenant.owner);
     await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/nordic\/app/);
-    await page.goto("/nordic/app/gift-cards");
+    await expect(page).toHaveURL((url) => url.pathname === app);
+    await page.goto(list);
     const add = page.getByRole("link", { name: "Add gift card", exact: true });
     const issue = page.getByRole("complementary", { name: "Add gift card", exact: true });
     const create = issue.getByRole("button", { name: "Create gift card", exact: true });
@@ -30,7 +35,26 @@ test("gift-card issue masks the number and rejects a duplicate without adding cr
     await expect(detail.getByText(code, { exact: true })).toHaveCount(0);
     await expect(detail.getByText("Not linked", { exact: true })).toBeVisible();
     const giftId = new URL(page.url()).searchParams.get("card");
-    await detail.getByRole("link", { name: "Close gift-card panel" }).click();
+    const close = detail.getByRole("link", { name: "Close gift-card panel" });
+    await close.click();
+    await expect(page).toHaveURL((url) => url.pathname === list && url.search === "");
+    const reopen = page.getByRole("link", { name: `Open gift card ending ${suffix}`, exact: true });
+    await reopen.press("Enter");
+    await expect(close).toBeFocused();
+    const edit = detail.getByRole("link", { name: "Edit owner and presentation" });
+    await page.keyboard.press("Tab");
+    await expect(edit).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL((url) => url.pathname === list && url.search === "");
+    await expect(reopen).toBeFocused();
+
+    await reopen.press("Enter");
+    await edit.press("Enter");
+    await expect(close).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(detail.getByPlaceholder("Search name, email, or phone")).toBeFocused();
+    await close.click();
+    await expect(page).toHaveURL((url) => url.pathname === list && url.search === "");
     await add.click();
     await number.fill(code);
     await balance.fill("200");
