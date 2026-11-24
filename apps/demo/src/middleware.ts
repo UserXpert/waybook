@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { bookingEmbedOrigin, verifyBookingFrame } from "@/lib/waybook/embed-frame";
 import { isTenantRouteSlug } from "@/lib/waybook/tenant-routes";
 
 const reservedRoots = new Set(["api", "app", "book", "control", "login", "_next", "favicon.ico"]);
@@ -8,7 +9,7 @@ const reservedRoots = new Set(["api", "app", "book", "control", "login", "_next"
  * to the established route tree. The trusted request header is created here;
  * route handlers and server actions resolve the tenant from it on the server.
  */
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   // Never trust a tenant header supplied by a caller. Only this rewrite may set it.
   const headers = new Headers(request.headers);
   headers.delete("x-waybook-tenant-route");
@@ -25,9 +26,17 @@ export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = target;
   const response = NextResponse.rewrite(url, { request: { headers } });
-  // Third parties never frame the booking page directly. An allowlisted
-  // Waybook-owned `/embed` document is the sole parent for external embeds.
-  if (rest[0] === "book") response.headers.set("X-Frame-Options", "SAMEORIGIN");
+  if (rest[0] === "book") {
+    const source = bookingEmbedOrigin(request.nextUrl.searchParams.get("embedSource"));
+    const grant = request.nextUrl.searchParams.get("embedFrame");
+    if (source && grant && await verifyBookingFrame(first, source, grant)) {
+      // Both the Waybook wrapper and the approved website are frame ancestors.
+      response.headers.set("Content-Security-Policy", `frame-ancestors 'self' ${source}`);
+      response.headers.set("Cache-Control", "private, no-store");
+    } else {
+      response.headers.set("X-Frame-Options", "SAMEORIGIN");
+    }
+  }
   return response;
 }
 
