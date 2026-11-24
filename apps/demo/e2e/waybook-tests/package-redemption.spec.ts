@@ -13,8 +13,8 @@ for (const tenant of [
   const email = `package-${suffix}@example.test`;
   const app = `/${tenant.route}/app`;
   try {
-    const [workspace] = await db<{ id: string; currency: string; locationId: string; serviceId: string }[]>`
-      SELECT ts.tenant_id AS id, ts.currency, l.id AS "locationId", s.id AS "serviceId"
+    const [workspace] = await db<{ id: string; currency: string; locationId: string; serviceId: string; serviceTitle: string }[]>`
+      SELECT ts.tenant_id AS id, ts.currency, l.id AS "locationId", s.id AS "serviceId", s.title AS "serviceTitle"
       FROM tenant_settings ts
       JOIN locations l ON l.tenant_id=ts.tenant_id AND l.slug='primary'
       JOIN service_locations sl ON sl.tenant_id=ts.tenant_id AND sl.location_id=l.id
@@ -52,6 +52,24 @@ for (const tenant of [
     await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL((url) => url.pathname === app);
+
+    // Give this separate fixture time to expire with its original visit intact.
+    const expiredPackageId = await db.begin(async (tx) => {
+      const [issued] = await tx<{ id: string }[]>`INSERT INTO commerce_packages
+        (tenant_id,catalog_item_id,customer_id,expires_at,title_snapshot,price_cents_snapshot,currency_snapshot,service_title_snapshot)
+        VALUES (${workspace.id},${item.id},${client.id},now()+interval '2 seconds',${title},25000,${workspace.currency},${workspace.serviceTitle}) RETURNING id`;
+      await tx`INSERT INTO commerce_entitlement_entries (tenant_id,package_id,service_id,kind,direction,units,reason)
+        VALUES (${workspace.id},${issued.id},${workspace.serviceId},'grant','credit',1,'Synthetic expiry fixture')`;
+      return issued.id;
+    });
+    await expect.poll(async () => (await db`SELECT expires_at <= now() AS expired FROM commerce_packages
+      WHERE id=${expiredPackageId}`)[0].expired).toBe(true);
+    await page.goto(`${app}/sales?sale=${matching.saleId}`);
+    await expect(page.getByText(/No eligible package can be redeemed/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Redeem package visit" })).toHaveCount(0);
+    expect(await db`SELECT kind,units FROM commerce_entitlement_entries WHERE package_id=${expiredPackageId}`)
+      .toEqual([{ kind: "grant", units: 1 }]);
+
     await page.goto(`${app}/packages`);
     await page.getByRole("link", { name: "Add package", exact: true }).click();
     await page.getByPlaceholder("Search name, email, or phone").fill(clientName);
@@ -63,7 +81,7 @@ for (const tenant of [
     const detailsUrl = `${app}/packages?package=${packageId}`;
     const terms = await db`SELECT customer_id, title_snapshot, price_cents_snapshot,
         round(extract(epoch FROM expires_at-created_at)/86400)::int AS expiry_days
-      FROM commerce_packages WHERE tenant_id=${workspace.id} AND catalog_item_id=${item.id}`;
+      FROM commerce_packages WHERE tenant_id=${workspace.id} AND id=${packageId}`;
     expect(terms).toEqual([{ customer_id: client.id, title_snapshot: title, price_cents_snapshot: 25000, expiry_days: 30 }]);
     const ledger = () => db`SELECT kind,direction,units,service_id,booking_id FROM commerce_entitlement_entries
       WHERE package_id=${packageId} ORDER BY CASE kind WHEN 'grant' THEN 0 ELSE 1 END, id`;
