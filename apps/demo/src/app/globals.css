@@ -3564,15 +3564,37 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .waybook-month-calendar__day:has(.waybook-month-calendar__preview:focus-within) { z-index: 12; }
 
 .tenant-editor-dialog {
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   max-width: none;
   max-height: none;
   margin: 0;
-  padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
 }
+.tenant-editor-dialog.tenant-drawer-layer { padding: 0; }
 .tenant-editor-dialog:not([open]) { display: none; }
 .tenant-editor-dialog::backdrop { background: transparent; }
+
+:root[data-waybook-theme="dark"] .client-form-modal {
+  border-color: var(--wb-dark-border);
+  background: var(--wb-dark-surface);
+  color: var(--wb-dark-text);
+}
+:root[data-waybook-theme="dark"] .client-form-modal header { border-color: var(--wb-dark-border); }
+:root[data-waybook-theme="dark"] .client-form-modal header h2,
+:root[data-waybook-theme="dark"] .client-form-modal__close { color: var(--wb-dark-text); }
+:root[data-waybook-theme="dark"] .client-form-modal header :is(p, span),
+:root[data-waybook-theme="dark"] .client-form-modal .waybook-customer-form label { color: var(--wb-dark-muted); }
+:root[data-waybook-theme="dark"] .client-form-modal__close { border-color: var(--wb-dark-border); }
+:root[data-waybook-theme="dark"] .client-form-modal .waybook-customer-form input {
+  border-color: var(--wb-dark-border);
+  background: var(--wb-dark-raised);
+  color: var(--wb-dark-text);
+}
+:root[data-waybook-theme="dark"] .client-form-modal .waybook-customer-form button {
+  background: var(--wb-dark-text);
+  color: var(--wb-dark-canvas);
+}

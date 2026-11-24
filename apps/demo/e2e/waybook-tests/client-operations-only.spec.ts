@@ -56,9 +56,11 @@ test("client records accept contact details and keep historical free text out of
     expect(items[0]).not.toHaveProperty("tags");
     expect(items[0]).not.toHaveProperty("internalNotes");
 
-    await page.getByRole("link", { name: "Edit", exact: true }).click();
+    const edit = page.getByRole("link", { name: "Edit", exact: true });
+    await edit.press("Enter");
     const dialog = page.getByRole("dialog");
     const form = dialog.locator("form");
+    await expect(dialog.getByLabel("Name")).toBeFocused();
     await expect(form.locator('[name="internalNotes"], [name="tags"]')).toHaveCount(0);
     await addLegacyField(form, "internalNotes", blockedText);
     await dialog.getByLabel("Name").fill("Rejected edit");
@@ -67,6 +69,9 @@ test("client records accept contact details and keep historical free text out of
     await expect(dialog.getByRole("alert")).not.toContainText(blockedText);
     const [unchanged] = await db`SELECT name FROM customers WHERE tenant_id = ${tenantId} AND id = ${customer.id}`;
     expect(unchanged.name).toBe(name);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(edit).toBeFocused();
 
     await page.goto(`${existing}&edit=1`);
     await dialog.getByLabel("Phone").fill("+45 11 22 33 44");
