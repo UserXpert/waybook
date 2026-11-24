@@ -13,6 +13,7 @@ for (const tenant of [
   const clientName = `QA service history ${suffix}`;
   const email = `service-${suffix}@example.test`;
   const app = `/${tenant.route}/app`;
+  let serviceId: string | undefined;
 
   try {
     const fixture = await db.begin(async (tx) => {
@@ -37,6 +38,7 @@ for (const tenant of [
         FROM booking_blocks WHERE id=${block.id} RETURNING id`;
       return { workspace, service, booking };
     });
+    serviceId = fixture.service.id;
 
     const bookingPage = await customer.newPage();
     const publicUrl = `/${tenant.route}/book?location=${fixture.workspace.locationId}`;
@@ -74,6 +76,10 @@ for (const tenant of [
     await bookingPage.reload();
     await expect(serviceButton).toBeVisible();
   } finally {
-    await Promise.all([customer.close(), db.end()]);
+    try {
+      if (serviceId) await db`UPDATE services SET is_active=false WHERE id=${serviceId}`;
+    } finally {
+      await Promise.all([customer.close(), db.end()]);
+    }
   }
 });
