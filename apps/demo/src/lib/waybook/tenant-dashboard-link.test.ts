@@ -5,6 +5,7 @@ import { routeSlugFromHostname, tenantPath } from "./tenant-routes.ts";
 
 test("uses a same-origin tenant path during local development", () => {
   assert.equal(tenantDashboardHref("localhost:3333", "nordic"), "http://localhost:3333/nordic/app");
+  assert.equal(tenantDashboardHref("localhost:3341", "nordic", "https"), "https://localhost:3341/nordic/app");
 });
 
 test("uses a same-origin tenant path when hosted", () => {

@@ -19,8 +19,8 @@ export async function closeOverdueConfirmedBookings(tenant: TenantRecord, limit 
          WHERE tenant_id=$1 AND booking_block_id=$2 AND status='confirmed' AND ends_at <= now() RETURNING id`, [tenant.id, block.id]);
       if (!booking) return true; // A concurrent change won; look for the next candidate.
       const metadata = JSON.stringify({ previousStatus: "confirmed", automatic: true, reason: "appointment_ended" });
-      await tx.unsafe("INSERT INTO booking_events (tenant_id,booking_id,event_type,metadata) VALUES ($1,$2,'booking.no_show',$3::jsonb)", [tenant.id, booking.id, metadata]);
-      await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id,action,target_type,target_id,metadata) VALUES ($1,'booking.no_show','booking',$2,$3::jsonb)", [tenant.id, booking.id, metadata]);
+      await tx.unsafe("INSERT INTO booking_events (tenant_id,booking_id,event_type,metadata) VALUES ($1,$2,'booking.no_show',$3::text::jsonb)", [tenant.id, booking.id, metadata]);
+      await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id,action,target_type,target_id,metadata) VALUES ($1,'booking.no_show','booking',$2,$3::text::jsonb)", [tenant.id, booking.id, metadata]);
       changed++;
       return true;
     });
