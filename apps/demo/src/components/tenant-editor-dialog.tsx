@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 export function TenantEditorDialog({ title, closeHref, initialField, centered = false, showScrim = true, cycleFocus = false, children }: {
   title: string;
   closeHref: string;
-  initialField?: "name" | "title" | "code";
+  initialField?: "name" | "title" | "code" | "scopeType";
   centered?: boolean;
   showScrim?: boolean;
   cycleFocus?: boolean;
@@ -19,8 +19,9 @@ export function TenantEditorDialog({ title, closeHref, initialField, centered = 
     const editor = dialog.current;
     if (!editor) return;
     editor.showModal();
-    const firstField = initialField ? `input[name="${initialField}"]` : 'form input:not([type="hidden"])';
-    const initialControl = editor.querySelector<HTMLElement>(cycleFocus ? ".tenant-drawer-close" : firstField);
+    const focusSelector = initialField ? `form [name="${initialField}"]`
+      : cycleFocus ? ".tenant-drawer-close" : 'form input:not([type="hidden"])';
+    const initialControl = editor.querySelector<HTMLElement>(focusSelector);
     initialControl?.focus();
     return () => editor.close();
   }, [initialField, cycleFocus]);

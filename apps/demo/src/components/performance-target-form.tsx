@@ -1,7 +1,7 @@
 "use client";
 
 import { defaultTenantTerminology, titleTerminology, type TenantTerminology } from "@/lib/waybook/terminology-labels";
-import Link from "next/link";
+import { TenantEditorClose } from "@/components/tenant-editor-dialog";
 
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 
@@ -10,6 +10,7 @@ import { savePerformanceTarget } from "@/app/app/targets/actions";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
 type Scope = { id: string; name: string };
+type ScopeSearchResult = Scope | { id: string; title: string };
 
 export function PerformanceTargetEditor({ closeHref, defaultMonth, terminology = defaultTenantTerminology }: { closeHref: string; defaultMonth: string; terminology?: TenantTerminology }) {
   const [scopeType, setScopeType] = useState<'staff' | 'service'>('staff');
@@ -20,17 +21,32 @@ export function PerformanceTargetEditor({ closeHref, defaultMonth, terminology =
   useEffect(() => {
     if (state.success) showSuccessToast(state.success);
   }, [state]);
-  useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { const endpoint = scopeType === 'staff' ? '/api/app/staff' : '/api/app/services'; fetch(`${tenantApiPrefix()}${endpoint}?q=${encodeURIComponent(query)}&limit=20`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Scope[] }) => { if (!cancelled) setScopes(data.items); }).catch(() => { if (!cancelled) setScopes([]); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [query, scopeType]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      const endpoint = scopeType === 'staff' ? '/api/app/staff' : '/api/app/services';
+      try {
+        const response = await fetch(`${tenantApiPrefix()}${endpoint}?q=${encodeURIComponent(query)}&limit=20`, { signal: controller.signal });
+        const data: { items: ScopeSearchResult[] } = response.ok ? await response.json() : { items: [] };
+        if (!controller.signal.aborted) {
+          setScopes(data.items.map((item) => ({ id: item.id, name: "title" in item ? item.title : item.name })));
+        }
+      } catch {
+        if (!controller.signal.aborted) setScopes([]);
+      }
+    }, 180);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [query, scopeType]);
   return <aside className="tenant-drawer" aria-label="Set monthly target">
     <header>
       <div><p>Monthly targets</p><h2>Set target</h2></div>
       <div className="tenant-drawer-header-actions">
         <button type="submit" form="performance-target-form" disabled={pending || !scopes.length}>{pending ? 'Saving…' : 'Save target'}</button>
       </div>
-      <Link className="tenant-drawer-close" aria-label="Close target editor" href={closeHref}>×</Link>
+      <TenantEditorClose label="Close target editor" href={closeHref}>×</TenantEditorClose>
     </header>
     <form id="performance-target-form" action={formAction} className="tenant-drawer-form" data-drawer-submit-in-header>
-    <label>Target applies to<select name="scopeType" value={scopeType} onChange={(event) => { setScopeType(event.target.value as 'staff' | 'service'); setQuery(''); }}><option value="staff">{titleTerminology(terminology.staffMember)}</option><option value="service">Service</option></select></label>
+    <label>Target applies to<select name="scopeType" value={scopeType} onChange={(event) => { setScopes([]); setScopeType(event.target.value as 'staff' | 'service'); setQuery(''); }}><option value="staff">{titleTerminology(terminology.staffMember)}</option><option value="service">Service</option></select></label>
     <label>{scopeType === 'staff' ? titleTerminology(terminology.staffMember) : 'Service'}<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${scopeType === 'staff' ? terminology.staffPlural : 'services'}`} aria-label={`Search target ${scopeType}`} autoComplete="off" /><select name="scopeId" required disabled={!scopes.length} key={scopeType}><option value="">Choose {scopeType === 'staff' ? terminology.staffPlural : 'service'}</option>{scopes.map((scope) => <option key={scope.id} value={scope.id}>{scope.name}</option>)}</select></label>
     <label>Measure<select name="metric" value={metric} onChange={(event) => setMetric(event.target.value as 'bookings' | 'booked_value_cents')}><option value="bookings">Non-cancelled bookings</option><option value="booked_value_cents">Booked service value</option></select></label>
     <label>Month<input name="periodStart" type="month" required defaultValue={defaultMonth} /></label>
