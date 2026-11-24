@@ -110,10 +110,10 @@ export async function getCalendarAppointment(bookingId: string) {
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) throw new Error("You do not have permission to view this calendar.");
   const db = tenantDb(tenant);
-  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string }[]>`
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string; teamMemberId: string }[]>`
     SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
       bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,
-      c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName"
+      c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
     JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
     JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
@@ -121,6 +121,8 @@ export async function getCalendarAppointment(bookingId: string) {
     WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND (${canViewTeam} OR b.team_member_id=${permissions.teamMemberId ?? null}::uuid) LIMIT 1
   `;
   if (!booking) throw new Error("Booking is unavailable.");
+  const { teamMemberId, ...detail } = booking;
+  const canManageSchedule = canManageAppointment(permissions, teamMemberId);
   const resources = permissions.isManager ? await db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -128,13 +130,13 @@ export async function getCalendarAppointment(bookingId: string) {
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [];
   const today = localDateKey(new Date(), tenant.timezone);
-  const days = permissions.isManager
+  const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
     : [];
-  const slots = permissions.isManager && !["cancelled", "completed"].includes(booking.status)
+  const slots = canManageSchedule && isMovableAppointmentStatus(booking.status)
     ? (await getRescheduleBookingAvailability({ bookingId, startDate: today })).slots : [];
   return {
-    ...booking,
+    ...detail,
     // Status-only staff need the appointment identity and current state, but
     // never contact or resource data used by the manager editing surface.
     customerEmail: permissions.isManager ? booking.customerEmail : "",
@@ -145,6 +147,7 @@ export async function getCalendarAppointment(bookingId: string) {
     startsAt: booking.startsAt.toISOString(),
     endsAt: booking.endsAt.toISOString(),
     canManage: permissions.isManager,
+    canManageSchedule,
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
     canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
     resources,

@@ -12,7 +12,7 @@ type Location = { id: string; name: string };
 type Member = { id: string; name: string };
 type Service = { id: string; title: string; durationMinutes: number };
 type Slot = { teamMemberId: string; startTime: string };
-type Props = { initialLocation: Location; initialMember: Member; initialService: Service; defaultDate: string; defaultTime?: string; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; terminology?: TenantTerminology };
+type Props = { initialLocation: Location; initialMember: Member; initialService: Service; fixedStaff?: boolean; defaultDate: string; defaultTime?: string; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; terminology?: TenantTerminology };
 
 function clock(value: string, timezone: string) { return new Intl.DateTimeFormat("sv-SE", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value)); }
 function dateAt(date: string, offset: number) { const result = new Date(`${date}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + offset); return result.toISOString().slice(0, 10); }
@@ -20,7 +20,7 @@ function localDateKey(timezone: string) { const parts = new Intl.DateTimeFormat(
 function dateLabel(value: string) { const date = new Date(`${value}T12:00:00Z`); return { weekday: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date), day: new Intl.DateTimeFormat("en-GB", { day: "2-digit" }).format(date), full: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(date) }; }
 
 /** Selection lists are searched in bounded windows; availability and writes stay server-authoritative. */
-export function ManualAppointmentForm({ initialLocation, initialMember, initialService, defaultDate, defaultTime, customerName, customerEmail, customerPhone, timezone, terminology = defaultTenantTerminology }: Props) {
+export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, defaultDate, defaultTime, customerName, customerEmail, customerPhone, timezone, terminology = defaultTenantTerminology }: Props) {
   const [state, formAction, pending] = useActionState(createManualBooking, { error: null, success: null });
   const [location, setLocation] = useState(initialLocation);
   const [member, setMember] = useState<Member | null>(initialMember);
@@ -47,7 +47,14 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   return <form action={formAction} className="tenant-drawer-form">
     <input type="hidden" name="locationId" value={locationId} /><input type="hidden" name="teamMemberId" value={teamMemberId} /><input type="hidden" name="serviceId" value={serviceId} />
     <p>Choose the appointment details. Availability is checked live and once more before confirmation.</p>
-    <div className="tenant-drawer-form__grid manual-appointment__selectors"><SearchPicker<Location> label="Location" selectedLabel={location.name} placeholder="Search locations" searchUrl={locationSearchUrl} resultsLabel={(item) => item.name} onPick={(item) => { setLocation(item); setService(null); setMember(null); }} /><SearchPicker<Member> label={titleTerminology(terminology.staffPlural)} selectedLabel={member?.name ?? ""} placeholder={locationId ? `Search ${terminology.staffPlural}` : "Choose a location first"} searchUrl={staffSearchUrl} resultsLabel={(item) => item.name} onPick={setMember} onClear={member ? () => setMember(null) : undefined} /></div>
+    <div className="tenant-drawer-form__grid manual-appointment__selectors">
+      <SearchPicker<Location> label="Location" selectedLabel={location.name} placeholder="Search locations" searchUrl={locationSearchUrl} resultsLabel={(item) => item.name} onPick={(item) => { setLocation(item); setService(null); if (!fixedStaff) setMember(null); }} />
+      {fixedStaff ? (
+        <label>{titleTerminology(terminology.staffPlural)}<input value={initialMember.name} readOnly /></label>
+      ) : (
+        <SearchPicker<Member> label={titleTerminology(terminology.staffPlural)} selectedLabel={member?.name ?? ""} placeholder={locationId ? `Search ${terminology.staffPlural}` : "Choose a location first"} searchUrl={staffSearchUrl} resultsLabel={(item) => item.name} onPick={setMember} onClear={member ? () => setMember(null) : undefined} />
+      )}
+    </div>
     <div className="manual-appointment__selectors"><SearchPicker<Service> label="Service" selectedLabel={service ? `${service.title} · ${service.durationMinutes} min` : ""} placeholder="Search services" searchUrl={serviceSearchUrl} resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min`} onPick={setService} onClear={service ? () => setService(null) : undefined} /></div>
     <label>{titleTerminology(terminology.client)} name<input name="customerName" required value={client.name} onChange={(event) => setClient((current) => ({ ...current, name: event.target.value }))} /></label><label>Email<input name="customerEmail" type="email" required value={client.email} onChange={(event) => setClient((current) => ({ ...current, email: event.target.value }))} /></label><label>Phone<input name="customerPhone" type="tel" value={client.phone} onChange={(event) => setClient((current) => ({ ...current, phone: event.target.value }))} /></label>
     <input type="hidden" name="appointmentDate" value={date} /><input type="hidden" name="appointmentTime" value={time} />

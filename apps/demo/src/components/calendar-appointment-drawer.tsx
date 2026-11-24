@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, updateBookingStatus, cancelAppointment } from "@/app/app/calendars/actions";
-import { AppointmentDrawerActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
+import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { appointmentDrawerCapabilities } from "@/lib/waybook/appointment-drawer-capabilities";
 
@@ -78,12 +78,16 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(selected.startsAt)}–{clock(selected.endsAt)}</dd></div>
           <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>{staffLabel}</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
-        {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : capabilities.canEdit ? <>
-          <AppointmentDrawerActions key={detail.id} bookingId={detail.id} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
+        {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
+          {capabilities.canEdit ? (
+            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
+          ) : <>
+            {capabilities.canUpdateStatus || (capabilities.canCancel && detail.status === "cancelled") ? <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} updateStatus={updateBookingStatus} /> : null}
+            {capabilities.canReschedule ? <AppointmentRescheduleActions key={detail.id} bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} reschedule={rescheduleBooking} /> : null}
+            {!capabilities.canUpdateStatus && !capabilities.canReschedule ? <p className="tenant-drawer-note">You have view-only access to this appointment.</p> : null}
+          </>}
           {capabilities.canCancel && isMovableAppointmentStatus(detail.status) ? <CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /> : null}
-        </> : capabilities.canUpdateStatus ? <>
-          <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} updateStatus={updateBookingStatus} />
-        </> : <p className="tenant-drawer-note">Read-only access: appointment changes require an owner or manager.</p>}
+        </>}
       </div>
     </aside>
   </div>;

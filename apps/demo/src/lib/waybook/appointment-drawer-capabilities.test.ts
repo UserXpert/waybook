@@ -20,3 +20,17 @@ test("managers retain all appointment drawer controls", () => {
   const capabilities = appointmentDrawerCapabilities({ canManage: true, canUpdateStatus: false });
   assert.ok(Object.values(capabilities).every(Boolean));
 });
+
+test("schedule grants expose only rescheduling and cancellation", () => {
+  assert.deepEqual(
+    appointmentDrawerCapabilities({ canManage: false, canManageSchedule: true, canUpdateStatus: false }),
+    {
+      canUpdateStatus: false,
+      canEdit: false,
+      canReschedule: true,
+      canCancel: true,
+      canManageResources: false,
+      canManagePayments: false,
+    },
+  );
+});
