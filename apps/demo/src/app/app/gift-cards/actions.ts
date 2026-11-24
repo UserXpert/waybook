@@ -14,49 +14,55 @@ import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { giftCardCodeHashes, normaliseGiftCardCode } from "@/lib/waybook/gift-card-code";
 
 const amountFrom = (value: FormDataEntryValue | null) => Math.round(Number(String(value ?? "").replace(",", ".")) * 100);
+const duplicateCardMessage = "That gift-card number already exists in this workspace.";
 
-export async function issueGiftCard(formData: FormData) {
+export type GiftCardIssueState = { error?: string };
+
+export async function issueGiftCard(_: GiftCardIssueState, formData: FormData): Promise<GiftCardIssueState> {
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "booking-essentials");
-  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to issue gift cards.");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) return { error: "You do not have permission to issue gift cards." };
 
   const code = normaliseGiftCardCode(String(formData.get("code") ?? ""));
   const ownerId = String(formData.get("ownerId") ?? "") || null;
   const amountCents = amountFrom(formData.get("amountDkk"));
   assertNoOperationalFreeText(formData, "notes");
   if (!/^[A-Z0-9-]{8,40}$/.test(code) || !Number.isFinite(amountCents) || amountCents < 100 || amountCents > 10_000_000) {
-    throw new Error("Enter an 8–40 character gift-card number and a balance from 1 to 100,000 kr.");
+    return { error: "Enter an 8–40 character gift-card number and a balance from 1 to 100,000 kr." };
   }
   const lastFour = code.replaceAll("-", "").slice(-4);
-  if (lastFour.length !== 4) throw new Error("The gift-card number needs at least four letters or digits.");
+  if (lastFour.length !== 4) return { error: "The gift-card number needs at least four letters or digits." };
 
   const identity = await requireIdentity();
   const db = tenantDb(tenant);
-  let cardId = "";
+  let result: { cardId: string } | { error: string };
   try {
-    await db.begin(async (transaction) => {
+    result = await db.begin(async (transaction) => {
       if (ownerId) {
         const [owner] = await transaction.unsafe<{ id: string }[]>("SELECT id FROM customers WHERE id=$1 AND tenant_id=$2", [ownerId, tenant.id]);
-        if (!owner) throw new Error("That contact is no longer available.");
+        if (!owner) return { error: "That contact is no longer available." };
       }
       const [settings] = await transaction.unsafe<{ currency: string }[]>("SELECT currency FROM tenant_settings WHERE tenant_id=$1", [tenant.id]);
       if (!settings) throw new Error("Tenant settings are unavailable.");
       const [hash, legacyHash] = giftCardCodeHashes(code);
       const [existing] = await transaction.unsafe<{ id: string }[]>("SELECT id FROM commerce_gift_cards WHERE tenant_id=$1 AND code_hash IN ($2,$3) LIMIT 1", [tenant.id, hash, legacyHash]);
-      if (existing) throw new Error("That gift-card number already exists in this workspace.");
+      if (existing) return { error: duplicateCardMessage };
       const [card] = await transaction.unsafe<{ id: string }[]>("INSERT INTO commerce_gift_cards (tenant_id,issued_to_customer_id,code_hash,code_hash_version,code_last_four,currency) VALUES ($1,$2,$3,2,$4,$5) RETURNING id", [tenant.id, ownerId, hash, lastFour, settings.currency]);
-      cardId = card.id;
       await transaction.unsafe("INSERT INTO commerce_gift_card_entries (tenant_id,gift_card_id,kind,direction,amount_cents,currency,reason,recorded_by_identity_id) VALUES ($1,$2,'issue','credit',$3,$4,$5,$6)", [tenant.id, card.id, amountCents, settings.currency, "Gift card issued", identity.id]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'gift_card.issued','commerce_gift_card',$3,$4::jsonb)", [tenant.id, identity.id, card.id, JSON.stringify({ ownerId, amountCents, lastFour })]);
+      return { cardId: card.id };
     });
   } catch (error) {
-    if (error instanceof Error && /unique|duplicate/i.test(error.message)) throw new Error("That gift-card number already exists in this workspace.");
+    if (error instanceof Error && "constraint_name" in error && error.constraint_name === "commerce_gift_cards_tenant_id_code_hash_key") {
+      return { error: duplicateCardMessage };
+    }
     throw error;
   }
+  if ("error" in result) return result;
   revalidatePath("/app/gift-cards");
   revalidatePath("/app/customers");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/gift-cards")}?card=${cardId}`, "Gift card created."));
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/gift-cards")}?card=${result.cardId}`, "Gift card created."));
 }
 
 export async function updateGiftCardDetails(formData: FormData) {
