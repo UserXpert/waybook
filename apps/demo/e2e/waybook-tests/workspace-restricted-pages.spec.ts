@@ -48,8 +48,9 @@ for (const workspace of workspaces) {
             await page.getByLabel("Work email").fill(email);
             await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
             await page.getByRole("button", { name: "Sign in", exact: true }).click();
-            await expect(page).toHaveURL((url) => url.pathname.startsWith(app));
             const isManager = profile.role === "manager";
+            await expect(page).toHaveURL((url) => url.pathname === (isManager ? app : `${app}/calendars`));
+            await expect(page.getByLabel("Tenant dashboard navigation")).toBeVisible();
             const hasGrant = profile.role === "staff" && profile.grants;
             const allowed = new Set([
               ...(isManager ? managerPages.filter((route) => route !== "emails" || enabled.has("email-notifications")) : []),
