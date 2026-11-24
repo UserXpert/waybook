@@ -4,9 +4,9 @@ import { useActionState, useEffect } from "react";
 import { saveCustomerForm } from "@/app/app/customers/actions";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
-type Customer = { id?: string; name?: string; email?: string; phone?: string | null; tags?: string[]; internalNotes?: string | null };
+type Customer = { id?: string; name?: string; email?: string; phone?: string | null };
 
-export function CustomerForm({ customer }: { customer?: Customer | null }) {
+export function CustomerForm({ customer, clientLabel }: { customer?: Customer | null; clientLabel: string }) {
   const [state, formAction, pending] = useActionState(saveCustomerForm, { error: null, success: null });
   useEffect(() => {
     if (state.success) showSuccessToast(state.success);
@@ -16,10 +16,8 @@ export function CustomerForm({ customer }: { customer?: Customer | null }) {
     <label>Name<input name="name" defaultValue={customer?.name ?? ""} required /></label>
     <label>Email<input name="email" type="email" defaultValue={customer?.email ?? ""} required /></label>
     <label>Phone<input name="phone" type="tel" defaultValue={customer?.phone ?? ""} /></label>
-    <label>Tags<input name="tags" defaultValue={customer?.tags?.join(", ") ?? ""} placeholder="VIP, regular, referral" /><small>Comma-separated internal labels.</small></label>
-    <label>Internal notes<textarea name="internalNotes" defaultValue={customer?.internalNotes ?? ""} rows={3} /></label>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
-    <button type="submit" disabled={pending}>{pending ? "Saving…" : "Save client"}</button>
+    <button type="submit" disabled={pending}>{pending ? "Saving…" : `Save ${clientLabel}`}</button>
   </form>;
 }

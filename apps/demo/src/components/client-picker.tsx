@@ -1,5 +1,7 @@
 "use client";
 
+import { defaultTenantTerminology, titleTerminology, type TenantTerminology } from "@/lib/waybook/terminology-labels";
+
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 
 import { useEffect, useState } from "react";
@@ -7,7 +9,8 @@ import { usePathname } from "next/navigation";
 
 type Client = { id: string; name: string; email: string; phone: string | null };
 
-export function ClientPicker({ name, label = "Client", required = false, initial }: { name: string; label?: string; required?: boolean; initial?: Client | null }) {
+export function ClientPicker({ name, label, required = false, initial, terminology = defaultTenantTerminology }: { name: string; label?: string; required?: boolean; initial?: Client | null; terminology?: Pick<TenantTerminology, "client" | "clients"> }) {
+  const fieldLabel = label ?? titleTerminology(terminology.client);
   const pathname = usePathname();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<Client[]>(initial ? [initial] : []);
@@ -39,5 +42,5 @@ export function ClientPicker({ name, label = "Client", required = false, initial
       setNextCursor(data.nextCursor);
     } finally { setIsLoadingMore(false); }
   };
-  return <div><label>{label}<input type="hidden" name={name} value={selected?.id ?? ""} required={required} /><input value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} placeholder="Search name, email, or phone" aria-label={`${label} search`} autoComplete="off" />{selected ? <small>Selected: {selected.name}{selected.email ? ` · ${selected.email}` : ""}</small> : null}<select value={selected?.id ?? ""} onChange={(event) => setSelected(items.find((item) => item.id === event.target.value) ?? null)} required={required} aria-label={label}><option value="">{required ? "Select a client" : "Not linked to a client"}</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.email}</option>)}</select>{nextCursor ? <button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "Loading…" : "Load more clients"}</button> : null}</label><a href={createClientHref}>Create a new client</a></div>;
+  return <div><label>{fieldLabel}<input type="hidden" name={name} value={selected?.id ?? ""} required={required} /><input value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} placeholder="Search name, email, or phone" aria-label={`${fieldLabel} search`} autoComplete="off" />{selected ? <small>Selected: {selected.name}{selected.email ? ` · ${selected.email}` : ""}</small> : null}<select value={selected?.id ?? ""} onChange={(event) => setSelected(items.find((item) => item.id === event.target.value) ?? null)} required={required} aria-label={fieldLabel}><option value="">{required ? `Select a ${terminology.client}` : `Not linked to a ${terminology.client}`}</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.email}</option>)}</select>{nextCursor ? <button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "Loading…" : `Load more ${terminology.clients}`}</button> : null}</label><a href={createClientHref}>Create a new {terminology.client}</a></div>;
 }

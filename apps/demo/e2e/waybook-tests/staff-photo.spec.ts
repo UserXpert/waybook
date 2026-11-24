@@ -165,14 +165,16 @@ for (const workspaceCase of [
       await expect(page).toHaveURL((url) => url.pathname.startsWith(`/${workspaceCase.route}/app`));
     }
     await signIn(staffEmail);
+    const bookingLink = (bookingId: string) => page.getByRole('link', { name: /Status-only customer/ })
+      .and(page.locator(`a[href*="booking=${bookingId}"]`));
 
     await page.goto(`/${workspaceCase.route}/app/calendars?day=${future.day}`);
-    await page.getByRole('link', { name: /Status-only customer/ }).click();
+    await bookingLink(future.id).click();
     await expect(page.getByText('Attendance can be updated once the appointment starts.')).toBeVisible();
     for (const label of attendanceLabels) await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
 
     await page.goto(`/${workspaceCase.route}/app/calendars?day=${past.day}`);
-    await page.getByRole('link', { name: /Status-only customer/ }).click();
+    await bookingLink(past.id).click();
     await expect(page.getByText('Current: no show')).toBeVisible();
     for (const heading of ['Edit', 'Reschedule', 'Sales ledger']) await expect(page.getByRole('heading', { name: heading })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /cancel appointment/i })).toHaveCount(0);

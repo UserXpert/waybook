@@ -1,0 +1,8 @@
+.form { display: grid; gap: 1rem; }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.fields label { display: grid; align-content: start; gap: .4rem; font-size: .85rem; }
+.fields select { min-width: 0; min-height: 2.6rem; padding: .55rem .65rem; border: 1px solid color-mix(in srgb, currentColor 20%, transparent); border-radius: .55rem; color: inherit; background: transparent; font-family: inherit; font-size: .9rem; font-weight: 400; }
+:global(:root[data-waybook-theme="dark"]) .fields select { color-scheme: dark; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.actions p { margin: 0; font-size: .85rem; }
+@media (max-width: 480px) { .fields { grid-template-columns: 1fr; } }

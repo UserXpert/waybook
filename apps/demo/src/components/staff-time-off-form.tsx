@@ -10,7 +10,7 @@ type Props = {
   timezone: string;
   action: (formData: FormData) => void | Promise<void>;
   deleteAction?: (formData: FormData) => void | Promise<void>;
-  initial?: { id: string; localDate: string; startTime: string | null; endTime: string | null; reason: string | null };
+  initial?: { id: string; localDate: string; startTime: string | null; endTime: string | null };
 };
 type DateMode = "day" | "range";
 const weekdays = ["M", "T", "W", "T", "F", "S", "S"];
@@ -102,7 +102,6 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
     </section>
     <div className="staff-timeoff-form__mode"><button type="button" className="staff-timeoff-form__switch" role="switch" aria-checked={fullDay} onClick={() => setFullDay((current) => !current)}><span aria-hidden="true" /><span><b>Full day</b><small>{fullDay ? "Blocks the selected date or date range from booking." : "Turn on to block every selected date."}</small></span></button></div>
     {!fullDay ? <OperationalTimeRange label="Partial-day lockout" startName="startTime" endName="endTime" startTime={timeAt(startSlot)} endTime={timeAt(endSlot)} onStartTimeChange={(value) => setStartSlot(Number(value.slice(0, 2)) * 2 + (value.endsWith("30") ? 1 : 0))} onEndTimeChange={(value) => setEndSlot(Number(value.slice(0, 2)) * 2 + (value.endsWith("30") ? 1 : 0))} /> : null}
-    <label>Reason <span className="staff-timeoff-form__optional">Optional</span><input name="reason" defaultValue={initial?.reason ?? ""} placeholder="Holiday, leave, break, meeting" /></label>
     <div className="staff-timeoff-form__actions">
       <button type="submit">{initial ? "Save changes" : "Save time off"}</button>
       {initial && remove ? <button className="staff-timeoff-form__remove" type="submit" formAction={remove} onClick={(event) => { if (!window.confirm("Remove this time-off entry? This cannot be undone.")) event.preventDefault(); }}><Trash2 aria-hidden="true" />Remove time off</button> : null}
