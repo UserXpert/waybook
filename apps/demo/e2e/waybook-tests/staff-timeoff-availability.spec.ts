@@ -6,8 +6,9 @@ import postgres from "postgres";
 for (const workspace of [
   { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
   { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
-]) test(`staff time off blocks only its selected times and dates in ${workspace.route}`, async ({ page, request }) => {
+]) test(`staff time off and split shifts control available slots in ${workspace.route}`, async ({ page, browser, baseURL, ignoreHTTPSErrors, request }) => {
   const db = postgres(process.env[workspace.database]!, { max: 1, ssl: false });
+  const guest = await browser.newContext({ baseURL, ignoreHTTPSErrors, viewport: page.viewportSize(), timezoneId: "Europe/Copenhagen" });
   const tag = randomUUID().slice(0, 8);
   let locationId: string | undefined;
   let serviceId: string | undefined;
@@ -49,7 +50,31 @@ for (const workspace of [
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     const app = `/${workspace.route}/app`;
     await expect(page).toHaveURL((url) => url.pathname === app);
+    const calendar = await page.context().newPage();
+    const booking = await guest.newPage();
+    const checkViews = async (day: string, checks: Record<string, boolean>) => {
+      const calendarQuery = new URLSearchParams({ view: "team", day, location: locationId!, service: serviceId! });
+      const bookingQuery = new URLSearchParams({ location: locationId!, service: serviceId! });
+      await Promise.all([
+        calendar.goto(`${app}/calendars?${calendarQuery}`),
+        booking.goto(`/${workspace.route}/book?${bookingQuery}`),
+      ]);
+      const weekday = new Intl.DateTimeFormat("en", { weekday: "short", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
+      const date = booking.locator(".tenant-day-list").getByRole("button", { name: new RegExp(`^${weekday}\\s*${day.slice(-2)}$`) });
+      await date.click();
+      await expect(date).toHaveAttribute("aria-pressed", "true");
+      if (!Object.values(checks).some(Boolean)) {
+        await expect(booking.getByRole("status").filter({ hasText: "No times are available on this date." })).toBeVisible();
+      }
+      const grid = booking.locator(".tenant-time-grid");
+      for (const [time, available] of Object.entries(checks)) {
+        const slot = calendar.getByRole("link", { name: `New appointment QA time-off staff ${tag} ${day} ${time}`, exact: true });
+        await expect(slot).toHaveCount(available ? 1 : 0);
+        await expect(grid.getByRole("button", { name: time, exact: true })).toHaveCount(available ? 1 : 0);
+      }
+    };
     const timeOffPath = `${app}/team?employee=${staffId}&tab=time-off`;
+    await checkViews(partial, { "10:30": true, "12:30": true });
     await page.goto(timeOffPath);
     const form = page.locator(".staff-timeoff-form");
     const choose = (day: string, dateForm = form) => {
@@ -70,6 +95,7 @@ for (const workspace of [
     await save.click();
     await expect(page.getByText("Time off saved.", { exact: true })).toBeVisible();
     expect(await slots(partial)).toEqual(expected.filter((slot) => slot < at(partial, "10:30") || slot >= at(partial, "12:30")));
+    await checkViews(partial, { "10:00": true, "10:30": false, "12:00": false, "12:30": true });
 
     await form.getByRole("button", { name: "Date range", exact: true }).click();
     await choose(first);
@@ -80,6 +106,7 @@ for (const workspace of [
     expect(await slots(first)).toEqual([]);
     expect(await slots(last)).toEqual([]);
     expect(await slots(after)).toContain(at(after, "11:00"));
+    await checkViews(first, { "11:00": false });
 
     await choose(last);
     await choose(after);
@@ -117,6 +144,7 @@ for (const workspace of [
     await expect(page.getByText("Time off removed.", { exact: true })).toBeVisible();
     expect(await slots(partial)).toEqual(expected);
     expect(await slots(first)).toEqual([]);
+    await checkViews(partial, { "10:30": true, "12:00": true });
 
     const otherTab = await page.context().newPage();
     try {
@@ -134,13 +162,50 @@ for (const workspace of [
     } finally {
       await otherTab.close();
     }
+
+    await test.step("recurring split shifts preserve the gap and reject overlaps", async () => {
+      const weekday = new Intl.DateTimeFormat("en", { weekday: "long", timeZone: "UTC" }).format(new Date(`${after}T12:00:00Z`));
+      await page.goto(`${app}/team?employee=${staffId}&tab=hours`);
+      const shifts = page.getByRole("button", { name: `Edit ${weekday} shifts`, exact: true });
+      await shifts.click();
+      const editor = page.getByRole("dialog", { name: `Edit shifts for ${weekday}s`, exact: true });
+      const addShift = editor.getByRole("button", { name: "+ Add a shift", exact: true });
+      const saveShifts = editor.getByRole("button", { name: "Save changes", exact: true });
+      const starts = editor.getByRole("slider", { name: /starts/i });
+      const ends = editor.getByRole("slider", { name: /ends/i });
+      await addShift.click();
+      await starts.nth(1).press("ArrowLeft");
+      await expect(editor.getByRole("alert")).toContainText("Shifts cannot overlap.");
+      await expect(saveShifts).toBeDisabled();
+      await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(shifts).toBeFocused();
+      expect(await slots(after)).toContain(at(after, "12:00"));
+
+      await shifts.click();
+      await expect(starts).toHaveCount(1);
+      for (let index = 0; index < 8; index++) await ends.nth(0).press("ArrowLeft");
+      await expect(ends.nth(0)).toHaveAttribute("aria-valuetext", "12:00");
+      await addShift.click();
+      for (let index = 0; index < 4; index++) await ends.nth(1).press("ArrowRight");
+      for (let index = 0; index < 2; index++) await starts.nth(1).press("ArrowRight");
+      await expect(starts.nth(1)).toHaveAttribute("aria-valuetext", "13:00");
+      await expect(ends.nth(1)).toHaveAttribute("aria-valuetext", "15:00");
+      await saveShifts.click();
+      await expect(editor).toHaveCount(0);
+      await page.reload();
+      await shifts.click();
+      await expect(ends.nth(0)).toHaveAttribute("aria-valuetext", "12:00");
+      await expect(starts.nth(1)).toHaveAttribute("aria-valuetext", "13:00");
+      await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+      await checkViews(after, { "11:30": true, "12:00": false, "12:30": false, "13:00": true, "14:30": true, "15:00": false });
+    });
   } finally {
     try {
       if (serviceId) await db`DELETE FROM services WHERE id=${serviceId}`;
       if (staffId) await db`DELETE FROM team_members WHERE id=${staffId}`;
       if (locationId) await db`DELETE FROM locations WHERE id=${locationId}`;
     } finally {
-      await db.end();
+      await Promise.all([guest.close(), db.end()]);
     }
   }
 });
