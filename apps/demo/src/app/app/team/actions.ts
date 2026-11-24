@@ -4,6 +4,7 @@ import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-field
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { TransactionSql } from "postgres";
 import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
 import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { hashPassword, requireIdentity } from "@/lib/waybook/auth";
@@ -68,7 +69,7 @@ function localDatesInRange(start: string, end: string) {
   const dates: string[] = [];
   const cursor = new Date(`${start}T12:00:00Z`);
   const last = new Date(`${end}T12:00:00Z`);
-  while (cursor <= last) {
+  while (cursor <= last && dates.length <= 31) {
     dates.push(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
@@ -444,7 +445,19 @@ export async function saveStaffWorkingHours(formData: FormData) {
   revalidateStaff();
 }
 
-export async function addStaffTimeOff(formData: FormData) {
+export type StaffTimeOffState = { error?: string; success?: string };
+
+async function saveTimeOffTransaction(tenant: TenantRecord, memberId: string, change: (tx: TransactionSql) => Promise<StaffTimeOffState>) {
+  const result = await tenantDb(tenant).begin(async (tx): Promise<StaffTimeOffState> => {
+    const [member] = await tx.unsafe("SELECT id FROM team_members WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [memberId, tenant.id]);
+    if (!member) return { error: "Staff member is unavailable." };
+    return change(tx);
+  });
+  if (result.success) revalidateStaff();
+  return result;
+}
+
+export async function addStaffTimeOff(formData: FormData): Promise<StaffTimeOffState> {
   const memberId = String(formData.get("memberId") ?? "");
   const tenant = await editableStaffTimeOffTenant(memberId);
   const localDate = String(formData.get("localDate") ?? "");
@@ -455,18 +468,22 @@ export async function addStaffTimeOff(formData: FormData) {
   const endTime = String(formData.get("endTime") ?? "") || null;
   assertNoOperationalFreeText(formData, "reason");
   const hasPartialWindow = Boolean(startTime) && Boolean(endTime);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate) || endLocalDate < localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) throw new Error("Choose a valid date or date range, then either block the full day or enter a complete valid time range.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate) || endLocalDate < localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) {
+    return { error: "Choose a valid date or date range, then either block the full day or enter a complete valid time range." };
+  }
   const dates = localDatesInRange(localDate, endLocalDate);
-  if (dates.length > 31) throw new Error("Time off can cover up to 31 days at a time.");
-  const db = await validStaffMember(tenant, memberId);
-  const existing = await db<{ localDate: string }[]>`SELECT local_date::text AS "localDate" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId} AND local_date >= ${localDate} AND local_date <= ${endLocalDate}`;
-  if (existing.length > 0) throw new Error("One or more selected dates already have a time-off exception. Choose dates without an existing exception.");
-  for (const date of dates) await db`INSERT INTO availability_overrides (tenant_id, team_member_id, local_date, start_time, end_time, is_unavailable) VALUES (${tenant.id}, ${memberId}, ${date}, ${startTime}, ${endTime}, ${isUnavailable})`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_added"}, 'team_member', ${memberId}, ${JSON.stringify({ localDate, endLocalDate, dateCount: dates.length, fullDay, isUnavailable, startTime, endTime })}::jsonb)`;
-  revalidateStaff();
+  if (dates.length > 31) return { error: "Time off can cover up to 31 days at a time." };
+  if (dates[0] !== localDate || dates.at(-1) !== endLocalDate) return { error: "Choose a valid date or date range." };
+  return saveTimeOffTransaction(tenant, memberId, async (tx) => {
+    const [existing] = await tx.unsafe("SELECT id FROM availability_overrides WHERE tenant_id = $1 AND team_member_id = $2 AND local_date BETWEEN $3 AND $4 LIMIT 1", [tenant.id, memberId, localDate, endLocalDate]);
+    if (existing) return { error: "One or more selected dates already have a time-off exception. Choose dates without an existing exception." };
+    await tx.unsafe("INSERT INTO availability_overrides (tenant_id, team_member_id, local_date, start_time, end_time, is_unavailable) SELECT $1, $2, day, $3, $4, TRUE FROM unnest($5::date[]) AS day", [tenant.id, memberId, startTime, endTime, dates]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'staff.availability.exception_added', 'team_member', $2, $3::jsonb)", [tenant.id, memberId, JSON.stringify({ localDate, endLocalDate, dateCount: dates.length, fullDay, isUnavailable, startTime, endTime })]);
+    return { success: "Time off saved." };
+  });
 }
 
-export async function updateStaffTimeOff(formData: FormData) {
+export async function updateStaffTimeOff(formData: FormData): Promise<StaffTimeOffState> {
   const memberId = String(formData.get("memberId") ?? "");
   const tenant = await editableStaffTimeOffTenant(memberId);
   const overrideId = String(formData.get("overrideId") ?? "");
@@ -477,25 +494,29 @@ export async function updateStaffTimeOff(formData: FormData) {
   const endTime = String(formData.get("endTime") ?? "") || null;
   assertNoOperationalFreeText(formData, "reason");
   const hasPartialWindow = Boolean(startTime) && Boolean(endTime);
-  if (!overrideId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || endLocalDate !== localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) throw new Error("Choose one valid date and a complete valid time range when needed.");
-  const db = await validStaffMember(tenant, memberId);
-  const [override] = await db<{ id: string }[]>`SELECT id FROM availability_overrides WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
-  if (!override) throw new Error("That time-off entry is unavailable.");
-  const conflicts = await db<{ id: string }[]>`SELECT id FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId} AND local_date = ${localDate} AND id <> ${overrideId}`;
-  if (conflicts.length) throw new Error("Another time-off entry already exists on that date.");
-  await db`UPDATE availability_overrides SET local_date = ${localDate}, start_time = ${startTime}, end_time = ${endTime}, is_unavailable = TRUE WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_updated"}, 'team_member', ${memberId}, ${JSON.stringify({ overrideId, localDate, fullDay, startTime, endTime })}::jsonb)`;
-  revalidateStaff();
+  if (!overrideId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || endLocalDate !== localDate || localDatesInRange(localDate, localDate)[0] !== localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) {
+    return { error: "Choose one valid date and a complete valid time range when needed." };
+  }
+  return saveTimeOffTransaction(tenant, memberId, async (tx) => {
+    const [override] = await tx.unsafe("SELECT id FROM availability_overrides WHERE id = $1 AND tenant_id = $2 AND team_member_id = $3", [overrideId, tenant.id, memberId]);
+    if (!override) return { error: "That time-off entry is unavailable." };
+    const [conflict] = await tx.unsafe("SELECT id FROM availability_overrides WHERE tenant_id = $1 AND team_member_id = $2 AND local_date = $3 AND id <> $4 LIMIT 1", [tenant.id, memberId, localDate, overrideId]);
+    if (conflict) return { error: "Another time-off entry already exists on that date." };
+    await tx.unsafe("UPDATE availability_overrides SET local_date = $1, start_time = $2, end_time = $3, is_unavailable = TRUE WHERE id = $4 AND tenant_id = $5 AND team_member_id = $6", [localDate, startTime, endTime, overrideId, tenant.id, memberId]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'staff.availability.exception_updated', 'team_member', $2, $3::jsonb)", [tenant.id, memberId, JSON.stringify({ overrideId, localDate, fullDay, startTime, endTime })]);
+    return { success: "Time off updated." };
+  });
 }
 
-export async function deleteStaffTimeOff(formData: FormData) {
+export async function deleteStaffTimeOff(formData: FormData): Promise<StaffTimeOffState> {
   const memberId = String(formData.get("memberId") ?? "");
   const tenant = await editableStaffTimeOffTenant(memberId);
   const overrideId = String(formData.get("overrideId") ?? "");
-  if (!overrideId) throw new Error("Choose a time-off entry to remove.");
-  const db = await validStaffMember(tenant, memberId);
-  const [removed] = await db<{ id: string; localDate: string }[]>`DELETE FROM availability_overrides WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId} RETURNING id, local_date::text AS "localDate"`;
-  if (!removed) throw new Error("That time-off entry is unavailable.");
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_removed"}, 'team_member', ${memberId}, ${JSON.stringify({ overrideId, localDate: removed.localDate })}::jsonb)`;
-  revalidateStaff();
+  if (!overrideId) return { error: "Choose a time-off entry to remove." };
+  return saveTimeOffTransaction(tenant, memberId, async (tx) => {
+    const [removed] = await tx.unsafe<{ localDate: string }[]>("DELETE FROM availability_overrides WHERE id = $1 AND tenant_id = $2 AND team_member_id = $3 RETURNING local_date::text AS \"localDate\"", [overrideId, tenant.id, memberId]);
+    if (!removed) return { error: "That time-off entry is unavailable." };
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'staff.availability.exception_removed', 'team_member', $2, $3::jsonb)", [tenant.id, memberId, JSON.stringify({ overrideId, localDate: removed.localDate })]);
+    return { success: "Time off removed." };
+  });
 }
