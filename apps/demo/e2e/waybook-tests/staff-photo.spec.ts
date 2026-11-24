@@ -10,6 +10,8 @@ test("an owner can select a profile photo and oversized files are rejected", asy
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/nordic\/app/);
   await page.goto("/nordic/app/team");
+  const directory = page.getByRole("complementary", { name: "Staff directory" });
+  await directory.getByRole("link", { name: /Sofie Andersen/ }).click();
   const button = page.getByRole("button", { name: "Change photo for Sofie Andersen" });
   await expect(button).toBeVisible();
   let chooserPromise = page.waitForEvent("filechooser");
@@ -27,7 +29,6 @@ test("an owner can select a profile photo and oversized files are rejected", asy
   await page.reload();
   await expect(page.getByRole("button", { name: "Change photo for Sofie Andersen" }).locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
 
-  const directory = page.getByRole("complementary", { name: "Staff directory" });
   const profile = page.locator(".staff-workspace__profile-header");
   const photoControls = profile.getByRole("button", { name: /^Change photo for / });
 

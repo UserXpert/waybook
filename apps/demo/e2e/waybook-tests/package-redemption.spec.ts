@@ -36,10 +36,10 @@ for (const tenant of [
       const ends = new Date(starts.getTime() + 30 * 60_000);
       const [block] = await db<{ id: string }[]>`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
         VALUES (${workspace.id},${staff.id},${workspace.locationId},${starts},${ends},'confirmed') RETURNING id`;
-      const [booking] = await db<{ id: string }[]>`INSERT INTO bookings
+      const [booking] = await db<{ id: string; booking_number: string }[]>`INSERT INTO bookings
         (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,booked_price_cents)
         VALUES (${workspace.id},${block.id},${serviceId},${staff.id},${workspace.locationId},${client.id},${starts},${ends},'confirmed','tenant',25000)
-        RETURNING id`;
+        RETURNING id,booking_number`;
       const [sale] = await db<{ id: string }[]>`SELECT id FROM commerce_sales WHERE tenant_id=${workspace.id} AND booking_id=${booking.id}`;
       return { booking, saleId: sale.id };
     };
@@ -93,6 +93,17 @@ for (const tenant of [
     await page.goto(detailsUrl);
     const balance = page.locator(".appointment-drawer .client-record__overview").getByText("Visits remaining", { exact: true });
     await expect(balance.locator("..").getByText("0", { exact: true })).toBeVisible();
+
+    await page.goto(`/${tenant.route}/book`);
+    await page.getByRole("button", { name: "Manage booking" }).click();
+    await page.getByLabel("Booking number").fill(matching.booking.booking_number);
+    await page.getByLabel("Email address").fill(email);
+    await page.getByRole("button", { name: "Find booking" }).click();
+    await page.getByRole("button", { name: "Cancel booking", exact: true }).click();
+    await expect(page.getByText("Please contact the business to cancel this booking because it has payment or package activity.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm cancellation" })).toHaveCount(0);
+    const [stored] = await db`SELECT status FROM bookings WHERE tenant_id=${workspace.id} AND id=${matching.booking.id}`;
+    expect(stored.status).toBe("confirmed");
     expect(await ledger()).toEqual([grant, redeemed]);
   } finally {
     await db.end();
