@@ -5,6 +5,7 @@ import postgres from "postgres";
 test("staff editing preserves profile fields and gives inline duplicate feedback", async ({ page }) => {
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const email = `staff-details-${randomUUID()}@example.test`;
+  const staffName = `Alexandria ${"Christophersen".repeat(10)}`;
   const details = { "Staff code": "QA-42", "Job title": "Studio scheduler", Specialty: "Group sessions", "Work location": "Reception" };
   try {
     await page.goto("/login");
@@ -16,18 +17,26 @@ test("staff editing preserves profile fields and gives inline duplicate feedback
     await page.getByRole("link", { name: "Add staff", exact: true }).click();
     await expect(page).toHaveURL(/new=1/);
     await page.waitForLoadState("networkidle");
-    await page.getByRole("textbox", { name: "Name", exact: true }).fill("Synthetic Staff Details QA");
+    await page.getByRole("textbox", { name: "Name", exact: true }).fill(staffName);
     await page.getByRole("textbox", { name: "Email", exact: true }).fill(email);
     for (const [label, value] of Object.entries(details)) {
       await page.getByRole("textbox", { name: label, exact: true }).fill(value);
     }
     await page.getByRole("button", { name: "Create staff member", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Synthetic Staff Details QA", exact: true })).toBeVisible();
+    const heading = page.getByRole("heading", { name: staffName, exact: true });
+    await expect(heading).toBeVisible();
+    await expect.poll(() => heading.evaluate((element) => {
+      const header = element.closest("header")!;
+      return header.scrollWidth - header.clientWidth;
+    })).toBeLessThanOrEqual(1);
     const profileUrl = page.url();
+    const dismissNotice = page.getByRole("button", { name: "Dismiss notification" });
+    await dismissNotice.click();
 
     await page.getByRole("textbox", { name: "Phone", exact: true }).fill("+45 12 34 56 78");
     await page.getByRole("button", { name: "Save staff details", exact: true }).click();
     await expect(page.getByText("Staff member saved.", { exact: true })).toBeVisible();
+    await dismissNotice.click();
     await page.reload();
     await expect(page.getByRole("textbox", { name: "Phone", exact: true })).toHaveValue("+45 12 34 56 78");
     for (const [label, value] of Object.entries(details)) {
