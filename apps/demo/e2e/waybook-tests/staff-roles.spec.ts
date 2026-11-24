@@ -34,9 +34,16 @@ test("owners can create and assign a role and manage its access in Settings", as
     await add.click();
     const dialog = page.getByRole("dialog", { name: "Add role" });
     await expect(dialog).toBeVisible();
+    const frame = (await dialog.boundingBox())!;
+    const viewport = page.viewportSize()!;
+    const createButton = dialog.getByRole("button", { name: "Create role" });
+    const footer = (await createButton.boundingBox())!;
+    expect(Math.abs(frame.x + frame.width / 2 - viewport.width / 2)).toBeLessThan(2);
+    expect(Math.abs(frame.y + frame.height / 2 - viewport.height / 2)).toBeLessThan(2);
+    expect(footer.y + footer.height).toBeLessThan(frame.y + frame.height);
     await dialog.getByLabel("Role name").fill(roleName);
     await dialog.getByRole("checkbox", { name: /^Can access clients/ }).check();
-    await dialog.getByRole("button", { name: "Create role" }).click();
+    await createButton.click();
     await expect(dialog).toHaveCount(0);
     await expect(rolePicker.locator("option:checked")).toHaveText(roleName);
     await expect(page.getByLabel("Name", { exact: true })).toHaveValue(name);
