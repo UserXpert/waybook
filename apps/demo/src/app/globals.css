@@ -893,10 +893,14 @@ body {
 .staff-role-picker { display: grid; align-content: start; gap: .35rem; min-width: 0; }
 .staff-role-picker__heading, .staff-role-settings__heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .staff-role-picker__heading button { border: 0; background: transparent; color: var(--waybook-accent-ink, #6328b5); font: inherit; font-size: .8rem; text-decoration: underline; cursor: pointer; padding: .2rem 0; }
-.staff-role-dialog { width: min(34rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; border: 1px solid var(--wb-border, #ddd); border-radius: 1rem; padding: clamp(1rem, 4vw, 1.5rem); background: var(--wb-surface, #fff); color: var(--wb-ink, #202124); }
+.staff-role-dialog { inset: 0; margin: auto; width: min(34rem, calc(100% - 2rem)); max-height: min(42rem, calc(100dvh - 2rem)); overflow: hidden; box-sizing: border-box; border: 1px solid var(--wb-border, #ddd); border-radius: 1rem; padding: clamp(1rem, 4vw, 1.5rem); background: var(--wb-surface, #fff); color: var(--wb-ink, #202124); }
+.staff-role-dialog[open] { display: flex; flex-direction: column; }
 .staff-role-dialog::backdrop { background: rgb(15 15 22 / .5); }
-.staff-role-dialog h2 { margin: 0 0 1rem; }
+.staff-role-dialog h2 { margin: 0 0 .5rem; }
 .staff-role-editor { display: grid; gap: 1rem; margin-top: .75rem; }
+.staff-role-dialog .staff-role-editor { display: flex; flex-direction: column; min-height: 0; }
+.staff-role-dialog .staff-role-editor > :not(.staff-role-editor__permissions) { flex-shrink: 0; }
+.staff-role-dialog .staff-role-editor__permissions { min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .staff-role-editor p { margin: 0; }
 .staff-role-editor > label { display: grid; gap: .4rem; }
 .staff-role-editor input[name="name"] { width: 100%; min-width: 0; box-sizing: border-box; padding: .65rem .75rem; border: 1px solid var(--wb-border, #ccc); border-radius: .5rem; background: transparent; color: inherit; font: inherit; font-weight: 400; }
