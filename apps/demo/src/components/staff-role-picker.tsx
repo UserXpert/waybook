@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { StaffRoleEditor } from "@/components/staff-role-editor";
+import { cycleDialogTab } from "@/components/tenant-editor-dialog";
 import type { StaffRoleOption } from "@/lib/waybook/staff-role-fields";
 
 export function StaffRolePicker({ initialRole, customRoles, isOwner, staffLabel }: {
@@ -36,7 +37,7 @@ export function StaffRolePicker({ initialRole, customRoles, isOwner, staffLabel 
       <option value="read-only">Read-only</option>
       {available.filter(({ id }) => isOwner || choice === `custom:${id}`).map(({ id, name }) => <option key={id} value={`custom:${id}`}>{name}</option>)}
     </select>
-    {open ? createPortal(<dialog ref={dialog} className="staff-role-dialog" aria-labelledby={`${id}-title`} onClose={() => setOpen(false)}>
+    {open ? createPortal(<dialog ref={dialog} className="staff-role-dialog" aria-labelledby={`${id}-title`} onKeyDown={cycleDialogTab} onClose={() => setOpen(false)}>
       <h2 id={`${id}-title`}>Add role</h2>
       <StaffRoleEditor onCancel={() => dialog.current?.close()} onSaved={(role) => {
         setCreated((roles) => [...roles, role]);
