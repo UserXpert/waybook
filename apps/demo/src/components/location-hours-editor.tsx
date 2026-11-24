@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useState } from "react";
 import { OperationalTimeRange } from "@/components/operational-time-range";
 import { saveLocation } from "@/app/app/locations/actions";
-import Link from "next/link";
+import { TenantEditorClose } from "@/components/tenant-editor-dialog";
 
 type Hour = { dayOfWeek: number; startTime: string; endTime: string };
 const days = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]] as const;
@@ -23,7 +23,7 @@ export function LocationEditor({ title, closeHref, editable, children }: { title
       </div>
       <div className="tenant-drawer-header-actions">
         {editable ? <button type="submit" form="location-editor-form" disabled={pending}>{pending ? "Saving…" : "Save location"}</button> : null}
-        <Link className="tenant-drawer-close" aria-label="Close location editor" href={closeHref}>×</Link>
+        <TenantEditorClose label="Close location editor" href={closeHref}>×</TenantEditorClose>
       </div>
     </header>
     {editable ? <form id="location-editor-form" className="tenant-drawer-form" action={action} onSubmit={(event) => {

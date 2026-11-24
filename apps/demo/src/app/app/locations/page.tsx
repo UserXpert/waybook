@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FormToggle } from "@/components/form-toggle";
 import { LocationEditor, LocationHoursEditor } from "@/components/location-hours-editor";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
+import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { tenantDb } from "@/lib/waybook/database";
 import {
   currentTenantRouteSlug,
@@ -200,12 +201,7 @@ export default async function LocationsPage({
         ) : null}
       </section>
       {panelOpen ? (
-        <div className="tenant-drawer-layer" role="presentation">
-          <Link
-            className="tenant-drawer-scrim"
-            aria-label="Close location editor"
-            href={path}
-          />
+        <TenantEditorDialog key={selected?.id ?? "new"} title={selected ? "Edit location" : "Add location"} closeHref={path} initialField="name">
           <aside
             className="tenant-drawer"
             aria-label={selected ? "Edit location" : "Add location"}
@@ -363,7 +359,7 @@ export default async function LocationsPage({
               </p>
             )}
           </aside>
-        </div>
+        </TenantEditorDialog>
       ) : null}
     </main>
   );

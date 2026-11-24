@@ -3563,7 +3563,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .waybook-month-calendar__day:has(.waybook-month-calendar__preview:hover),
 .tenant-dashboard-page .waybook-month-calendar__day:has(.waybook-month-calendar__preview:focus-within) { z-index: 12; }
 
-.product-editor-dialog {
+.tenant-editor-dialog {
   width: 100%;
   height: 100%;
   max-width: none;
@@ -3574,5 +3574,5 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   background: transparent;
   color: inherit;
 }
-.product-editor-dialog:not([open]) { display: none; }
-.product-editor-dialog::backdrop { background: transparent; }
+.tenant-editor-dialog:not([open]) { display: none; }
+.tenant-editor-dialog::backdrop { background: transparent; }
