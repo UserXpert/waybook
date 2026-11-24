@@ -23,7 +23,7 @@ type AvailabilityRule = { memberId: string; memberName: string; startTime: strin
 type ScheduledCapacity = { scheduledMinutes: number };
 type ScheduledStaffCapacity = { memberId: string; scheduledMinutes: number };
 
-const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
+const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(cents / 100);
 const localDateKey = (date: Date, timezone: string) => { const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date); const value = (type: string) => parts.find((part) => part.type === type)?.value ?? ""; return `${value("year")}-${value("month")}-${value("day")}`; };
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
