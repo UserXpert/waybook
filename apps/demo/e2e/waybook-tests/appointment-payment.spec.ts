@@ -67,6 +67,16 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     const rowFor = (kind: string) => paymentRows.filter({ has: page.getByRole("cell", { name: kind, exact: true }) });
     await expect.soft(rowFor("payment")).toContainText(money.format(150.5));
     await expect(rowFor("refund")).toContainText(money.format(40.25));
+
+    const [monthly] = await db<{ cents: number }[]>`
+      SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)::int AS cents
+      FROM payment_records
+      WHERE recorded_at >= date_trunc('month', now(), 'Europe/Copenhagen')
+    `;
+    await page.goto("/nordic/app");
+    const net = page.getByText("Net payments", { exact: true }).locator("..");
+    const overviewMoney = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    await expect(net).toContainText(overviewMoney.format(monthly.cents / 100));
   } finally {
     await db.end();
   }

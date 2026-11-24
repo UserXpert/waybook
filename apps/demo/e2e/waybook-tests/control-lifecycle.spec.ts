@@ -16,8 +16,17 @@ test("Control feature and lifecycle changes affect only the selected workspace",
   await expect(details.getByRole("heading", { name: "Nordic Studio" })).toBeVisible();
   await expect(details.getByText("Migration", { exact: true })).toBeVisible();
   await expect(details.getByText("Backup", { exact: true })).toBeVisible();
-  await expect(details.getByRole("link", { name: /Open read-only tenant dashboard/ })).toHaveAttribute("href", new URL("/nordic/app", baseURL).href);
+  const workspaceLink = details.getByRole("link", { name: /Open read-only tenant dashboard/ });
+  await expect(workspaceLink).toHaveAttribute("href", new URL("/nordic/app", baseURL).href);
   await expect(details.getByText("Always on", { exact: true })).toBeVisible();
+  await workspaceLink.click();
+  await expect(page).toHaveURL(/\/nordic\/app$/);
+  await expect(page.getByRole("heading", { name: "Appointment overview" })).toBeVisible();
+  await expect(page.getByText(/Control view.*read-only/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "New appointment", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Upcoming appointments" })).toHaveCount(0);
+  await page.goBack();
+  await expect(details).toBeVisible();
 
   const nordicContext = await browser.newContext({ baseURL });
   const copenhagenContext = await browser.newContext({ baseURL });
