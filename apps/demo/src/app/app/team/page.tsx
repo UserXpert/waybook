@@ -18,7 +18,7 @@ import { controlDb, tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
 import { staffCalendarColors } from "@/lib/waybook/staff-calendar-colors";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
-import { staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
+import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { addStaffTimeOff, deleteStaffTimeOff, saveStaffPermissions, saveStaffPhoto, saveOwnerProfileDetails, saveTeamMember, updateStaffTimeOff } from "./actions";
@@ -47,6 +47,8 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const canManage = ["owner", "manager"].includes(membership.role);
   const [signedInPermissions, terms] = await Promise.all([staffPermissionContext(tenant, membership), getTenantTerminology(tenant)]);
   if (!canManage && !signedInPermissions.teamMemberId) throw new Error("Your staff profile is unavailable for this workspace.");
+  const canSelectTeamTimeOff = !canManage && signedInPermissions.canManageTeamTimeOff
+    && requestedTab === "time-off" && !createNew;
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const db = tenantDb(tenant);
   const archiveAvailable = await staffLifecycleAvailable(tenant);
@@ -54,20 +56,30 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const photosAvailable = photoColumn?.available ?? false;
   const search = (q ?? "").trim().slice(0, 100);
   const rawCursor = (after ?? "").trim();
-  const cursor = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(rawCursor) ? rawCursor : null;
+  const staffIdPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const cursor = staffIdPattern.test(rawCursor) ? rawCursor : null;
   const archiveSelect = archiveAvailable ? "tm.archived_at::text AS \"archivedAt\"" : "NULL::text AS \"archivedAt\"";
   const archiveOrder = archiveAvailable ? "tm.archived_at NULLS FIRST," : "";
   const photoSelect = photosAvailable ? 'tm.photo_data_url' : 'NULL::text';
   const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.staff_role_id AS \"staffRoleId\",sr.name AS \"staffRoleName\",tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.calendar_color AS \"calendarColor\",${photoSelect} AS \"photoDataUrl\" FROM team_members tm LEFT JOIN staff_roles sr ON sr.tenant_id = tm.tenant_id AND sr.id = tm.staff_role_id`;
-  const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1 AND ($2::uuid IS NULL OR tm.id=$2::uuid) AND ($3='' OR tm.name ILIKE $4 OR tm.email ILIKE $4) AND ($5::uuid IS NULL OR (tm.name,tm.id) > (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$5::uuid),''),$5::uuid)) ORDER BY ${archiveOrder}tm.is_active DESC,tm.name,tm.id LIMIT 51`;
-  const memberRows = await db.unsafe<StaffRow[]>(staffDirectorySql, [tenant.id, canManage ? null : signedInPermissions.teamMemberId, search, `%${search}%`, cursor]);
+  const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1 AND ($2::uuid IS NULL OR tm.id=$2::uuid)
+    AND ($3='' OR tm.name ILIKE $4 OR ($7::boolean AND tm.email ILIKE $4))
+    AND ($5::uuid IS NULL OR (tm.name,tm.id) > (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$5::uuid),''),$5::uuid))
+    AND (NOT $6::boolean OR tm.is_active)
+    ORDER BY ${archiveOrder}tm.is_active DESC,tm.name,tm.id LIMIT 51`;
+  const memberRows = await db.unsafe<StaffRow[]>(staffDirectorySql, [
+    tenant.id, canManage || canSelectTeamTimeOff ? null : signedInPermissions.teamMemberId, search, `%${search}%`, cursor, canSelectTeamTimeOff, !canSelectTeamTimeOff,
+  ]);
   const hasMoreMembers = memberRows.length > 50;
   const members = memberRows.slice(0, 50);
   const selectedFromDirectory = members.find((member) => member.id === employee);
-  const selectedOutsideDirectory = !selectedFromDirectory && employee && canManage
-    ? (await db.unsafe<StaffRow[]>(staffColumns + " WHERE tm.tenant_id=$1 AND tm.id=$2::uuid", [tenant.id, employee])).at(0)
+  const selectedOutsideDirectory = !selectedFromDirectory && employee && staffIdPattern.test(employee) && (canManage || canSelectTeamTimeOff)
+    ? (await db.unsafe<StaffRow[]>(staffColumns + " WHERE tm.tenant_id=$1 AND tm.id=$2::uuid AND (NOT $3::boolean OR tm.is_active)", [tenant.id, employee, canSelectTeamTimeOff])).at(0)
     : undefined;
-  const selected = selectedFromDirectory ?? selectedOutsideDirectory ?? members.at(0);
+  const preferredDefault = canSelectTeamTimeOff && employee ? members.find((member) => member.id === signedInPermissions.teamMemberId) : members.at(0);
+  const selected = selectedFromDirectory ?? selectedOutsideDirectory ?? preferredDefault;
+  const timeOffOnly = canSelectTeamTimeOff && selected?.id !== signedInPermissions.teamMemberId;
+  const canEditTimeOff = Boolean(selected && canManageTimeOff(signedInPermissions, selected.id));
   const [selectedServices, selectedLocations] = selected ? await Promise.all([
     db<Selection[]>`SELECT s.id,s.title AS name FROM service_team_members stm JOIN services s ON s.id=stm.service_id AND s.tenant_id=stm.tenant_id WHERE stm.tenant_id=${tenant.id} AND stm.team_member_id=${selected.id} ORDER BY s.title`,
     db<Selection[]>`SELECT l.id,l.name FROM team_member_locations tml JOIN locations l ON l.id=tml.location_id AND l.tenant_id=tml.tenant_id WHERE tml.tenant_id=${tenant.id} AND tml.team_member_id=${selected.id} ORDER BY l.name`,
@@ -101,10 +113,10 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
     ? await db<StaffPermissions[]>`SELECT can_update_appointment_status AS "canUpdateAppointmentStatus", can_manage_own_appointments AS "canManageOwnAppointments", can_view_team_calendar AS "canViewTeamCalendar", can_manage_team_appointments AS "canManageTeamAppointments", can_manage_own_time_off AS "canManageOwnTimeOff", can_manage_team_time_off AS "canManageTeamTimeOff", can_manage_waitlist AS "canManageWaitlist", can_view_clients AS "canViewClients", can_manage_clients AS "canManageClients", can_access_reports AS "canAccessReports", can_manage_resources AS "canManageResources", can_manage_service_settings AS "canManageServiceSettings" FROM staff_permissions WHERE tenant_id = ${tenant.id} AND team_member_id = ${selected.id} LIMIT 1`
     : permissionRows;
   const schedule = rules.flatMap((rule) => (rule.rrule.match(/BYDAY=([^;]+)/)?.[1].split(",") ?? []).map((day) => ({ day, startTime: rule.startTime, endTime: rule.endTime })));
-  const editingOverride = overrides.find((override) => override.id === editTimeOff) ?? null;
+  const editingOverride = canEditTimeOff ? overrides.find((override) => override.id === editTimeOff) ?? null : null;
   const basePath = tenantPath(tenantSlug, "/app/team");
   const staffPath = (memberId: string, targetTab = tab) => basePath + "?employee=" + memberId + "&tab=" + targetTab;
-  const moreStaffHref = basePath + "?" + new URLSearchParams({ ...(search ? { q: search } : {}), after: members.at(-1)?.id ?? "" }).toString();
+  const moreStaffHref = basePath + "?" + new URLSearchParams({ ...(search ? { q: search } : {}), ...(canSelectTeamTimeOff ? { tab: "time-off" } : {}), after: members.at(-1)?.id ?? "" }).toString();
 
   const [passwordAccess] = selected?.identityId && membership.role === "owner" ? await controlDb<{ available: boolean }[]>`
     SELECT i.password_hash <> '' AND NOT i.is_platform_admin
@@ -128,12 +140,12 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           <div><p>PEOPLE</p><h1>{titleTerminology(terms.staffPlural)}</h1></div>
           {canManage ? <Link className="waybook-primary-link" href={basePath + "?new=1"}>Add {terms.staff}</Link> : null}
         </div>
-        <p className="staff-workspace__directory-copy">Select a person to manage their profile, schedule, services, and time off.</p>
-        {canManage ? <form method="get" className="waybook-list-filter"><label>Search {terms.staffPlural}<input name="q" type="search" defaultValue={search} placeholder="Name or email" /></label><button type="submit">Search</button></form> : null}
+        <p className="staff-workspace__directory-copy">{canSelectTeamTimeOff ? "Select a person to manage their time off." : canManage ? "Select a person to manage their profile, schedule, services, and time off." : "View your profile and schedule."}</p>
+        {canManage || canSelectTeamTimeOff ? <form method="get" className="waybook-list-filter">{canSelectTeamTimeOff ? <input type="hidden" name="tab" value="time-off" /> : null}<label>Search {terms.staffPlural}<input name="q" type="search" defaultValue={search} placeholder={canSelectTeamTimeOff ? "Name" : "Name or email"} /></label><button type="submit">Search</button></form> : null}
         <nav>
           {members.map((member) => <Link key={member.id} href={staffPath(member.id)} aria-current={selected?.id === member.id ? "page" : undefined}>
-            <span className="staff-workspace__avatar" aria-hidden="true">{member.photoDataUrl ? <img src={member.photoDataUrl} alt="" /> : member.name.slice(0, 1)}</span>
-            <span><strong>{member.name}</strong><small>{member.jobTitle ?? member.staffRoleName ?? (member.role === "staff" ? terms.staff : member.role)}</small></span>
+            <span className="staff-workspace__avatar" aria-hidden="true">{member.photoDataUrl && (!canSelectTeamTimeOff || member.id === signedInPermissions.teamMemberId) ? <img src={member.photoDataUrl} alt="" /> : member.name.slice(0, 1)}</span>
+            <span><strong>{member.name}</strong>{!canSelectTeamTimeOff || member.id === signedInPermissions.teamMemberId ? <small>{member.jobTitle ?? member.staffRoleName ?? (member.role === "staff" ? terms.staff : member.role)}</small> : null}</span>
             <i className={member.isActive ? "is-active" : ""}>{member.isActive ? "Active" : "Inactive"}</i>
           </Link>)}
         </nav>
@@ -146,12 +158,15 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
         </section> : null}
         {!createNew && selected ? <>
           <header key={selected.id} className="staff-workspace__profile-header">
-            {photosAvailable && canEditStaffPhoto(membership.role, signedInPermissions.teamMemberId, selected.id) ? <StaffPhotoUpload memberId={selected.id} name={selected.name} photoDataUrl={selected.photoDataUrl} action={saveStaffPhoto} /> : <span className="staff-workspace__avatar is-large" aria-hidden="true">{selected.photoDataUrl ? <img src={selected.photoDataUrl} alt="" /> : selected.name.slice(0, 1)}</span>}
-            <div><p>{terms.staff.toUpperCase()} PROFILE</p><h2>{selected.name}</h2><span>{selected.jobTitle ?? titleTerminology(terms.staffMember)} · {selected.isActive ? "Active and bookable" : "Inactive"}</span></div>
-            <StaffAccessMenu memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} canInviteWithGoogle={canInviteWithGoogle} canManagePassword={!selected.identityId || passwordAccess?.available === true} />
+            {photosAvailable && canEditStaffPhoto(membership.role, signedInPermissions.teamMemberId, selected.id) ? <StaffPhotoUpload memberId={selected.id} name={selected.name} photoDataUrl={selected.photoDataUrl} action={saveStaffPhoto} /> : <span className="staff-workspace__avatar is-large" aria-hidden="true">{selected.photoDataUrl && !timeOffOnly ? <img src={selected.photoDataUrl} alt="" /> : selected.name.slice(0, 1)}</span>}
+            <div><p>{timeOffOnly ? "STAFF TIME OFF" : `${terms.staff.toUpperCase()} PROFILE`}</p><h2>{selected.name}</h2>{!timeOffOnly ? <span>{selected.jobTitle ?? titleTerminology(terms.staffMember)} · {selected.isActive ? "Active and bookable" : "Inactive"}</span> : null}</div>
+            {canManage ? <StaffAccessMenu memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} canInviteWithGoogle={canInviteWithGoogle} canManagePassword={!selected.identityId || passwordAccess?.available === true} /> : null}
           </header>
           <nav className="staff-workspace__tabs" aria-label={`${titleTerminology(terms.staff)} profile sections`}>
-            {([{ id: "details", label: "Details" }, { id: "hours", label: "Work hours" }, ...(canManage ? [{ id: "permissions" as const, label: "Permissions" }] : []), { id: "services", label: "Services & locations" }, { id: "time-off", label: "Time off" }] as const).map((item) => <Link key={item.id} href={staffPath(selected.id, item.id)} aria-current={tab === item.id ? "page" : undefined}>{item.label}</Link>)}
+            {timeOffOnly && signedInPermissions.teamMemberId ? <Link href={staffPath(signedInPermissions.teamMemberId, "details")}>Your profile</Link> : null}
+            {([{ id: "details", label: "Details" }, { id: "hours", label: "Work hours" }, ...(canManage ? [{ id: "permissions" as const, label: "Permissions" }] : []), { id: "services", label: "Services & locations" }, { id: "time-off", label: "Time off" }] as const)
+              .filter((item) => !timeOffOnly || item.id === "time-off")
+              .map((item) => <Link key={item.id} href={staffPath(selected.id, item.id)} aria-current={tab === item.id ? "page" : undefined}>{item.label}</Link>)}
           </nav>
           {tab === "details" ? <section className="staff-workspace__panel">
             <PanelHeading title="Details" text="Contact and profile information used inside your workspace." />
@@ -176,8 +191,13 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </section> : null}
           {tab === "time-off" ? <section className="staff-workspace__panel">
             <PanelHeading title="Time off" text="Block one day, a date range, or specific hours for leave, breaks, meetings, or other time off." />
-            {canManage ? <>{editingOverride ? <div className="staff-timeoff-form__editing"><div><b>Editing time off</b><span>Update this one-day exception, then save or remove it.</span></div><Link href={staffPath(selected.id, "time-off")}>Cancel</Link></div> : null}<StaffTimeOffForm key={`${selected.id}:${editingOverride?.id ?? "new"}`} memberId={selected.id} timezone={tenant.timezone} action={editingOverride ? updateStaffTimeOff : addStaffTimeOff} deleteAction={editingOverride ? deleteStaffTimeOff : undefined} initial={editingOverride ? { id: editingOverride.id, localDate: editingOverride.localDate, startTime: editingOverride.startTime, endTime: editingOverride.endTime } : undefined} /></> : null}
-            <div className="staff-exception-list">{overrides.map((override) => <Link className="staff-exception-list__row" key={override.id} href={staffPath(selected.id, "time-off") + "&editTimeOff=" + override.id}><div><strong>{displayOverrideDate(override.localDate)}</strong><span>{displayOverride(override)}</span></div><Pencil aria-hidden="true" /></Link>)}{overrides.length === 0 ? <p>No time off recorded yet.</p> : null}</div>
+            {canEditTimeOff ? <>{editingOverride ? <div className="staff-timeoff-form__editing"><div><b>Editing time off</b><span>Update this one-day exception, then save or remove it.</span></div><Link href={staffPath(selected.id, "time-off")}>Cancel</Link></div> : null}<StaffTimeOffForm key={`${selected.id}:${editingOverride?.id ?? "new"}`} memberId={selected.id} timezone={tenant.timezone} action={editingOverride ? updateStaffTimeOff : addStaffTimeOff} deleteAction={editingOverride ? deleteStaffTimeOff : undefined} initial={editingOverride ? { id: editingOverride.id, localDate: editingOverride.localDate, startTime: editingOverride.startTime, endTime: editingOverride.endTime } : undefined} /></> : null}
+            <div className="staff-exception-list">{overrides.map((override) => {
+              const summary = <div><strong>{displayOverrideDate(override.localDate)}</strong><span>{displayOverride(override)}</span></div>;
+              return canEditTimeOff
+                ? <Link className="staff-exception-list__row" key={override.id} href={staffPath(selected.id, "time-off") + "&editTimeOff=" + override.id}>{summary}<Pencil aria-hidden="true" /></Link>
+                : <div className="staff-exception-list__row" key={override.id}>{summary}</div>;
+            })}{overrides.length === 0 ? <p>No time off recorded yet.</p> : null}</div>
           </section> : null}
         </> : null}
         {!createNew && !selected ? <section className="staff-workspace__empty"><h2>{search ? `No matching ${terms.staffPlural}` : `No ${terms.staffPlural} yet`}</h2><p>{search ? "Try a different name or email." : "Add the first person to begin setting availability."}</p></section> : null}
