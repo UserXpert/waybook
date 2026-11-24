@@ -21,18 +21,24 @@ export function TenantAppMenu({ links, active }: { links: TenantAppLink[]; activ
   const [destination, setDestination] = useState("");
   const router = useRouter();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!open) return;
     const trigger = triggerRef.current;
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") { setOpen(false); return; }
-      if (event.key !== "Tab") return;
-      const dialog = document.querySelector<HTMLElement>(".tenant-app-menu__dialog");
-      const controls = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled])')) : [];
+      if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
+      const dialog = dialogRef.current;
+      const controls = Array.from(dialog?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled])') ?? [])
+        .filter((control) => control.tabIndex >= 0 && control.getClientRects().length > 0);
       if (!controls.length) return;
-      const first = controls[0], last = controls[controls.length - 1];
-      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+      // WebKit can skip links in its default Tab order.
+      event.preventDefault();
+      const current = controls.findIndex((control) => control === document.activeElement);
+      const next = current < 0
+        ? event.shiftKey ? controls.length - 1 : 0
+        : (current + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+      controls[next]?.focus();
     };
     document.addEventListener("keydown", handleKey);
     return () => { document.removeEventListener("keydown", handleKey); trigger?.focus(); };
@@ -43,6 +49,6 @@ export function TenantAppMenu({ links, active }: { links: TenantAppLink[]; activ
   return <div className="tenant-app-menu">
     <button ref={triggerRef} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => { setQuery(""); setOpen(true); }}><PanelsTopLeft aria-hidden="true" /> Apps</button>
     {pending ? <span className="tenant-app-menu__loading" role="status">Opening {destination}…</span> : null}
-    {open ? createPortal(<div className="tenant-app-menu__layer" role="presentation"><button className="tenant-app-menu__scrim" aria-label="Close apps menu" onClick={() => setOpen(false)} /><section className="tenant-app-menu__dialog" role="dialog" aria-modal="true" aria-labelledby="tenant-app-menu-title"><header><div><p>WAYBOOK APPS</p><h2 id="tenant-app-menu-title">Apps & settings</h2></div><button type="button" aria-label="Close apps menu" onClick={() => setOpen(false)}><X aria-hidden="true" /></button></header><label className="tenant-app-menu__search"><Search aria-hidden="true" /><input aria-label="Search apps and settings" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search apps and settings" /></label><div className="tenant-app-menu__groups">{groups.map((group) => { const groupLinks = visibleLinks.filter((link) => link.group === group); return groupLinks.length ? <section key={group}><h3>{group}</h3><div>{groupLinks.map((link) => { const Icon = appIcons[link.id as keyof typeof appIcons]; return <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setOpen(false); if (active === link.id) return; setDestination(link.label); startTransition(() => router.push(link.href)); }}><i aria-hidden="true"><Icon /></i><span>{link.label}</span></Link>; })}</div></section> : null; })}</div>{visibleLinks.length === 0 ? <p className="tenant-app-menu__empty">No enabled Waybook app matches “{query}”.</p> : null}</section></div>, document.body) : null}
+    {open ? createPortal(<div className="tenant-app-menu__layer" role="presentation"><button type="button" className="tenant-app-menu__scrim" aria-hidden="true" tabIndex={-1} onClick={() => setOpen(false)} /><section ref={dialogRef} className="tenant-app-menu__dialog" role="dialog" aria-modal="true" aria-labelledby="tenant-app-menu-title"><header><div><p>WAYBOOK APPS</p><h2 id="tenant-app-menu-title">Apps & settings</h2></div><button type="button" aria-label="Close apps menu" onClick={() => setOpen(false)}><X aria-hidden="true" /></button></header><label className="tenant-app-menu__search"><Search aria-hidden="true" /><input aria-label="Search apps and settings" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search apps and settings" /></label><div className="tenant-app-menu__groups">{groups.map((group) => { const groupLinks = visibleLinks.filter((link) => link.group === group); return groupLinks.length ? <section key={group}><h3>{group}</h3><div>{groupLinks.map((link) => { const Icon = appIcons[link.id as keyof typeof appIcons]; return <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setOpen(false); if (active === link.id) return; setDestination(link.label); startTransition(() => router.push(link.href)); }}><i aria-hidden="true"><Icon /></i><span>{link.label}</span></Link>; })}</div></section> : null; })}</div>{visibleLinks.length === 0 ? <p className="tenant-app-menu__empty">No enabled Waybook app matches “{query}”.</p> : null}</section></div>, document.body) : null}
   </div>;
 }
