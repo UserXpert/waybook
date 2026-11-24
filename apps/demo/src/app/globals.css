@@ -890,6 +890,27 @@ body {
 :root[data-waybook-theme="dark"] .calendar-row-filter button,:root[data-waybook-theme="dark"] .calendar-row-filter__more { border-color: #3a3a3f; background: #202023; color: #f4f4f5; }
 .tenant-dashboard-page .staff-calendar-colour { align-content: start; border: 0; display: grid; gap: .45rem; grid-column: 1 / -1; margin: 0; min-inline-size: 0; padding: 0; }
 .tenant-dashboard-page .staff-calendar-colour legend { color: var(--wb-ink, #202124); font-size: .82rem; font-weight: 600; padding: 0; }
+.staff-role-picker { display: grid; align-content: start; gap: .35rem; min-width: 0; }
+.staff-role-picker__heading, .staff-role-settings__heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.staff-role-picker__heading button { border: 0; background: transparent; color: var(--waybook-accent-ink, #6328b5); font: inherit; font-size: .8rem; text-decoration: underline; cursor: pointer; padding: .2rem 0; }
+.staff-role-dialog { width: min(34rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; border: 1px solid var(--wb-border, #ddd); border-radius: 1rem; padding: clamp(1rem, 4vw, 1.5rem); background: var(--wb-surface, #fff); color: var(--wb-ink, #202124); }
+.staff-role-dialog::backdrop { background: rgb(15 15 22 / .5); }
+.staff-role-dialog h2 { margin: 0 0 1rem; }
+.staff-role-editor { display: grid; gap: 1rem; margin-top: .75rem; }
+.staff-role-editor p { margin: 0; }
+.staff-role-editor > label { display: grid; gap: .4rem; }
+.staff-role-editor input[name="name"] { width: 100%; min-width: 0; box-sizing: border-box; padding: .65rem .75rem; border: 1px solid var(--wb-border, #ccc); border-radius: .5rem; background: transparent; color: inherit; font: inherit; font-weight: 400; }
+.staff-role-editor__permissions { display: grid; gap: .6rem; }
+.staff-role-editor fieldset { min-width: 0; margin: 0; padding: .5rem .75rem .65rem; border: 1px solid var(--wb-border, #ddd); border-radius: .5rem; }
+.staff-role-editor legend { padding: 0 .25rem; font-weight: 600; }
+.staff-role-editor__permission { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: .6rem; padding: .35rem 0; cursor: pointer; }
+.staff-role-editor__permission input { margin: .25rem 0 0; }
+.staff-role-editor__permission small { display: block; font-size: .8em; opacity: .8; }
+.staff-role-editor__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .65rem; }
+.staff-role-editor__actions button:not(.waybook-primary-link) { border: 1px solid var(--wb-border, #ccc); border-radius: .5rem; background: transparent; color: inherit; font: inherit; padding: .45rem .7rem; cursor: pointer; }
+.staff-role-settings__list { display: grid; gap: .75rem; padding: 0; margin: .75rem 0 0; list-style: none; }
+.staff-role-settings__list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem .75rem; }
+:root[data-waybook-theme="dark"] .staff-role-dialog { color: var(--wb-dark-ink); background: var(--wb-dark-surface); border-color: var(--wb-dark-border, #444); }
 .tenant-dashboard-page .staff-calendar-colour__swatches { display: flex; flex-wrap: wrap; gap: .5rem; }
 .tenant-dashboard-page .staff-calendar-colour__swatches label { align-items: center; border: 2px solid transparent; border-radius: 999px; cursor: pointer; display: inline-flex; height: 2.2rem; justify-content: center; padding: .18rem; transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; width: 2.2rem; }
 .tenant-dashboard-page .staff-calendar-colour__swatches label:hover { transform: translateY(-1px); }

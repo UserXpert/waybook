@@ -10,14 +10,16 @@ import { findTenantByHostname, findTenantByRouteSlug, findTenantMembershipByRout
 export type TenantMembership = { tenantId: string; role: string };
 
 async function assertActiveStaffMembership(tenant: TenantRecord, identityId: string, membership: TenantMembership) {
-  const [staff] = await tenantDb(tenant)<{ isActive: boolean }[]>`
-    SELECT is_active AS "isActive" FROM team_members
+  const [staff] = await tenantDb(tenant)<{ isActive: boolean; staffRoleId: string | null }[]>`
+    SELECT is_active AS "isActive", staff_role_id AS "staffRoleId" FROM team_members
     WHERE tenant_id = ${tenant.id} AND identity_id = ${identityId}
     LIMIT 1
   `;
   // A linked profile is the lifecycle authority for every workspace role.
   // Legacy owners can have no profile, but staff/read-only identities cannot.
   if (staff && !staff.isActive) throw new Error("Your staff access is inactive for this workspace.");
+  // A failed Control write must not retain manager access after a custom role is assigned.
+  if (staff?.staffRoleId && membership.role === "manager") throw new Error("Your workspace role change is pending.");
   if (!staff && ["staff", "read-only"].includes(membership.role)) {
     throw new Error("Your staff profile is unavailable for this workspace.");
   }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, UsersRound, Wrench } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, ShieldCheck, UsersRound, Wrench } from "lucide-react";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { isFeatureEnabled } from "@/lib/waybook/features";
@@ -22,6 +22,7 @@ export default async function SettingsPage() {
       { title: "Locations", description: "Locations, contact details and opening hours", href: "/app/locations", Icon: MapPin },
     ] : []),
     ...(teamEnabled && (permissions.isManager || permissions.teamMemberId) ? [{ title: "Staff", description: "Team profiles and availability", href: "/app/team", Icon: UsersRound }] : []),
+    ...(teamEnabled && membership.role === "owner" ? [{ title: "Roles & permissions", description: "Create workspace roles and manage staff access", href: "/app/settings/roles", Icon: ShieldCheck }] : []),
     ...(resourcesEnabled && (permissions.isManager || permissions.canManageResources) ? [{ title: "Resources", description: "Rooms, equipment and availability", href: "/app/resources", Icon: Wrench }] : []),
     ...(emailsEnabled && permissions.isManager ? [{ title: "Email", description: "Sender connection, templates and reminders", href: "/app/emails?view=connection", Icon: Mail }] : []),
   ];

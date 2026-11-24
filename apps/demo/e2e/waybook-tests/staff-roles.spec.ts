@@ -1,0 +1,98 @@
+import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import postgres from "postgres";
+
+test("owners can create and assign a role and manage its access in Settings", async ({ page, browser }) => {
+  // The Waybook E2E configuration requires disposable local databases.
+  const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
+  const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
+  const suffix = randomUUID().slice(0, 8);
+  const roleName = `Reception ${suffix}`;
+  const spareRole = `Training ${suffix}`;
+  const email = `role-test-${suffix}@example.test`;
+  const name = `Role test ${suffix}`;
+  const signIn = async (target: typeof page, account: string) => {
+    await target.goto("/login");
+    await target.getByLabel("Work email").fill(account);
+    await target.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await target.getByRole("button", { name: "Sign in" }).click();
+    await expect(target).toHaveURL(/\/nordic\/app/);
+  };
+  let workspaceId: string | undefined;
+  try {
+    const [workspace] = await control<{ id: string }[]>`SELECT id FROM tenants WHERE slug = 'nordic-studio'`;
+    workspaceId = workspace.id;
+    await signIn(page, "owner@nordic.local");
+    await page.goto("/nordic/app/team?new=1");
+    await page.getByLabel("Name", { exact: true }).fill(name);
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    const rolePicker = page.locator(".staff-role-picker");
+    const label = await rolePicker.getByText("Role", { exact: true }).boundingBox();
+    const add = rolePicker.getByRole("button", { name: "Add role" });
+    const button = await add.boundingBox();
+    expect(button!.x).toBeGreaterThan(label!.x + label!.width);
+    await add.click();
+    const dialog = page.getByRole("dialog", { name: "Add role" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("Role name").fill(roleName);
+    await dialog.getByRole("checkbox", { name: /^Can access clients/ }).check();
+    await dialog.getByRole("button", { name: "Create role" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(rolePicker.locator("option:checked")).toHaveText(roleName);
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue(name);
+    await page.getByRole("button", { name: "Create staff member" }).click();
+    await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(rolePicker.locator("option:checked")).toHaveText(roleName);
+
+    const [identity] = await control<{ id: string }[]>`INSERT INTO identities (email, password_hash, display_name)
+      SELECT ${email}, password_hash, ${name} FROM identities WHERE email = 'owner@nordic.local' RETURNING id`;
+    await control`INSERT INTO tenant_memberships (tenant_id, identity_id, role) VALUES (${workspace.id}, ${identity.id}, 'staff')`;
+    await db`UPDATE team_members SET identity_id = ${identity.id} WHERE tenant_id = ${workspace.id} AND email = ${email}`;
+
+    const staffContext = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: page.viewportSize() });
+    try {
+      const staff = await staffContext.newPage();
+      await signIn(staff, email);
+      await staff.goto("/nordic/app/customers");
+      await expect(staff).toHaveURL(/\/nordic\/app\/customers/);
+      await expect(staff.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+      const restricted = await staff.goto("/nordic/app/settings/roles");
+      expect(restricted?.status()).toBe(404);
+
+      await page.goto("/nordic/app/settings");
+      await page.getByRole("link", { name: /^Roles & permissions/ }).click();
+      await page.getByRole("link", { name: roleName, exact: true }).click();
+      await expect(page.getByText("Saving changes updates access for 1 assigned staff member.")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Delete role" })).toHaveCount(0);
+      await page.getByRole("checkbox", { name: /^Can access clients/ }).uncheck();
+      await page.getByRole("button", { name: "Save role" }).click();
+      await expect(page.getByRole("status")).toHaveText("Role saved.");
+      await staff.goto("/nordic/app/customers");
+      await expect(staff).not.toHaveURL(/\/nordic\/app\/customers/);
+    } finally {
+      await staffContext.close();
+    }
+
+    await page.getByRole("link", { name: "Add role", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Add role", exact: true })).toBeVisible();
+    await page.getByLabel("Role name").fill(spareRole);
+    await page.getByRole("button", { name: "Create role" }).click();
+    await expect(page.getByRole("heading", { name: `Edit ${spareRole}` })).toBeVisible();
+    await page.getByLabel("Role name").fill(`${spareRole} updated`);
+    await page.getByRole("button", { name: "Save role" }).click();
+    await expect(page.getByRole("link", { name: `${spareRole} updated`, exact: true })).toBeVisible();
+    page.once("dialog", (confirmation) => confirmation.accept());
+    await page.getByRole("button", { name: "Delete role" }).click();
+    await expect(page.getByRole("link", { name: `${spareRole} updated`, exact: true })).toHaveCount(0);
+  } finally {
+    try {
+      if (workspaceId) {
+        await db`DELETE FROM team_members WHERE tenant_id = ${workspaceId} AND email = ${email}`;
+        await db`DELETE FROM staff_roles WHERE tenant_id = ${workspaceId} AND name IN (${roleName}, ${spareRole}, ${`${spareRole} updated`})`;
+      }
+      await control`DELETE FROM identities WHERE email = ${email}`;
+    } finally {
+      await Promise.all([db.end(), control.end()]);
+    }
+  }
+});
