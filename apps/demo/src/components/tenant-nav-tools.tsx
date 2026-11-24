@@ -5,7 +5,7 @@ import { Bell, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
-export function TenantNavTools({ searchHref, searchLabel, notificationsHref, notificationsPending = false }: { searchHref: string; searchLabel: string; notificationsHref?: string; notificationsPending?: boolean }) {
+export function TenantNavTools({ searchHref, searchLabel, notificationsHref, notificationsPending = false }: { searchHref?: string; searchLabel: string; notificationsHref?: string; notificationsPending?: boolean }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -26,12 +26,12 @@ export function TenantNavTools({ searchHref, searchLabel, notificationsHref, not
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = query.trim();
-    if (!value) return;
+    if (!searchHref || !value) return;
     router.push(`${searchHref}?q=${encodeURIComponent(value)}`);
     setOpen(false);
   };
   return <div className={`tenant-nav-tools${open ? " is-searching" : ""}`}>
-    {open ? (
+    {searchHref && (open ? (
       <form className="tenant-nav-tools__search" role="search" onSubmit={submit} onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         event.preventDefault();
@@ -43,7 +43,7 @@ export function TenantNavTools({ searchHref, searchLabel, notificationsHref, not
       </form>
     ) : (
       <button ref={triggerRef} type="button" aria-label={searchLabel} onClick={() => setOpen(true)}><Search aria-hidden="true" /></button>
-    )}
+    ))}
     {notificationsHref ? <Link href={notificationsHref} aria-label={notificationsPending ? "Notifications: appointments need review" : "Notifications"} className="tenant-nav-tools__notifications"><Bell aria-hidden="true" />{notificationsPending ? <span className="tenant-nav-tools__notification-dot" aria-hidden="true" /> : null}</Link> : <button type="button" aria-label="Notifications unavailable" disabled><Bell aria-hidden="true" /></button>}
   </div>;
 }

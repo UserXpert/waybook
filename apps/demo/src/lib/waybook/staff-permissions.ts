@@ -25,6 +25,13 @@ export type StaffPermissionContext = {
   canManageServiceSettings: boolean;
 };
 
+export function workspaceSearchPermissions(permissions: StaffPermissionContext) {
+  return {
+    canSearchAppointments: permissions.isManager || permissions.canManageOwnAppointments,
+    canSearchClients: permissions.isManager || permissions.canViewClients || permissions.canManageClients,
+  };
+}
+
 const denied: Omit<StaffPermissionContext, "isManager" | "teamMemberId"> = {
   canUpdateAppointmentStatus: false,
   canManageOwnAppointments: false,

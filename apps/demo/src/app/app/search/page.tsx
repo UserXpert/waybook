@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
-import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { staffPermissionContext, workspaceSearchPermissions } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { tenantDateKey, weekStartForLocalDate } from "@/lib/waybook/today-command-centre";
@@ -20,8 +20,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   await requireFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const permissions = await staffPermissionContext(tenant, membership);
-  const canSearchAppointments = permissions.isManager || permissions.canManageOwnAppointments;
-  const canSearchClients = permissions.isManager || permissions.canViewClients || permissions.canManageClients;
+  const { canSearchAppointments, canSearchClients } = workspaceSearchPermissions(permissions);
   if (!canSearchAppointments && !canSearchClients) redirect(tenantPath(tenantSlug, "/app"));
 
   const search = (q ?? "").trim().slice(0, 100);
