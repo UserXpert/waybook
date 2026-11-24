@@ -58,9 +58,10 @@ for (const tenant of [
     await expect(page.getByRole("img", { name: "Current product" })).toHaveCount(0);
 
     await page.getByRole("complementary", { name: "Edit product" }).getByRole("link", { name: "Close product editor" }).click();
+    await expect(page.getByRole("dialog", { name: "Edit product" })).toHaveCount(0);
     await page.getByRole("searchbox", { name: "Search", exact: true }).fill(sku);
     await page.getByRole("button", { name: "Apply", exact: true }).click();
-    await expect(page).toHaveURL(/\?q=/);
+    await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku);
     await expect(page.getByRole("link", { name: "Open Synthetic Catalogue QA", exact: true })).toBeVisible();
     const openProduct = page.getByRole("link", { name: "Open Synthetic Catalogue QA", exact: true });
     const closeProduct = (label: string) => page.getByRole("complementary", { name: label }).getByRole("link", { name: "Close product editor" });

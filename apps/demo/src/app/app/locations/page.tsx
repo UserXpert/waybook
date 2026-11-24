@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { FormToggle } from "@/components/form-toggle";
 import { LocationEditor, LocationHoursEditor } from "@/components/location-hours-editor";
@@ -9,7 +10,7 @@ import {
   requireTenantWorkspace,
 } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { logout } from "../../actions";
 import {
@@ -64,12 +65,12 @@ export default async function LocationsPage({
 }) {
   const { location, new: createNew, q, after } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership);
   const canManage =
     permissions.isManager || permissions.canManageServiceSettings;
   if (!canManage)
-    throw new Error("You do not have permission to view location settings.");
+    notFound();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const db = tenantDb(tenant);
   const search = (q ?? "").trim().slice(0, 100);

@@ -1,9 +1,10 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { FormToggle } from "@/components/form-toggle";
 import { TableRowLink } from "@/components/table-row-link";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -17,10 +18,10 @@ const formatMoney = (cents: number, currency: string) => new Intl.NumberFormat("
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ product?: string; new?: string; q?: string }> }) {
   const { product, new: createNew, q } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const permissions = await staffPermissionContext(tenant, membership);
-  if (!permissions.isManager) throw new Error("You do not have permission to view products.");
+  if (!permissions.isManager) notFound();
   const search = (q ?? "").trim().slice(0, 100);
   const selectedId = product && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(product) ? product.toLowerCase() : null;
   const db = tenantDb(tenant);

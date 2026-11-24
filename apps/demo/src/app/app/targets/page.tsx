@@ -5,7 +5,7 @@ import { PerformanceTargetEditor } from "@/components/performance-target-form";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -22,7 +22,7 @@ export default async function TargetsPage({ searchParams }: { searchParams: Prom
   const permissions = await staffPermissionContext(tenant, membership);
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   if (!permissions.isManager) redirect(tenantPath(tenantSlug, permissions.canAccessReports ? '/app/reports' : '/app'));
-  await requireFeature(tenant.id, 'booking-essentials');
+  await requirePageFeature(tenant.id, 'booking-essentials');
   const db = tenantDb(tenant); const currentMonth = monthKey(new Date(), tenant.timezone); const path = tenantPath(tenantSlug, '/app/targets');
   const [targets] = await Promise.all([
     db.unsafe<Target[]>("WITH month_bounds AS (SELECT pt.id,pt.scope_type,pt.scope_id,pt.metric,pt.period_start,pt.target_value,(pt.period_start::timestamp AT TIME ZONE $2) AS starts_at,((pt.period_start + interval '1 month')::timestamp AT TIME ZONE $2) AS ends_at FROM performance_targets pt WHERE pt.tenant_id=$1) SELECT mb.id,mb.scope_type AS \"scopeType\",mb.scope_id AS \"scopeId\",mb.metric,mb.period_start::text AS \"periodStart\",mb.target_value AS \"targetValue\",coalesce(tm.name,s.title,'Unavailable') AS \"scopeName\",coalesce(CASE WHEN mb.metric='bookings' THEN count(b.id) FILTER (WHERE b.status <> 'cancelled') ELSE sum(b.booked_price_cents) FILTER (WHERE b.status <> 'cancelled') END,0)::int AS \"actualValue\" FROM month_bounds mb LEFT JOIN team_members tm ON mb.scope_type='staff' AND tm.id=mb.scope_id AND tm.tenant_id=$1 LEFT JOIN services s ON mb.scope_type='service' AND s.id=mb.scope_id AND s.tenant_id=$1 LEFT JOIN bookings b ON b.tenant_id=$1 AND ((mb.scope_type='staff' AND b.team_member_id=mb.scope_id) OR (mb.scope_type='service' AND b.service_id=mb.scope_id)) AND b.starts_at >= mb.starts_at AND b.starts_at < mb.ends_at GROUP BY mb.id,mb.scope_type,mb.scope_id,mb.metric,mb.period_start,mb.target_value,tm.name,s.title ORDER BY mb.period_start DESC,mb.scope_type,\"scopeName\"", [tenant.id, tenant.timezone]),

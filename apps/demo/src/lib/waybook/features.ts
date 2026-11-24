@@ -1,5 +1,6 @@
 import "server-only";
 
+import { notFound } from "next/navigation";
 import { controlDb } from "./database";
 
 export const featureKeys = ["booking-essentials", "clients", "team", "calendars", "resources", "email-notifications"] as const;
@@ -22,6 +23,10 @@ export async function isFeatureEnabled(tenantId: string, featureKey: FeatureKey)
     WHERE tenant_id = ${tenantId} AND feature_key = ${featureKey} LIMIT 1
   `;
   return states[0]?.isEnabled === true;
+}
+
+export async function requirePageFeature(tenantId: string, featureKey: FeatureKey) {
+  if (!await isFeatureEnabled(tenantId, featureKey)) notFound();
 }
 
 /** Server-only entitlement guard. Navigation visibility never substitutes for this check. */

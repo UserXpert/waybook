@@ -1,8 +1,9 @@
+import { notFound } from "next/navigation";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import Link from "next/link";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -20,9 +21,9 @@ const money = (cents: number, currency: string) => new Intl.NumberFormat("en-DK"
 export default async function RetailCheckoutPage({ searchParams }: { searchParams: Promise<{ sale?: string }> }) {
   const { sale } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to manage checkout.");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) notFound();
   const terminology = await getTenantTerminology(tenant);
   const clientLabel = titleTerminology(terminology.client);
   const db = tenantDb(tenant);

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { GiftCardTenderForm } from "@/components/gift-card-tender-form";
 import { controlDb, tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -70,7 +70,7 @@ function settlement(row: SaleRow) {
 export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string }> }) {
   const { location, q, status, sale } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const permissions = await staffPermissionContext(tenant, membership);
   if (!permissions.isManager) redirect(tenantPath(tenantSlug, "/app"));

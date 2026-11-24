@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
@@ -5,7 +6,7 @@ import { AsyncMultiSelect } from "@/components/async-multi-select";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -20,11 +21,11 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
   const { service, new: createNew } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const terms = await getTenantTerminology(tenant);
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const permissions = await staffPermissionContext(tenant, membership);
   const canManage = permissions.isManager || permissions.canManageServiceSettings;
-  if (!canManage) throw new Error("You do not have permission to view service settings.");
+  if (!canManage) notFound();
   const db = tenantDb(tenant);
   const services = await db<Service[]>`SELECT s.id,s.title,s.description,s.duration_minutes AS "durationMinutes",s.price_cents AS "priceCents",s.recommended_rebook_days AS "recommendedRebookDays",s.is_active AS "isActive",string_agg(tm.name,', ' ORDER BY tm.name) AS employees FROM services s LEFT JOIN service_team_members stm ON stm.service_id=s.id AND stm.tenant_id=s.tenant_id LEFT JOIN team_members tm ON tm.id=stm.team_member_id AND tm.tenant_id=stm.tenant_id WHERE s.tenant_id=${tenant.id} GROUP BY s.id ORDER BY s.is_active DESC,s.title`;
   const selected = services.find((item) => item.id === service) ?? null;

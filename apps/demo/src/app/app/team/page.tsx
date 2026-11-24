@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import { StaffRolePicker } from "@/components/staff-role-picker";
@@ -15,7 +16,7 @@ import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { currentIdentity } from "@/lib/waybook/auth";
 import { googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { controlDb, tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffCalendarColors } from "@/lib/waybook/staff-calendar-colors";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
@@ -43,10 +44,10 @@ function displayOverrideDate(localDate: string) {
 export default async function TeamPage({ searchParams }: { searchParams: Promise<{ employee?: string; tab?: string; new?: string; editTimeOff?: string; q?: string; after?: string }> }) {
   const { employee, tab: requestedTab, new: createNew, editTimeOff, q, after } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
-  await requireFeature(tenant.id, "team");
+  await requirePageFeature(tenant.id, "team");
   const canManage = ["owner", "manager"].includes(membership.role);
   const [signedInPermissions, terms] = await Promise.all([staffPermissionContext(tenant, membership), getTenantTerminology(tenant)]);
-  if (!canManage && !signedInPermissions.teamMemberId) throw new Error("Your staff profile is unavailable for this workspace.");
+  if (!canManage && !signedInPermissions.teamMemberId) notFound();
   const canSelectTeamTimeOff = !canManage && signedInPermissions.canManageTeamTimeOff
     && requestedTab === "time-off" && !createNew;
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);

@@ -1,9 +1,10 @@
+import { notFound } from "next/navigation";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import Link from "next/link";
 import { TableRowLink } from "@/components/table-row-link";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -21,8 +22,8 @@ const money = (cents: number, currency: string) => new Intl.NumberFormat("en-DK"
 export default async function GiftCardsPage({ searchParams }: { searchParams: Promise<{ card?: string; new?: string; q?: string; edit?: string }> }) {
   const { card, new: createNew, q, edit } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
-  await requireFeature(tenant.id, "booking-essentials");
-  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to manage gift cards.");
+  await requirePageFeature(tenant.id, "booking-essentials");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) notFound();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const search = (q ?? "").trim().slice(0, 100);
   const terminology = await getTenantTerminology(tenant);

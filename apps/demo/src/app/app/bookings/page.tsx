@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
@@ -9,7 +10,7 @@ import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
 import { bookingListQuery, type BookingRow } from "@/lib/waybook/booking-list-query";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { canChangeAttendanceNow, isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
@@ -24,9 +25,9 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
   const { location, status, q, booking: selectedId } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const terms = await getTenantTerminology(tenant);
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership);
-  if (!permissions.isManager && !permissions.canManageOwnAppointments) throw new Error("You do not have permission to view bookings.");
+  if (!permissions.isManager && !permissions.canManageOwnAppointments) notFound();
   const db = tenantDb(tenant);
   const locations = await db<Location[]>`SELECT id, name FROM locations WHERE tenant_id = ${tenant.id} AND is_active = TRUE ORDER BY CASE WHEN slug = 'primary' THEN 0 ELSE 1 END, name`;
   const selectedLocation = locations.find((item) => item.id === location);

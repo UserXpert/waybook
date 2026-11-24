@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -6,7 +7,7 @@ import { FormToggle } from "@/components/form-toggle";
 import { TableRowLink } from "@/components/table-row-link";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -23,9 +24,9 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
   const { new: createNew, setup, package: issued } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const terms = await getTenantTerminology(tenant);
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const slug = await currentTenantRouteSlug(tenant.slug);
-  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to manage packages.");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) notFound();
   const db = tenantDb(tenant);
   const [definitionRows, clientPackages] = await Promise.all([
     db<(Omit<Definition, "photoDataUrl"> & { metadata: unknown })[]>`SELECT ci.id,ci.title,ci.currency,ci.price_cents AS "priceCents",ci.is_active AS "isActive",ci.metadata,d.service_id AS "serviceId",s.title AS "serviceTitle",d.included_units AS units,d.expires_after_days AS "expiryDays",count(cp.id)::int AS "issuedCount" FROM commerce_catalog_items ci JOIN commerce_package_service_entitlements d ON d.catalog_item_id=ci.id AND d.tenant_id=ci.tenant_id JOIN services s ON s.id=d.service_id AND s.tenant_id=d.tenant_id LEFT JOIN commerce_packages cp ON cp.catalog_item_id=ci.id AND cp.tenant_id=ci.tenant_id WHERE ci.tenant_id=${tenant.id} AND ci.kind='package' GROUP BY ci.id,s.id,d.id ORDER BY ci.is_active DESC,ci.created_at DESC`,

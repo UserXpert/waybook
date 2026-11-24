@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
@@ -24,7 +25,7 @@ import {
   requireTenantWorkspace,
 } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { canManageAppointment, staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { canChangeAttendanceNow, isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 import {
@@ -235,13 +236,13 @@ export default async function CalendarsPage({
   const { tenant, membership } = await requireTenantWorkspace();
   const terms = await getTenantTerminology(tenant);
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  await requireFeature(tenant.id, "calendars");
+  await requirePageFeature(tenant.id, "calendars");
   const permissions = await staffPermissionContext(tenant, membership);
   const canManage = permissions.isManager;
   const canManageSchedule = (memberId: string | null) => canManageAppointment(permissions, memberId);
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) {
-    throw new Error("You do not have permission to view this calendar.");
+    notFound();
   }
   const effectiveEmployee = canViewTeam ? employee : permissions.teamMemberId;
   const restrictedEmployeeId = permissions.teamMemberId ?? "";

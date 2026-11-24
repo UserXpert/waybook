@@ -1,10 +1,11 @@
+import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import Link from "next/link";
 import { AsyncMultiSelect } from "@/components/async-multi-select";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -21,12 +22,12 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
   const { resource, new: createNew, day } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const terms = await getTenantTerminology(tenant);
-  await requireFeature(tenant.id, "resources");
+  await requirePageFeature(tenant.id, "resources");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const db = tenantDb(tenant);
   const permissions = await staffPermissionContext(tenant, membership);
   const canManage = permissions.isManager || permissions.canManageResources;
-  if (!canManage) throw new Error("You do not have permission to view resource settings.");
+  if (!canManage) notFound();
   const scheduleDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantDateKey(new Date(), tenant.timezone);
   const [resources, resourceBookings] = await Promise.all([
     db.unsafe<Resource[]>("SELECT r.id,r.name,r.resource_type AS \"resourceType\",r.capacity,r.is_active AS \"isActive\",r.is_mutually_exclusive AS \"isMutuallyExclusive\",string_agg(DISTINCT l.name, ', ' ORDER BY l.name) AS locations,string_agg(DISTINCT s.title, ', ' ORDER BY s.title) AS services FROM resources r LEFT JOIN resource_locations rl ON rl.resource_id=r.id AND rl.tenant_id=r.tenant_id LEFT JOIN locations l ON l.id=rl.location_id AND l.tenant_id=r.tenant_id LEFT JOIN service_resources sr ON sr.resource_id=r.id AND sr.tenant_id=r.tenant_id LEFT JOIN services s ON s.id=sr.service_id AND s.tenant_id=r.tenant_id WHERE r.tenant_id=$1 GROUP BY r.id ORDER BY r.is_active DESC,r.name", [tenant.id]),
