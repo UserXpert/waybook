@@ -891,16 +891,17 @@ body {
 .tenant-dashboard-page .staff-calendar-colour { align-content: start; border: 0; display: grid; gap: .45rem; grid-column: 1 / -1; margin: 0; min-inline-size: 0; padding: 0; }
 .tenant-dashboard-page .staff-calendar-colour legend { color: var(--wb-ink, #202124); font-size: .82rem; font-weight: 600; padding: 0; }
 .tenant-dashboard-page .staff-calendar-colour__swatches { display: flex; flex-wrap: wrap; gap: .5rem; }
-.tenant-dashboard-page .staff-calendar-colour__swatches label { align-items: center; border: 2px solid transparent; border-radius: 999px; cursor: pointer; display: inline-flex; height: 2.2rem; justify-content: center; padding: .18rem; transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease; width: 2.2rem; }
-.tenant-dashboard-page .staff-calendar-colour__swatches label:hover { transform: translateY(-1px); }
+.tenant-dashboard-page .staff-calendar-colour__swatches label { align-items: center; border: 2px solid transparent; border-radius: 999px; cursor: pointer; display: inline-flex; height: 2.2rem; justify-content: center; padding: .18rem; transition: border-color 120ms ease, transform 120ms ease; width: 2.2rem; }
+.tenant-dashboard-page .staff-calendar-colour__swatches label:not(:has(input:disabled)):hover { transform: translateY(-1px); }
+.tenant-dashboard-page .staff-calendar-colour__swatches label:has(input:disabled) { cursor: not-allowed; opacity: .45; }
 .tenant-dashboard-page .staff-calendar-colour__swatches input { appearance: none; block-size: 1px; inline-size: 1px; margin: 0; opacity: 0; position: absolute; }
 .tenant-dashboard-page .staff-calendar-colour__swatches span { border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .08); display: block; height: 100%; width: 100%; }
-.tenant-dashboard-page .staff-calendar-colour__swatches label:has(input:checked) { border-color: var(--wb-ink, #202124); box-shadow: 0 0 0 2px var(--wb-surface, #fff), 0 0 0 4px var(--wb-ink, #202124); }
+.tenant-dashboard-page .staff-calendar-colour__swatches label:has(input:checked:not(:focus-visible)) { border-color: var(--wb-ink, #202124); }
 .tenant-dashboard-page .staff-calendar-colour__swatches label:has(input:focus-visible) { outline: 3px solid var(--wb-accent, #6750a4); outline-offset: 3px; }
 .tenant-dashboard-page .staff-calendar-colour small { color: #747479; font-size: .72rem; font-weight: 500; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-calendar-colour small { color: var(--wb-dark-muted); }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-calendar-colour legend { color: var(--wb-dark-ink); }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-calendar-colour__swatches label:has(input:checked) { border-color: var(--wb-dark-ink); box-shadow: 0 0 0 2px var(--wb-dark-surface), 0 0 0 4px var(--wb-dark-ink); }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-calendar-colour__swatches label:has(input:checked:not(:focus-visible)) { border-color: var(--wb-dark-ink); }
 
 /* Appearance modes share one complete surface stack.  These final scopes are
    deliberately explicit: staff workspaces and account popovers are rendered

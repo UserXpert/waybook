@@ -13,5 +13,6 @@ export const staffCalendarColors = [
   { value: "#84cc98", label: "Mint" },
 ] as const;
 
-export const defaultStaffCalendarColor = staffCalendarColors[0].value;
-export const staffCalendarColorValues = new Set<string>(staffCalendarColors.map(({ value }) => value));
+export function isStaffCalendarColor(value: string): boolean {
+  return /^#[0-9a-f]{6}$/.test(value);
+}
