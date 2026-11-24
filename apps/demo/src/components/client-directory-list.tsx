@@ -81,10 +81,10 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
       <tbody>
         {clients.map((client) => <tr key={client.id} className="customer-table-row">
           <td><Link href={clientHref(client.id)}><strong>{client.name}</strong><small>{client.lastBookingAt ? `Last visit ${date.format(new Date(client.lastBookingAt))}` : `New ${clientLabel}`}</small></Link></td>
-          <td><Link href={clientHref(client.id)}>{client.email}{client.phone ? <small>{client.phone}</small> : null}</Link></td>
-          <td><Link href={clientHref(client.id)}>{client.nextBookingAt ? date.format(new Date(client.nextBookingAt)) : "—"}</Link></td>
-          <td><Link href={clientHref(client.id)}>{client.bookingCount}</Link></td>
-          <td><Link href={clientHref(client.id)}>{money(client.bookedValueCents)}</Link></td>
+          <td><Link href={clientHref(client.id)} tabIndex={-1}>{client.email}{client.phone ? <small>{client.phone}</small> : null}</Link></td>
+          <td><Link href={clientHref(client.id)} tabIndex={-1}>{client.nextBookingAt ? date.format(new Date(client.nextBookingAt)) : "—"}</Link></td>
+          <td><Link href={clientHref(client.id)} tabIndex={-1}>{client.bookingCount}</Link></td>
+          <td><Link href={clientHref(client.id)} tabIndex={-1}>{money(client.bookedValueCents)}</Link></td>
         </tr>)}
         {clients.length === 0 ? <tr><td colSpan={5}>No {clientsLabel} match this search.</td></tr> : null}
         {nextCursor ? <tr ref={sentinelRef} className="client-directory-list__sentinel"><td colSpan={5}>{loading ? `Loading ${clientsLabel}…` : ""}</td></tr> : null}

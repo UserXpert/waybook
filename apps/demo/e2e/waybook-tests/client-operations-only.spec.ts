@@ -58,7 +58,7 @@ test("client records accept contact details and keep historical free text out of
 
     const edit = page.getByRole("link", { name: "Edit", exact: true });
     await edit.press("Enter");
-    const dialog = page.getByRole("dialog");
+    const dialog = page.getByRole("dialog", { name: /^(Edit (client|patient) |Add (client|patient)$)/i });
     const form = dialog.locator("form");
     await expect(dialog.getByLabel("Name")).toBeFocused();
     await expect(form.locator('[name="internalNotes"], [name="tags"]')).toHaveCount(0);
@@ -71,6 +71,7 @@ test("client records accept contact details and keep historical free text out of
     expect(unchanged.name).toBe(name);
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`customer=${customer.id}$`));
     await expect(edit).toBeFocused();
 
     await page.goto(`${existing}&edit=1`);
