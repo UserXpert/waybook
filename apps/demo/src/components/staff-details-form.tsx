@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState } from "react";
+import { unstable_rethrow } from "next/navigation";
 import type { StaffDetailsState } from "@/app/app/team/actions";
 
 export function StaffDetailsForm({ children, saveLabel, save }: {
@@ -8,7 +9,14 @@ export function StaffDetailsForm({ children, saveLabel, save }: {
   saveLabel: string;
   save: (previous: StaffDetailsState, formData: FormData) => Promise<StaffDetailsState>;
 }) {
-  const [state, action, pending] = useActionState(save, {});
+  const [state, action, pending] = useActionState(async (previous: StaffDetailsState, formData: FormData) => {
+    try {
+      return await save(previous, formData);
+    } catch (error) {
+      unstable_rethrow(error);
+      return { error: "Could not confirm the save. Your changes are still here. Try again." };
+    }
+  }, {});
 
   return <form action={action} className="staff-profile-form" onSubmit={(event) => {
     if (event.target !== event.currentTarget) return;

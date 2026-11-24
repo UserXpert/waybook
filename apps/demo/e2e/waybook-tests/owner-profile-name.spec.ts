@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Request } from "@playwright/test";
 import postgres from "postgres";
 import sharp from "sharp";
 
@@ -69,8 +69,44 @@ test("both owners use the Staff Details form and share the saved photo with thei
       const newColour = colourGroup.locator('input[type="radio"]:enabled:not(:checked)').first();
       const nextColour = await newColour.inputValue({ timeout: 5000 });
       await newColour.check();
+
+      // Hold one real save to check the pending state, then fail it before it reaches the server.
+      let releaseSave!: () => void;
+      const heldSave = new Promise<void>((resolve) => { releaseSave = resolve; });
+      const teamRoute = /\/app\/team(?:\?|$)/;
+      const isSaveRequest = (request: Request) =>
+        request.method() === "POST" && Boolean(request.headers()["next-action"]);
+      const auditCount = async () => (await db<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM tenant_audit_events
+        WHERE action = 'staff.updated' AND target_id = ${original.id}
+      `)[0].count;
+      const beforeSave = await auditCount();
+      await page.route(teamRoute, async (route) => {
+        if (!isSaveRequest(route.request())) return route.continue();
+        await heldSave;
+        await route.abort("failed");
+      });
+      try {
+        await Promise.all([
+          page.waitForRequest((candidate) => teamRoute.test(candidate.url()) && isSaveRequest(candidate)),
+          save.click(),
+        ]);
+        await expect(page.getByRole("button", { name: "Saving…" })).toBeDisabled();
+      } finally {
+        releaseSave();
+      }
+      await expect(page.getByRole("alert").filter({ hasText: "Could not confirm the save" })).toBeVisible();
+      await page.unroute(teamRoute);
+      await expect(save).toBeEnabled();
+      await expect(name).toHaveValue(nextName);
+      await expect(email).toHaveValue(nextEmail);
+      await expect(phone).toHaveValue(nextPhone);
+      await expect(colourGroup.getByRole("radio", { checked: true })).toHaveValue(nextColour);
+      expect(await auditCount()).toBe(beforeSave);
+
       await save.click();
       await expect(page.getByRole("status")).toHaveText("Details saved.");
+      expect(await auditCount()).toBe(beforeSave + 1);
       const updatedMenu = page.getByRole("button", { name: `Account menu for ${nextName}` });
       await expect(updatedMenu).toBeVisible();
       await page.reload();
