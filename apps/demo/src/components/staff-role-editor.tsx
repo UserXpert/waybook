@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveStaffRole } from "@/app/app/settings/roles/actions";
 import { staffPermissionSections, type StaffRole, type StaffRoleOption } from "@/lib/waybook/staff-role-fields";
@@ -12,13 +12,14 @@ export function StaffRoleEditor({ role, onSaved, onCancel, settingsHref }: {
   settingsHref?: string;
 }) {
   const router = useRouter();
+  const editorId = useId();
   const [name, setName] = useState(role?.name ?? "");
   const [permissions, setPermissions] = useState(role?.permissions ?? {});
   const [state, action, pending] = useActionState(async (previous: Awaited<ReturnType<typeof saveStaffRole>>, data: FormData) => {
     const result = await saveStaffRole(previous, data);
     if (result.role) {
       onSaved?.(result.role);
-      if (!role && settingsHref) router.replace(`${settingsHref}?role=${result.role.id}`);
+      if (!role && settingsHref) router.replace(`${settingsHref}&role=${result.role.id}#role-details`);
     }
     if (result.deleted && settingsHref) router.replace(settingsHref);
     return result;
@@ -35,11 +36,12 @@ export function StaffRoleEditor({ role, onSaved, onCancel, settingsHref }: {
       {staffPermissionSections.map(({ title, items }) => <fieldset key={title}>
         <legend>{title}</legend>
         {items.map(([key, label, description]) => <label key={key} className="staff-role-editor__permission">
-          <input type="checkbox" name={key} checked={permissions[key] === true} onChange={(event) => {
+          <span>{label}<small id={`${editorId}-${key}`}>{description}</small></span>
+          <input type="checkbox" role="switch" aria-label={label} aria-describedby={`${editorId}-${key}`} name={key} checked={permissions[key] === true} onChange={(event) => {
             const checked = event.target.checked;
             setPermissions((current) => ({ ...current, [key]: checked }));
           }} />
-          <span>{label}<small>{description}</small></span>
+          <span className="staff-role-editor__switch" aria-hidden="true" />
         </label>)}
       </fieldset>)}
     </div>

@@ -50,7 +50,7 @@ export async function saveStaffRole(_: RoleActionState, data: FormData): Promise
   if (!role) return { error: "This role is unavailable." };
 
   const slug = await currentTenantRouteSlug(tenant.slug);
-  for (const path of ["/app/team", "/app/settings/roles"]) {
+  for (const path of ["/app/team", "/app/settings"]) {
     revalidatePath(path);
     revalidatePath(tenantPath(slug, path));
   }

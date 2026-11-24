@@ -151,7 +151,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           {tab === "permissions" && canManage ? <section className="staff-workspace__panel staff-workspace__panel--permissions">
             <PanelHeading title="Permissions" text="Set the calendar and waitlist tasks this staff member may perform when they sign in." />
             {selected.staffRoleId ? <p>
-              Access follows the {selected.staffRoleName} role. {membership.role === "owner" ? <Link href={tenantPath(tenantSlug, `/app/settings/roles?role=${selected.staffRoleId}`)}>Manage role permissions</Link> : null}
+              Access follows the {selected.staffRoleName} role. {membership.role === "owner" ? <Link href={tenantPath(tenantSlug, `/app/settings?tab=roles&role=${selected.staffRoleId}`)}>Manage role permissions</Link> : null}
             </p> : <StaffPermissionsForm key={selected.id} memberId={selected.id} initial={permissions[0]} workspacePermissionsAvailable={workspacePermissionsAvailable} />}
           </section> : null}
           {tab === "services" ? <section className="staff-workspace__panel">

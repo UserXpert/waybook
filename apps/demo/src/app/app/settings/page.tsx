@@ -1,19 +1,27 @@
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, ShieldCheck, UsersRound, Wrench } from "lucide-react";
+import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, UsersRound, Wrench } from "lucide-react";
+import { notFound } from "next/navigation";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { StaffRolesPanel } from "./roles/panel";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
-  const [slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled] = await Promise.all([
+  const [params, slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled] = await Promise.all([
+    searchParams,
     currentTenantRouteSlug(tenant.slug), staffPermissionContext(tenant, membership),
     isFeatureEnabled(tenant.id, "team"), isFeatureEnabled(tenant.id, "resources"),
     isFeatureEnabled(tenant.id, "email-notifications"),
   ]);
+  const canManageRoles = teamEnabled && membership.role === "owner";
+  const showingRoles = params.tab === "roles";
+  if (showingRoles && !canManageRoles) notFound();
+  const settingsHref = tenantPath(slug, "/app/settings");
+  const rolesHref = `${settingsHref}?tab=roles`;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -22,7 +30,6 @@ export default async function SettingsPage() {
       { title: "Locations", description: "Locations, contact details and opening hours", href: "/app/locations", Icon: MapPin },
     ] : []),
     ...(teamEnabled && (permissions.isManager || permissions.teamMemberId) ? [{ title: "Staff", description: "Team profiles and availability", href: "/app/team", Icon: UsersRound }] : []),
-    ...(teamEnabled && membership.role === "owner" ? [{ title: "Roles & permissions", description: "Create workspace roles and manage staff access", href: "/app/settings/roles", Icon: ShieldCheck }] : []),
     ...(resourcesEnabled && (permissions.isManager || permissions.canManageResources) ? [{ title: "Resources", description: "Rooms, equipment and availability", href: "/app/resources", Icon: Wrench }] : []),
     ...(emailsEnabled && permissions.isManager ? [{ title: "Email", description: "Sender connection, templates and reminders", href: "/app/emails?view=connection", Icon: Mail }] : []),
   ];
@@ -31,10 +38,16 @@ export default async function SettingsPage() {
     <div className="workspace-settings">
       <header className="workspace-settings__heading"><p>WORKSPACE</p><h1>Settings</h1><span>Manage your preferences and business setup.</span></header>
       <div className="workspace-settings__layout">
-        <nav className="workspace-settings__nav" aria-label="Settings sections"><a href="#appearance">Appearance</a>{links.length ? <a href="#business-settings">Business setup</a> : null}</nav>
+        <nav className="workspace-settings__nav" aria-label="Settings sections">
+          <Link href={`${settingsHref}#appearance`}>Appearance</Link>
+          {links.length ? <Link href={`${settingsHref}#business-settings`}>Business setup</Link> : null}
+          {canManageRoles ? <Link href={rolesHref} aria-current={showingRoles ? "page" : undefined}>Roles &amp; permissions</Link> : null}
+        </nav>
         <div className="workspace-settings__content">
+          {showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : <>
           <section className="workspace-settings__panel" id="appearance"><h2>Appearance</h2><p>Choose how Waybook looks on this browser.</p><TenantAppearanceControls /></section>
           {links.length ? <section className="workspace-settings__panel" id="business-settings"><h2>Business setup</h2><p>Find the settings for your booking experience and operations.</p><div className="workspace-settings__links">{links.map(({ title, description, href, Icon }) => <Link key={title} href={tenantPath(slug, href)}><i><Icon aria-hidden="true" /></i><span><strong>{title}</strong><small>{description}</small></span><ArrowUpRight aria-hidden="true" /></Link>)}</div></section> : null}
+          </>}
         </div>
       </div>
     </div>

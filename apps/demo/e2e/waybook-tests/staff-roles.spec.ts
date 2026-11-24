@@ -42,7 +42,8 @@ test("owners can create and assign a role and manage its access in Settings", as
     expect(Math.abs(frame.y + frame.height / 2 - viewport.height / 2)).toBeLessThan(2);
     expect(footer.y + footer.height).toBeLessThan(frame.y + frame.height);
     await dialog.getByLabel("Role name").fill(roleName);
-    await dialog.getByRole("checkbox", { name: /^Can access clients/ }).check();
+    await dialog.getByRole("switch", { name: "Can access clients" }).press("Space");
+    await expect(dialog.getByRole("switch", { name: "Can access clients" })).toBeChecked();
     await createButton.click();
     await expect(dialog).toHaveCount(0);
     await expect(rolePicker.locator("option:checked")).toHaveText(roleName);
@@ -63,15 +64,31 @@ test("owners can create and assign a role and manage its access in Settings", as
       await staff.goto("/nordic/app/customers");
       await expect(staff).toHaveURL(/\/nordic\/app\/customers/);
       await expect(staff.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
-      const restricted = await staff.goto("/nordic/app/settings/roles");
+      const restricted = await staff.goto("/nordic/app/settings?tab=roles");
       expect(restricted?.status()).toBe(404);
 
       await page.goto("/nordic/app/settings");
-      await page.getByRole("link", { name: /^Roles & permissions/ }).click();
+      const settingsNav = page.getByRole("navigation", { name: "Settings sections" });
+      await expect(settingsNav.getByRole("link")).toHaveText(["Appearance", "Business setup", "Roles & permissions"]);
+      await expect(page.locator("#business-settings").getByRole("link", { name: /^Roles & permissions/ })).toHaveCount(0);
+      const rolesTab = settingsNav.getByRole("link", { name: "Roles & permissions" });
+      await rolesTab.click();
+      await expect(page).toHaveURL(/\/nordic\/app\/settings\?tab=roles$/);
+      await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+      await expect(rolesTab).toHaveAttribute("aria-current", "page");
+      await expect(page.getByRole("heading", { name: "Built-in roles" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Custom roles" })).toBeVisible();
+      const details = page.locator("#role-details");
+      await expect(details.getByRole("heading", { name: "Owner" })).toBeVisible();
+      await page.getByRole("link", { name: "Manager", exact: true }).click();
+      await expect(details.getByRole("heading", { name: "Manager" })).toBeVisible();
+      await expect(details.getByText("Manage staff and day-to-day operations.")).toBeVisible();
+      await expect(details.getByRole("switch")).toHaveCount(0);
       await page.getByRole("link", { name: roleName, exact: true }).click();
       await expect(page.getByText("Saving changes updates access for 1 assigned staff member.")).toBeVisible();
       await expect(page.getByRole("button", { name: "Delete role" })).toHaveCount(0);
-      await page.getByRole("checkbox", { name: /^Can access clients/ }).uncheck();
+      await page.getByRole("switch", { name: "Can access clients" }).locator("..").click();
+      await expect(page.getByRole("switch", { name: "Can access clients" })).not.toBeChecked();
       await page.getByRole("button", { name: "Save role" }).click();
       await expect(page.getByRole("status")).toHaveText("Role saved.");
       await staff.goto("/nordic/app/customers");
@@ -91,6 +108,9 @@ test("owners can create and assign a role and manage its access in Settings", as
     page.once("dialog", (confirmation) => confirmation.accept());
     await page.getByRole("button", { name: "Delete role" }).click();
     await expect(page.getByRole("link", { name: `${spareRole} updated`, exact: true })).toHaveCount(0);
+    await page.goto("/nordic/app/settings/roles?role=read-only");
+    await expect(page).toHaveURL(/\/settings\?tab=roles&role=read-only$/);
+    await expect(page.locator("#role-details").getByRole("heading", { name: "Read-only" })).toBeVisible();
   } finally {
     try {
       if (workspaceId) {
