@@ -6,11 +6,12 @@ import postgres from "postgres";
 for (const workspace of [
   { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
   { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
-]) test(`staff time off and split shifts control available slots in ${workspace.route}`, async ({ page, browser, baseURL, ignoreHTTPSErrors, request }) => {
+]) test(`staff schedules and assignments control available slots in ${workspace.route}`, async ({ page, browser, baseURL, ignoreHTTPSErrors, request }) => {
   const db = postgres(process.env[workspace.database]!, { max: 1, ssl: false });
   const guest = await browser.newContext({ baseURL, ignoreHTTPSErrors, viewport: page.viewportSize(), timezoneId: "Europe/Copenhagen" });
   const tag = randomUUID().slice(0, 8);
   let locationId: string | undefined;
+  let secondLocationId: string | undefined;
   let serviceId: string | undefined;
   let staffId: string | undefined;
   try {
@@ -33,9 +34,9 @@ for (const workspace of [
       VALUES (${tenantId},${staffId},'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU','09:00','16:00',${timezone})`;
 
     const at = (day: string, time: string) => fromZonedTime(`${day}T${time}:00`, timezone).toISOString();
-    const slots = async (day: string) => {
+    const slots = async (day: string, location = locationId!) => {
       const response = await request.get(`/${workspace.route}/api/public/availability`, {
-        params: { service: serviceId!, location: locationId!, start: at(day, "09:00"), end: at(day, "16:00") },
+        params: { service: serviceId!, location, start: at(day, "09:00"), end: at(day, "16:00") },
       });
       expect(response.status()).toBe(200);
       const payload: { availability: { slots: { startTime: string }[] }[] } = await response.json();
@@ -52,9 +53,9 @@ for (const workspace of [
     await expect(page).toHaveURL((url) => url.pathname === app);
     const calendar = await page.context().newPage();
     const booking = await guest.newPage();
-    const checkViews = async (day: string, checks: Record<string, boolean>) => {
-      const calendarQuery = new URLSearchParams({ view: "team", day, location: locationId!, service: serviceId! });
-      const bookingQuery = new URLSearchParams({ location: locationId!, service: serviceId! });
+    const checkViews = async (day: string, checks: Record<string, boolean>, location = locationId!) => {
+      const calendarQuery = new URLSearchParams({ view: "team", day, location, service: serviceId! });
+      const bookingQuery = new URLSearchParams({ location, service: serviceId! });
       await Promise.all([
         calendar.goto(`${app}/calendars?${calendarQuery}`),
         booking.goto(`/${workspace.route}/book?${bookingQuery}`),
@@ -199,11 +200,56 @@ for (const workspace of [
       await editor.getByRole("button", { name: "Cancel", exact: true }).click();
       await checkViews(after, { "11:30": true, "12:00": false, "12:30": false, "13:00": true, "14:30": true, "15:00": false });
     });
+
+    await test.step("staff must be assigned to both the service and location", async () => {
+      const secondaryName = `Secondary QA time-off location ${tag}`;
+      [{ id: secondLocationId }] = await db<{ id: string }[]>`
+        INSERT INTO locations (tenant_id,slug,name,timezone) VALUES (${tenantId},${`secondary-${tag}`},${secondaryName},${timezone}) RETURNING id`;
+      await db`INSERT INTO location_hours (tenant_id,location_id,day_of_week,start_time,end_time)
+        SELECT ${tenantId},${secondLocationId},day,'09:00','16:00' FROM generate_series(0,6) AS day`;
+      await db`INSERT INTO service_locations (tenant_id,service_id,location_id) VALUES (${tenantId},${serviceId},${secondLocationId})`;
+      expect(await slots(after, secondLocationId)).toEqual([]);
+
+      await page.goto(`${app}/team?employee=${staffId}&tab=services`);
+      const locations = page.getByRole("group", { name: "Locations this person can serve", exact: true });
+      const services = page.getByRole("group", { name: "Services this person can deliver", exact: true });
+      const serviceName = `QA time-off service ${tag}`;
+      const saveAssignments = async () => {
+        await page.getByRole("button", { name: "Save services & locations", exact: true }).click();
+        await expect(page.getByText("Staff member saved.", { exact: true })).toBeVisible();
+        await page.reload();
+        await expect(page).toHaveURL((url) => url.searchParams.get("employee") === staffId && url.searchParams.get("tab") === "services");
+      };
+
+      await locations.getByRole("textbox").fill(secondaryName);
+      await locations.getByRole("button", { name: secondaryName, exact: true }).click();
+      await saveAssignments();
+      await expect(locations.getByRole("button", { name: `Remove ${secondaryName}`, exact: true })).toBeVisible();
+      expect(await slots(after, secondLocationId)).toContain(at(after, "13:00"));
+
+      await services.getByRole("button", { name: `Remove ${serviceName}`, exact: true }).click();
+      await saveAssignments();
+      await expect(services.getByText("None selected", { exact: true })).toBeVisible();
+      await expect(locations.getByRole("button", { name: `Remove ${secondaryName}`, exact: true })).toBeVisible();
+      expect(await slots(after)).toEqual([]);
+      expect(await slots(after, secondLocationId)).toEqual([]);
+
+      await services.getByRole("textbox").fill(serviceName);
+      await services.getByRole("button", { name: serviceName, exact: true }).click();
+      await saveAssignments();
+      await checkViews(after, { "13:00": true, "12:30": false }, secondLocationId);
+
+      await locations.getByRole("button", { name: `Remove ${secondaryName}`, exact: true }).click();
+      await saveAssignments();
+      expect(await slots(after, secondLocationId)).toEqual([]);
+      expect(await slots(after)).toContain(at(after, "13:00"));
+    });
   } finally {
     try {
       if (serviceId) await db`DELETE FROM services WHERE id=${serviceId}`;
       if (staffId) await db`DELETE FROM team_members WHERE id=${staffId}`;
       if (locationId) await db`DELETE FROM locations WHERE id=${locationId}`;
+      if (secondLocationId) await db`DELETE FROM locations WHERE id=${secondLocationId}`;
     } finally {
       await Promise.all([guest.close(), db.end()]);
     }
