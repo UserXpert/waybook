@@ -60,10 +60,25 @@ for (const workspace of workspaces) {
       await expect(rows).toHaveCount(expected.length);
       await expect(opener).toBeFocused();
 
-      await page.getByRole("searchbox").fill(target.email);
+      const search = page.getByRole("searchbox");
+      await search.fill(target.email);
       await page.getByRole("button", { name: "Search", exact: true }).click();
       await expect(rows).toHaveCount(1);
       await expect(rows.first()).toContainText(target.email);
+
+      await opener.press("Enter");
+      await record.getByRole("link", { name: "Edit", exact: true }).click();
+      const updatedEmail = `updated-${target.email}`.replace("@example.test", "@example.invalid");
+      await editor.getByRole("textbox", { name: "Email", exact: true }).fill(updatedEmail);
+      await editor.getByRole("button", { name: "Save client", exact: true }).click();
+      await expect(editor.getByRole("status")).toHaveText("Contact details saved.");
+      await editor.getByRole("link", { name: "Close client form" }).click();
+      await expect(editor).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(record).toHaveCount(0);
+      await expect(rows).toHaveCount(0);
+      await expect(search).toBeFocused();
+      await expect(search).toHaveValue(target.email);
     } finally {
       try {
         await db`DELETE FROM customers WHERE name LIKE ${`${batch} %`}`;

@@ -4,7 +4,7 @@ import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 type Client = {
   id: string;
@@ -27,6 +27,8 @@ type Props = {
   timeZone: string;
   clientLabel: string;
   clientsLabel: string;
+  recordOpen: boolean;
+  searchInputId: string;
 };
 
 const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
@@ -38,20 +40,39 @@ async function loadClients(query: string, cursor: string, signal: AbortSignal): 
   return response.json();
 }
 
-export function ClientDirectoryList({ initialClients, initialNextCursor, query, path, timeZone, clientLabel, clientsLabel }: Props) {
+export function ClientDirectoryList({ initialClients, initialNextCursor, query, path, timeZone, clientLabel, clientsLabel, recordOpen, searchInputId }: Props) {
   const [clients, setClients] = useState(initialClients);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
   const [loading, setLoading] = useState(false);
   const sentinelRef = useRef<HTMLTableRowElement>(null);
+  const directoryRef = useRef<HTMLDivElement>(null);
+  const focusedBeforeRefresh = useRef<Element | null>(null);
+  const recordWasOpen = useRef(recordOpen);
   const requestRef = useRef<AbortController | null>(null);
   const loadedPages = useRef(0);
   const date = new Intl.DateTimeFormat("en-GB", { timeZone, dateStyle: "medium" });
 
+  useLayoutEffect(() => {
+    const recordClosed = recordWasOpen.current && !recordOpen;
+    const focusedRowRemoved = focusedBeforeRefresh.current?.isConnected === false;
+    if ((recordClosed || focusedRowRemoved) && document.activeElement === document.body && !document.querySelector("dialog:modal")) {
+      document.getElementById(searchInputId)?.focus();
+    }
+    recordWasOpen.current = recordOpen;
+    focusedBeforeRefresh.current = null;
+  }, [clients, recordOpen, searchInputId]);
+
   useEffect(() => {
+    function replaceRows(rows: Client[]) {
+      const focused = document.activeElement;
+      focusedBeforeRefresh.current = directoryRef.current?.contains(focused) ? focused : null;
+      setClients(rows);
+    }
+
     requestRef.current?.abort();
     requestRef.current = null;
     if (!loadedPages.current || !initialNextCursor) {
-      setClients(initialClients);
+      replaceRows(initialClients);
       setNextCursor(initialNextCursor);
       setLoading(false);
       loadedPages.current = 0;
@@ -75,7 +96,7 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
       }
       if (controller.signal.aborted) return;
       loadedPages.current = pages;
-      setClients([...refreshed.values()]);
+      replaceRows([...refreshed.values()]);
       setNextCursor(cursor);
     }
     void refresh().catch(() => {
@@ -122,7 +143,7 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
 
   const clientHref = (id: string) => `${path}?${new URLSearchParams({ ...(query ? { q: query } : {}), customer: id })}`;
 
-  return <div className="waybook-table-wrap">
+  return <div className="waybook-table-wrap" ref={directoryRef}>
     <table>
       <thead><tr><th>{titleTerminology(clientLabel)}</th><th>Contact</th><th>Next appointment</th><th>Visits</th><th>Booked value</th></tr></thead>
       <tbody>
