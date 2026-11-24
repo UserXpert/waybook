@@ -23,6 +23,7 @@ test("an owner can select a profile photo and oversized files are rejected", asy
   chooser = await chooserPromise;
   await chooser.setFiles({ name: "synthetic.png", mimeType: "image/png", buffer: image });
   await expect(button.locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
+  await expect(page.getByRole("button", { name: "Account menu for Sofie Andersen" }).locator("img")).toHaveAttribute("src", `data:image/png;base64,${image.toString("base64")}`);
   await page.reload();
   await expect(page.getByRole("button", { name: "Change photo for Sofie Andersen" }).locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
 
@@ -102,48 +103,61 @@ test("owner profile photos stay in their workspace when the owner uses one login
   }
 });
 
-test("account menu photos stay with the signed-in owner in the same browser", async ({ page }) => {
-  await page.goto("/login");
+test("account menu photos stay with the owner across browser sessions", async ({ page, browser }, testInfo) => {
   const accounts = [
-    { email: "owner@nordic.local", name: "Sofie Andersen", home: /\/nordic\/app/, color: "#6c56ad" },
+    { email: "owner@nordic.local", name: "Sofie Andersen", home: /\/nordic\/app/, color: "#b24c69" },
     { email: "owner@copenhagen-physio.local", name: "Mikkel Holm", home: /\/copenhagen\/app/, color: "#267050" },
   ];
-  for (const { email, name, home, color } of accounts) {
-    await page.getByLabel("Work email").fill(email);
-    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page).toHaveURL(home);
-    const accountButton = page.getByRole("button", { name: `Account menu for ${name}` });
+  const signIn = async (target: typeof page, account: (typeof accounts)[number]) => {
+    await target.goto("/login");
+    await target.getByLabel("Work email").fill(account.email);
+    await target.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await target.getByRole("button", { name: "Sign in" }).click();
+    await expect(target).toHaveURL(account.home);
+  };
+
+  const savedPhotos: string[] = [];
+  for (const account of accounts) {
+    await signIn(page, account);
+    const accountButton = page.getByRole("button", { name: `Account menu for ${account.name}` });
+    if (savedPhotos.length) await expect(accountButton.locator(`img[src="${savedPhotos[0]}"]`)).toHaveCount(0);
     await accountButton.click();
     const menu = page.getByRole("menu", { name: "Account menu" });
     const upload = menu.getByRole("button", { name: "Upload profile photo" });
-    await expect(upload).toHaveText(name.split(" ").map((part) => part[0]).join(""));
-    await expect(accountButton.locator("img")).toHaveCount(0);
-    const image = await sharp({ create: { width: 8, height: 8, channels: 3, background: color } }).png().toBuffer();
+    const image = await sharp({
+      create: { width: testInfo.project.name === "mobile" ? 9 : 8, height: 8, channels: 3, background: account.color },
+    }).png().toBuffer();
     const chooser = page.waitForEvent("filechooser");
     await upload.click();
     await (await chooser).setFiles({ name: "avatar.png", mimeType: "image/png", buffer: image });
     const expectedPhoto = `data:image/png;base64,${image.toString("base64")}`;
+    savedPhotos.push(expectedPhoto);
     await expect(accountButton.locator("img")).toHaveAttribute("src", expectedPhoto);
     await expect(upload.locator("img")).toHaveAttribute("src", expectedPhoto);
-    if (email === accounts[0].email) {
-      // Simulate a browser that still has a photo written by the previous release.
+    await menu.getByRole("menuitem", { name: "Edit profile" }).click();
+    await expect(page.getByRole("button", { name: `Change photo for ${account.name}` }).locator("img")).toHaveAttribute("src", expectedPhoto);
+    if (account === accounts[0]) {
+      // An older browser may still have an unscoped avatar from before this change.
       await page.evaluate((photo) => localStorage.setItem("waybook.profile-photo", photo), expectedPhoto);
     }
-    await page.reload();
-    await expect(accountButton.locator("img")).toHaveAttribute("src", expectedPhoto);
     await accountButton.click();
     await menu.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/login$/);
   }
 
-  const nordic = accounts[0];
-  await page.getByLabel("Work email").fill(nordic.email);
-  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(nordic.home);
-  const original = await sharp({ create: { width: 8, height: 8, channels: 3, background: nordic.color } }).png().toBuffer();
-  await expect(page.getByRole("button", { name: `Account menu for ${nordic.name}` }).locator("img")).toHaveAttribute("src", `data:image/png;base64,${original.toString("base64")}`);
+  for (const [index, account] of accounts.entries()) {
+    const freshContext = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: page.viewportSize() });
+    try {
+      const freshPage = await freshContext.newPage();
+      await signIn(freshPage, account);
+      const accountButton = freshPage.getByRole("button", { name: `Account menu for ${account.name}` });
+      await expect(accountButton.locator("img")).toHaveAttribute("src", savedPhotos[index]);
+      await accountButton.click();
+      await expect(freshPage.getByRole("button", { name: "Upload profile photo" }).locator("img")).toHaveAttribute("src", savedPhotos[index]);
+    } finally {
+      await freshContext.close();
+    }
+  }
 });
 
 test("Apps menu groups, search, keyboard and navigation work", async ({ page }, testInfo) => {

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { BarChart3, CalendarDays, LayoutDashboard, UsersRound } from "lucide-react";
 import { logout } from "@/app/actions";
+import { saveStaffPhoto } from "@/app/app/team/actions";
 import { tenantFeatures } from "@/lib/waybook/features";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
 import { tenantDb } from "@/lib/waybook/database";
 import { TenantAppMenu, type TenantAppLink } from "@/components/tenant-app-menu";
 import { TenantUserMenu } from "@/components/tenant-user-menu";
@@ -40,8 +42,15 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     permissionAndReview,
   ]);
   const enabled = new Set(features.filter((feature) => feature.isEnabled).map((feature) => feature.featureKey));
-  const profilePhotoKey = `waybook.profile-photo.v2:${tenant.id}:${identity.id}`;
   const clientsEnabled = enabled.has("clients"), teamEnabled = enabled.has("team"), calendarsEnabled = enabled.has("calendars"), resourcesEnabled = enabled.has("resources"), notificationsEnabled = enabled.has("email-notifications");
+  // Read the optional photo field without requiring the migration on older tenant databases.
+  const [accountProfile] = teamEnabled && !identity.isPlatformAdmin ? await tenantDb(tenant)<{ id: string; hasPhotoColumn: boolean; photo: string | null }[]>`
+    SELECT id, to_jsonb(tm) ? 'photo_data_url' AS "hasPhotoColumn", to_jsonb(tm)->>'photo_data_url' AS photo
+    FROM team_members tm
+    WHERE tenant_id = ${tenant.id} AND identity_id = ${identity.id} AND is_active
+    ORDER BY created_at, id LIMIT 1
+  ` : [];
+  const photoMemberId = accountProfile?.hasPhotoColumn && canEditStaffPhoto(membership.role, permissions.teamMemberId, accountProfile.id) ? accountProfile.id : null;
   const canUse = {
     overview: permissions.isManager,
     clients: clientsEnabled && (permissions.isManager || permissions.canViewClients || permissions.canManageClients),
@@ -86,6 +95,8 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     <div className="tenant-dashboard-nav__workspace"><span className="tenant-dashboard-nav__brand"><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--light" src="/brand/waybook-logo.svg" alt="Waybook" /><img className="tenant-dashboard-nav__logo tenant-dashboard-nav__logo--dark" src="/brand/waybook-logo-white.svg" alt="" aria-hidden="true" /></span><strong>{tenantName}</strong></div>
     <nav aria-label="Primary navigation">{primary.map((link) => <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined}><link.Icon aria-hidden="true" />{link.label}</Link>)}</nav>
     <TenantAppMenu links={appLinks} active={active} />
-    <div className="tenant-nav-account-actions"><TenantNavTools searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} /><TenantUserMenu key={profilePhotoKey} profilePhotoKey={profilePhotoKey} displayName={identity.displayName} email={identity.email} tenantName={tenantName} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : "Staff member"} staffHref={canUse.team ? toHref("/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} /></div>
+    <div className="tenant-nav-account-actions"><TenantNavTools searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} />
+      <TenantUserMenu key={`${tenant.id}:${identity.id}`} photo={accountProfile?.photo ?? null} photoMemberId={photoMemberId} onSavePhoto={saveStaffPhoto} displayName={identity.displayName} email={identity.email} role={identity.isPlatformAdmin ? "Platform administrator" : membership.role === "owner" ? "Owner" : membership.role === "manager" ? "Manager" : "Staff member"} staffHref={canUse.team ? toHref(accountProfile ? `/app/team?employee=${accountProfile.id}` : "/app/team") : undefined} settingsHref={toHref("/app/settings")} onSignOut={logout} />
+    </div>
   </header></>;
 }
