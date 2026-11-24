@@ -107,6 +107,34 @@ for (const workspace of workspaces) {
       function drawer(browserPage: Page, booking: (typeof bookings)[number]) {
         return browserPage.getByRole("complementary", { name: `Appointment with ${booking.name}` });
       }
+      const [first, second] = bookings;
+      const firstDrawer = drawer(page, first);
+      const secondDrawer = drawer(page, second);
+      const firstNameField = firstDrawer.getByLabel("Customer name");
+      await page.goto(calendar);
+      await page.locator(`a.waybook-week-calendar__entry[href*="booking=${first.id}"]`).click();
+      await expect(firstNameField).toHaveValue(first.name);
+      await firstNameField.fill("Unsaved calendar name");
+      await expect(firstDrawer.getByRole("button", { name: "Save changes" })).toBeEnabled();
+      await page.goBack();
+      await expect(firstDrawer).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
+      await page.goForward();
+      await expect(firstNameField).toHaveValue(first.name);
+      await firstNameField.fill("Unsaved before reload");
+      await page.reload();
+      await expect(page).toHaveURL((url) => url.searchParams.get("booking") === first.id);
+      await expect(firstNameField).toHaveValue(first.name);
+      const drawerDocument = await page.evaluate(() => performance.timeOrigin);
+      await firstDrawer.getByRole("button", { name: "Close appointment", exact: true }).click();
+      await expect(firstDrawer).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(drawerDocument);
+      await page.goto(`${calendar}&booking=${second.id}`);
+      await expect(secondDrawer.getByLabel("Customer name")).toHaveValue(second.name);
+      await expect(secondDrawer.getByRole("button", { name: "Save changes" })).toBeDisabled();
+      await expect(firstDrawer).toHaveCount(0);
+
       const pages = [page, secondPage];
       await Promise.all(pages.map(async (browserPage, index) => {
         const booking = bookings[index];

@@ -39,7 +39,8 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     ++request.current;
     setSelected(null); setDetail(null); setError("");
     const url = new URL(window.location.href); url.searchParams.delete("booking");
-    if (window.history.state?.waybookBookingDrawer) window.history.back();
+    // A reloaded drawer retains its history state but has a new document.
+    if (window.history.state?.waybookBookingDrawer === performance.timeOrigin) window.history.back();
     else window.history.replaceState(null, "", url);
   }, []);
 
@@ -52,7 +53,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
       const id = url.searchParams.get("booking");
       if (url.origin !== window.location.origin || url.pathname !== window.location.pathname || !id || !summariesRef.current.some((item) => item.id === id)) return;
       event.preventDefault(); event.stopPropagation();
-      window.history.pushState({ waybookBookingDrawer: true }, "", url); load(id);
+      window.history.pushState({ waybookBookingDrawer: performance.timeOrigin }, "", url); load(id);
     };
     const onPopState = () => {
       const id = new URL(window.location.href).searchParams.get("booking");
