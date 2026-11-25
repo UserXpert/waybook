@@ -19,7 +19,9 @@ import { logout } from "../../actions";
 
 type Location = { id: string; name: string };
 const bookingStatuses = ["confirmed", "arrived", "completed", "cancelled", "no_show"] as const;
-const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
+const money = (cents: number) => new Intl.NumberFormat("en-DK", {
+  style: "currency", currency: "DKK", minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2,
+}).format(cents / 100);
 
 export default async function BookingsPage({ searchParams }: { searchParams: Promise<{ location?: string; status?: string; q?: string; booking?: string }> }) {
   const { location, status, q, booking: selectedId } = await searchParams;
