@@ -160,7 +160,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   };
   const checkoutHref = (row: SaleRow) => {
     if (!row.teamMemberId) return null;
-    const params = new URLSearchParams({ employee: row.teamMemberId, booking: row.bookingId, week: weekStartForLocalDate(tenantDateKey(row.startsAt, tenant.timezone)) });
+    const day = tenantDateKey(row.startsAt, tenant.timezone);
+    const params = new URLSearchParams({ employee: row.teamMemberId, booking: row.bookingId, week: weekStartForLocalDate(day), day, view: "staff" });
     if (row.locationId) params.set("location", row.locationId);
     return `${tenantPath(tenantSlug, "/app/calendars")}?${params}`;
   };

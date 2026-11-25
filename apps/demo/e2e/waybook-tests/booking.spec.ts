@@ -203,7 +203,9 @@ test("a signed embed booking is confirmed with verified-source audit attribution
       const html = await embed.text();
       const iframeUrl = html.match(/<iframe[^>]+src="([^"]+)"/)?.[1];
       expect(iframeUrl).toBeTruthy();
-      const signedBookingUrl = new URL(iframeUrl!);
+      const signedBookingUrl = new URL(iframeUrl!.replaceAll("&amp;", "&"), embed.url());
+      expect(signedBookingUrl.origin).toBe(new URL(embed.url()).origin);
+      expect(signedBookingUrl.pathname).toBe("/nordic/book");
       expect(signedBookingUrl.searchParams.get('embedSource')).toBe(source);
       const embedToken = signedBookingUrl.searchParams.get('embedToken');
       expect(embedToken).toBeTruthy();
@@ -503,10 +505,15 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await check(page.getByRole("heading", { name: "Z E2E roster 21", exact: true })).toBeVisible();
   await check(page.locator(".waybook-week-calendar")).toBeVisible();
   await page.getByRole("link", { name: "Month", exact: true }).click();
+  await check(page).toHaveURL(/view=month/);
+  await check(page.locator(".waybook-month-calendar")).toBeVisible();
   // The Week-to-Month switch can land in a different month near a boundary.
   await page.locator(".calendar-date-picker > button").click();
   await chooseCalendarDate(page, monthDay);
-  await check(page).toHaveURL(new RegExp(`day=${monthDay}`));
+  await check.poll(() => {
+    const params = new URL(page.url()).searchParams;
+    return [params.get("view"), params.get("day")];
+  }).toEqual(["month", monthDay]);
   expect(new URL(page.url()).searchParams.has("employee")).toBe(true);
   const scopedDay = page.locator(`a.waybook-month-calendar__day-link[href*="day=${monthDay}"]`).locator("..");
   await check(scopedDay).toContainText("1 booking");

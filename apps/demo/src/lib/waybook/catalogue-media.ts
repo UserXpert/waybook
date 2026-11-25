@@ -6,8 +6,27 @@ const maxImagePixels = 4_000_000;
 
 type ImageInfo = { type: "image/jpeg" | "image/png" | "image/webp"; width: number; height: number };
 
+export function readCatalogueMetadata(value: unknown): Record<string, unknown> & { photoDataUrl?: string } {
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const metadata = value as Record<string, unknown>;
+  return { ...metadata, photoDataUrl: typeof metadata.photoDataUrl === "string" ? metadata.photoDataUrl : undefined };
+}
+
+export class CatalogueImageError extends Error {
+  constructor() {
+    super("Use a genuine JPG, PNG, or WebP photo up to 250 KB and 2,400 × 2,400 pixels.");
+  }
+}
+
 function invalidImage(): never {
-  throw new Error("Use a genuine JPG, PNG, or WebP photo up to 250 KB and 2,400 × 2,400 pixels.");
+  throw new CatalogueImageError();
 }
 
 function dimensionsAreSafe(width: number, height: number) {

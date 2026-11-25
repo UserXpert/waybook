@@ -368,7 +368,7 @@ export default async function CalendarsPage({
           TeamBooking[],
         ]);
   const selectedBooking =
-    bookingId && selectedLocation
+    bookingId && isMemberId(bookingId)
         ? (((teamView || monthlyView) ? teamBookings : bookings).find(
           (booking) => booking.id === bookingId,
         ) ??
@@ -381,7 +381,7 @@ export default async function CalendarsPage({
       JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id
       LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
       LEFT JOIN resources r ON r.id=bra.resource_id AND r.tenant_id=b.tenant_id
-      WHERE b.tenant_id = ${tenant.id} AND b.id = ${bookingId} AND b.location_id = ${selectedLocation.id} ${canViewTeam ? db`` : db`AND b.team_member_id = ${restrictedEmployeeId}`}
+      WHERE b.tenant_id = ${tenant.id} AND b.id = ${bookingId} ${canViewTeam ? db`` : db`AND b.team_member_id = ${restrictedEmployeeId}`}
       LIMIT 1
     `
         )[0] ??

@@ -7,8 +7,9 @@ function hostnameFrom(host: string): string {
  * host. Local development keeps tenant subdomains; hosted environments stay on
  * the deployed Waybook origin until tenant domains are provisioned.
  */
-export function tenantDashboardHref(requestHost: string, tenantRouteSlug: string): string {
+export function tenantDashboardHref(requestHost: string, tenantRouteSlug: string, requestProtocol?: string | null): string {
   const requestHostname = hostnameFrom(requestHost);
-  const protocol = requestHostname === "localhost" || requestHostname.endsWith(".localhost") ? "http" : "https";
+  const isLocalhost = requestHostname === "localhost" || requestHostname.endsWith(".localhost");
+  const protocol = isLocalhost && requestProtocol !== "https" ? "http" : "https";
   return `${protocol}://${requestHost.trim()}/${tenantRouteSlug}/app`;
 }

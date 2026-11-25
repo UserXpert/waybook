@@ -14,6 +14,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { emailTemplates } from "@/lib/waybook/email-templates";
 import { configuredProviderKey } from "@/lib/waybook/provider-secret-config";
 import { emailDeliveryDescription } from "@/lib/waybook/email-delivery-status";
+import { isEmailDeliveryEnabledForTenant } from "@/lib/waybook/email-delivery-config";
 import { emailQueueWarning } from "@/lib/waybook/email-queue-health";
 import { configuredResendOnboardingTest } from "@/lib/waybook/resend-onboarding-test";
 
@@ -41,7 +42,7 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
   const [health] = await db.unsafe<Array<{ verified: boolean; overdue: number }>>(`SELECT EXISTS (SELECT 1 FROM email_provider_connections WHERE tenant_id=$1 AND provider='resend' AND revoked_at IS NULL AND verified_at IS NOT NULL) AS verified, (SELECT count(*)::int FROM email_outbox eo JOIN email_provider_connections pc ON pc.tenant_id=eo.tenant_id AND pc.provider='resend' AND pc.revoked_at IS NULL AND pc.verified_at IS NOT NULL WHERE eo.tenant_id=$1 AND eo.status='queued' AND eo.created_at>=pc.created_at AND eo.created_at<now()-interval '15 minutes' AND (eo.delivery_next_attempt_at IS NULL OR eo.delivery_next_attempt_at<=now())) AS overdue`, [tenant.id]);
   const [scheduler] = await controlDb<Array<{ recent: boolean }>>`SELECT EXISTS (SELECT 1 FROM email_worker_heartbeats WHERE tenant_id=${tenant.id} AND last_success_at>now()-interval '20 minutes') AS recent`;
   const onboardingTestAvailable = Boolean(configuredResendOnboardingTest());
-  const deliveryEnabled = process.env.WAYBOOK_EMAIL_DELIVERY_ENABLED === "true";
+  const deliveryEnabled = isEmailDeliveryEnabledForTenant(tenant.slug);
   const warning = emailQueueWarning({ enabled: deliveryEnabled, keyConfigured: Boolean(configuredProviderKey()), verified: health.verified, overdue: health.overdue, schedulerRecent: scheduler.recent, testAvailable: onboardingTestAvailable });
   const [reminderSettings] = reminderView ? await db.unsafe<Array<{ enabled: boolean; leadHours: number }>>('SELECT enabled,lead_hours AS "leadHours" FROM email_reminder_settings WHERE tenant_id=$1', [tenant.id]) : [];
   const [connection] = connectionView ? await db.unsafe<Array<{ senderEmail: string; verifiedAt: Date | null; testAcceptedAt: Date | null }>>("SELECT sender_email AS \"senderEmail\",verified_at AS \"verifiedAt\",verification_accepted_at AS \"testAcceptedAt\" FROM email_provider_connections WHERE tenant_id=$1 AND revoked_at IS NULL", [tenant.id]) : [];

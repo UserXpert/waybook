@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { BookingLocationPicker } from "@/components/booking-location-picker";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
@@ -43,11 +43,13 @@ function price(priceCents: number, currency: string) {
 }
 
 export function PublicBookingFlow({ terminology, policyRevision, launcherLabel = "Book now", launcherPosition = "right", bookingTheme = "light", managementEnabled = false, initialManage = false, tenantSlug, tenantName, timezone, currency, services, teamMembers, locations, initialLocationId, initialServiceId, embedSource, embedToken, intro, contact, logoUrl, panelImageUrl, panelOverlayColor, panelTitle, panelCopy, policyVersion, policyUrl, policyText, serviceStepTitle, timeStepTitle, detailsStepTitle, brandColor, showPrices }: Props) {
-  const [step, setStep] = useState<Step>("service");
+  const presetLocationId = initialLocationId ?? locations[0]?.id ?? "";
+  const presetService = servicesAtLocation(services, presetLocationId).find((service) => service.id === initialServiceId);
+  const [step, setStep] = useState<Step>(presetService ? "time" : "service");
   const [bookingOpen, setBookingOpen] = useState(true);
   const [manageOpen, setManageOpen] = useState(managementEnabled && initialManage);
-  const [serviceId, setServiceId] = useState(initialServiceId ?? "");
-  const [locationId, setLocationId] = useState(() => initialLocationId ?? locations[0]?.id ?? "");
+  const [serviceId, setServiceId] = useState(presetService?.id ?? "");
+  const [locationId, setLocationId] = useState(presetLocationId);
   const [locationQuery, setLocationQuery] = useState("");
   const [locationOptions, setLocationOptions] = useState<Location[]>(locations);
   const [date, setDate] = useState(() => isoDateInTimezone(new Date(), timezone));
@@ -59,6 +61,7 @@ export function PublicBookingFlow({ terminology, policyRevision, launcherLabel =
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const loadPreset = useRef(Boolean(presetService));
   const availabilityRequest = useRef(0);
   const [confirmation, setConfirmation] = useState<{ id: string; bookingNumber: string; startsAt: string } | null>(null);
   const selectedService = services.find((service) => service.id === serviceId) ?? null;
@@ -66,7 +69,7 @@ export function PublicBookingFlow({ terminology, policyRevision, launcherLabel =
   const upcomingDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addCalendarDays(firstDay, index)), [firstDay]);
   useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { fetch(`/${tenantSlug}/api/public/locations?q=${encodeURIComponent(locationQuery)}&limit=20`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Location[] }) => { if (!cancelled) { setLocationOptions(data.items); } }).catch(() => { if (!cancelled) setLocationOptions(locations); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [locationId, locationQuery, locations, tenantSlug]);
 
-  const fetchSlots = async (selectedDate: string, service = selectedService) => {
+  const fetchSlots = useCallback(async (selectedDate: string, service = selectedService) => {
     const request = ++availabilityRequest.current;
     if (!service || !teamMembers.some(member => member.serviceId === service.id)) { setIsLoading(false); setSlots([]); setStatus(`This service has no available ${terminology.staffMember} yet.`); return; }
     setIsLoading(true); setStatus(""); setSelectedSlot(null); setHoldId(null); setIdempotencyKey(null);
@@ -95,7 +98,13 @@ export function PublicBookingFlow({ terminology, policyRevision, launcherLabel =
     const available = [...deduplicated.values()].sort((a, b) => a.startTime.localeCompare(b.startTime));
     setSlots(available);
     if (!available.length) setStatus("No times are available on this date. Try another day.");
-  };
+  }, [locationId, selectedService, teamMembers, tenantSlug, terminology.staffMember, timezone]);
+
+  useEffect(() => {
+    if (!loadPreset.current) return;
+    loadPreset.current = false;
+    void fetchSlots(date);
+  }, [date, fetchSlots]);
 
   const chooseService = async (nextServiceId: string) => {
     const service = locationServices.find(item => item.id === nextServiceId);

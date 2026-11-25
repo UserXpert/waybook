@@ -31,7 +31,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Prom
       tenantFeatures(tenant.id),
     ]);
     const routeSlug = routeSlugFromHostname(tenant.hostname, tenant.slug);
-    return { ...tenant, routeSlug, bookingCount: bookings.count, staffCount: staff.count, features: features as TenantFeatureState[], workspaceHref: tenantDashboardHref(requestHost, routeSlug) };
+    return { ...tenant, routeSlug, bookingCount: bookings.count, staffCount: staff.count, features: features as TenantFeatureState[], workspaceHref: tenantDashboardHref(requestHost, routeSlug, requestHeaders.get("x-forwarded-proto")) };
   }));
   return <main className="waybook-data-page"><header><div><p>WAYBOOK CONTROL · DATABASE-BACKED</p><h1>Tenant operations</h1><span>Signed in as {identity.displayName}</span></div><form action={logout}><button>Sign out</button></form></header><ControlTenantManager tenants={rows} selectedTenantId={selectedTenantId} /></main>;
 }

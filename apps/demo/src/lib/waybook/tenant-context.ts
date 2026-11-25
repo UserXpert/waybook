@@ -2,14 +2,14 @@ import "server-only";
 
 import { cache } from "react";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireIdentity } from "./auth";
 import { closeOverdueConfirmedBookings } from "./overdue-bookings";
 import { findTenantByHostname, findTenantByRouteSlug, findTenantMembershipByRouteSlug, tenantDb, type TenantRecord } from "./database";
 
 export type TenantMembership = { tenantId: string; role: string };
 
-async function assertActiveStaffMembership(tenant: TenantRecord, identityId: string, membership: TenantMembership) {
+async function assertActiveStaffMembership(tenant: TenantRecord, identityId: string, membership: TenantMembership, isApiRequest: boolean) {
   const [staff] = await tenantDb(tenant)<{ isActive: boolean }[]>`
     SELECT is_active AS "isActive" FROM team_members
     WHERE tenant_id = ${tenant.id} AND identity_id = ${identityId}
@@ -17,9 +17,10 @@ async function assertActiveStaffMembership(tenant: TenantRecord, identityId: str
   `;
   // A linked profile is the lifecycle authority for every workspace role.
   // Legacy owners can have no profile, but staff/read-only identities cannot.
-  if (staff && !staff.isActive) throw new Error("Your staff access is inactive for this workspace.");
-  if (!staff && ["staff", "read-only"].includes(membership.role)) {
-    throw new Error("Your staff profile is unavailable for this workspace.");
+  const unavailable = !staff && ["staff", "read-only"].includes(membership.role);
+  if (staff?.isActive === false || unavailable) {
+    if (isApiRequest) notFound();
+    redirect(unavailable ? "/login?access=unavailable" : "/login?access=inactive");
   }
 }
 
@@ -42,7 +43,7 @@ async function resolveTenantWorkspace(requestHeaders?: Headers): Promise<{ tenan
     const workspace = await findTenantMembershipByRouteSlug(routeSlug, identity.id);
     if (!workspace) notFound();
     const { tenant, membership } = workspace;
-    await assertActiveStaffMembership(tenant, identity.id, membership);
+    await assertActiveStaffMembership(tenant, identity.id, membership, Boolean(requestHeaders));
     await closeOverdueConfirmedBookings(tenant);
     return { tenant, membership, isControlView: false };
   }

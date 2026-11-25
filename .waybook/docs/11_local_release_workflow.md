@@ -18,6 +18,8 @@ The prior Lab was reconciled and retained as [`archive/lab-reconciled-20261121`]
 3. Push the branch and open a pull request. Require the package, Postgres integration, E2E and migration-history workflows. For a direct release also verify the Waybook app preview; for a batch, verify the combined release preview as described below. Identify unrelated project failures explicitly instead of treating them as app success.
 4. Merge only the reviewed commit after checks pass. The main branch automatically triggers Vercel production deployment; group changes when practical and assess migrations and rollback before merging.
 
+Keep the PR in draft while iterating. Draft PRs run the migration-history guard. Run focused tests locally and push a coherent batch when it is ready for review. Marking the PR ready starts the package, database and browser checks. Review the successful checks for the exact release candidate before merging. Treat skipped draft checks as pending release evidence. A browser run that stops after two failures still fails and needs a fresh passing run after the fix.
+
 ### Batch several PRs into one production release
 
 The release collector runs every three hours on a best-effort schedule and
