@@ -3610,3 +3610,21 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   gap: .12rem;
   text-align: left;
 }
+
+.tenant-dashboard-page .sales-pagination {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+.sales-pagination span {
+  margin-inline-end: auto;
+  font-size: .85rem;
+}
+.sales-pagination a {
+  padding: .55rem .8rem;
+  text-decoration: none;
+}
+.sales-pagination a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
