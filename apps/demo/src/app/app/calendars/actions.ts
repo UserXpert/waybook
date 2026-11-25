@@ -619,33 +619,51 @@ export async function cancelAppointment(formData: FormData): Promise<Cancellatio
 export type PaymentState = { error: string | null; success: string | null };
 
 /** Appends a tenant-recorded payment or refund; corrections are never destructive. */
-export async function recordPayment(_previousState: PaymentState, formData: FormData): Promise<PaymentState> {
+export async function recordPayment(formData: FormData): Promise<PaymentState> {
+  const kind = String(formData.get("kind") ?? "payment");
   try {
+    const entryId = String(formData.get("entryId") ?? "");
     const bookingId = String(formData.get("bookingId") ?? "");
-    const kind = String(formData.get("kind") ?? "payment");
     const method = String(formData.get("method") ?? "card");
     const amount = Number(String(formData.get("amountDkk") ?? "").replace(",", "."));
     if (!bookingId || !["payment", "refund"].includes(kind) || !["card", "cash", "bank_transfer", "other"].includes(method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
       throw new Error("Enter a valid positive amount and payment method.");
     }
+    if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(entryId)) throw new Error("The payment entry could not be identified.");
     const { tenant, db, booking } = await editableBooking(bookingId, "manager");
     assertNoOperationalFreeText(formData, "notes");
-    if (booking.status === "cancelled" && kind !== "refund") throw new Error("Cancelled appointments cannot receive a payment record.");
     const identity = await requireIdentity();
     const amountCents = Math.round(amount * 100);
     await db.begin(async (transaction) => {
-      const [payment] = await transaction.unsafe<{ id: string }[]>(
-        "INSERT INTO payment_records (tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-        [tenant.id, booking.id, kind, amountCents, method, identity.id],
+      // Use the ledger trigger's booking lock to serialize simultaneous retries.
+      const [locked] = await transaction.unsafe<{ status: string }[]>(
+        "SELECT status FROM bookings WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+        [tenant.id, booking.id],
       );
-      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)", [tenant.id, booking.id, identity.id, `payment.${kind}`, JSON.stringify({ paymentId: payment.id, amountCents, method })]);
-      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenant.id, identity.id, `payment.${kind}_recorded`, payment.id, JSON.stringify({ bookingId: booking.id, amountCents, method })]);
+      if (!locked) throw new Error("Booking is unavailable.");
+      const [existing] = await transaction.unsafe<{ bookingId: string; kind: string; method: string; amountCents: number; actorId: string | null }[]>(`
+        SELECT booking_id AS "bookingId", kind, method, amount_cents AS "amountCents", recorded_by_identity_id AS "actorId"
+        FROM payment_records WHERE tenant_id = $1 AND id = $2
+      `, [tenant.id, entryId]);
+      if (existing) {
+        if (existing.bookingId !== booking.id || existing.actorId !== identity.id || existing.kind !== kind || existing.method !== method || existing.amountCents !== amountCents) {
+          throw new Error("The recorded payment entry does not match this request.");
+        }
+        return;
+      }
+      if (locked.status === "cancelled" && kind !== "refund") throw new Error("Cancelled appointments cannot receive a payment record.");
+      const [payment] = await transaction.unsafe<{ id: string }[]>(
+        "INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+        [entryId, tenant.id, booking.id, kind, amountCents, method, identity.id],
+      );
+      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)", [tenant.id, booking.id, identity.id, `payment.${kind}`, { paymentId: payment.id, amountCents, method }]);
+      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenant.id, identity.id, `payment.${kind}_recorded`, payment.id, { bookingId: booking.id, amountCents, method }]);
     });
-    revalidateCalendars();
-    return { error: null, success: kind === "refund" ? "Refund recorded in the immutable sales ledger." : "Payment recorded in the immutable sales ledger." };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not record this payment.", success: null };
   }
+  revalidateCalendars();
+  return { error: null, success: kind === "refund" ? "Refund recorded in the immutable sales ledger." : "Payment recorded in the immutable sales ledger." };
 }
 
 export type ManualBookingState = { error: string | null; success: string | null };
