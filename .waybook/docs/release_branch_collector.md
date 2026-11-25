@@ -1,6 +1,6 @@
 # Release-branch collector
 
-The collector runs every 30 minutes and may append explicitly human-marked PRs to `release/ready`. It never merges or deploys `main`.
+The collector runs every three hours and may append explicitly human-marked PRs to `release/ready`. It never merges or deploys `main`.
 
 ## Eligibility
 

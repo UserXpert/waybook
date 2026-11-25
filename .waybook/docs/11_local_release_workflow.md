@@ -20,7 +20,7 @@ The prior Lab was reconciled and retained as [`archive/lab-reconciled-20261121`]
 
 ### Batch several PRs into one production release
 
-The release collector runs every 30 minutes on a best-effort schedule and
+The release collector runs every three hours on a best-effort schedule and
 collects PRs marked `release-ready` into `release/ready` after their exact head
 passes the four GitHub checks. Apply that label only after reviewing the PR.
 Conflicts, changed heads, missing checks, draft PRs and forked branches are
