@@ -8,9 +8,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const { tenant, membership } = await requireTenantWorkspace(request.headers);
-  await requireFeature(tenant.id, "booking-essentials");
+  const forWaitlist = request.nextUrl.searchParams.get("purpose") === "waitlist";
+  await requireFeature(tenant.id, forWaitlist ? "calendars" : "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership);
-  if (!permissions.isManager && !permissions.canManageServiceSettings && !permissions.canManageTeamAppointments && !permissions.canManageOwnAppointments) return NextResponse.json({ error: "You do not have permission to search locations." }, { status: 403 });
+  const canLookup = forWaitlist ? permissions.canManageWaitlist
+    : permissions.canManageServiceSettings || permissions.canManageTeamAppointments || permissions.canManageOwnAppointments;
+  if (!permissions.isManager && !canLookup) return NextResponse.json({ error: "You do not have permission to search locations." }, { status: 403 });
   const query = (request.nextUrl.searchParams.get("q") ?? "").trim().slice(0, 100);
   const rawCursor = (request.nextUrl.searchParams.get("cursor") ?? "").trim();
   const cursor = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(rawCursor) ? rawCursor : null;

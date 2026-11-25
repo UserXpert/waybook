@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, UsersRound, Wrench } from "lucide-react";
+import { notFound } from "next/navigation";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { TenantTerminologyForm } from "@/components/tenant-terminology-form";
@@ -9,16 +10,23 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { terminologyLabels, titleTerminology } from "@/lib/waybook/terminology-labels";
+import { StaffRolesPanel } from "./roles/panel";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
-  const [slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled, terminology] = await Promise.all([
+  const [params, slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled, terminology] = await Promise.all([
+    searchParams,
     currentTenantRouteSlug(tenant.slug), staffPermissionContext(tenant, membership),
     isFeatureEnabled(tenant.id, "team"), isFeatureEnabled(tenant.id, "resources"),
     isFeatureEnabled(tenant.id, "email-notifications"),
     getTenantTerminologySettings(tenant),
   ]);
   const labels = terminologyLabels(terminology.preferences.clientTerm, terminology.preferences.staffTerm);
+  const canManageRoles = teamEnabled && membership.role === "owner";
+  const showingRoles = params.tab === "roles";
+  if (showingRoles && !canManageRoles) notFound();
+  const settingsHref = tenantPath(slug, "/app/settings");
+  const rolesHref = `${settingsHref}?tab=roles`;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -35,8 +43,13 @@ export default async function SettingsPage() {
     <div className="workspace-settings">
       <header className="workspace-settings__heading"><p>WORKSPACE</p><h1>Settings</h1><span>Manage your preferences and business setup.</span></header>
       <div className="workspace-settings__layout">
-        <nav className="workspace-settings__nav" aria-label="Settings sections"><a href="#appearance">Appearance</a>{links.length ? <a href="#business-settings">Business setup</a> : null}</nav>
+        <nav className="workspace-settings__nav" aria-label="Settings sections">
+          <Link href={`${settingsHref}#appearance`}>Appearance</Link>
+          {links.length ? <Link href={`${settingsHref}#business-settings`}>Business setup</Link> : null}
+          {canManageRoles ? <Link href={rolesHref} aria-current={showingRoles ? "page" : undefined}>Roles &amp; permissions</Link> : null}
+        </nav>
         <div className="workspace-settings__content">
+          {showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : <>
           <section className="workspace-settings__panel" id="appearance"><h2>Appearance</h2><p>Choose how Waybook looks on this browser.</p><TenantAppearanceControls /></section>
           {links.length ? <section className="workspace-settings__panel" id="business-settings"><h2>Business setup</h2><p>Find the settings for your booking experience and operations.</p><div className="workspace-settings__links">{links.map(({ title, description, href, Icon }) => <Link key={title} href={tenantPath(slug, href)}><i><Icon aria-hidden="true" /></i><span><strong>{title}</strong><small>{description}</small></span><ArrowUpRight aria-hidden="true" /></Link>)}</div></section> : null}
           {membership.role === "owner" ? <section className="workspace-settings__panel" id="terminology">
@@ -44,6 +57,7 @@ export default async function SettingsPage() {
             <p>Choose the terms used in your workspace and online booking.</p>
             {terminology.available ? <TenantTerminologyForm preferences={terminology.preferences} /> : <p>Update the workspace database to change terminology.</p>}
           </section> : null}
+          </>}
         </div>
       </div>
     </div>

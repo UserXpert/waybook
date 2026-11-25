@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { OnlineBookingEmbedDesigner, OnlineBookingEmbedSnapshot, MobileBookingPreview } from "@/components/online-booking-embed-designer";
@@ -7,7 +8,7 @@ import { OnlineBookingServices } from "@/components/online-booking-services";
 import { OnlineBookingCodes } from "@/components/online-booking-codes";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -19,8 +20,8 @@ type Service = { id: string; title: string; durationMinutes: number; priceCents:
 function parse(value: BookingPage | string | null | undefined): BookingPage { if (typeof value !== "string") return value ?? {}; try { return JSON.parse(value) as BookingPage; } catch { return {}; } }
 
 export default async function OnlineBookingPage() {
-  const { tenant, membership } = await requireTenantWorkspace(); await requireFeature(tenant.id, "booking-essentials");
-  const permissions = await staffPermissionContext(tenant, membership); if (!permissions.isManager && !permissions.canManageServiceSettings) throw new Error("You do not have permission to manage online booking.");
+  const { tenant, membership } = await requireTenantWorkspace(); await requirePageFeature(tenant.id, "booking-essentials");
+  const permissions = await staffPermissionContext(tenant, membership); if (!permissions.isManager && !permissions.canManageServiceSettings) notFound();
   const db = tenantDb(tenant);
   const [[settings], services, locations, terminology] = await Promise.all([
     db<{ bookingPage: BookingPage | string | null; currency: string }[]>`SELECT currency, booking_page AS "bookingPage" FROM tenant_settings WHERE tenant_id=${tenant.id}`,

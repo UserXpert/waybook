@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("password reset revokes an active staff session and accepts only the replacement password", async ({ page, browser }) => {
+test("password reset revokes an active staff session and accepts only the replacement password", async ({ page, browser, baseURL, ignoreHTTPSErrors }) => {
   const { randomUUID } = await import("node:crypto");
   const { default: postgres } = await import("postgres");
   const controlUrl = process.env.WAYBOOK_CONTROL_DATABASE_URL!;
@@ -35,7 +35,7 @@ test("password reset revokes an active staff session and accepts only the replac
       RETURNING id
     `;
 
-    const staffContext = await browser.newContext({ baseURL: "http://localhost:3336" });
+    const staffContext = await browser.newContext({ baseURL, ignoreHTTPSErrors });
     const staffPage = await staffContext.newPage();
     await staffPage.goto("/login");
     await staffPage.getByLabel("Work email").fill(email);

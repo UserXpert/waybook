@@ -83,8 +83,26 @@ for (const workspace of workspaces) {
 
       for (const [index, member] of staff.entries()) {
         await page.goto(calendar);
-        await page.getByRole("link", { name: `New appointment ${member.name} ${day} 10:00`, exact: true }).click();
+        const slot = page.getByRole("link", { name: `New appointment ${member.name} ${day} 10:00`, exact: true });
+        await slot.focus();
+        await slot.press("Enter");
         const form = page.getByRole("complementary", { name: "New appointment" });
+        await expect(form.getByRole("link", { name: "Close new appointment" })).toBeFocused();
+        for (let step = 0; step < 8; step += 1) {
+          await page.keyboard.press("Tab");
+          await expect(form.locator(":focus")).toHaveCount(1);
+        }
+        const locationPicker = form.getByRole("combobox", { name: "Location" });
+        await locationPicker.fill("Unmatched location");
+        await expect(locationPicker).toHaveAttribute("aria-expanded", "true");
+        await page.keyboard.press("Escape");
+        await expect(locationPicker).toHaveAttribute("aria-expanded", "false");
+        await expect(locationPicker).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(form).toHaveCount(0);
+        await expect(page).toHaveURL((url) => !url.searchParams.has("create"));
+        await expect(slot).toBeFocused();
+        await slot.press("Enter");
         await form.getByLabel("Client name").fill(customerNames[index]);
         await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
         await form.getByRole("button", { name: "10:00", exact: true }).click();
@@ -107,6 +125,45 @@ for (const workspace of workspaces) {
       function drawer(browserPage: Page, booking: (typeof bookings)[number]) {
         return browserPage.getByRole("complementary", { name: `Appointment with ${booking.name}` });
       }
+      const [first, second] = bookings;
+      const firstDrawer = drawer(page, first);
+      const secondDrawer = drawer(page, second);
+      const firstNameField = firstDrawer.getByLabel("Customer name");
+      await page.goto(calendar);
+      const firstCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${first.id}"]`);
+      await firstCard.focus();
+      await firstCard.press("Enter");
+      await expect(firstDrawer.getByRole("button", { name: "Close appointment" })).toBeFocused();
+      await expect(firstNameField).toHaveValue(first.name);
+      await page.keyboard.press("Shift+Tab");
+      await expect(firstDrawer.getByRole("button", { name: "Cancel appointment" })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(firstDrawer).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
+      await expect(firstCard).toBeFocused();
+      await firstCard.press("Enter");
+      await expect(firstNameField).toHaveValue(first.name);
+      await firstNameField.fill("Unsaved calendar name");
+      await expect(firstDrawer.getByRole("button", { name: "Save changes" })).toBeEnabled();
+      await page.goBack();
+      await expect(firstDrawer).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
+      await page.goForward();
+      await expect(firstNameField).toHaveValue(first.name);
+      await firstNameField.fill("Unsaved before reload");
+      await page.reload();
+      await expect(page).toHaveURL((url) => url.searchParams.get("booking") === first.id);
+      await expect(firstNameField).toHaveValue(first.name);
+      const drawerDocument = await page.evaluate(() => performance.timeOrigin);
+      await firstDrawer.getByRole("button", { name: "Close appointment", exact: true }).click();
+      await expect(firstDrawer).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(drawerDocument);
+      await page.goto(`${calendar}&booking=${second.id}`);
+      await expect(secondDrawer.getByLabel("Customer name")).toHaveValue(second.name);
+      await expect(secondDrawer.getByRole("button", { name: "Save changes" })).toBeDisabled();
+      await expect(firstDrawer).toHaveCount(0);
+
       const pages = [page, secondPage];
       await Promise.all(pages.map(async (browserPage, index) => {
         const booking = bookings[index];
@@ -143,30 +200,6 @@ for (const workspace of workspaces) {
       await expect.poll(async () => (await assignments()).length).toBe(0);
       expect(await availableAt(winner.memberId, "10:00")).toBe(true);
 
-      if (testInfo.project.name === "desktop") {
-        await page.goto(calendar);
-        const source = page.locator(`a.waybook-week-calendar__entry[href*="booking=${moving.id}"]`);
-        const destination = page.locator(`[data-calendar-team-member-id="${moving.memberId}"][data-calendar-starts-at="${day}T11:30"]`);
-        await source.scrollIntoViewIfNeeded();
-        const sourceBounds = (await source.boundingBox())!;
-        const x = sourceBounds.x + sourceBounds.width / 2;
-        const y = sourceBounds.y + sourceBounds.height / 2;
-        await page.mouse.move(x, y);
-        await page.mouse.down();
-        await page.mouse.move(x + 8, y + 8);
-        await expect(destination).toHaveClass(/is-drop-eligible/);
-        const drop = (await destination.boundingBox())!;
-        await page.mouse.move(drop.x + drop.width / 2, drop.y + drop.height / 2);
-        await page.mouse.up();
-        await expect(page.locator(".calendar-drag-feedback")).toContainText("Appointment moved.");
-      } else {
-        await page.goto(`${calendar}&booking=${moving.id}`);
-        const panel = drawer(page, moving);
-        await panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) }).click();
-        await panel.getByRole("button", { name: "11:30", exact: true }).click();
-        await panel.getByRole("button", { name: "Reschedule appointment" }).click();
-      }
-
       const readBooking = async () => {
         const [booking] = await sql<{ state: string; status: string; startsAt: Date; memberId: string; locationId: string }[]>`
           SELECT b.status, b.starts_at AS "startsAt", b.team_member_id AS "memberId", b.location_id AS "locationId", bb.state
@@ -175,6 +208,90 @@ for (const workspace of workspaces) {
         `;
         return { ...booking, startsAt: booking.startsAt.toISOString() };
       };
+      if (testInfo.project.name.startsWith("desktop")) {
+        await page.goto(`${calendar}&booking=${moving.id}`);
+        const pendingMove = drawer(page, moving);
+        await pendingMove.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
+        await pendingMove.getByRole("button", { name: "Save changes" }).click();
+        await expect.poll(assignments).toEqual([{ bookingId: moving.id }]);
+        await page.goto(calendar);
+        const source = page.locator(`a.waybook-week-calendar__entry[href*="booking=${moving.id}"]`);
+        const destination = page.locator(`[data-calendar-team-member-id="${moving.memberId}"][data-calendar-starts-at="${day}T11:30"]`);
+        async function prepareDrop() {
+          await source.scrollIntoViewIfNeeded();
+          const sourceBounds = (await source.boundingBox())!;
+          const x = sourceBounds.x + sourceBounds.width / 2;
+          const y = sourceBounds.y + sourceBounds.height / 2;
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          await page.mouse.move(x + 8, y + 8);
+          await expect(destination).toHaveClass(/is-drop-eligible/);
+          const drop = (await destination.boundingBox())!;
+          await page.mouse.move(drop.x + drop.width / 2, drop.y + drop.height / 2, { steps: 3 });
+          await page.mouse.move(drop.x + drop.width / 2 + 1, drop.y + drop.height / 2);
+          await expect(destination).toHaveClass(/is-drop-target/);
+        }
+        const beforeInterruptedMove = await readBooking();
+        const beforeAssignments = await assignments();
+        await prepareDrop();
+        const calendarRequests = `**/${workspace.route}/app/calendars**`;
+        let interrupted = false;
+        await page.route(calendarRequests, async (route) => {
+          if (!interrupted && route.request().method() === "POST" && route.request().headers()["next-action"]) {
+            interrupted = true;
+            await route.abort("failed");
+          } else await route.continue();
+        });
+        await page.mouse.up();
+        await expect(page.locator(".calendar-drag-feedback")).toContainText("Could not confirm the move.");
+        await page.unroute(calendarRequests);
+        expect(interrupted).toBe(true);
+        expect(await readBooking()).toEqual(beforeInterruptedMove);
+        expect(await assignments()).toEqual(beforeAssignments);
+
+        await page.reload();
+        await prepareDrop();
+        await page.mouse.up();
+        await expect(page.locator(".calendar-drag-feedback")).toContainText("Appointment moved.");
+        expect(await assignments()).toEqual(beforeAssignments);
+      } else {
+        await page.goto(`${calendar}&booking=${moving.id}`);
+        const panel = drawer(page, moving);
+        const date = panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) });
+        const slot = panel.getByRole("button", { name: "11:30", exact: true });
+        const reschedule = panel.getByRole("button", { name: "Reschedule appointment" });
+        const nextWeek = panel.getByRole("button", { name: "Next week" });
+        await date.click();
+        await slot.click();
+
+        const beforeUnavailableWeek = await readBooking();
+        const calendarRequests = `**/${workspace.route}/app/calendars**`;
+        let interrupted = false;
+        await page.route(calendarRequests, async (route) => {
+          if (!interrupted && route.request().method() === "POST" && route.request().headers()["next-action"]) {
+            interrupted = true;
+            await route.abort("failed");
+          } else await route.continue();
+        });
+        await nextWeek.click();
+        const alert = panel.getByRole("alert").filter({ hasText: "Could not load availability." });
+        await expect(alert).toBeVisible();
+        await page.unroute(calendarRequests);
+        expect(interrupted).toBe(true);
+        await expect(slot).toHaveAttribute("aria-pressed", "true");
+        await expect(reschedule).toBeEnabled();
+        expect(await readBooking()).toEqual(beforeUnavailableWeek);
+
+        await nextWeek.click();
+        const previousWeek = panel.getByRole("button", { name: "Previous week" });
+        await expect(previousWeek).toBeEnabled();
+        await expect(alert).toHaveCount(0);
+        await previousWeek.click();
+        await date.click();
+        await slot.click();
+        await reschedule.click();
+      }
+
       await expect.poll(readBooking).toMatchObject({ state: "confirmed", status: "confirmed", startsAt: start("11:30"), memberId: moving.memberId, locationId: location.id });
       expect(await availableAt(moving.memberId, "10:00")).toBe(true);
       expect(await availableAt(moving.memberId, "11:30")).toBe(false);

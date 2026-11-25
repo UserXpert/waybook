@@ -6,6 +6,7 @@ import { requireIdentity } from "./auth";
 import { tenantDb, type TenantRecord } from "./database";
 import type { TenantMembership } from "./tenant-context";
 import { enforceReadOnlyPermissions } from "./read-only-permissions";
+import type { StaffPermissionKey, StaffRolePermissions } from "./staff-role-fields";
 
 export type StaffPermissionContext = {
   isManager: boolean;
@@ -23,6 +24,13 @@ export type StaffPermissionContext = {
   canManageResources: boolean;
   canManageServiceSettings: boolean;
 };
+
+export function workspaceSearchPermissions(permissions: StaffPermissionContext) {
+  return {
+    canSearchAppointments: permissions.isManager || permissions.canManageOwnAppointments,
+    canSearchClients: permissions.isManager || permissions.canViewClients || permissions.canManageClients,
+  };
+}
 
 const denied: Omit<StaffPermissionContext, "isManager" | "teamMemberId"> = {
   canUpdateAppointmentStatus: false,
@@ -91,9 +99,10 @@ export const staffPermissionContext = cache(async function staffPermissionContex
   const identity = await requireIdentity();
   const db = tenantDb(tenant);
   const [staff] = await db<
-    Array<BaseStaffPermissionContext>
+    Array<BaseStaffPermissionContext & { rolePermissions: StaffRolePermissions | null }>
   >`
     SELECT tm.id AS "teamMemberId",
+      sr.permissions AS "rolePermissions",
       COALESCE(sp.can_update_appointment_status, FALSE) AS "canUpdateAppointmentStatus",
       COALESCE(sp.can_manage_own_appointments, FALSE) AS "canManageOwnAppointments",
       COALESCE(sp.can_view_team_calendar, FALSE) AS "canViewTeamCalendar",
@@ -104,14 +113,21 @@ export const staffPermissionContext = cache(async function staffPermissionContex
     FROM team_members tm
     LEFT JOIN staff_permissions sp
       ON sp.tenant_id = tm.tenant_id AND sp.team_member_id = tm.id
+    LEFT JOIN staff_roles sr ON sr.tenant_id = tm.tenant_id AND sr.id = tm.staff_role_id
     WHERE tm.tenant_id = ${tenant.id}
       AND tm.identity_id = ${identity.id}
       AND tm.is_active = TRUE
     LIMIT 1
   `;
   if (!staff) return { isManager: false, teamMemberId: null, ...denied };
+  const { rolePermissions, ...individualPermissions } = staff;
+  if (membership.role === "staff" && rolePermissions) {
+    const permissions = { ...denied };
+    for (const key of Object.keys(denied) as StaffPermissionKey[]) permissions[key] = rolePermissions[key] === true;
+    return { isManager: false, teamMemberId: staff.teamMemberId, ...permissions };
+  }
   if (!await staffWorkspacePermissionsAvailable(tenant)) {
-    return enforceReadOnlyPermissions(membership.role, { isManager: false, ...staff, ...deniedWorkspacePermissions });
+    return enforceReadOnlyPermissions(membership.role, { isManager: false, ...individualPermissions, ...deniedWorkspacePermissions });
   }
   const [workspace] = await db<ExtendedWorkspacePermissions[]>`
     SELECT can_view_clients AS "canViewClients",
@@ -123,7 +139,7 @@ export const staffPermissionContext = cache(async function staffPermissionContex
     WHERE tenant_id = ${tenant.id} AND team_member_id = ${staff.teamMemberId}
     LIMIT 1
   `;
-  return enforceReadOnlyPermissions(membership.role, { isManager: false, ...staff, ...(workspace ?? deniedWorkspacePermissions) });
+  return enforceReadOnlyPermissions(membership.role, { isManager: false, ...individualPermissions, ...(workspace ?? deniedWorkspacePermissions) });
 });
 
 export function canManageAppointment(

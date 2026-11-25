@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { OperationalTimeRange } from "@/components/operational-time-range";
 import { showSuccessToast } from "@/lib/waybook/toast";
+import type { StaffTimeOffState } from "@/app/app/team/actions";
 
 type Props = {
   memberId: string;
   timezone: string;
-  action: (formData: FormData) => void | Promise<void>;
-  deleteAction?: (formData: FormData) => void | Promise<void>;
+  action: (formData: FormData) => Promise<StaffTimeOffState>;
+  deleteAction?: (formData: FormData) => Promise<StaffTimeOffState>;
   initial?: { id: string; localDate: string; startTime: string | null; endTime: string | null };
 };
 type DateMode = "day" | "range";
@@ -59,10 +60,14 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
     setRangeAnchor(null);
   }
 
-  const save = async (formData: FormData) => { await action(formData); showSuccessToast(initial ? "Time off updated." : "Time off saved."); };
-  const remove = deleteAction ? async (formData: FormData) => { await deleteAction(formData); showSuccessToast("Time off removed."); } : undefined;
+  const [state, submit, pending] = useActionState(async (_previous: StaffTimeOffState, formData: FormData) => {
+    const handler = formData.get("intent") === "remove" && deleteAction ? deleteAction : action;
+    const result = await handler(formData);
+    if (result.success) showSuccessToast(result.success);
+    return result;
+  }, {});
 
-  return <form action={save} className="staff-timeoff-form">
+  return <form action={submit} className="staff-timeoff-form">
     <input type="hidden" name="memberId" value={memberId} />
     {initial ? <input type="hidden" name="overrideId" value={initial.id} /> : null}
     <input type="hidden" name="localDate" value={startDate} />
@@ -102,9 +107,10 @@ export function StaffTimeOffForm({ memberId, timezone, action, deleteAction, ini
     </section>
     <div className="staff-timeoff-form__mode"><button type="button" className="staff-timeoff-form__switch" role="switch" aria-checked={fullDay} onClick={() => setFullDay((current) => !current)}><span aria-hidden="true" /><span><b>Full day</b><small>{fullDay ? "Blocks the selected date or date range from booking." : "Turn on to block every selected date."}</small></span></button></div>
     {!fullDay ? <OperationalTimeRange label="Partial-day lockout" startName="startTime" endName="endTime" startTime={timeAt(startSlot)} endTime={timeAt(endSlot)} onStartTimeChange={(value) => setStartSlot(Number(value.slice(0, 2)) * 2 + (value.endsWith("30") ? 1 : 0))} onEndTimeChange={(value) => setEndSlot(Number(value.slice(0, 2)) * 2 + (value.endsWith("30") ? 1 : 0))} /> : null}
+    {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     <div className="staff-timeoff-form__actions">
-      <button type="submit">{initial ? "Save changes" : "Save time off"}</button>
-      {initial && remove ? <button className="staff-timeoff-form__remove" type="submit" formAction={remove} onClick={(event) => { if (!window.confirm("Remove this time-off entry? This cannot be undone.")) event.preventDefault(); }}><Trash2 aria-hidden="true" />Remove time off</button> : null}
+      <button type="submit" disabled={pending}>{initial ? "Save changes" : "Save time off"}</button>
+      {initial && deleteAction ? <button className="staff-timeoff-form__remove" type="submit" name="intent" value="remove" disabled={pending} onClick={(event) => { if (!window.confirm("Remove this time-off entry? This cannot be undone.")) event.preventDefault(); }}><Trash2 aria-hidden="true" />Remove time off</button> : null}
     </div>
   </form>;
 }

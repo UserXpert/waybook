@@ -4,6 +4,7 @@ import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-field
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { TransactionSql } from "postgres";
 import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
 import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { hashPassword, requireIdentity } from "@/lib/waybook/auth";
@@ -12,8 +13,9 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { getGoogleAuth, googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { issueStaffInvitation, revokeStaffInvitation } from "@/lib/waybook/staff-invitations";
 import { requireFeature } from "@/lib/waybook/features";
-import { defaultStaffCalendarColor, staffCalendarColorValues } from "@/lib/waybook/staff-calendar-colors";
+import { isStaffCalendarColor } from "@/lib/waybook/staff-calendar-colors";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
+import { staffRoleIdPattern } from "@/lib/waybook/staff-role-fields";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { withSuccessToast } from "@/lib/waybook/toast";
@@ -67,7 +69,7 @@ function localDatesInRange(start: string, end: string) {
   const dates: string[] = [];
   const cursor = new Date(`${start}T12:00:00Z`);
   const last = new Date(`${end}T12:00:00Z`);
-  while (cursor <= last) {
+  while (cursor <= last && dates.length <= 31) {
     dates.push(cursor.toISOString().slice(0, 10));
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
@@ -89,7 +91,7 @@ export async function saveStaffPhoto(formData: FormData) {
   await db.begin(async (tx) => {
     const [updated] = await tx.unsafe<{ id: string }[]>("UPDATE team_members SET photo_data_url = $1, updated_at = now() WHERE tenant_id = $2 AND id = $3 RETURNING id", [photoDataUrl, tenant.id, memberId]);
     if (!updated) throw new Error("Staff member is unavailable.");
-    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'staff.photo_updated', 'team_member', $3, $4::jsonb)", [tenant.id, actor.id, memberId, JSON.stringify({ removed: removing })]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'staff.photo_updated', 'team_member', $3, $4::jsonb)", [tenant.id, actor.id, memberId, { removed: removing }]);
   });
   revalidateStaff();
   const slug = await currentTenantRouteSlug(tenant.slug);
@@ -105,12 +107,12 @@ export async function saveOwnerProfileDetails(_: StaffDetailsState, formData: Fo
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const phone = String(formData.get("phone") ?? "").trim();
-  const calendarColor = String(formData.get("calendarColor") ?? "").trim();
+  const calendarColor = String(formData.get("calendarColor") ?? "").trim().toLowerCase() || null;
   const memberId = formData.get("memberId");
   if (!name || name.length > 160) return { error: "Enter a name up to 160 characters." };
   if (!/^[^\s@]+@[^\s@]+$/.test(email) || email.length > 254) return { error: "Enter a valid workspace email." };
   if (phone.length > 80) return { error: "Enter a phone number up to 80 characters." };
-  if (!staffCalendarColorValues.has(calendarColor)) return { error: "Choose one of the available calendar colours." };
+  if (calendarColor && !isStaffCalendarColor(calendarColor)) return { error: "Choose one of the available calendar colours." };
   assertNoOperationalFreeText(formData, "internalNotes");
   if (typeof memberId !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(memberId)) {
     return { error: "Your workspace profile is unavailable." };
@@ -123,26 +125,44 @@ export async function saveOwnerProfileDetails(_: StaffDetailsState, formData: Fo
   const actor = await requireIdentity();
   try {
     const [saved] = await tenantDb(tenant)<{ id: string }[]>`
-      WITH profile AS (
-        UPDATE team_members
-        SET name = ${name}, email = ${email}, phone = ${phone || null}, calendar_color = ${calendarColor},
-          job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END,
-          specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END,
-          work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END,
-          staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END,
-          updated_at = now()
+      WITH prior AS (
+        SELECT id, name, email, phone, calendar_color, job_title, specialty, work_location, staff_code
+        FROM team_members
         WHERE tenant_id = ${tenant.id} AND id = ${memberId} AND identity_id = ${actor.id}
           AND role = 'owner' AND is_active
-        RETURNING id
+        FOR UPDATE
+      ), profile AS (
+        UPDATE team_members AS member
+        SET name = ${name}, email = ${email}, phone = ${phone || null}, calendar_color = COALESCE(${calendarColor}, member.calendar_color),
+          job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE member.job_title END,
+          specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE member.specialty END,
+          work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE member.work_location END,
+          staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE member.staff_code END,
+          updated_at = now()
+        FROM prior WHERE member.id = prior.id
+        RETURNING member.id, array_remove(ARRAY[
+          CASE WHEN member.name IS DISTINCT FROM prior.name THEN 'name' END,
+          CASE WHEN member.email IS DISTINCT FROM prior.email THEN 'email' END,
+          CASE WHEN member.phone IS DISTINCT FROM prior.phone THEN 'phone' END,
+          CASE WHEN member.calendar_color IS DISTINCT FROM prior.calendar_color THEN 'calendarColor' END,
+          CASE WHEN member.job_title IS DISTINCT FROM prior.job_title THEN 'jobTitle' END,
+          CASE WHEN member.specialty IS DISTINCT FROM prior.specialty THEN 'specialty' END,
+          CASE WHEN member.work_location IS DISTINCT FROM prior.work_location THEN 'workLocation' END,
+          CASE WHEN member.staff_code IS DISTINCT FROM prior.staff_code THEN 'staffCode' END
+        ], NULL) AS fields
+      ), audited AS (
+        INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
+        SELECT ${tenant.id}, ${actor.id}, 'staff.updated', 'team_member', id,
+          jsonb_build_object('fields', fields) FROM profile WHERE cardinality(fields) > 0
       )
-      INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
-      SELECT ${tenant.id}, ${actor.id}, 'staff.updated', 'team_member', id,
-        '{"fields":["name","email","phone","calendarColor","jobTitle","specialty","workLocation","staffCode"]}'::jsonb FROM profile
-      RETURNING target_id AS id
+      SELECT id FROM profile
     `;
     if (!saved) return { error: "Your workspace profile is unavailable." };
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "23505") {
+      if ("constraint_name" in error && error.constraint_name === "team_members_tenant_calendar_color_key") {
+        return { error: "That calendar colour is already in use. Choose another colour." };
+      }
       return { error: "A staff member already uses this email." };
     }
     throw error;
@@ -160,7 +180,9 @@ export async function saveTeamMember(_: StaffDetailsState, formData: FormData): 
   await requireFeature(tenant.id, "team");
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const role = String(formData.get("role") ?? "staff");
+  const roleChoice = String(formData.get("role") ?? "staff");
+  const staffRoleId = roleChoice.startsWith("custom:") ? roleChoice.slice(7) : null;
+  const role = staffRoleId !== null ? "staff" : roleChoice;
   const memberId = String(formData.get("memberId") ?? "");
   let serviceIds = formData.getAll("serviceIds").map(String).filter(Boolean);
   let locationIds = formData.getAll("locationIds").map(String).filter(Boolean);
@@ -171,22 +193,28 @@ export async function saveTeamMember(_: StaffDetailsState, formData: FormData): 
   const workLocation = optionalText(formData, "workLocation", 160);
   const staffCode = optionalText(formData, "staffCode", 80);
   assertNoOperationalFreeText(formData, "internalNotes");
-  const calendarColor = String(formData.get("calendarColor") ?? defaultStaffCalendarColor).trim();
+  const calendarColor = String(formData.get("calendarColor") ?? "").trim().toLowerCase() || null;
   const assignmentsOnly = formData.get("editMode") === "assignments";
   const replaceAssignments = assignmentsOnly || !memberId;
   if (assignmentsOnly && !memberId) return { error: "Staff member is unavailable." };
   if (!assignmentsOnly && (!name || name.length > 160 || !email.includes("@") || !["manager", "staff", "read-only"].includes(role))) return { error: "Enter a name, valid email, and role." };
+  const db = tenantDb(tenant);
+  if (!assignmentsOnly && staffRoleId !== null) {
+    if (!staffRoleIdPattern.test(staffRoleId)) return { error: "Choose an available role." };
+    const [customRole] = await db`SELECT id FROM staff_roles WHERE tenant_id = ${tenant.id} AND id = ${staffRoleId}`;
+    if (!customRole) return { error: "Choose an available role." };
+  }
   if (!assignmentsOnly && memberId) {
-    const [existing] = await tenantDb(tenant)<{ role: string }[]>`SELECT role FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
+    const [existing] = await db<{ role: string; staffRoleId: string | null }[]>`SELECT role, staff_role_id AS "staffRoleId" FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
     if (existing?.role === "owner") return { error: "The workspace owner profile cannot be changed here." };
     if (membership.role !== "owner" && (role === "manager" || existing?.role === "manager")) {
       return { error: "Only an owner can create or change a manager profile." };
     }
-  } else if (!assignmentsOnly && membership.role !== "owner" && role === "manager") {
-    return { error: "Only an owner can create or change a manager profile." };
+    if (existing && membership.role !== "owner" && staffRoleId !== existing.staffRoleId) return { error: "Only an owner can change custom role assignments." };
+  } else if (!assignmentsOnly && membership.role !== "owner" && (role === "manager" || staffRoleId !== null)) {
+    return { error: "Only an owner can assign manager or custom roles." };
   }
-  if (!assignmentsOnly && !staffCalendarColorValues.has(calendarColor)) return { error: "Choose one of the available calendar colours." };
-  const db = tenantDb(tenant);
+  if (!assignmentsOnly && calendarColor && !isStaffCalendarColor(calendarColor)) return { error: "Choose one of the available calendar colours." };
   // Preserve the established new-staff default without sending an unbounded
   // directory to the browser. Existing profiles always submit explicit IDs.
   if (!memberId && String(formData.get("defaultAssignments") ?? "") === "all") {
@@ -206,10 +234,13 @@ export async function saveTeamMember(_: StaffDetailsState, formData: FormData): 
     [member] = assignmentsOnly
       ? await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`
       : memberId
-      ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, is_active = ${isActive}, phone = ${phone}, job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END, specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END, work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END, staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END, calendar_color = ${calendarColor}, updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND role <> 'owner' AND (${membership.role} = 'owner' OR role <> 'manager') RETURNING id`
-      : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, name, email, is_active, phone, job_title, specialty, work_location, staff_code, calendar_color) VALUES (${tenant.id}, ${role}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
+      ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, staff_role_id = ${staffRoleId}, is_active = ${isActive}, phone = ${phone}, job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END, specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END, work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END, staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END, calendar_color = COALESCE(${calendarColor}, calendar_color), updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND role <> 'owner' AND (${membership.role} = 'owner' OR (role <> 'manager' AND staff_role_id IS NOT DISTINCT FROM ${staffRoleId}::uuid)) RETURNING id`
+      : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, staff_role_id, name, email, is_active, phone, job_title, specialty, work_location, staff_code, calendar_color) VALUES (${tenant.id}, ${role}, ${staffRoleId}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "23505") {
+      if ("constraint_name" in error && error.constraint_name === "team_members_tenant_calendar_color_key") {
+        return { error: "That calendar colour is already in use. Choose another colour." };
+      }
       return { error: "A staff member already uses this email." };
     }
     throw error;
@@ -232,7 +263,7 @@ export async function saveTeamMember(_: StaffDetailsState, formData: FormData): 
     await tx.unsafe("DELETE FROM team_member_locations WHERE tenant_id = $1 AND team_member_id = $2", [tenant.id, member.id]);
     await tx.unsafe("INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) SELECT $1, $2, unnest($3::uuid[])", [tenant.id, member.id, validLocations.map(({ id }) => id)]);
   });
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${memberId ? "staff.updated" : "staff.created"}, 'team_member', ${member.id}, ${JSON.stringify({ fields: ["name", "email", "role", "isActive", "phone", "jobTitle", "specialty", "workLocation", "staffCode", "calendarColor", "serviceIds", "locationIds"] })}::jsonb)`;
+  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${memberId ? "staff.updated" : "staff.created"}, 'team_member', ${member.id}, ${JSON.stringify({ fields: ["name", "email", "role", "staffRoleId", "isActive", "phone", "jobTitle", "specialty", "workLocation", "staffCode", "calendarColor", "serviceIds", "locationIds"] })}::jsonb)`;
   revalidateStaff();
   const slug = await currentTenantRouteSlug(tenant.slug);
   redirect(withSuccessToast(`${tenantPath(slug, "/app/team")}?employee=${member.id}${assignmentsOnly ? "&tab=services" : ""}`, "Staff member saved."));
@@ -362,7 +393,8 @@ export async function saveStaffPermissions(formData: FormData) {
   await requireFeature(tenant.id, 'team');
   const memberId = String(formData.get("memberId") ?? "");
   const db = await validStaffMember(tenant, memberId);
-  const [member] = await db<{ role: string }[]>`SELECT role FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
+  const [member] = await db<{ role: string; staffRoleId: string | null }[]>`SELECT role, staff_role_id AS "staffRoleId" FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
+  if (member?.staffRoleId) throw new Error("Manage permissions for this role in Settings.");
   if (member?.role === 'owner') throw new Error('Owner permissions cannot be changed from the staff directory.');
   if (membership.role !== 'owner' && member?.role === 'manager') throw new Error("Only an owner can change a manager's permissions.");
   const workspacePermissionsAvailable = await staffWorkspacePermissionsAvailable(tenant);
@@ -428,7 +460,19 @@ export async function saveStaffWorkingHours(formData: FormData) {
   revalidateStaff();
 }
 
-export async function addStaffTimeOff(formData: FormData) {
+export type StaffTimeOffState = { error?: string; success?: string };
+
+async function saveTimeOffTransaction(tenant: TenantRecord, memberId: string, change: (tx: TransactionSql) => Promise<StaffTimeOffState>) {
+  const result = await tenantDb(tenant).begin(async (tx): Promise<StaffTimeOffState> => {
+    const [member] = await tx.unsafe("SELECT id FROM team_members WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [memberId, tenant.id]);
+    if (!member) return { error: "Staff member is unavailable." };
+    return change(tx);
+  });
+  if (result.success) revalidateStaff();
+  return result;
+}
+
+export async function addStaffTimeOff(formData: FormData): Promise<StaffTimeOffState> {
   const memberId = String(formData.get("memberId") ?? "");
   const tenant = await editableStaffTimeOffTenant(memberId);
   const localDate = String(formData.get("localDate") ?? "");
@@ -439,18 +483,22 @@ export async function addStaffTimeOff(formData: FormData) {
   const endTime = String(formData.get("endTime") ?? "") || null;
   assertNoOperationalFreeText(formData, "reason");
   const hasPartialWindow = Boolean(startTime) && Boolean(endTime);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate) || endLocalDate < localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) throw new Error("Choose a valid date or date range, then either block the full day or enter a complete valid time range.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endLocalDate) || endLocalDate < localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) {
+    return { error: "Choose a valid date or date range, then either block the full day or enter a complete valid time range." };
+  }
   const dates = localDatesInRange(localDate, endLocalDate);
-  if (dates.length > 31) throw new Error("Time off can cover up to 31 days at a time.");
-  const db = await validStaffMember(tenant, memberId);
-  const existing = await db<{ localDate: string }[]>`SELECT local_date::text AS "localDate" FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId} AND local_date >= ${localDate} AND local_date <= ${endLocalDate}`;
-  if (existing.length > 0) throw new Error("One or more selected dates already have a time-off exception. Choose dates without an existing exception.");
-  for (const date of dates) await db`INSERT INTO availability_overrides (tenant_id, team_member_id, local_date, start_time, end_time, is_unavailable) VALUES (${tenant.id}, ${memberId}, ${date}, ${startTime}, ${endTime}, ${isUnavailable})`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_added"}, 'team_member', ${memberId}, ${JSON.stringify({ localDate, endLocalDate, dateCount: dates.length, fullDay, isUnavailable, startTime, endTime })}::jsonb)`;
-  revalidateStaff();
+  if (dates.length > 31) return { error: "Time off can cover up to 31 days at a time." };
+  if (dates[0] !== localDate || dates.at(-1) !== endLocalDate) return { error: "Choose a valid date or date range." };
+  return saveTimeOffTransaction(tenant, memberId, async (tx) => {
+    const [existing] = await tx.unsafe("SELECT id FROM availability_overrides WHERE tenant_id = $1 AND team_member_id = $2 AND local_date BETWEEN $3 AND $4 LIMIT 1", [tenant.id, memberId, localDate, endLocalDate]);
+    if (existing) return { error: "One or more selected dates already have a time-off exception. Choose dates without an existing exception." };
+    await tx.unsafe("INSERT INTO availability_overrides (tenant_id, team_member_id, local_date, start_time, end_time, is_unavailable) SELECT $1, $2, day, $3, $4, TRUE FROM unnest($5::date[]) AS day", [tenant.id, memberId, startTime, endTime, dates]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'staff.availability.exception_added', 'team_member', $2, $3::jsonb)", [tenant.id, memberId, JSON.stringify({ localDate, endLocalDate, dateCount: dates.length, fullDay, isUnavailable, startTime, endTime })]);
+    return { success: "Time off saved." };
+  });
 }
 
-export async function updateStaffTimeOff(formData: FormData) {
+export async function updateStaffTimeOff(formData: FormData): Promise<StaffTimeOffState> {
   const memberId = String(formData.get("memberId") ?? "");
   const tenant = await editableStaffTimeOffTenant(memberId);
   const overrideId = String(formData.get("overrideId") ?? "");
@@ -461,25 +509,29 @@ export async function updateStaffTimeOff(formData: FormData) {
   const endTime = String(formData.get("endTime") ?? "") || null;
   assertNoOperationalFreeText(formData, "reason");
   const hasPartialWindow = Boolean(startTime) && Boolean(endTime);
-  if (!overrideId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || endLocalDate !== localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) throw new Error("Choose one valid date and a complete valid time range when needed.");
-  const db = await validStaffMember(tenant, memberId);
-  const [override] = await db<{ id: string }[]>`SELECT id FROM availability_overrides WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
-  if (!override) throw new Error("That time-off entry is unavailable.");
-  const conflicts = await db<{ id: string }[]>`SELECT id FROM availability_overrides WHERE tenant_id = ${tenant.id} AND team_member_id = ${memberId} AND local_date = ${localDate} AND id <> ${overrideId}`;
-  if (conflicts.length) throw new Error("Another time-off entry already exists on that date.");
-  await db`UPDATE availability_overrides SET local_date = ${localDate}, start_time = ${startTime}, end_time = ${endTime}, is_unavailable = TRUE WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId}`;
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_updated"}, 'team_member', ${memberId}, ${JSON.stringify({ overrideId, localDate, fullDay, startTime, endTime })}::jsonb)`;
-  revalidateStaff();
+  if (!overrideId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || endLocalDate !== localDate || localDatesInRange(localDate, localDate)[0] !== localDate || (!fullDay && (!hasPartialWindow || startTime! >= endTime!)) || (fullDay && (startTime || endTime))) {
+    return { error: "Choose one valid date and a complete valid time range when needed." };
+  }
+  return saveTimeOffTransaction(tenant, memberId, async (tx) => {
+    const [override] = await tx.unsafe("SELECT id FROM availability_overrides WHERE id = $1 AND tenant_id = $2 AND team_member_id = $3", [overrideId, tenant.id, memberId]);
+    if (!override) return { error: "That time-off entry is unavailable." };
+    const [conflict] = await tx.unsafe("SELECT id FROM availability_overrides WHERE tenant_id = $1 AND team_member_id = $2 AND local_date = $3 AND id <> $4 LIMIT 1", [tenant.id, memberId, localDate, overrideId]);
+    if (conflict) return { error: "Another time-off entry already exists on that date." };
+    await tx.unsafe("UPDATE availability_overrides SET local_date = $1, start_time = $2, end_time = $3, is_unavailable = TRUE WHERE id = $4 AND tenant_id = $5 AND team_member_id = $6", [localDate, startTime, endTime, overrideId, tenant.id, memberId]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'staff.availability.exception_updated', 'team_member', $2, $3::jsonb)", [tenant.id, memberId, JSON.stringify({ overrideId, localDate, fullDay, startTime, endTime })]);
+    return { success: "Time off updated." };
+  });
 }
 
-export async function deleteStaffTimeOff(formData: FormData) {
+export async function deleteStaffTimeOff(formData: FormData): Promise<StaffTimeOffState> {
   const memberId = String(formData.get("memberId") ?? "");
   const tenant = await editableStaffTimeOffTenant(memberId);
   const overrideId = String(formData.get("overrideId") ?? "");
-  if (!overrideId) throw new Error("Choose a time-off entry to remove.");
-  const db = await validStaffMember(tenant, memberId);
-  const [removed] = await db<{ id: string; localDate: string }[]>`DELETE FROM availability_overrides WHERE id = ${overrideId} AND tenant_id = ${tenant.id} AND team_member_id = ${memberId} RETURNING id, local_date::text AS "localDate"`;
-  if (!removed) throw new Error("That time-off entry is unavailable.");
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${"staff.availability.exception_removed"}, 'team_member', ${memberId}, ${JSON.stringify({ overrideId, localDate: removed.localDate })}::jsonb)`;
-  revalidateStaff();
+  if (!overrideId) return { error: "Choose a time-off entry to remove." };
+  return saveTimeOffTransaction(tenant, memberId, async (tx) => {
+    const [removed] = await tx.unsafe<{ localDate: string }[]>("DELETE FROM availability_overrides WHERE id = $1 AND tenant_id = $2 AND team_member_id = $3 RETURNING local_date::text AS \"localDate\"", [overrideId, tenant.id, memberId]);
+    if (!removed) return { error: "That time-off entry is unavailable." };
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'staff.availability.exception_removed', 'team_member', $2, $3::jsonb)", [tenant.id, memberId, JSON.stringify({ overrideId, localDate: removed.localDate })]);
+    return { success: "Time off removed." };
+  });
 }

@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
@@ -12,6 +13,7 @@ import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
 import { CalendarAppointmentDrawer } from "@/components/calendar-appointment-drawer";
 import { ManualAppointmentForm } from "@/components/manual-appointment-form";
+import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { availableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
 import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
@@ -23,8 +25,8 @@ import {
   requireTenantWorkspace,
 } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { requireFeature } from "@/lib/waybook/features";
-import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { requirePageFeature } from "@/lib/waybook/features";
+import { canManageAppointment, staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { canChangeAttendanceNow, isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 import {
   getRescheduleBookingAvailability,
@@ -205,6 +207,7 @@ export default async function CalendarsPage({
     booking?: string;
     create?: string;
     customer?: string;
+    waitlist?: string;
     staff?: string;
     after?: string;
     before?: string;
@@ -223,6 +226,7 @@ export default async function CalendarsPage({
     booking: bookingId,
     create,
     customer: customerId,
+    waitlist: waitlistEntryId,
     staff: staffFilter,
     after,
     before,
@@ -232,12 +236,13 @@ export default async function CalendarsPage({
   const { tenant, membership } = await requireTenantWorkspace();
   const terms = await getTenantTerminology(tenant);
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  await requireFeature(tenant.id, "calendars");
+  await requirePageFeature(tenant.id, "calendars");
   const permissions = await staffPermissionContext(tenant, membership);
   const canManage = permissions.isManager;
+  const canManageSchedule = (memberId: string | null) => canManageAppointment(permissions, memberId);
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) {
-    throw new Error("You do not have permission to view this calendar.");
+    notFound();
   }
   const effectiveEmployee = canViewTeam ? employee : permissions.teamMemberId;
   const restrictedEmployeeId = permissions.teamMemberId ?? "";
@@ -287,14 +292,24 @@ export default async function CalendarsPage({
     ? (await db<Member[]>`SELECT tm.id,tm.name,tm.email,tm.calendar_color AS "calendarColor" FROM team_members tm JOIN team_member_locations tml ON tml.team_member_id=tm.id AND tml.tenant_id=tm.tenant_id WHERE tm.tenant_id=${tenant.id} AND tm.id=${effectiveEmployee} AND tm.is_active=TRUE AND tml.location_id=${selectedLocation.id} LIMIT 1`)[0]
     : undefined) ?? members[0];
   const selectedStaffBookingColor = selected?.calendarColor ?? "#67c7cf";
-  const requestedCreateMember = isMemberId(createStaff)
-    ? members.find((member) => member.id === createStaff)
-    : undefined;
-  const [selectedCustomer] = customerId
+  const canManageSelectedSchedule = Boolean(selected && canManageSchedule(selected.id));
+  const canViewClientDirectory = canManage || permissions.canViewClients || permissions.canManageClients;
+  const [directCustomer] = customerId && isMemberId(customerId) && canViewClientDirectory
     ? await db<
         Customer[]
       >`SELECT id, name, email, phone FROM customers WHERE tenant_id = ${tenant.id} AND id = ${customerId} LIMIT 1`
     : [];
+  const [waitlistCustomer] = !directCustomer && waitlistEntryId && isMemberId(waitlistEntryId) && service && isMemberId(service)
+    && selectedLocation && canManageSelectedSchedule && (canManage || permissions.canManageWaitlist)
+    ? await db<Customer[]>`
+      SELECT c.id,c.name,c.email,CASE WHEN ${canViewClientDirectory} THEN c.phone END AS phone
+      FROM waitlist_entries w
+      JOIN customers c ON c.tenant_id=w.tenant_id AND c.id=w.customer_id
+      WHERE w.tenant_id=${tenant.id} AND w.id=${waitlistEntryId} AND w.status IN ('waiting','offered')
+        AND w.location_id=${selectedLocation.id} AND w.service_id=${service}
+    `
+    : [];
+  const selectedCustomer = directCustomer ?? waitlistCustomer;
   const calendarNow = new Date();
   const tenantToday = localDateKey(calendarNow, tenant.timezone);
   // A selected staff member can sit outside the bounded roster window. The
@@ -435,7 +450,6 @@ export default async function CalendarsPage({
   const selectedService = service
     ? selectableServices.find((item) => item.id === service)
     : undefined;
-  const manualService = selectedService ?? services[0] ?? calendarServices[0];
   // "All services" is an availability union. Each actionable calendar cell
   // carries the compatible service into the create drawer below.
   const availabilityServices = monthlyView ? [] : selectedService
@@ -549,7 +563,8 @@ export default async function CalendarsPage({
   const rescheduleDays = Array.from({ length: 7 }, (_, index) =>
     addDays(localDateKey(new Date(), tenant.timezone), index),
   );
-  const rescheduleSlots = canManage && selectedBooking?.teamMemberId
+  const canManageBookingSchedule = Boolean(selectedBooking && canManageSchedule(selectedBooking.teamMemberId));
+  const rescheduleSlots = canManageBookingSchedule && selectedBooking && isMovableAppointmentStatus(selectedBooking.status)
     ? (await getRescheduleBookingAvailability({ bookingId: selectedBooking.id, startDate: rescheduleDays[0] })).slots
     : [];
   const calendarDate = new Intl.DateTimeFormat("en-GB", {
@@ -611,8 +626,9 @@ export default async function CalendarsPage({
     if (next.monthDay) params.set("monthDay", next.monthDay);
     if (next.booking) params.set("booking", next.booking);
     if (next.create) params.set("create", next.create);
-    if (next.customer ?? selectedCustomer?.id)
-      params.set("customer", next.customer ?? selectedCustomer!.id);
+    const nextCustomer = next.customer ?? directCustomer?.id;
+    if (nextCustomer) params.set("customer", nextCustomer);
+    else if (waitlistCustomer && waitlistEntryId) params.set("waitlist", waitlistEntryId);
     if (next.staff ?? staffSearch) params.set("staff", next.staff ?? staffSearch);
     if (showOffShift === "0") params.set("showOffShift", "0");
     if (next.after) params.set("after", next.after);
@@ -641,6 +657,22 @@ export default async function CalendarsPage({
     teamDayBookings.some((booking) => booking.teamMemberId === member.id)
     || Array.from(bookableSlotKeys).some((key) => key.startsWith(`${member.id}|${teamDay}T`)),
   );
+  const teamCreateMember = canManageSelectedSchedule ? selected : visibleTeamMembers.find((member) => canManageSchedule(member.id));
+  const createMember = createStaff
+    ? members.find((member) => member.id === createStaff && canManageSchedule(member.id))
+    : teamView ? teamCreateMember : canManageSelectedSchedule ? selected : undefined;
+  const createServices = requestedAppointment && createMember && selectedLocation && createMember.id !== selected?.id
+    ? await db<Service[]>`
+      SELECT s.id, s.title, s.duration_minutes AS "durationMinutes"
+      FROM services s
+      JOIN service_team_members stm ON stm.service_id = s.id AND stm.tenant_id = s.tenant_id
+      JOIN service_locations sl ON sl.service_id = s.id AND sl.tenant_id = s.tenant_id
+      WHERE s.tenant_id = ${tenant.id} AND stm.team_member_id = ${createMember.id}
+        AND sl.location_id = ${selectedLocation.id} AND s.is_active = TRUE
+      ORDER BY s.title
+    `
+    : services;
+  const manualService = createServices.find((item) => item.id === selectedService?.id) ?? createServices[0];
   const teamDayOpenPeriods = mergeSlots(
     availability
       .flatMap((item) => item.slots as Slot[])
@@ -684,7 +716,7 @@ export default async function CalendarsPage({
         active="calendars"
       />
       <CalendarFilterDismiss />
-      {canManage ? (
+      {(canManage || permissions.canManageOwnAppointments || permissions.canManageTeamAppointments) ? (
         <CalendarBookingDragDrop />
       ) : null}
       <style>{`.tenant-dashboard-page .waybook-week-calendar:not(.team-day-calendar) .waybook-week-calendar__entry.is-booking { border-left-color: ${selectedStaffBookingColor} !important; }`}</style>
@@ -822,7 +854,7 @@ export default async function CalendarsPage({
                           <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </div>
-                      {canManage && calendarServices.length && !isHistoricalTeamDay ? (
+                      {teamCreateMember && calendarServices.length && !isHistoricalTeamDay ? (
                         <Link
                           className="waybook-primary-link"
                           href={href({
@@ -871,7 +903,8 @@ export default async function CalendarsPage({
                                 tenant.timezone,
                               ),
                           );
-                          return canManage && isBookable ? (
+                          const canManageMember = canManageSchedule(member.id);
+                          return canManageMember && isBookable ? (
                             <Link
                               className="waybook-week-calendar__cell is-actionable is-bookable"
                               data-availability-state="bookable"
@@ -896,7 +929,7 @@ export default async function CalendarsPage({
                             <div
                               className={`waybook-week-calendar__cell ${isPastDate ? "is-past" : isAppointmentConflict ? "is-appointment-conflict" : "is-unavailable"}`}
                               data-availability-state={isPastDate ? "past" : isAppointmentConflict ? "appointment-overlap" : "unavailable"}
-                              {...(canManage && !isPastDate
+                              {...(canManageMember && !isPastDate
                                 ? {
                                     "data-calendar-drop-cell": "true",
                                     "data-calendar-team-member-id": member.id,
@@ -921,7 +954,7 @@ export default async function CalendarsPage({
                           })}
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
-                          draggable={canManage && isMovableAppointmentStatus(booking.status)}
+                          draggable={canManageSchedule(booking.teamMemberId) && isMovableAppointmentStatus(booking.status)}
                           style={teamPosition(booking)}
                         >
                           <strong>{booking.customerName}</strong>
@@ -1019,7 +1052,7 @@ export default async function CalendarsPage({
                           <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </div>
-                      {canManage && services.length && hasCurrentOrFutureWeekDay ? (
+                      {canManageSelectedSchedule && services.length && hasCurrentOrFutureWeekDay ? (
                         <Link
                           className="waybook-primary-link"
                           href={href({
@@ -1088,7 +1121,7 @@ export default async function CalendarsPage({
                                 tenant.timezone,
                               ),
                           );
-                          return canManage && services.length && isBookable ? (
+                          return canManageSelectedSchedule && services.length && isBookable ? (
                             <Link
                               className="waybook-week-calendar__cell is-actionable is-bookable"
                               data-availability-state="bookable"
@@ -1110,7 +1143,7 @@ export default async function CalendarsPage({
                             <div
                               className={`waybook-week-calendar__cell ${isPastDate ? "is-past" : isAppointmentConflict ? "is-appointment-conflict" : "is-unavailable"}`}
                               data-availability-state={isPastDate ? "past" : isAppointmentConflict ? "appointment-overlap" : "unavailable"}
-                              {...(canManage && !isPastDate
+                              {...(canManageSelectedSchedule && !isPastDate
                                 ? {
                                     "data-calendar-drop-cell": "true",
                                     "data-calendar-team-member-id": selected!.id,
@@ -1147,7 +1180,7 @@ export default async function CalendarsPage({
                           })}
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
-                          draggable={canManage && isMovableAppointmentStatus(booking.status)}
+                          draggable={canManageSchedule(booking.teamMemberId) && isMovableAppointmentStatus(booking.status)}
                           style={staffWeekPosition({
                             startTime: booking.startsAt.toISOString(),
                             endTime: booking.endsAt.toISOString(),
@@ -1190,20 +1223,14 @@ export default async function CalendarsPage({
           startsAt: selectedBooking.startsAt.toISOString(), endsAt: selectedBooking.endsAt.toISOString(), status: selectedBooking.status,
           customerName: selectedBooking.customerName, customerEmail: canManage ? selectedBooking.customerEmail : "", customerPhone: canManage ? selectedBooking.customerPhone : null,
           serviceTitle: selectedBooking.serviceTitle, teamMemberName: selectedBookingMember.name,
-          canManage, canChangeAttendanceNow: canChangeAttendanceNow(selectedBooking),
+          canManage, canManageSchedule: canManageBookingSchedule, canChangeAttendanceNow: canChangeAttendanceNow(selectedBooking),
           canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
           resourceId: canManage ? selectedBooking.resourceId : null,
-          resources: eligibleResources, days: canManage ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
+          resources: eligibleResources, days: canManageBookingSchedule ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
         } : null}
       />
-      {requestedAppointment && (requestedCreateMember ?? selected) && services.length && canManage ? (
-        <div className="tenant-drawer-layer" role="presentation">
-          <Link
-            className="tenant-drawer-scrim"
-            aria-hidden="true"
-            tabIndex={-1}
-            href={href({})}
-          />
+      {requestedAppointment && createMember && selectedLocation ? (
+        <TenantEditorDialog title="New appointment" closeHref={href({})} cycleFocus>
           <aside
             className="tenant-drawer appointment-drawer"
             aria-label="New appointment"
@@ -1213,17 +1240,13 @@ export default async function CalendarsPage({
                 <p>NEW APPOINTMENT</p>
                 <h2>Create an appointment</h2>
                 <span>
-                  {(requestedCreateMember ?? selected).name} · {selectedLocation?.name} ·{" "}
+                  {createMember.name} · {selectedLocation.name} ·{" "}
                   {requestedAppointment.replace("T", " ")}
                 </span>
               </div>
-              <Link
-                className="tenant-drawer-close"
-                aria-label="Close new appointment"
-                href={href({})}
-              >
+              <TenantEditorClose label="Close new appointment" href={href({})}>
                 ×
-              </Link>
+              </TenantEditorClose>
             </header>
             <div className="appointment-drawer__body">
               {selectedCustomer ? (
@@ -1235,9 +1258,10 @@ export default async function CalendarsPage({
                 </div>
               ) : null}
               {manualService ? <ManualAppointmentForm terminology={terms}
-                initialLocation={selectedLocation!}
-                initialMember={requestedCreateMember ?? selected}
+                initialLocation={selectedLocation}
+                initialMember={createMember}
                 initialService={manualService}
+                fixedStaff={!canManage && !permissions.canManageTeamAppointments}
                 defaultDate={requestedAppointment.slice(0, 10)}
                 defaultTime={requestedAppointment.slice(11)}
                 timezone={tenant.timezone}
@@ -1247,7 +1271,7 @@ export default async function CalendarsPage({
               /> : <p className="tenant-drawer-note">Choose a location with an active service before creating an appointment.</p>}
             </div>
           </aside>
-        </div>
+        </TenantEditorDialog>
       ) : null}
     </main>
   );

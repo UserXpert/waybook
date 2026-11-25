@@ -1,7 +1,9 @@
+import { notFound } from "next/navigation";
+import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import Link from "next/link";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -9,35 +11,66 @@ import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import { addProductToRetailCheckout, closeRetailCheckout, createRetailCheckout } from "./actions";
 import { ClientPicker } from "@/components/client-picker";
+import { RetailCheckoutForm } from "@/components/retail-checkout-form";
 
 type Product = { id: string; title: string; sku: string | null; priceCents: number; currency: string };
 type RetailSale = { id: string; customerName: string; status: string; currency: string; createdAt: Date; totalCents: number };
 type RetailLine = { id: string; title: string; unitPriceCents: number; quantity: number; discountCents: number };
 type RetailTransaction = { method: string; amountCents: number; recordedAt: Date };
-const money = (cents: number, currency: string) => new Intl.NumberFormat("en-DK", { style: "currency", currency, maximumFractionDigits: 0 }).format(cents / 100);
+const money = (cents: number, currency: string) => new Intl.NumberFormat("en-DK", { style: "currency", currency, minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(cents / 100);
+const salesPageSize = 100;
+const uuidPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
-export default async function RetailCheckoutPage({ searchParams }: { searchParams: Promise<{ sale?: string }> }) {
-  const { sale } = await searchParams;
+export default async function RetailCheckoutPage({ searchParams }: { searchParams: Promise<{ sale?: string; page?: string }> }) {
+  const { sale, page: rawPage } = await searchParams;
+  const saleId = typeof sale === "string" && uuidPattern.test(sale) ? sale : null;
+  const requestedPage = typeof rawPage === "string" && /^[1-9]\d{0,8}$/.test(rawPage) ? Number(rawPage) : 1;
   const { tenant, membership } = await requireTenantWorkspace();
-  await requireFeature(tenant.id, "booking-essentials");
+  await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to manage checkout.");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) notFound();
   const terminology = await getTenantTerminology(tenant);
   const clientLabel = titleTerminology(terminology.client);
   const db = tenantDb(tenant);
-  const [products, sales] = await Promise.all([
+  const retailScope = db`
+    FROM commerce_sales cs
+    JOIN customers c ON c.id=cs.customer_id AND c.tenant_id=cs.tenant_id
+    WHERE cs.tenant_id=${tenant.id} AND cs.booking_id IS NULL
+  `;
+  const saleDetails = db`
+    SELECT cs.id, c.name AS "customerName", cs.status, cs.currency, cs.created_at AS "createdAt",
+      (SELECT coalesce(sum((sl.unit_price_cents * sl.quantity) - sl.discount_cents),0)::int
+        FROM commerce_sale_lines sl WHERE sl.sale_id=cs.id AND sl.tenant_id=cs.tenant_id) AS "totalCents"
+    ${retailScope}
+  `;
+  const [products, [total], selectedSales] = await Promise.all([
     db<Product[]>`SELECT id,title,sku,price_cents AS "priceCents",currency FROM commerce_catalog_items WHERE tenant_id=${tenant.id} AND kind='product' AND is_active=TRUE ORDER BY title`,
-    db<RetailSale[]>`SELECT cs.id, c.name AS "customerName", cs.status, cs.currency, cs.created_at AS "createdAt", coalesce(sum((sl.unit_price_cents * sl.quantity) - sl.discount_cents),0)::int AS "totalCents" FROM commerce_sales cs JOIN customers c ON c.id=cs.customer_id AND c.tenant_id=cs.tenant_id LEFT JOIN commerce_sale_lines sl ON sl.sale_id=cs.id AND sl.tenant_id=cs.tenant_id WHERE cs.tenant_id=${tenant.id} AND cs.booking_id IS NULL GROUP BY cs.id,c.id ORDER BY cs.created_at DESC LIMIT 100`,
+    db<{ count: number }[]>`SELECT count(*)::int AS count ${retailScope}`,
+    saleId ? db<RetailSale[]>`${saleDetails} AND cs.id=${saleId}` : [],
   ]);
-  const selected = sales.find((item) => item.id === sale) ?? null;
-  const lines = selected ? await db<RetailLine[]>`SELECT id,title_snapshot AS title,unit_price_cents AS "unitPriceCents",quantity,discount_cents AS "discountCents" FROM commerce_sale_lines WHERE tenant_id=${tenant.id} AND sale_id=${selected.id} ORDER BY created_at` : [];
-  const transactions = selected ? await db<RetailTransaction[]>`SELECT method,amount_cents AS "amountCents",recorded_at AS "recordedAt" FROM commerce_sale_transactions WHERE tenant_id=${tenant.id} AND sale_id=${selected.id} ORDER BY recorded_at DESC` : [];
+  const page = Math.min(requestedPage, Math.max(1, Math.ceil(total.count / salesPageSize)));
+  const offset = (page - 1) * salesPageSize;
+  const [sales, lines, transactions] = await Promise.all([
+    db<RetailSale[]>`${saleDetails} ORDER BY cs.created_at DESC, cs.id DESC LIMIT ${salesPageSize} OFFSET ${offset}`,
+    selectedSales.length ? db<RetailLine[]>`SELECT id,title_snapshot AS title,unit_price_cents AS "unitPriceCents",quantity,discount_cents AS "discountCents" FROM commerce_sale_lines WHERE tenant_id=${tenant.id} AND sale_id=${saleId} ORDER BY created_at` : [],
+    selectedSales.length ? db<RetailTransaction[]>`SELECT method,amount_cents AS "amountCents",recorded_at AS "recordedAt" FROM commerce_sale_transactions WHERE tenant_id=${tenant.id} AND sale_id=${saleId} ORDER BY recorded_at DESC` : [],
+  ]);
+  const selected = selectedSales[0];
   const path = tenantPath(tenantSlug, "/app/sales/retail");
+  const listHref = (pageNumber: number) => pageNumber > 1 ? `${path}?page=${pageNumber}` : path;
+  const closeHref = listHref(page);
+  const saleHref = (id: string) => `${closeHref}${page > 1 ? "&" : "?"}sale=${id}`;
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="sales" />
     <section className="reports-intro"><div><p>SALES · RETAIL</p><h1>New checkout</h1><span>Create a draft retail sale, then add products before payment is recorded.</span></div><Link className="waybook-primary-link" href={tenantPath(tenantSlug, "/app/sales")}>Appointment sales</Link></section>
-    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Start a retail checkout</h2><p>Products use an immutable price snapshot once added. Only active products can be selected.</p></div></div><form action={createRetailCheckout} className="tenant-inline-form"><ClientPicker name="customerId" terminology={terminology} required /><label>Product<select name="productId" required defaultValue=""><option value="" disabled>Select product</option>{products.map((item) => <option key={item.id} value={item.id}>{item.title}{item.sku ? ` · ${item.sku}` : ""} · {money(item.priceCents, item.currency)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" defaultValue={1} min={1} max={99} required /></label><button type="submit">Create draft</button></form></section>
-    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Retail checkouts</h2><p>Drafts are editable; a collected checkout is permanently closed and paid by one recorded tender.</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>Checkout</th><th>{clientLabel}</th><th>Status</th><th>Total</th><th>Created</th></tr></thead><tbody>{sales.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : undefined}><td><Link className="waybook-row-link" href={`${path}?sale=${item.id}`}>Retail checkout</Link></td><td>{item.customerName}</td><td><b className={`sales-status ${item.status === "closed" ? "is-paid" : "is-open"}`}>{item.status}</b></td><td>{money(item.totalCents, item.currency)}</td><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.createdAt)}</td></tr>)}{sales.length === 0 ? <tr><td colSpan={5}>No retail checkouts yet.</td></tr> : null}</tbody></table></div></section>
-    {selected ? <div className="tenant-drawer-layer" role="presentation"><Link className="tenant-drawer-scrim" href={path} aria-label="Close checkout" /><aside className="tenant-drawer appointment-drawer sale-detail" aria-label="Retail checkout details"><header><div><p>{selected.status.toUpperCase()} CHECKOUT</p><h2>{selected.customerName}</h2><span>{money(selected.totalCents, selected.currency)} · {lines.length} line{lines.length === 1 ? "" : "s"}</span></div><Link className="tenant-drawer-close" href={path} aria-label="Close checkout">Close</Link></header><div className="appointment-drawer__body"><section><h3>Items</h3><ul className="client-record__ledger">{lines.map((line) => <li key={line.id}><div><strong>{line.title}</strong><span>{line.quantity} × {money(line.unitPriceCents, selected.currency)}</span></div><b>{money((line.unitPriceCents * line.quantity) - line.discountCents, selected.currency)}</b></li>)}</ul></section>{selected.status === "draft" ? <><section><h3>Add product</h3><form action={addProductToRetailCheckout} className="tenant-inline-form"><input type="hidden" name="saleId" value={selected.id} /><label>Product<select name="productId" required defaultValue=""><option value="" disabled>Select product</option>{products.map((item) => <option key={item.id} value={item.id}>{item.title} · {money(item.priceCents, item.currency)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" defaultValue={1} min={1} max={99} required /></label><button type="submit">Add item</button></form></section><section><h3>Collect payment</h3><form action={closeRetailCheckout} className="tenant-inline-form"><input type="hidden" name="saleId" value={selected.id} /><label>Method<select name="method" defaultValue="card"><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label><button type="submit">Collect {money(selected.totalCents, selected.currency)}</button></form><p className="sale-detail__note">This creates one immutable tender for the exact total and closes the sale. Refunds will be separate append-only entries.</p></section></> : <section><h3>Collected payment</h3><ul className="client-record__ledger">{transactions.map((item, index) => <li key={`${item.recordedAt.toISOString()}-${index}`}><div><strong>{item.method.replaceAll("_", " ")}</strong><span>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.recordedAt)}</span></div><b>{money(item.amountCents, selected.currency)}</b></li>)}</ul><p className="sale-detail__note">This checkout is closed. Lines and payment cannot be changed; later refunds are appended as separate ledger entries.</p></section>}</div></aside></div> : null}
+    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Start a retail checkout</h2><p>Products use an immutable price snapshot once added. Only active products can be selected.</p></div></div><RetailCheckoutForm action={createRetailCheckout} submitLabel="Create draft"><ClientPicker name="customerId" terminology={terminology} required /><label>Product<select name="productId" required defaultValue=""><option value="" disabled>Select product</option>{products.map((item) => <option key={item.id} value={item.id}>{item.title}{item.sku ? ` · ${item.sku}` : ""} · {money(item.priceCents, item.currency)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" defaultValue={1} min={1} max={99} required /></label></RetailCheckoutForm></section>
+    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Retail checkouts</h2><p>Drafts are editable; a collected checkout is permanently closed and paid by one recorded tender.</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>Checkout</th><th>{clientLabel}</th><th>Status</th><th>Total</th><th>Created</th></tr></thead><tbody>{sales.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : undefined}><td><Link className="waybook-row-link" href={saleHref(item.id)}>Retail checkout</Link></td><td>{item.customerName}</td><td><b className={`sales-status ${item.status === "closed" ? "is-paid" : "is-open"}`}>{item.status}</b></td><td>{money(item.totalCents, item.currency)}</td><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.createdAt)}</td></tr>)}{sales.length === 0 ? <tr><td colSpan={5}>No retail checkouts yet.</td></tr> : null}</tbody></table></div>
+      {total.count > salesPageSize ? <nav className="waybook-list-filter sales-pagination" aria-label="Retail checkout pages">
+        <span>Showing {offset + 1}–{Math.min(offset + salesPageSize, total.count)} of {total.count}</span>
+        {page > 1 ? <Link href={listHref(page - 1)}>Previous page</Link> : null}
+        {offset + salesPageSize < total.count ? <Link href={listHref(page + 1)}>Next page</Link> : null}
+      </nav> : null}
+    </section>
+    {selected ? <TenantEditorDialog key={selected.id} title="Retail checkout details" closeHref={closeHref} cycleFocus dismissSuccessToastOnClose><aside className="tenant-drawer appointment-drawer sale-detail" aria-label="Retail checkout details"><header><div><p>{selected.status.toUpperCase()} CHECKOUT</p><h2>{selected.customerName}</h2><span>{money(selected.totalCents, selected.currency)} · {lines.length} line{lines.length === 1 ? "" : "s"}</span></div><TenantEditorClose href={closeHref} label="Close checkout">Close</TenantEditorClose></header><div className="appointment-drawer__body"><section><h3>Items</h3><ul className="client-record__ledger">{lines.map((line) => <li key={line.id}><div><strong>{line.title}</strong><span>{line.quantity} × {money(line.unitPriceCents, selected.currency)}</span></div><b>{money((line.unitPriceCents * line.quantity) - line.discountCents, selected.currency)}</b></li>)}</ul></section>{selected.status === "draft" ? <><section><h3>Add product</h3><RetailCheckoutForm action={addProductToRetailCheckout} submitLabel="Add item"><input type="hidden" name="saleId" value={selected.id} />{page > 1 ? <input type="hidden" name="page" value={page} /> : null}<label>Product<select name="productId" required defaultValue=""><option value="" disabled>Select product</option>{products.map((item) => <option key={item.id} value={item.id}>{item.title} · {money(item.priceCents, item.currency)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" defaultValue={1} min={1} max={99} required /></label></RetailCheckoutForm></section><section><h3>Collect payment</h3><RetailCheckoutForm action={closeRetailCheckout} submitLabel={`Collect ${money(selected.totalCents, selected.currency)}`}><input type="hidden" name="saleId" value={selected.id} />{page > 1 ? <input type="hidden" name="page" value={page} /> : null}<input type="hidden" name="totalCents" value={selected.totalCents} /><label>Method<select name="method" defaultValue="card"><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label></RetailCheckoutForm><p className="sale-detail__note">This creates one immutable tender for the exact total and closes the sale. Refunds will be separate append-only entries.</p></section></> : <section><h3>Collected payment</h3><ul className="client-record__ledger">{transactions.map((item, index) => <li key={`${item.recordedAt.toISOString()}-${index}`}><div><strong>{item.method.replaceAll("_", " ")}</strong><span>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.recordedAt)}</span></div><b>{money(item.amountCents, selected.currency)}</b></li>)}</ul><p className="sale-detail__note">This checkout is closed. Lines and payment cannot be changed; later refunds are appended as separate ledger entries.</p></section>}</div></aside></TenantEditorDialog> : null}
   </main>;
 }

@@ -21,6 +21,7 @@ type Props = {
 };
 
 type StatusActionProps = Pick<Props, "bookingId" | "status" | "updateStatus" | "canChangeAttendanceNow">;
+type RescheduleProps = Pick<Props, "bookingId" | "status" | "timezone" | "days" | "slots" | "reschedule">;
 
 export function AppointmentStatusActions({ bookingId, status, updateStatus, canChangeAttendanceNow }: StatusActionProps) {
   const statusOptions = status === "confirmed"
@@ -44,6 +45,38 @@ export function AppointmentStatusActions({ bookingId, status, updateStatus, canC
   return <section><h3>Appointment status</h3><p className="appointment-status-current">Current: {status.replace("_", " ")}</p><div className="appointment-drawer__status-actions">{statusOptions.map(([value, label]) => <form action={updateStatus} key={value}><input type="hidden" name="bookingId" value={bookingId} /><input type="hidden" name="status" value={value} /><button type="submit">{label}</button></form>)}</div></section>;
 }
 
+export function AppointmentRescheduleActions({ bookingId, status, timezone, days, slots, reschedule }: RescheduleProps) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [hasNewTime, setHasNewTime] = useState(false);
+  if (!isMovableAppointmentStatus(status)) return null;
+
+  async function saveSchedule(formData: FormData) {
+    setPending(true);
+    setError("");
+    try {
+      await reschedule(formData);
+      showSuccessToast("Appointment rescheduled");
+      router.refresh();
+    } catch {
+      setError("Could not reschedule this appointment. Please try another time.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <section>
+    <h3>Reschedule</h3>
+    <form action={saveSchedule} className="tenant-drawer-form">
+      <input type="hidden" name="bookingId" value={bookingId} />
+      <RescheduleSlotPicker bookingId={bookingId} timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} />
+      {error ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{error}</p> : null}
+      <button type="submit" disabled={!hasNewTime || pending}>{pending ? "Rescheduling…" : "Reschedule appointment"}</button>
+    </form>
+  </section>;
+}
+
 export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, canChangeAttendanceNow, saveDetails, reschedule, updateStatus, resourceId, resources }: Props) {
   const router = useRouter();
   const detailsFormId = useId();
@@ -56,11 +89,8 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
       ?.querySelector<HTMLElement>("[data-appointment-save-action]");
     setSaveTarget(target ?? null);
   }, [bookingId]);
-  const [reschedulePending, setReschedulePending] = useState(false);
-  const [rescheduleError, setRescheduleError] = useState("");
   const [details, setDetails] = useState({ name: customerName, email: customerEmail, phone: customerPhone ?? "" });
   const [savedDetails, setSavedDetails] = useState({ name: customerName, email: customerEmail, phone: customerPhone ?? "", resource: resourceId ?? "" });
-  const [hasNewTime, setHasNewTime] = useState(false);
   const [resource, setResource] = useState(resourceId ?? "");
   const [savingDetails, setSavingDetails] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -114,7 +144,7 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
         {saveTarget ? createPortal(saveButton, saveTarget) : saveButton}
       </form>
     </section>
-    {isMovableAppointmentStatus(status) ? <section><h3>Reschedule</h3><form action={async (formData) => { setReschedulePending(true); setRescheduleError(""); try { await reschedule(formData); showSuccessToast("Appointment rescheduled"); router.refresh(); } catch { setRescheduleError("Could not reschedule this appointment. Please try another time."); } finally { setReschedulePending(false); } }} className="tenant-drawer-form"><input type="hidden" name="bookingId" value={bookingId} /><RescheduleSlotPicker bookingId={bookingId} timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} />{rescheduleError ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{rescheduleError}</p> : null}<button type="submit" disabled={!hasNewTime || reschedulePending}>{reschedulePending ? "Rescheduling…" : "Reschedule appointment"}</button></form></section> : null}
+    <AppointmentRescheduleActions bookingId={bookingId} status={status} timezone={timezone} days={days} slots={slots} reschedule={reschedule} />
     <section><h3>Sales ledger</h3><p className="appointment-status-current">Record payment received or a refund. Entries are immutable and feed paid-revenue reporting.</p><AppointmentPaymentForm bookingId={bookingId} outstandingCents={0} /></section>
   </>;
 }

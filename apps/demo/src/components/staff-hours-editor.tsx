@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Pencil } from "lucide-react";
 import { saveStaffWorkingHours } from "@/app/app/team/actions";
 import { showSuccessToast } from "@/lib/waybook/toast";
@@ -72,6 +72,13 @@ export function StaffHoursEditor({ memberId, initialSchedule }: { memberId: stri
 
   const dialog = useRef<HTMLElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  const closeEditor = useCallback((discard: boolean) => {
+    if (discard && editingDay && editingSnapshot) {
+      setSchedule((current) => ({ ...current, [editingDay]: editingSnapshot }));
+    }
+    setEditingSnapshot(null);
+    setEditingDay(null);
+  }, [editingDay, editingSnapshot]);
   useEffect(() => {
     if (!editingDay) return;
     const trigger = opener.current;
@@ -79,12 +86,18 @@ export function StaffHoursEditor({ memberId, initialSchedule }: { memberId: stri
     return () => trigger?.focus();
   }, [editingDay]);
 
-  function keepDialogFocus(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Escape") {
+  useEffect(() => {
+    if (!editingDay) return;
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
       event.preventDefault();
       if (!saving) closeEditor(true);
-      return;
-    }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [closeEditor, editingDay, saving]);
+
+  function keepDialogFocus(event: KeyboardEvent<HTMLElement>) {
     if (event.key !== "Tab") return;
     const controls = event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), [tabindex='0']");
     const first = controls[0];
@@ -105,13 +118,7 @@ export function StaffHoursEditor({ memberId, initialSchedule }: { memberId: stri
     setEditingSnapshot(schedule[day].map((shift) => ({ ...shift })));
     setEditingDay(day);
   }
-  function closeEditor(discard: boolean) {
-    if (discard && editingDay && editingSnapshot) {
-      setSchedule((current) => ({ ...current, [editingDay]: editingSnapshot }));
-    }
-    setEditingSnapshot(null);
-    setEditingDay(null);
-  }
+
 
   function updateShift(index: number, key: "startTime" | "endTime", value: string) {
     if (!editingDay) return;

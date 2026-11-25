@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
@@ -6,7 +7,7 @@ import { EmailTemplateEditor } from "@/components/email-template-editor";
 import { EmailProviderSettings } from "@/components/email-provider-settings";
 import { confirmProviderTest, removeEmailProvider, retryRejectedEmail, saveEmailProvider, saveEmailTemplate, saveReminderSettings, sendOnboardingProviderTest, sendProviderTest } from "./actions";
 import { controlDb, tenantDb } from "@/lib/waybook/database";
-import { requireFeature } from "@/lib/waybook/features";
+import { requirePageFeature } from "@/lib/waybook/features";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { tenantDateKey, weekStartForLocalDate } from "@/lib/waybook/today-command-centre";
@@ -28,8 +29,8 @@ export default async function EmailsPage({ searchParams }: { searchParams: Promi
   const { tenant, membership } = await requireTenantWorkspace();
   const terms = await getTenantTerminology(tenant);
   const permissions = await staffPermissionContext(tenant, membership);
-  if (!permissions.isManager) throw new Error("You do not have permission to view emails.");
-  await requireFeature(tenant.id, "email-notifications");
+  if (!permissions.isManager) notFound();
+  await requirePageFeature(tenant.id, "email-notifications");
   const slug = await currentTenantRouteSlug(tenant.slug);
   const path = tenantPath(slug, "/app/emails");
   const db = tenantDb(tenant);

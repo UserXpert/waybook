@@ -1,16 +1,17 @@
 export type AppointmentDrawerCapabilityInput = {
   canManage: boolean;
+  canManageSchedule?: boolean;
   canUpdateStatus: boolean;
 };
 
-/** Keeps status-only staff from inheriting appointment-management controls. */
 export function appointmentDrawerCapabilities(input: AppointmentDrawerCapabilityInput) {
   const canManageAppointment = input.canManage;
+  const canManageSchedule = canManageAppointment || Boolean(input.canManageSchedule);
   return {
     canUpdateStatus: canManageAppointment || input.canUpdateStatus,
     canEdit: canManageAppointment,
-    canReschedule: canManageAppointment,
-    canCancel: canManageAppointment,
+    canReschedule: canManageSchedule,
+    canCancel: canManageSchedule,
     canManageResources: canManageAppointment,
     canManagePayments: canManageAppointment,
   };

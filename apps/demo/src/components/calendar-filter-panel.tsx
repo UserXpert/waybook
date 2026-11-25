@@ -10,7 +10,12 @@ export function CalendarFilterDismiss() {
       });
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") document.querySelectorAll<HTMLDetailsElement>(".calendar-filter-panel[open]").forEach((panel) => { panel.open = false; });
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      document.querySelectorAll<HTMLDetailsElement>(".calendar-filter-panel[open]").forEach((panel) => {
+        const hadFocus = panel.contains(document.activeElement);
+        panel.open = false;
+        if (hadFocus) panel.querySelector("summary")?.focus();
+      });
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", dismissOnEscape);

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Request } from "@playwright/test";
 import postgres from "postgres";
 import sharp from "sharp";
 
@@ -20,9 +20,9 @@ test("both owners use the Staff Details form and share the saved photo with thei
   for (const tenant of tenants) {
     const db = postgres(process.env[tenant.database]!, { max: 1, ssl: false });
     const [original] = await db<{
-      id: string; name: string; email: string; phone: string | null; role: string; isActive: boolean; color: string | null; photo: string | null;
+      id: string; identityId: string; name: string; email: string; phone: string | null; role: string; isActive: boolean; color: string | null; photo: string | null;
     }[]>`
-      SELECT id, name, email, phone, role, is_active AS "isActive", calendar_color AS color, photo_data_url AS photo
+      SELECT id, identity_id AS "identityId", name, email, phone, role, is_active AS "isActive", calendar_color AS color, photo_data_url AS photo
       FROM team_members WHERE role = 'owner' AND email = ${tenant.email}
     `;
     try {
@@ -59,22 +59,81 @@ test("both owners use the Staff Details form and share the saved photo with thei
       await name.fill("   ");
       await save.click();
       await expect(page.getByRole("alert").filter({ hasText: "Enter a name" })).toBeVisible();
+      const profileAndSchedule = async () => (await db`
+        SELECT to_jsonb(tm) - 'name' - 'updated_at' AS profile,
+          (SELECT jsonb_agg(to_jsonb(b) ORDER BY b.id) FROM bookings b WHERE b.team_member_id=tm.id) AS bookings,
+          (SELECT array_agg(location_id ORDER BY location_id) FROM team_member_locations WHERE team_member_id=tm.id) AS locations,
+          (SELECT array_agg(service_id ORDER BY service_id) FROM service_team_members WHERE team_member_id=tm.id) AS services
+        FROM team_members tm WHERE tm.id=${original.id}
+      `)[0];
+      const beforeNameOnly = await profileAndSchedule();
+      const nameOnly = `${tenant.slug} QA Øwner`;
+      await name.fill(nameOnly);
+      await save.click();
+      await expect(page.getByRole("status")).toHaveText("Details saved.");
+      await expect(page.getByRole("heading", { name: nameOnly, exact: true })).toBeVisible();
+      expect(await profileAndSchedule()).toEqual(beforeNameOnly);
+      const [nameAudit] = await db`
+        SELECT actor_identity_id, metadata->'fields' AS fields FROM tenant_audit_events
+        WHERE action='staff.updated' AND target_id=${original.id} ORDER BY created_at DESC,id DESC LIMIT 1
+      `;
+      expect(nameAudit).toEqual({ actor_identity_id: original.identityId, fields: ["name"] });
+
       const nextName = `${tenant.slug} Owner QA`;
       const nextEmail = `contact-${tenant.slug}@example.invalid`;
       const nextPhone = "+45 12 34 56 78";
       await name.fill(nextName);
       await email.fill(nextEmail);
       await phone.fill(nextPhone);
-      await page.getByRole("radio", { name: "Blue", exact: true }).check();
+      const colourGroup = page.getByRole("group", { name: "Calendar colour" });
+      const newColour = colourGroup.locator('input[type="radio"]:enabled:not(:checked)').first();
+      const nextColour = await newColour.inputValue({ timeout: 5000 });
+      await newColour.check();
+
+      // Hold one real save to check the pending state, then fail it before it reaches the server.
+      let releaseSave!: () => void;
+      const heldSave = new Promise<void>((resolve) => { releaseSave = resolve; });
+      const teamRoute = /\/app\/team(?:\?|$)/;
+      const isSaveRequest = (request: Request) =>
+        request.method() === "POST" && Boolean(request.headers()["next-action"]);
+      const auditCount = async () => (await db<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM tenant_audit_events
+        WHERE action = 'staff.updated' AND target_id = ${original.id}
+      `)[0].count;
+      const beforeSave = await auditCount();
+      await page.route(teamRoute, async (route) => {
+        if (!isSaveRequest(route.request())) return route.continue();
+        await heldSave;
+        await route.abort("failed");
+      });
+      try {
+        await Promise.all([
+          page.waitForRequest((candidate) => teamRoute.test(candidate.url()) && isSaveRequest(candidate)),
+          save.click(),
+        ]);
+        await expect(page.getByRole("button", { name: "Saving…" })).toBeDisabled();
+      } finally {
+        releaseSave();
+      }
+      await expect(page.getByRole("alert").filter({ hasText: "Could not confirm the save" })).toBeVisible();
+      await page.unroute(teamRoute);
+      await expect(save).toBeEnabled();
+      await expect(name).toHaveValue(nextName);
+      await expect(email).toHaveValue(nextEmail);
+      await expect(phone).toHaveValue(nextPhone);
+      await expect(colourGroup.getByRole("radio", { checked: true })).toHaveValue(nextColour);
+      expect(await auditCount()).toBe(beforeSave);
+
       await save.click();
       await expect(page.getByRole("status")).toHaveText("Details saved.");
+      expect(await auditCount()).toBe(beforeSave + 1);
       const updatedMenu = page.getByRole("button", { name: `Account menu for ${nextName}` });
       await expect(updatedMenu).toBeVisible();
       await page.reload();
       await expect(name).toHaveValue(nextName);
       await expect(email).toHaveValue(nextEmail);
       await expect(phone).toHaveValue(nextPhone);
-      await expect(page.getByRole("radio", { name: "Blue", exact: true })).toBeChecked();
+      await expect(colourGroup.getByRole("radio", { checked: true })).toHaveValue(nextColour);
 
       const photoButton = page.getByRole("button", { name: `Change photo for ${nextName}` });
       const image = await sharp({ create: { width: 8, height: 8, channels: 3, background: tenant.background } }).png().toBuffer();
@@ -86,7 +145,7 @@ test("both owners use the Staff Details form and share the saved photo with thei
       photos.push(savedPhoto);
       await expect(photoButton.locator("img")).toHaveAttribute("src", savedPhoto);
       const [saved] = await db`SELECT id, name, email, phone, role, is_active AS "isActive", calendar_color AS color FROM team_members WHERE id = ${original.id}`;
-      expect(saved).toEqual({ id: original.id, name: nextName, email: nextEmail, phone: nextPhone, role: original.role, isActive: original.isActive, color: "#7baaf7" });
+      expect(saved).toEqual({ id: original.id, name: nextName, email: nextEmail, phone: nextPhone, role: original.role, isActive: original.isActive, color: nextColour });
 
       const fresh = await browser.newPage();
       try {

@@ -11,7 +11,9 @@ import { withSuccessToast } from "@/lib/waybook/toast";
 
 function slug(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 56) || "location"; }
 
-export async function saveLocation(formData: FormData) {
+type LocationSaveState = { error?: string };
+
+export async function saveLocation(_: LocationSaveState, formData: FormData): Promise<LocationSaveState> {
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, 'booking-essentials');
   const permissions = await staffPermissionContext(tenant, membership);
@@ -19,7 +21,7 @@ export async function saveLocation(formData: FormData) {
   const id = String(formData.get('locationId') ?? '');
   const name = String(formData.get('name') ?? '').trim();
   const locationType = String(formData.get('locationType') ?? 'fixed');
-  if (!name || !['fixed', 'mobile'].includes(locationType)) throw new Error('Enter a location name and valid type.');
+  if (!name || !['fixed', 'mobile'].includes(locationType)) return { error: 'Enter a location name and valid type.' };
   const db = tenantDb(tenant);
   const fields = [String(formData.get('phone') ?? '').trim() || null, String(formData.get('addressLine1') ?? '').trim() || null, String(formData.get('addressLine2') ?? '').trim() || null, String(formData.get('city') ?? '').trim() || null, String(formData.get('region') ?? '').trim() || null, String(formData.get('postalCode') ?? '').trim() || null];
   const online = formData.get('isOnlineBookable') === 'on';
@@ -29,9 +31,6 @@ export async function saveLocation(formData: FormData) {
     if (String(formData.get(`open-${day}`)) !== 'on') return [];
     const start = String(formData.get(`start-${day}`) ?? '09:00');
     const end = String(formData.get(`end-${day}`) ?? '17:00');
-    if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start) {
-      throw new Error('Each opening period must end after it starts.');
-    }
     return [{ day, start, end }];
   });
   let openingHours = legacyOpeningHours;
@@ -39,31 +38,52 @@ export async function saveLocation(formData: FormData) {
   if (serializedHours) {
     try {
       const parsed: unknown = JSON.parse(serializedHours);
-      if (!Array.isArray(parsed)) throw new Error();
-      openingHours = parsed.filter((entry): entry is OpeningHour => Boolean(entry) && typeof entry === 'object' && typeof (entry as OpeningHour).day === 'number' && typeof (entry as OpeningHour).start === 'string' && typeof (entry as OpeningHour).end === 'string');
-    } catch { throw new Error('Opening hours could not be read. Please try again.'); }
-    if (openingHours.some(({ day, start, end }) => !Number.isInteger(day) || day < 0 || day > 6 || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end) || end <= start)) throw new Error('Each opening period must end after it starts.');
-    const byDay = new Map<number, OpeningHour[]>();
-    for (const hour of openingHours) byDay.set(hour.day, [...(byDay.get(hour.day) ?? []), hour]);
-    for (const hours of byDay.values()) {
-      const ordered = [...hours].sort((left, right) => left.start.localeCompare(right.start));
-      if (ordered.some((hour, index) => index > 0 && hour.start < ordered[index - 1].end)) throw new Error('Opening periods on the same day cannot overlap.');
+      if (!Array.isArray(parsed) || !parsed.every((entry): entry is OpeningHour =>
+        entry && typeof entry === 'object' && typeof entry.day === 'number' &&
+        typeof entry.start === 'string' && typeof entry.end === 'string')) {
+        return { error: 'Opening hours could not be read. Please try again.' };
+      }
+      openingHours = parsed;
+    } catch {
+      return { error: 'Opening hours could not be read. Please try again.' };
     }
   }
-  let locationId = id;
-  if (id) {
-    const [row] = await db<{ id: string }[]>`UPDATE locations SET name=${name}, location_type=${locationType}, is_online_bookable=${online}, phone=${fields[0]}, address_line_1=${fields[1]}, address_line_2=${fields[2]}, city=${fields[3]}, region=${fields[4]}, postal_code=${fields[5]}, is_active=${active}, updated_at=now() WHERE id=${id} AND tenant_id=${tenant.id} RETURNING id`;
-    if (!row) throw new Error('Location is unavailable.');
-  } else {
-    const base = slug(name); const [count] = await db<{ count: number }[]>`SELECT count(*)::int AS count FROM locations WHERE tenant_id=${tenant.id} AND slug LIKE ${`${base}%`}`;
-    const [row] = await db<{ id: string }[]>`INSERT INTO locations (tenant_id, slug, name, location_type, is_online_bookable, phone, address_line_1, address_line_2, city, region, postal_code, timezone, is_active) VALUES (${tenant.id}, ${count?.count ? `${base}-${count.count + 1}` : base}, ${name}, ${locationType}, ${online}, ${fields[0]}, ${fields[1]}, ${fields[2]}, ${fields[3]}, ${fields[4]}, ${fields[5]}, ${tenant.timezone}, ${active}) RETURNING id`;
-    locationId = row.id;
+  const clockTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+  if (openingHours.some(({ day, start, end }) => !Number.isInteger(day) || day < 0 || day > 6 || !clockTime.test(start) || !clockTime.test(end) || end <= start)) {
+    return { error: 'Each opening period must end after it starts.' };
   }
-  await db.begin(async (transaction) => {
-    await transaction.unsafe('DELETE FROM location_hours WHERE tenant_id=$1 AND location_id=$2', [tenant.id, locationId]);
-    for (const { day, start, end } of openingHours) await transaction.unsafe('INSERT INTO location_hours (tenant_id, location_id, day_of_week, start_time, end_time) VALUES ($1,$2,$3,$4,$5)', [tenant.id, locationId, day, start, end]);
+  const ordered = [...openingHours].sort((left, right) => left.day - right.day || left.start.localeCompare(right.start));
+  if (ordered.some((hour, index) => index > 0 && hour.day === ordered[index - 1].day && hour.start < ordered[index - 1].end)) {
+    return { error: 'Opening periods on the same day cannot overlap.' };
+  }
+
+  const locationId = await db.begin(async (transaction) => {
+    let row: { id: string } | undefined;
+    if (id) {
+      [row] = await transaction.unsafe<{ id: string }[]>(
+        'UPDATE locations SET name=$1, location_type=$2, is_online_bookable=$3, phone=$4, address_line_1=$5, address_line_2=$6, city=$7, region=$8, postal_code=$9, is_active=$10, updated_at=now() WHERE id=$11 AND tenant_id=$12 RETURNING id',
+        [name, locationType, online, ...fields, active, id, tenant.id],
+      );
+    } else {
+      const base = slug(name);
+      const [count] = await transaction.unsafe<{ count: number }[]>('SELECT count(*)::int AS count FROM locations WHERE tenant_id=$1 AND slug LIKE $2', [tenant.id, base + '%']);
+      [row] = await transaction.unsafe<{ id: string }[]>(
+        'INSERT INTO locations (tenant_id, slug, name, location_type, is_online_bookable, phone, address_line_1, address_line_2, city, region, postal_code, timezone, is_active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id',
+        [tenant.id, count?.count ? base + '-' + (count.count + 1) : base, name, locationType, online, ...fields, tenant.timezone, active],
+      );
+    }
+    if (!row) return null;
+    await transaction.unsafe('DELETE FROM location_hours WHERE tenant_id=$1 AND location_id=$2', [tenant.id, row.id]);
+    for (const { day, start, end } of ordered) {
+      await transaction.unsafe('INSERT INTO location_hours (tenant_id, location_id, day_of_week, start_time, end_time) VALUES ($1,$2,$3,$4,$5)', [tenant.id, row.id, day, start, end]);
+    }
+    await transaction.unsafe(
+      "INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1,$2,'location',$3,$4::jsonb)",
+      [tenant.id, id ? 'location.updated' : 'location.created', row.id, JSON.stringify({ name, locationType, online, active })],
+    );
+    return row.id;
   });
-  await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${id ? 'location.updated' : 'location.created'}, 'location', ${locationId}, ${JSON.stringify({ name, locationType, online, active })}::jsonb)`;
+  if (!locationId) return { error: 'Location is unavailable.' };
   revalidatePath('/app'); revalidatePath('/app/locations'); revalidatePath('/app/team'); revalidatePath('/app/services'); revalidatePath('/app/calendars'); revalidatePath('/book');
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/locations")}?location=${locationId}`, "Location saved."));

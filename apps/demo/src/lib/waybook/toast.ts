@@ -22,6 +22,10 @@ export function showSuccessToast(message: string): void {
   }));
 }
 
+export function clearSuccessToast(): void {
+  window.dispatchEvent(new CustomEvent(WAYBOOK_TOAST_EVENT, { detail: null }));
+}
+
 /** Adds a fixed post-action toast message to a tenant-local redirect. */
 export function withSuccessToast(href: string, message: string): string {
   const token = Object.entries(redirectToastMessages).find(([, candidate]) => candidate === message)?.[0];

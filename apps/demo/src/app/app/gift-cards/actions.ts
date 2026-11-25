@@ -100,5 +100,10 @@ export async function updateGiftCardDetails(formData: FormData) {
   revalidatePath("/app/gift-cards");
   revalidatePath("/app/customers");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/gift-cards")}?card=${cardId}`, "Gift card saved."));
+  const params = new URLSearchParams({ card: cardId });
+  const search = String(formData.get("q") ?? "").trim().slice(0, 100);
+  const page = String(formData.get("page") ?? "");
+  if (search) params.set("q", search);
+  if (/^[1-9]\d{0,8}$/.test(page) && page !== "1") params.set("page", page);
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/gift-cards")}?${params}`, "Gift card saved."));
 }

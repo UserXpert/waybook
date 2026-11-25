@@ -5,16 +5,20 @@ import sharp from "sharp";
 
 test.use({ actionTimeout: 6000 });
 
-test("product editor preserves checkout availability, validates input and updates its photo", async ({ page }) => {
-  const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
+for (const tenant of [
+  { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
+  { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
+]) test(`product editor preserves availability and search, validates input and updates its photo in ${tenant.route}`, async ({ page }) => {
+  const db = postgres(process.env[tenant.database]!, { max: 1, ssl: false });
   const sku = `QA-${randomUUID()}`.toUpperCase();
+  const revisedSku = `REVISED-${randomUUID()}`.toUpperCase();
   try {
     await page.goto("/login");
-    await page.getByLabel("Work email").fill("owner@nordic.local");
+    await page.getByLabel("Work email").fill(tenant.owner);
     await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL(/\/nordic\/app/);
-    await page.goto("/nordic/app/products");
+    await expect(page).toHaveURL((url) => url.pathname === `/${tenant.route}/app`);
+    await page.goto(`/${tenant.route}/app/products`);
     await page.getByRole("link", { name: "Add product", exact: true }).click();
     await expect(page).toHaveURL(/new=1/);
     await page.waitForLoadState("networkidle");
@@ -54,10 +58,17 @@ test("product editor preserves checkout availability, validates input and update
     await expect(page.getByRole("img", { name: "Current product" })).toHaveCount(0);
 
     await page.getByRole("complementary", { name: "Edit product" }).getByRole("link", { name: "Close product editor" }).click();
+    await expect(page.getByRole("dialog", { name: "Edit product" })).toHaveCount(0);
     await page.getByRole("searchbox", { name: "Search", exact: true }).fill(sku);
     await page.getByRole("button", { name: "Apply", exact: true }).click();
-    await expect(page).toHaveURL(/\?q=/);
+    await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku);
     await expect(page.getByRole("link", { name: "Open Synthetic Catalogue QA", exact: true })).toBeVisible();
+    const openProduct = page.getByRole("link", { name: "Open Synthetic Catalogue QA", exact: true });
+    const closeProduct = (label: string) => page.getByRole("complementary", { name: label }).getByRole("link", { name: "Close product editor" });
+    await openProduct.click();
+    await closeProduct("Edit product").click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku && !url.searchParams.has("product"));
+    await expect(page.getByRole("searchbox", { name: "Search", exact: true })).toHaveValue(sku);
     await page.getByRole("link", { name: "Add product", exact: true }).click();
     await expect(page).toHaveURL(/new=1/);
     await name.fill("Duplicate SKU Draft");
@@ -65,12 +76,26 @@ test("product editor preserves checkout availability, validates input and update
     await save.click();
     await expect(page.getByRole("alert").filter({ hasText: "That SKU already belongs" })).toBeVisible();
     await expect(name).toHaveValue("Duplicate SKU Draft");
+    await closeProduct("Add product").click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku && !url.searchParams.has("new"));
+    await expect(page.getByRole("searchbox", { name: "Search", exact: true })).toHaveValue(sku);
     expect(await db`SELECT id FROM commerce_catalog_items WHERE sku = ${sku}`).toHaveLength(1);
     await page.goto(productUrl);
     await expect(name).toHaveValue("Synthetic Catalogue QA");
+    const filteredProductUrl = new URL(productUrl);
+    filteredProductUrl.searchParams.set("q", sku);
+    await page.goto(filteredProductUrl.toString());
+    await page.getByRole("textbox", { name: "SKU", exact: true }).fill(revisedSku);
+    await save.click();
+    await expect(page.getByText("Product saved.", { exact: true })).toBeVisible();
+    await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku && url.searchParams.has("product"));
+    await expect(page.getByRole("textbox", { name: "SKU", exact: true })).toHaveValue(revisedSku);
+    await closeProduct("Edit product").click();
+    await expect(page.getByRole("searchbox", { name: "Search", exact: true })).toHaveValue(sku);
+    await expect(page.getByText("No matching products. Try a different name or SKU.", { exact: true })).toBeVisible();
   } finally {
     try {
-      await db`DELETE FROM commerce_catalog_items WHERE sku = ${sku} AND kind = 'product'`;
+      await db`DELETE FROM commerce_catalog_items WHERE sku IN (${sku}, ${revisedSku}) AND kind = 'product'`;
     } finally {
       await db.end();
     }

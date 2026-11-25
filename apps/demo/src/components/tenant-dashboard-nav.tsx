@@ -9,7 +9,7 @@ import { tenantFeatures } from "@/lib/waybook/features";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireIdentity } from "@/lib/waybook/auth";
-import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { staffPermissionContext, workspaceSearchPermissions } from "@/lib/waybook/staff-permissions";
 import { tenantDb } from "@/lib/waybook/database";
 import { TenantAppMenu, type TenantAppLink } from "@/components/tenant-app-menu";
 import { TenantUserMenu } from "@/components/tenant-user-menu";
@@ -59,6 +59,11 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     accountProfileResult,
   ]);
   const enabled = new Set(features.filter((feature) => feature.isEnabled).map((feature) => feature.featureKey));
+  const { canSearchAppointments, canSearchClients } = workspaceSearchPermissions(permissions);
+  const searchEnabled = enabled.has("booking-essentials") && (canSearchAppointments || canSearchClients);
+  const searchLabel = canSearchAppointments && canSearchClients
+    ? `Search bookings or ${terms.clients}`
+    : canSearchAppointments ? "Search bookings" : `Search ${terms.clients}`;
   const clientsEnabled = enabled.has("clients"), teamEnabled = enabled.has("team"), calendarsEnabled = enabled.has("calendars"), resourcesEnabled = enabled.has("resources"), notificationsEnabled = enabled.has("email-notifications");
   const canUse = {
     overview: permissions.isManager,
@@ -108,7 +113,7 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     <nav aria-label="Primary navigation">{primary.map((link) => <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined}><link.Icon aria-hidden="true" />{link.label}</Link>)}</nav>
     <TenantAppMenu links={appLinks} active={active} />
     <div className="tenant-nav-account-actions">
-      <TenantNavTools searchLabel={`Search bookings or ${terms.clients}`} searchHref={toHref("/app/search")} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} />
+      <TenantNavTools searchLabel={searchLabel} searchHref={searchEnabled ? toHref("/app/search") : undefined} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} />
       <TenantUserMenu
         key={`${tenant.id}:${identity.id}`}
         photo={accountProfile?.photo ?? null}

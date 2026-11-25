@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { OperationalTimeRange } from "@/components/operational-time-range";
+import { saveLocation } from "@/app/app/locations/actions";
+import { TenantEditorClose } from "@/components/tenant-editor-dialog";
 
 type Hour = { dayOfWeek: number; startTime: string; endTime: string };
 const days = [[1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"], [5, "Friday"], [6, "Saturday"], [0, "Sunday"]] as const;
@@ -10,9 +12,33 @@ const timeAfter = (time: string) => {
   return minutes <= 23 * 60 + 30 ? `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}` : null;
 };
 
-export function LocationHoursEditor({ initialHours }: { initialHours: Hour[] }) {
-  const initial = useMemo(() => initialHours.length ? initialHours : days.filter(([day]) => day >= 1 && day <= 5).map(([day]) => ({ dayOfWeek: day, startTime: "09:00", endTime: "17:00" })), [initialHours]);
-  const [hours, setHours] = useState(initial);
+export function LocationEditor({ title, closeHref, editable, children }: { title: string; closeHref: string; editable: boolean; children: React.ReactNode }) {
+  const [state, action, pending] = useActionState(saveLocation, {});
+  return <>
+    <header>
+      <div>
+        <p>LOCATIONS</p>
+        <h2>{title}</h2>
+        <span>Manage address, booking visibility, and opening hours.</span>
+      </div>
+      <div className="tenant-drawer-header-actions">
+        {editable ? <button type="submit" form="location-editor-form" disabled={pending}>{pending ? "Saving…" : "Save location"}</button> : null}
+        <TenantEditorClose label="Close location editor" href={closeHref}>×</TenantEditorClose>
+      </div>
+    </header>
+    {editable ? <form id="location-editor-form" className="tenant-drawer-form" action={action} onSubmit={(event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      startTransition(() => action(data));
+    }}>
+      {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
+      {children}
+    </form> : null}
+  </>;
+}
+
+export function LocationHoursEditor({ initialHours, newLocation }: { initialHours: Hour[]; newLocation: boolean }) {
+  const [hours, setHours] = useState(() => newLocation ? days.filter(([day]) => day >= 1 && day <= 5).map(([day]) => ({ dayOfWeek: day, startTime: "09:00", endTime: "17:00" })) : initialHours);
   const set = (index: number, key: "startTime" | "endTime", value: string) => setHours((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
   const addRange = (dayOfWeek: number, current: Hour[]) => {
     const startTime = current.at(-1)?.endTime ?? "09:00";
