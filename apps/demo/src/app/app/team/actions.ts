@@ -16,6 +16,7 @@ import { requireFeature } from "@/lib/waybook/features";
 import { isStaffCalendarColor } from "@/lib/waybook/staff-calendar-colors";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
 import { staffRoleIdPattern } from "@/lib/waybook/staff-role-fields";
+import { enforceReadOnlyPermissions } from "@/lib/waybook/read-only-permissions";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { withSuccessToast } from "@/lib/waybook/toast";
@@ -398,7 +399,7 @@ export async function saveStaffPermissions(formData: FormData) {
   if (member?.role === 'owner') throw new Error('Owner permissions cannot be changed from the staff directory.');
   if (membership.role !== 'owner' && member?.role === 'manager') throw new Error("Only an owner can change a manager's permissions.");
   const workspacePermissionsAvailable = await staffWorkspacePermissionsAvailable(tenant);
-  const permissions = {
+  const permissions = enforceReadOnlyPermissions(member?.role ?? "", {
     canUpdateAppointmentStatus: String(formData.get("canUpdateAppointmentStatus") ?? "") === "on",
     canManageOwnAppointments: String(formData.get("canManageOwnAppointments") ?? "") === "on",
     canViewTeamCalendar: String(formData.get("canViewTeamCalendar") ?? "") === "on",
@@ -411,14 +412,26 @@ export async function saveStaffPermissions(formData: FormData) {
     canAccessReports: String(formData.get("canAccessReports") ?? "") === "on",
     canManageResources: String(formData.get("canManageResources") ?? "") === "on",
     canManageServiceSettings: String(formData.get("canManageServiceSettings") ?? "") === "on",
-  };
-  const baseArgs = [tenant.id, memberId, permissions.canUpdateAppointmentStatus, permissions.canManageOwnAppointments, permissions.canViewTeamCalendar, permissions.canManageTeamAppointments, permissions.canManageOwnTimeOff, permissions.canManageTeamTimeOff, permissions.canManageWaitlist];
-  await db.unsafe(
-    workspacePermissionsAvailable ?
-    "INSERT INTO staff_permissions (tenant_id, team_member_id, can_update_appointment_status, can_manage_own_appointments, can_view_team_calendar, can_manage_team_appointments, can_manage_own_time_off, can_manage_team_time_off, can_manage_waitlist, can_view_clients, can_manage_clients, can_access_reports, can_manage_resources, can_manage_service_settings, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now()) ON CONFLICT (tenant_id, team_member_id) DO UPDATE SET can_update_appointment_status=EXCLUDED.can_update_appointment_status, can_manage_own_appointments=EXCLUDED.can_manage_own_appointments, can_view_team_calendar=EXCLUDED.can_view_team_calendar, can_manage_team_appointments=EXCLUDED.can_manage_team_appointments, can_manage_own_time_off=EXCLUDED.can_manage_own_time_off, can_manage_team_time_off=EXCLUDED.can_manage_team_time_off, can_manage_waitlist=EXCLUDED.can_manage_waitlist, can_view_clients=EXCLUDED.can_view_clients, can_manage_clients=EXCLUDED.can_manage_clients, can_access_reports=EXCLUDED.can_access_reports, can_manage_resources=EXCLUDED.can_manage_resources, can_manage_service_settings=EXCLUDED.can_manage_service_settings, updated_at=now()"
-    : "INSERT INTO staff_permissions (tenant_id, team_member_id, can_update_appointment_status, can_manage_own_appointments, can_view_team_calendar, can_manage_team_appointments, can_manage_own_time_off, can_manage_team_time_off, can_manage_waitlist, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now()) ON CONFLICT (tenant_id, team_member_id) DO UPDATE SET can_update_appointment_status=EXCLUDED.can_update_appointment_status, can_manage_own_appointments=EXCLUDED.can_manage_own_appointments, can_view_team_calendar=EXCLUDED.can_view_team_calendar, can_manage_team_appointments=EXCLUDED.can_manage_team_appointments, can_manage_own_time_off=EXCLUDED.can_manage_own_time_off, can_manage_team_time_off=EXCLUDED.can_manage_team_time_off, can_manage_waitlist=EXCLUDED.can_manage_waitlist, updated_at=now()",
-    workspacePermissionsAvailable ? [...baseArgs, permissions.canViewClients, permissions.canManageClients, permissions.canAccessReports, permissions.canManageResources, permissions.canManageServiceSettings] : baseArgs,
-  );
+  });
+  if (member?.role === "read-only") {
+    // An edit to view access should leave any previous write grants stored.
+    const viewGrants = { can_view_team_calendar: permissions.canViewTeamCalendar };
+    const grants = workspacePermissionsAvailable
+      ? { ...viewGrants, can_view_clients: permissions.canViewClients, can_access_reports: permissions.canAccessReports }
+      : viewGrants;
+    await db`
+      INSERT INTO staff_permissions ${db({ tenant_id: tenant.id, team_member_id: memberId, ...grants })}
+      ON CONFLICT (tenant_id, team_member_id) DO UPDATE SET ${db(grants)}, updated_at=now()
+    `;
+  } else {
+    const baseArgs = [tenant.id, memberId, permissions.canUpdateAppointmentStatus, permissions.canManageOwnAppointments, permissions.canViewTeamCalendar, permissions.canManageTeamAppointments, permissions.canManageOwnTimeOff, permissions.canManageTeamTimeOff, permissions.canManageWaitlist];
+    await db.unsafe(
+      workspacePermissionsAvailable ?
+      "INSERT INTO staff_permissions (tenant_id, team_member_id, can_update_appointment_status, can_manage_own_appointments, can_view_team_calendar, can_manage_team_appointments, can_manage_own_time_off, can_manage_team_time_off, can_manage_waitlist, can_view_clients, can_manage_clients, can_access_reports, can_manage_resources, can_manage_service_settings, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now()) ON CONFLICT (tenant_id, team_member_id) DO UPDATE SET can_update_appointment_status=EXCLUDED.can_update_appointment_status, can_manage_own_appointments=EXCLUDED.can_manage_own_appointments, can_view_team_calendar=EXCLUDED.can_view_team_calendar, can_manage_team_appointments=EXCLUDED.can_manage_team_appointments, can_manage_own_time_off=EXCLUDED.can_manage_own_time_off, can_manage_team_time_off=EXCLUDED.can_manage_team_time_off, can_manage_waitlist=EXCLUDED.can_manage_waitlist, can_view_clients=EXCLUDED.can_view_clients, can_manage_clients=EXCLUDED.can_manage_clients, can_access_reports=EXCLUDED.can_access_reports, can_manage_resources=EXCLUDED.can_manage_resources, can_manage_service_settings=EXCLUDED.can_manage_service_settings, updated_at=now()"
+      : "INSERT INTO staff_permissions (tenant_id, team_member_id, can_update_appointment_status, can_manage_own_appointments, can_view_team_calendar, can_manage_team_appointments, can_manage_own_time_off, can_manage_team_time_off, can_manage_waitlist, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now()) ON CONFLICT (tenant_id, team_member_id) DO UPDATE SET can_update_appointment_status=EXCLUDED.can_update_appointment_status, can_manage_own_appointments=EXCLUDED.can_manage_own_appointments, can_view_team_calendar=EXCLUDED.can_view_team_calendar, can_manage_team_appointments=EXCLUDED.can_manage_team_appointments, can_manage_own_time_off=EXCLUDED.can_manage_own_time_off, can_manage_team_time_off=EXCLUDED.can_manage_team_time_off, can_manage_waitlist=EXCLUDED.can_manage_waitlist, updated_at=now()",
+      workspacePermissionsAvailable ? [...baseArgs, permissions.canViewClients, permissions.canManageClients, permissions.canAccessReports, permissions.canManageResources, permissions.canManageServiceSettings] : baseArgs,
+    );
+  }
   await db`INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, 'staff.permissions.updated', 'team_member', ${memberId}, ${JSON.stringify(permissions)}::jsonb)`;
   revalidateStaff();
   const slug = await currentTenantRouteSlug(tenant.slug);

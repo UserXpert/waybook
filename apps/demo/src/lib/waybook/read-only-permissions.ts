@@ -1,15 +1,21 @@
+const readOnlyWritePermissions = {
+  canUpdateAppointmentStatus: false,
+  canManageOwnAppointments: false,
+  canManageTeamAppointments: false,
+  canManageOwnTimeOff: false,
+  canManageTeamTimeOff: false,
+  canManageWaitlist: false,
+  canManageClients: false,
+  canManageResources: false,
+  canManageServiceSettings: false,
+};
+
+export function canConfigureStaffPermission(role: string, permission: string) {
+  return role !== "read-only" || !Object.hasOwn(readOnlyWritePermissions, permission);
+}
+
 /** A read-only membership may retain view permissions, but never write permissions. */
-export function enforceReadOnlyPermissions<T extends {
-  canUpdateAppointmentStatus: boolean;
-  canManageOwnAppointments: boolean;
-  canManageTeamAppointments: boolean;
-  canManageOwnTimeOff: boolean;
-  canManageTeamTimeOff: boolean;
-  canManageWaitlist: boolean;
-  canManageClients: boolean;
-  canManageResources: boolean;
-  canManageServiceSettings: boolean;
-}>(role: string, permissions: T): T {
+export function enforceReadOnlyPermissions<T extends Record<keyof typeof readOnlyWritePermissions, boolean>>(role: string, permissions: T): T {
   if (role !== "read-only") return permissions;
-  return { ...permissions, canUpdateAppointmentStatus: false, canManageOwnAppointments: false, canManageTeamAppointments: false, canManageOwnTimeOff: false, canManageTeamTimeOff: false, canManageWaitlist: false, canManageClients: false, canManageResources: false, canManageServiceSettings: false };
+  return { ...permissions, ...readOnlyWritePermissions };
 }
