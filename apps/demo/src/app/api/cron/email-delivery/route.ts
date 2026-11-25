@@ -7,6 +7,7 @@ import { isFeatureEnabled } from "@/lib/waybook/features";
 import { queueDueReminders } from "@/lib/waybook/email-reminders";
 import { suppressHistoricalEmails } from "@/lib/waybook/email-outbox-queue";
 import { drainEmailQueues } from "@/lib/waybook/email-sweep";
+import { isEmailDeliveryEnabledForTenant } from "@/lib/waybook/email-delivery-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
   let failures = 0, incomplete = false;
   const ready: TenantRecord[] = [];
   for (const tenant of tenants) {
+    if (!isEmailDeliveryEnabledForTenant(tenant.slug)) continue;
     if (Date.now() >= deadline) { incomplete = true; break; }
     try {
       if (!await isFeatureEnabled(tenant.id, "email-notifications")) continue;

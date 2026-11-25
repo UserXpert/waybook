@@ -4,10 +4,11 @@ import { tenantDb, type TenantRecord } from "./database";
 import { deliverOneEmail } from "./email-delivery-worker";
 import { configuredProviderKeyring } from "./provider-secret-config";
 import { isFeatureEnabled } from "./features";
+import { isEmailDeliveryEnabledForTenant } from "./email-delivery-config";
 
 /** The outbox is durable; this is a best-effort prompt, never a substitute for retries. */
 export function promptEmailDelivery(tenant: TenantRecord, outboxId: string | null | undefined): void {
-  if (!outboxId || process.env.WAYBOOK_EMAIL_DELIVERY_ENABLED !== "true") return;
+  if (!outboxId || !isEmailDeliveryEnabledForTenant(tenant.slug)) return;
   const keyring = configuredProviderKeyring();
   if (!keyring) return;
   try {
