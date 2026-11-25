@@ -40,7 +40,7 @@ export async function sendEmailProviderTest(db: Sql, tenantId: string, resolveKe
 export async function confirmEmailProviderTest(db: Sql, tenantId: string, actorId: string): Promise<boolean> {
   return db.begin(async (tx) => {
     const [row] = await tx.unsafe<{ id: string }[]>(`UPDATE email_provider_connections SET verified_at=now()
-      WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NOT NULL AND lower(sender_email)<>$3 RETURNING id`, [tenantId, resendOnboardingTestSender]);
+      WHERE tenant_id=$1 AND revoked_at IS NULL AND verified_at IS NULL AND verification_accepted_at IS NOT NULL AND lower(sender_email)<>$2 RETURNING id`, [tenantId, resendOnboardingTestSender]);
     if (!row) return false;
     await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'email_provider.verified','email_provider',$3,$4::text::jsonb)", [tenantId, actorId, row.id, JSON.stringify({ provider: "resend" })]);
     return true;

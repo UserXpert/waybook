@@ -25,6 +25,63 @@ test("an owner can select a profile photo and oversized files are rejected", asy
   await expect(page.getByRole("button", { name: "Change photo for Sofie Andersen" }).locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
 });
 
+test("switching staff profiles keeps exactly one avatar for the selected member", async ({ page }) => {
+  const { default: postgres } = await import("postgres");
+  const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
+  const members = await db<{ id: string; name: string; photoDataUrl: string | null }[]>`
+    SELECT id,name,photo_data_url AS "photoDataUrl" FROM team_members
+    WHERE email IN ('e2e-roster-1@example.test','e2e-roster-2@example.test','e2e-roster-3@example.test') ORDER BY name
+  `;
+  const originalPhotos = new Map(members.map((member) => [member.id, member.photoDataUrl]));
+  try {
+    expect(members).toHaveLength(3);
+    await page.goto("/login");
+    await page.getByLabel("Work email").fill("owner@nordic.local");
+    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/nordic\/app/);
+    await page.goto("/nordic/app/team");
+    const header = page.locator(".staff-workspace__profile-header");
+    const directory = page.getByRole("complementary", { name: "Staff directory" });
+    const avatar = header.getByRole("button", { name: /^Change photo for/ });
+    async function expectProfile(member: (typeof members)[number]) {
+      await expect(header.getByRole("heading", { name: member.name, exact: true })).toBeVisible();
+      await expect(avatar).toHaveCount(1);
+      await expect(avatar).toHaveAccessibleName(`Change photo for ${member.name}`);
+      if (member.photoDataUrl) await expect(avatar.locator("img")).toHaveAttribute("src", member.photoDataUrl);
+      else await expect(avatar.locator("img")).toHaveCount(0);
+    }
+
+    for (const [index, member] of members.entries()) {
+      await directory.getByRole("link", { name: new RegExp(member.name) }).click();
+      await expectProfile(member);
+      if (index < 2) {
+        const background = index === 0 ? "#67c7cf" : "#a78bfa";
+        const image = await sharp({ create: { width: 8, height: 8, channels: 3, background } }).png().toBuffer();
+        const chooser = page.waitForEvent("filechooser");
+        await avatar.click();
+        await (await chooser).setFiles({ name: "synthetic-staff.png", mimeType: "image/png", buffer: image });
+        member.photoDataUrl = `data:image/png;base64,${image.toString("base64")}`;
+        await expectProfile(member);
+      }
+    }
+    await page.goBack();
+    await expectProfile(members[1]);
+    await page.goForward();
+    await expectProfile(members[2]);
+    await page.reload();
+    await expectProfile(members[2]);
+  } finally {
+    try {
+      for (const [id, photoDataUrl] of originalPhotos) {
+        await db`UPDATE team_members SET photo_data_url=${photoDataUrl} WHERE id=${id}`;
+      }
+    } finally {
+      await db.end();
+    }
+  }
+});
+
 test("Apps menu groups, search, keyboard and navigation work", async ({ page }, testInfo) => {
   await page.goto("/login");
   await page.getByLabel("Work email").fill("owner@nordic.local");

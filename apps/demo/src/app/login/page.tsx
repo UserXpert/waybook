@@ -5,9 +5,9 @@ import { login } from "./actions";
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; reset?: string; google?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string; google?: string; access?: string }>;
 }) {
-  const { error, reset, google } = await searchParams;
+  const { error, reset, google, access } = await searchParams;
   const googleAvailable = await googleSignInAvailable();
 
   return (
@@ -40,6 +40,8 @@ export default async function Login({
             {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
             {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
             {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
+            {access === "inactive" ? <p className="waybook-login-error" role="alert">Your staff access is inactive. Ask your workspace owner to restore it.</p> : null}
+            {access === "unavailable" ? <p className="waybook-login-error" role="alert">Your staff profile is unavailable. Ask your workspace owner to check your access.</p> : null}
             <form action={login} className="waybook-login">
               <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>
               <label><span className="waybook-login-label-row">Password<a href="/login?reset=1">Forgot password?</a></span><input name="password" type="password" autoComplete="current-password" placeholder="Enter your password" required /></label>

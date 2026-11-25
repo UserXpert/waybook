@@ -17,7 +17,8 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
   const digest = createHmac("sha256", process.env.WAYBOOK_GIFT_CARD_CODE_SECRET!).update(code).digest("hex");
   try {
     const [settings] = await db<{ tenantId: string; currency: string }[]>`SELECT tenant_id AS "tenantId",currency FROM tenant_settings LIMIT 1`;
-    const [member] = await db<{ id: string; locationId: string }[]>`SELECT tm.id, tml.location_id AS "locationId" FROM team_members tm JOIN team_member_locations tml ON tml.tenant_id=tm.tenant_id AND tml.team_member_id=tm.id WHERE tm.tenant_id=${settings.tenantId} LIMIT 1`;
+    const [member] = await db<{ id: string; locationId: string }[]>`SELECT tm.id, tml.location_id AS "locationId" FROM team_members tm JOIN team_member_locations tml ON tml.tenant_id=tm.tenant_id AND tml.team_member_id=tm.id JOIN locations l ON l.id=tml.location_id AND l.tenant_id=tm.tenant_id
+      WHERE tm.tenant_id=${settings.tenantId} AND tm.role='owner' AND tm.is_active AND l.slug='primary' AND l.is_active LIMIT 1`;
     const [service] = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id=${settings.tenantId} AND slug='studio-session'`;
     const date = new Date("2028-01-01T12:00:00Z");
     date.setUTCDate(date.getUTCDate() + (Number.parseInt(unique.slice(0, 6), 16) % 700));

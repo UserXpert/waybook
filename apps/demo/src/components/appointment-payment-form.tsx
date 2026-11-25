@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import { recordPayment } from "@/app/app/calendars/actions";
 
 export function AppointmentPaymentForm({ bookingId, outstandingCents }: { bookingId: string; outstandingCents: number }) {
@@ -8,7 +8,16 @@ export function AppointmentPaymentForm({ bookingId, outstandingCents }: { bookin
   const outstandingDkk = Math.max(0, outstandingCents) / 100;
   const [amount, setAmount] = useState(outstandingDkk ? outstandingDkk.toFixed(2) : "");
   const [amountConfirmed, setAmountConfirmed] = useState(false);
-  return <form action={formAction} className="tenant-drawer-form appointment-payment-form">
+  useEffect(() => {
+    if (!state.success) return;
+    setAmount("");
+    setAmountConfirmed(false);
+  }, [state]);
+  return <form action={formAction} className="tenant-drawer-form appointment-payment-form" onSubmit={(event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    startTransition(() => formAction(data));
+  }}>
     <input type="hidden" name="bookingId" value={bookingId} />
     <div className="tenant-drawer-form__grid">
       <label>Entry<select name="kind" defaultValue="payment"><option value="payment">Payment received</option><option value="refund">Refund issued</option></select></label>

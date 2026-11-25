@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Pencil } from "lucide-react";
 import { saveStaffWorkingHours } from "@/app/app/team/actions";
 import { showSuccessToast } from "@/lib/waybook/toast";
@@ -70,7 +70,36 @@ export function StaffHoursEditor({ memberId, initialSchedule }: { memberId: stri
   const editingLabel = days.find((day) => day.id === editingDay)?.label ?? "";
   const overlappingDays = dayOrder.filter((day) => hasOverlappingShifts(schedule[day]));
 
-  function openEditor(day: DayId) {
+  const dialog = useRef<HTMLElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!editingDay) return;
+    const trigger = opener.current;
+    dialog.current?.querySelector("button")?.focus();
+    return () => trigger?.focus();
+  }, [editingDay]);
+
+  function keepDialogFocus(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (!saving) closeEditor(true);
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const controls = event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), [tabindex='0']");
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  }
+
+  function openEditor(day: DayId, trigger: HTMLButtonElement) {
+    opener.current = trigger;
     setSaveError("");
     setSaved(false);
     setEditingSnapshot(schedule[day].map((shift) => ({ ...shift })));
@@ -125,8 +154,8 @@ export function StaffHoursEditor({ memberId, initialSchedule }: { memberId: stri
     {saved ? <p className="staff-shift-schedule__saved" role="status">Working hours saved.</p> : null}
     <ol className="staff-shift-schedule__list">{calendarDays.map((day) => {
       const shifts = schedule[day.id];
-      return <li key={day.id}><button type="button" className="staff-shift-schedule__row" onClick={() => openEditor(day.id)} aria-label={"Edit " + day.label + " shifts"}><span className="staff-shift-schedule__day"><strong>{day.short}</strong><span>{day.dateLabel}</span></span><span className={shifts.length ? "staff-shift-schedule__summary has-shifts" : "staff-shift-schedule__summary"}>{shifts.length ? shifts.map((shift) => <span key={shift.id}>{readableTime(shift.startTime)} – {readableTime(shift.endTime)}</span>) : <em>No shifts</em>}</span><Pencil className="staff-shift-schedule__pencil" aria-hidden="true" /></button></li>;
+      return <li key={day.id}><button type="button" className="staff-shift-schedule__row" onClick={(event) => openEditor(day.id, event.currentTarget)} aria-label={"Edit " + day.label + " shifts"}><span className="staff-shift-schedule__day"><strong>{day.short}</strong><span>{day.dateLabel}</span></span><span className={shifts.length ? "staff-shift-schedule__summary has-shifts" : "staff-shift-schedule__summary"}>{shifts.length ? shifts.map((shift) => <span key={shift.id}>{readableTime(shift.startTime)} – {readableTime(shift.endTime)}</span>) : <em>No shifts</em>}</span><Pencil className="staff-shift-schedule__pencil" aria-hidden="true" /></button></li>;
     })}</ol>
-    {editingDay ? <div className="staff-shift-modal-layer" role="presentation"><button type="button" className="staff-shift-modal-layer__scrim" disabled={saving} aria-label="Close shift editor" onClick={() => closeEditor(true)} /><section className="staff-shift-modal" role="dialog" aria-modal="true" aria-busy={saving} aria-label={"Edit shifts for " + editingLabel + "s"}><button type="button" className="staff-shift-modal__close" disabled={saving} aria-label="Close shift editor" onClick={() => closeEditor(true)}>×</button><header><p>RECURRING WORK HOURS</p><h3>Edit shifts for {editingLabel}s</h3><span>These changes apply to all future {editingLabel}s. Existing time-off exceptions are unchanged.</span></header><div className="staff-shift-modal__body">{saveError ? <p className="staff-shift-modal__error" role="alert">{saveError}</p> : null}{overlappingDays.length ? <p className="staff-shift-modal__error" role="alert">Shifts cannot overlap. Adjust or remove one interval before saving.</p> : null}{editing.map((shift, index) => <div className="staff-shift-modal__row" key={shift.id}><OperationalTimeRange compact label={editingLabel + " shift " + (index + 1)} startTime={shift.startTime} endTime={shift.endTime} onStartTimeChange={(value) => updateShift(index, "startTime", value)} onEndTimeChange={(value) => updateShift(index, "endTime", value)} /><button type="button" className="staff-shift-modal__remove" disabled={saving} aria-label="Remove shift" onClick={() => removeShift(index)}>Remove</button></div>)}<button type="button" className="staff-shift-modal__add" disabled={saving} onClick={addShift}>+ Add a shift</button></div><footer><button type="button" className="staff-shift-modal__cancel" disabled={saving} onClick={() => closeEditor(true)}>Cancel</button><button type="submit" disabled={saving || overlappingDays.length > 0}>{saving ? "Saving…" : "Save changes"}</button></footer></section></div> : null}
+    {editingDay ? <div className="staff-shift-modal-layer" role="presentation"><button type="button" className="staff-shift-modal-layer__scrim" disabled={saving} aria-label="Close shift editor" onClick={() => closeEditor(true)} /><section ref={dialog} onKeyDown={keepDialogFocus} className="staff-shift-modal" role="dialog" aria-modal="true" aria-busy={saving} aria-label={"Edit shifts for " + editingLabel + "s"}><button type="button" className="staff-shift-modal__close" disabled={saving} aria-label="Close shift editor" onClick={() => closeEditor(true)}>×</button><header><p>RECURRING WORK HOURS</p><h3>Edit shifts for {editingLabel}s</h3><span>These changes apply to all future {editingLabel}s. Existing time-off exceptions are unchanged.</span></header><div className="staff-shift-modal__body">{saveError ? <p className="staff-shift-modal__error" role="alert">{saveError}</p> : null}{overlappingDays.length ? <p className="staff-shift-modal__error" role="alert">Shifts cannot overlap. Adjust or remove one interval before saving.</p> : null}{editing.map((shift, index) => <div className="staff-shift-modal__row" key={shift.id}><OperationalTimeRange compact label={editingLabel + " shift " + (index + 1)} startTime={shift.startTime} endTime={shift.endTime} onStartTimeChange={(value) => updateShift(index, "startTime", value)} onEndTimeChange={(value) => updateShift(index, "endTime", value)} /><button type="button" className="staff-shift-modal__remove" disabled={saving} aria-label="Remove shift" onClick={() => removeShift(index)}>Remove</button></div>)}<button type="button" className="staff-shift-modal__add" disabled={saving} onClick={addShift}>+ Add a shift</button></div><footer><button type="button" className="staff-shift-modal__cancel" disabled={saving} onClick={() => closeEditor(true)}>Cancel</button><button type="submit" disabled={saving || overlappingDays.length > 0}>{saving ? "Saving…" : "Save changes"}</button></footer></section></div> : null}
   </form>;
 }
