@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import postgres from "postgres";
 
-async function openSession(page: Page, email: string, route: string) {
+async function openSession(page: Page, email: string, landingPath: string) {
   await page.goto("/login");
   await page.getByLabel("Work email").fill(email);
   await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL((url) => url.pathname.startsWith(`/${route}/app`));
+  await expect(page).toHaveURL((url) => url.pathname === landingPath);
 }
 
 for (const tenant of [
@@ -45,17 +45,17 @@ for (const tenant of [
 
     const [staffPage, readonlyPage, managerPage] = await Promise.all(contexts.map(context => context.newPage()));
     await Promise.all([
-      openSession(page, tenant.owner, tenant.route),
-      openSession(staffPage, staffAccount.email, tenant.route),
-      openSession(readonlyPage, readonlyAccount.email, tenant.route),
-      openSession(managerPage, managerAccount.email, tenant.route),
+      openSession(page, tenant.owner, app),
+      openSession(staffPage, staffAccount.email, `${app}/calendars`),
+      openSession(readonlyPage, readonlyAccount.email, `${app}/calendars`),
+      openSession(managerPage, managerAccount.email, app),
     ]);
 
     const clients = `${app}/customers?customer=${customer.id}`;
     const record = (p: Page) => p.getByRole("dialog", { name: new RegExp(`record for ${name}$`, "i") });
     const save = (p: Page) => p.getByRole("button", { name: /^Save (client|patient)$/ });
     const blocked = async (p: Page) => {
-      await p.goto(clients);
+      await p.goto(clients, { waitUntil: "commit" });
       await expect(p).toHaveURL((url) => url.pathname === `${app}/calendars`);
       await expect(record(p)).toHaveCount(0);
     };
