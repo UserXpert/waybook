@@ -72,8 +72,17 @@ for (const tenant of [
     const view = page.getByRole("switch", { name: /^Can access clients/ });
     const edit = page.getByRole("switch", { name: /^Can create and change clients/ });
     const savePermissions = async () => {
-      await page.getByRole("button", { name: "Save permissions" }).click();
-      await expect(page.getByText("Staff permissions saved.", { exact: true })).toBeVisible();
+      const notice = page.getByRole("status").filter({ hasText: "Staff permissions saved." });
+      if (await notice.isVisible()) {
+        await notice.getByRole("button", { name: "Dismiss notification" }).click();
+        await expect(notice).toHaveCount(0);
+      }
+      const [response] = await Promise.all([
+        page.waitForResponse((result) => result.request().method() === "POST" && new URL(result.url()).pathname === `${app}/team`),
+        page.getByRole("button", { name: "Save permissions" }).click(),
+      ]);
+      expect(response.status()).toBe(303);
+      await expect(notice).toBeVisible();
     };
     await page.goto(perms(staffAccount.id));
     await view.check();
