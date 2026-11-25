@@ -3362,17 +3362,14 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .staff-workspace__avatar { overflow: hidden; flex-shrink: 0; }
 .staff-workspace__avatar img { width: 100%; height: 100%; object-fit: cover; }
 .staff-photo-upload { position: relative; flex: 0 0 auto; display: grid; justify-items: center; gap: .25rem; }
-.profile-photo-remove { min-height: 2rem; padding: .25rem; border: 0; background: transparent; color: inherit; font: inherit; font-size: .75rem; font-weight: 400; text-decoration: underline; text-underline-offset: .15em; cursor: pointer; }
-.tenant-user-menu__popover .profile-photo-remove { align-self: start; padding-inline: 0; }
-.profile-photo-remove:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: .2rem; }
-.profile-photo-remove:disabled { opacity: .65; cursor: wait; }
 .staff-photo-upload__button { position: relative; border: 0; padding: 0; cursor: pointer; overflow: visible; }
 .staff-photo-upload__button img { border-radius: 50%; }
-.staff-photo-upload__button:focus-visible { outline: 2px solid var(--waybook-accent); outline-offset: 3px; }
-.staff-photo-upload__button:disabled { opacity: .65; cursor: wait; }
+.staff-photo-upload__button:focus-visible, .staff-photo-upload__remove:focus-visible { outline: 2px solid var(--waybook-accent); outline-offset: 3px; }
+.staff-photo-upload__button:disabled, .staff-photo-upload__remove:disabled { opacity: .65; cursor: wait; }
 .staff-photo-upload__camera { position: absolute; right: -2px; bottom: -2px; display: grid !important; width: 1.45rem; height: 1.45rem; place-items: center; margin: 0 !important; border: 2px solid #fff; border-radius: 50%; background: #242428; color: #fff !important; }
+.staff-photo-upload__remove { position: absolute; top: -2px; right: -2px; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #242428; color: #fff; cursor: pointer; }
 .staff-photo-upload__error { position: absolute; z-index: 2; top: calc(100% + .4rem); left: 0; width: min(18rem, 75vw); margin: 0 !important; padding: .5rem; border-radius: .4rem; background: #fff0f0; color: #9f2020 !important; font-size: .75rem !important; }
-:root[data-waybook-theme="dark"] .staff-photo-upload__camera { border-color: #171719; }
+:root[data-waybook-theme="dark"] :is(.staff-photo-upload__camera, .staff-photo-upload__remove) { border-color: #171719; }
 
 :root .tenant-app-menu__scrim { background: rgba(18, 20, 24, .42) !important; backdrop-filter: blur(2px) !important; }
 :root[data-waybook-theme="dark"] .tenant-app-menu__scrim { background: rgba(0, 0, 0, .6) !important; }
