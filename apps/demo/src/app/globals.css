@@ -2763,6 +2763,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .booking-manage-icon { display:grid; place-items:center; width:2.5rem; height:2.5rem; padding:0; border:1px solid #dbe3de; border-radius:50%; background:#fff; color:inherit; cursor:pointer; }
 .booking-manage-dialog__body { padding:1.25rem clamp(1.4rem, 5vw, 3rem) 2.5rem; }
 .booking-manage-dialog__body h2 { margin:.4rem 0 .75rem; font-size:1.8rem; letter-spacing:-.04em; line-height:1.15; }
+.booking-manage-dialog__body h2:focus-visible { outline:2px solid currentColor; outline-offset:.2rem; border-radius:.2rem; }
 .booking-manage-dialog__body p { color:#64736a; line-height:1.5; }
 .booking-manage-kicker { font-size:.7rem; font-weight:600; letter-spacing:.13em; }
 .booking-manage-dialog__body form,.booking-manage-actions { display:grid; gap:1rem; margin-top:1.5rem; }

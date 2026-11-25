@@ -8,7 +8,7 @@ const workspaces = [
 ];
 
 for (const workspace of workspaces) {
-  test(`Manage booking ignores previous lookups and retries the same day in ${workspace.route}`, async ({ page }) => {
+  test(`Manage booking retains keyboard focus and recovers from interrupted requests in ${workspace.route}`, async ({ page }) => {
     const db = postgres(process.env[workspace.database]!, { max: 1, ssl: false });
     const email = `qa-manage-reopen-${randomUUID()}@example.test`;
     try {
@@ -45,15 +45,28 @@ for (const workspace of workspaces) {
       const numberField = dialog.getByLabel("Booking number");
       const emailField = dialog.getByLabel("Email address");
       const lookup = dialog.getByRole("button", { name: "Find booking", exact: true });
-      await open.click();
+      await open.focus();
+      await page.keyboard.press("Enter");
+      await expect(numberField).toBeFocused();
+      const close = dialog.getByRole("button", { name: "Close", exact: true });
+      await page.keyboard.press("Shift+Tab");
+      await expect(close).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(lookup).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(close).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(numberField).toBeFocused();
       await numberField.fill(number!);
       await emailField.fill(email);
       await lookup.click();
       try {
         expect(await lookupStatus).toBe(200);
-        await dialog.getByRole("button", { name: "Close", exact: true }).click();
+        await page.keyboard.press("Escape");
         await expect(dialog).toBeHidden();
-        await open.click();
+        await expect(open).toBeFocused();
+        await page.keyboard.press("Enter");
+        await expect(numberField).toBeFocused();
         await expect(dialog.getByRole("heading", { name: "Find your booking" })).toBeVisible();
         const response = page.waitForResponse((value) => value.url().endsWith("/api/public/manage"));
         releaseLookup();
@@ -67,25 +80,39 @@ for (const workspace of workspaces) {
         await numberField.fill(number!);
         await emailField.fill(email);
         await lookup.click();
-        await expect(dialog.getByRole("heading", { name: "Your booking", exact: true })).toBeVisible();
+        const bookingHeading = dialog.getByRole("heading", { name: "Your booking", exact: true });
+        await expect(bookingHeading).toBeFocused();
+        await dialog.getByRole("button", { name: "Cancel booking" }).click();
+        await expect(dialog.getByRole("heading", { name: "Cancel this booking?" })).toBeFocused();
+        await dialog.getByRole("button", { name: "Go back" }).click();
+        await expect(bookingHeading).toBeFocused();
         await expect(dialog).toContainText(preset.title);
 
         const [appointment] = await db`SELECT starts_at::text AS starts_at,
           to_char(starts_at AT TIME ZONE 'Europe/Copenhagen', 'YYYY-MM-DD') AS day
           FROM bookings WHERE booking_number=${number}`;
         await dialog.getByRole("button", { name: "Reschedule booking" }).click();
+        await expect(dialog.getByRole("heading", { name: "Choose a new time" })).toBeFocused();
         await expect(dialog.getByRole("status")).toBeHidden();
         const date = dialog.getByLabel("Day");
         await page.route(`**/${workspace.route}/api/public/manage`, (route) => route.abort("failed"), { times: 1 });
         await date.fill(appointment.day);
         await expect(dialog.getByRole("alert")).toContainText("We couldn’t connect");
         await expect(date).toHaveValue(appointment.day);
-        await dialog.getByRole("button", { name: "Retry availability" }).click();
+        const retry = dialog.getByRole("button", { name: "Retry availability" });
+        await retry.focus();
+        await page.keyboard.press("Enter");
+        await expect(date).toBeFocused();
         await expect(dialog.locator(".booking-manage-times button").first()).toBeVisible();
         await expect(dialog.getByRole("alert")).toBeHidden();
         await expect(date).toHaveValue(appointment.day);
         const [unchanged] = await db`SELECT starts_at::text AS starts_at FROM bookings WHERE booking_number=${number}`;
         expect(unchanged.starts_at).toBe(appointment.starts_at);
+        await dialog.locator(".booking-manage-times button").first().click();
+        await expect(dialog.getByRole("heading", { name: "Confirm your new time" })).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+        await expect(open).toBeFocused();
       } finally {
         releaseLookup();
       }
