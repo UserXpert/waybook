@@ -64,8 +64,13 @@ for (const workspaceCase of workspaces) test(`staff grants and deactivation gove
     await expect(staff.getByText("Time off saved.", { exact: true })).toBeVisible();
     expect(await overridesFor(colleague.id)).toHaveLength(1);
     await staff.locator(".staff-exception-list__row").click();
-    await staff.getByRole("switch", { name: /Full day/ }).click();
-    await staff.getByRole("button", { name: "Save changes", exact: true }).click();
+    const saveChanges = staff.getByRole("button", { name: "Save changes", exact: true });
+    const editForm = staff.locator("form.staff-timeoff-form").filter({ has: saveChanges });
+    const fullDay = editForm.getByRole("switch", { name: /Full day/ });
+    await expect(fullDay).toHaveAttribute("aria-checked", "true");
+    await fullDay.click();
+    await expect(fullDay).toHaveAttribute("aria-checked", "false");
+    await saveChanges.click();
     await expect(staff.getByText("Time off updated.", { exact: true })).toBeVisible();
     expect(await tenant`SELECT left(start_time::text, 5) AS start, left(end_time::text, 5) AS "end" FROM availability_overrides WHERE team_member_id=${colleague.id}`)
       .toEqual([{ start: "09:00", end: "17:00" }]);
