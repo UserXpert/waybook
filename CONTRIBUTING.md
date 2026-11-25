@@ -1,6 +1,6 @@
 # Contributing to Waybook
 
-Waybook is a Denmark-first booking operations application. Start with the [README](README.md), [product manifest](.waybook/docs/00_manifest.md), and [delivery backlog](.waybook/docs/07_delivery_backlog.md) before changing behavior.
+Waybook is a Denmark-first booking operations application. Start with the [README](.waybook/docs/project_overview.md), [product manifest](.waybook/docs/00_manifest.md), and [delivery backlog](.waybook/docs/07_delivery_backlog.md) before changing behavior.
 
 ## Development
 
