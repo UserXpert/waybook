@@ -129,6 +129,7 @@ for (const workspace of workspaces) {
         await confirmation.getByRole("button", { name: "Dismiss notification" }).click();
         await expect(confirmation).toHaveCount(0);
         await expect.poll(() => getBooking(ownCustomer)).toMatchObject({ memberId: own.id, startsAt: startsAt("11:30"), blockState: "confirmed" });
+        await expect(bookingCard(ownBooking.id).locator(".waybook-calendar-entry__time")).toContainText("11:30");
 
         await setGrants({ viewTeam: true, manageOwn: false, manageTeam: true });
         await page.goto(teamBoard);

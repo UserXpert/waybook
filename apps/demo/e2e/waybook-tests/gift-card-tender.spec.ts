@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("gift-card tender returns to the same card on cancellation", async ({ page, browser }, testInfo) => {
+test("gift-card tender returns to the same card on cancellation", async ({ page, browser, baseURL, ignoreHTTPSErrors }, testInfo) => {
   test.setTimeout(180_000);
   const raw = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
   const url = new URL(raw);
@@ -52,7 +52,7 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
       const [readIdentity] = await control<{ id: string }[]>`INSERT INTO identities (email,password_hash,display_name) VALUES (${readEmail},${owner.passwordHash},'Synthetic read-only') RETURNING id`;
       await control`INSERT INTO tenant_memberships (tenant_id,identity_id,role) VALUES (${settings.tenantId},${readIdentity.id},'read-only')`;
       await db`INSERT INTO team_members (tenant_id,identity_id,role,name,email) VALUES (${settings.tenantId},${readIdentity.id},'read-only','Synthetic read-only',${readEmail})`;
-      const readContext = await browser.newContext({ baseURL: "http://localhost:3336" });
+      const readContext = await browser.newContext({ baseURL, ignoreHTTPSErrors });
       try {
         const readPage = await readContext.newPage();
         await readPage.goto("/login"); await readPage.getByLabel("Work email").fill(readEmail);
