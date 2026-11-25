@@ -3633,3 +3633,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
+
+.retail-checkout-form fieldset { display: contents; }
+.retail-checkout-form__error { grid-column: 1 / -1; }

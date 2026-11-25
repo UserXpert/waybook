@@ -14,6 +14,10 @@ function TenantSuccessToastListener() {
   useEffect(() => {
     const receiveToast = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
+      if (event instanceof CustomEvent && detail === null) {
+        setNotification(null);
+        return;
+      }
       if (!detail || typeof detail !== "object" || typeof (detail as WaybookToastDetail).message !== "string") return;
       const nextMessage = (detail as WaybookToastDetail).message.trim();
       if (nextMessage) {
