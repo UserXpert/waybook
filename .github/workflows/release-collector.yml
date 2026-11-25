@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   collect:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
