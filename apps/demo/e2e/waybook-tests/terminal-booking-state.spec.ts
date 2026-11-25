@@ -84,7 +84,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
     await page.goto(`/nordic/app/calendars?view=team&day=${day}`);
     const card = page.locator(`a.waybook-week-calendar__entry[href*="booking=${bookingId}"]`);
     await expect(card).toBeVisible();
-    if (testInfo.project.name === "mobile") {
+    if (testInfo.project.use.isMobile || testInfo.project.name === "mobile") {
       await db.unsafe("UPDATE bookings SET status='no_show' WHERE id=$1 AND tenant_id=$2", [bookingId, settings.tenantId]);
       await page.goto(`/nordic/app/calendars?view=team&day=${day}&booking=${bookingId}`);
       await expect(card).toHaveAttribute("draggable", "false");
@@ -146,7 +146,11 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
         await continued;
       });
     });
-    await page.mouse.move(destinationBox!.x + destinationBox!.width / 2, destinationBox!.y + destinationBox!.height / 2);
+    const dropX = destinationBox!.x + destinationBox!.width / 2;
+    const dropY = destinationBox!.y + destinationBox!.height / 2;
+    await page.mouse.move(dropX, dropY, { steps: 3 });
+    await page.mouse.move(dropX + 1, dropY);
+    await expect(destination).toHaveClass(/is-drop-target/);
     await page.mouse.up();
     await expect(page.locator(".calendar-drag-feedback")).toContainText("Only confirmed or arrived appointments can be moved.");
     expect(changedAfterPreflight).toBe(true);
