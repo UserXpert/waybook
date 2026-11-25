@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="apps/demo/public/brand/waybook-logo.svg" alt="Waybook" width="220" />
+  <img src="../../apps/demo/public/brand/waybook-logo.svg" alt="Waybook" width="220" />
 
   ### More time for the people you serve.
 
   A simpler way from interest to appointment — for clinics and other service businesses.
 
-  [Explore the website](https://waybook-website.vercel.app/) · [Documentation](docs/README.md) · [Delivery backlog](.waybook/docs/07_delivery_backlog.md) · [GitHub issues](https://github.com/UserXpert/waybook/issues)
+  [Explore the website](https://waybook-website.vercel.app/) · [Documentation](../../docs/index.md) · [Delivery backlog](07_delivery_backlog.md) · [GitHub issues](https://github.com/UserXpert/waybook/issues)
 </div>
 
 ---
@@ -16,7 +16,7 @@ Waybook brings online booking, the calendar, staff and services together in one 
 
 The first pilot is planned for Denmark, starting with clinics and appointment-based businesses. The aim is simple: make the small tasks around each appointment feel effortless, so teams have more time for their customers.
 
-> **Status: in development.** Waybook has database-backed workflows and an isolated hosted preview, but is not yet cleared for a live clinic pilot. The [pilot readiness record](.waybook/docs/08_pilot_readiness.md) tracks the remaining release gates.
+> **Status: in development.** Waybook has database-backed workflows and an isolated hosted preview, but is not yet cleared for a live clinic pilot. The [pilot readiness record](08_pilot_readiness.md) tracks the remaining release gates.
 
 ## From first click to next appointment
 
@@ -24,7 +24,7 @@ The first pilot is planned for Denmark, starting with clinics and appointment-ba
 | --- | --- | --- |
 | **Share a booking page** | Give customers a route to a business's services and availability. | Tenant-specific public booking routes are implemented; branded booking and website embed work remains in progress. |
 | **Choose a time** | Customers select a service and an available appointment. | Database-backed availability, temporary holds and booking confirmation are implemented and have focused test coverage. |
-| **See the day clearly** | Teams manage appointments, people, services and locations from a shared workspace. | Calendar and management workflows are implemented; see the [module ledger](.waybook/docs/04_modules_ledger.md) for feature-level evidence and gaps. |
+| **See the day clearly** | Teams manage appointments, people, services and locations from a shared workspace. | Calendar and management workflows are implemented; see the [module ledger](04_modules_ledger.md) for feature-level evidence and gaps. |
 | **Keep customers informed** | Confirmations and reminders help customers know when and where to arrive. | Email delivery is not yet verified for the pilot. Businesses will use a manual confirmation process for now. |
 
 The website also describes future possibilities such as SMS, integrations and additional industry-specific flows. These are product directions, not a promise that they are available today.
@@ -34,9 +34,9 @@ The website also describes future possibilities such as SMS, integrations and ad
 - **One workspace per business** — tenant-scoped routes and operational data, with a central Control database for tenant and identity records.
 - **A calendar connected to real availability** — staff schedules, location hours, booking holds and database-level conflict protection.
 - **The people and services behind each booking** — customer, staff, service and location management connected to the booking workflow.
-- **Commerce foundations** — selected product, package and gift-card workflows; see the [commerce ledger](.waybook/docs/05_commerce_foundation.md) for scope and verification.
+- **Commerce foundations** — selected product, package and gift-card workflows; see the [commerce ledger](05_commerce_foundation.md) for scope and verification.
 
-Waybook is an operations product, not an electronic health record. Diagnoses, treatment notes, prescriptions and clinical images are outside its intended scope. Appointment or service information can still reveal health information, so the [Denmark privacy review](.waybook/docs/10_denmark_privacy_review.md) remains a release requirement.
+Waybook is an operations product, not an electronic health record. Diagnoses, treatment notes, prescriptions and clinical images are outside its intended scope. Appointment or service information can still reveal health information, so the [Denmark privacy review](10_denmark_privacy_review.md) remains a release requirement.
 
 ## Developer onboarding
 
@@ -72,7 +72,7 @@ env -u WAYBOOK_CONTROL_DATABASE_URL -u WAYBOOK_NORDIC_STUDIO_DATABASE_URL -u WAY
 npm run waybook:dev
 ```
 
-Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](.env.waybook.local.example). The seed command writes demo users and data; the example unsets the three configured database URLs for that command so it targets the local defaults. For a fresh seed, sign in as `owner@nordic.local` with the local-only default password `waybook-local-only`, unless `WAYBOOK_LOCAL_PASSWORD` was set when seeding. Do not use seed credentials in hosted environments.
+Open [localhost:3333/login](http://localhost:3333/login). Connection examples are in [`.env.waybook.local.example`](../../.env.waybook.local.example). The seed command writes demo users and data; the example unsets the three configured database URLs for that command so it targets the local defaults. For a fresh seed, sign in as `owner@nordic.local` with the local-only default password `waybook-local-only`, unless `WAYBOOK_LOCAL_PASSWORD` was set when seeding. Do not use seed credentials in hosted environments.
 
 For an **existing** database, preserve its data and check its history first:
 
@@ -91,7 +91,7 @@ npm run waybook:build
 npm test --workspace=@waybook/app
 ```
 
-Use the [GitHub workflows](.github/workflows/) for package, Postgres integration and browser-test setup. Verify affected user-facing flows on desktop and mobile using isolated test data. A local build alone does not establish hosted or pilot readiness.
+Use the [GitHub workflows](../../.github/workflows/) for package, Postgres integration and browser-test setup. Verify affected user-facing flows on desktop and mobile using isolated test data. A local build alone does not establish hosted or pilot readiness.
 
 ### 4. Review, merge and verify production
 
@@ -105,7 +105,7 @@ Use the [GitHub workflows](.github/workflows/) for package, Postgres integration
 
 Database schema changes require versioned migrations; they must not be silently applied during Vercel builds or application startup. The schema guard rejects edits or deletions of existing migration files in pull requests. The history check reports recorded filenames, not a full physical-schema audit. Before hosted schema writes, verify the target, independent backup and recovery, rehearse on isolated copies, and plan a compatible rollout. Automated production schema changes are not yet enabled.
 
-For the full checklist, see the [local-to-production workflow](.waybook/docs/11_local_release_workflow.md), [pilot readiness record](.waybook/docs/08_pilot_readiness.md) and [GitHub issue #54](https://github.com/UserXpert/waybook/issues/54).
+For the full checklist, see the [local-to-production workflow](11_local_release_workflow.md), [pilot readiness record](08_pilot_readiness.md) and [GitHub issue #54](https://github.com/UserXpert/waybook/issues/54).
 
 ## Inside the repository
 
@@ -121,8 +121,8 @@ The application uses Next.js, React, TypeScript and PostgreSQL. Workspace packag
 
 ## Documentation
 
-Use the [documentation index](docs/README.md) to find architecture, booking, release, support and privacy guidance. The [manifest](.waybook/docs/00_manifest.md) routes implementation work to the authoritative topic documents. The [local-to-production workflow](.waybook/docs/11_local_release_workflow.md) is required before reconciling changes or deploying.
+Use the [documentation index](../../docs/index.md) to find architecture, booking, release, support and privacy guidance. The [manifest](00_manifest.md) routes implementation work to the authoritative topic documents. The [local-to-production workflow](11_local_release_workflow.md) is required before reconciling changes or deploying.
 
 ## License and attribution
 
-Amit Das’s original contributions to Waybook are reserved under [LICENSE](LICENSE). Third-party dependencies and earlier distributions remain subject to their applicable licenses.
+Amit Das’s original contributions to Waybook are reserved under [LICENSE](../../LICENSE). Third-party dependencies and earlier distributions remain subject to their applicable licenses.

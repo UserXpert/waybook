@@ -4,7 +4,7 @@ Waybook is a Denmark-first, multi-tenant booking operations application. It is i
 
 ## Start here
 
-- [README](README.md) for setup and current product scope.
+- [README](.waybook/docs/project_overview.md) for setup and current product scope.
 - [WAYBOOK_MVP.md](WAYBOOK_MVP.md) and [manifest](.waybook/docs/00_manifest.md) for product decisions.
 - [Delivery backlog](.waybook/docs/07_delivery_backlog.md) and [pilot readiness](.waybook/docs/08_pilot_readiness.md) for current priorities and evidence.
 - [AGENTS.md](AGENTS.md) for repository working rules and form-field typography.

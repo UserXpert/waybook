@@ -2,7 +2,7 @@
 
 Waybook documentation is deliberately decoupled to keep implementation context small while preserving factual consistency.
 
-For a human-readable overview, see the [documentation index](docs/README.md). Start implementation routing with [`.waybook/docs/00_manifest.md`](.waybook/docs/00_manifest.md). Then read **only** the topic document selected by its routing table, and update only that document after a meaningful change. Do not load the entire tree for a small feature.
+For a human-readable overview, see the [documentation index](docs/index.md). Start implementation routing with [`.waybook/docs/00_manifest.md`](.waybook/docs/00_manifest.md). Then read **only** the topic document selected by its routing table, and update only that document after a meaningful change. Do not load the entire tree for a small feature.
 
 The canonical documents are:
 

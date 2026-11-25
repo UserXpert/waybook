@@ -2,7 +2,7 @@ name: Email delivery sweep
 
 on:
   schedule:
-    - cron: '3-58/5 * * * *'
+    - cron: '3 */3 * * *'
   workflow_dispatch:
 
 permissions: {}
