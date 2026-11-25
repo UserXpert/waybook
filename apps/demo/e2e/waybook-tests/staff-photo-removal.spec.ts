@@ -49,7 +49,10 @@ for (const [index, tenant] of tenants.entries()) {
 
       await pickPhoto(page, avatar, photo);
       await expect(avatar.locator("img")).toHaveAttribute("src", uri(photo));
+      const rejectedUpload = page.waitForResponse((response) =>
+        response.request().method() === "POST" && Boolean(response.request().headers()["next-action"]));
       await pickPhoto(page, avatar, Buffer.from("invalid PNG bytes"));
+      expect((await rejectedUpload).status()).toBe(200);
       await expect(profile.getByRole("alert")).toContainText("Could not upload photo");
       expect((await owner(db, tenant.profileEmail)).photo_data_url).toBe(uri(photo));
       await pickPhoto(page, avatar, replacement);
@@ -96,6 +99,13 @@ for (const [index, tenant] of tenants.entries()) {
       await expect(opener.locator("img")).toHaveAttribute("src", uri(photo));
       await expect(menuAvatar.locator("img")).toHaveAttribute("src", uri(photo));
       await expect(menu.getByRole("menuitem", { name: /Remove.*photo/i })).toHaveCount(0);
+      const rejectedMenuUpload = page.waitForResponse((response) =>
+        response.request().method() === "POST" && Boolean(response.request().headers()["next-action"]));
+      await pickPhoto(page, menuAvatar, Buffer.from("invalid PNG bytes"));
+      expect((await rejectedMenuUpload).status()).toBe(200);
+      await expect(menu.getByRole("alert")).toContainText("Could not upload photo");
+      await expect(opener.locator("img")).toHaveAttribute("src", uri(photo));
+      expect((await owner(db, tenant.profileEmail)).photo_data_url).toBe(uri(photo));
       await opener.click();
       page.once("dialog", (prompt) => prompt.accept());
       await remove.click();
