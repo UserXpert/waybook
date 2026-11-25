@@ -4,7 +4,7 @@ import { defaultTenantTerminology, titleTerminology, type TenantTerminology } fr
 
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 
-import { type KeyboardEvent, useCallback, useEffect, useId, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type Member = { id: string; name: string };
@@ -40,8 +40,11 @@ export function SearchPicker<T extends { id: string }>({
   const [results, setResults] = useState<T[]>([]);
   const [isFocused, setIsFocused] = useState(false);
   const [hasTyped, setHasTyped] = useState(false);
+  const blurTimer = useRef<number | undefined>(undefined);
   const normalizedQuery = query.trim();
   const isSearching = isFocused && hasTyped && normalizedQuery.length >= 2;
+
+  useEffect(() => () => window.clearTimeout(blurTimer.current), []);
 
   useEffect(() => {
     setQuery(selectedLabel);
@@ -103,10 +106,13 @@ export function SearchPicker<T extends { id: string }>({
         aria-describedby={hintId}
         autoComplete="off"
         onFocus={(event) => {
+          window.clearTimeout(blurTimer.current);
           setIsFocused(true);
           event.currentTarget.select();
         }}
-        onBlur={() => window.setTimeout(() => setIsFocused(false), 120)}
+        onBlur={() => {
+          blurTimer.current = window.setTimeout(() => setIsFocused(false), 120);
+        }}
         onChange={(event) => {
           setHasTyped(true);
           setQuery(event.target.value);
