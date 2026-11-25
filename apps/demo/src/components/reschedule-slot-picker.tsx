@@ -31,6 +31,7 @@ export function RescheduleSlotPicker({ bookingId, timezone, days: initialDays, s
   const [days, setDays] = useState(initialDays);
   const [slots, setSlots] = useState(initialSlots);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const firstAvailableDate = days.find((day) => slots.some((slot) => localDateKey(new Date(slot.startTime), timezone) === day)) ?? days[0] ?? "";
   const [date, setDate] = useState(firstAvailableDate);
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
@@ -51,13 +52,17 @@ export function RescheduleSlotPicker({ bookingId, timezone, days: initialDays, s
     const startDate = addDays(days[0] ?? today, direction * 7);
     if (startDate < today || isLoading) return;
     setIsLoading(true);
-    setSelectedSlot(null);
+    setLoadError("");
     onSelectionChange?.(false);
     try {
       const result = await getRescheduleBookingAvailability({ bookingId, startDate });
       setDays(Array.from({ length: 7 }, (_, index) => addDays(startDate, index)));
       setSlots(result.slots);
       setDate(startDate);
+      setSelectedSlot(null);
+    } catch {
+      setLoadError("Could not load availability. Try again.");
+      onSelectionChange?.(Boolean(selectedSlot));
     } finally {
       setIsLoading(false);
     }
@@ -72,10 +77,11 @@ export function RescheduleSlotPicker({ bookingId, timezone, days: initialDays, s
       <button type="button" aria-label="Next week" onClick={() => void moveWindow(1)} disabled={isLoading}>→</button>
     </div>
     <div className="appointment-reschedule-picker__days" aria-label="Choose a date">
-      {days.map((day) => <button type="button" key={day} className={`appointment-reschedule-picker__day${day === date ? " is-selected" : ""}`} aria-pressed={day === date} onClick={() => { setDate(day); setSelectedSlot(null); onSelectionChange?.(false); }}><small>{new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: timezone }).format(new Date(`${day}T12:00:00Z`))}</small><strong>{day.slice(-2)}</strong></button>)}
+      {days.map((day) => <button type="button" key={day} className={`appointment-reschedule-picker__day${day === date ? " is-selected" : ""}`} aria-pressed={day === date} disabled={isLoading} onClick={() => { setDate(day); setSelectedSlot(null); onSelectionChange?.(false); }}><small>{new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: timezone }).format(new Date(`${day}T12:00:00Z`))}</small><strong>{day.slice(-2)}</strong></button>)}
     </div>
+    {loadError ? <p className="manual-appointment__message is-error" role="alert">{loadError}</p> : null}
     <p className="appointment-reschedule-picker__label">Available times</p>
     <div className="appointment-reschedule-picker__slots">{isLoading ? <span className="appointment-reschedule-picker__empty">Checking availability…</span> : dateSlots.map((slot) => <button type="button" key={slot.startTime} className={`appointment-reschedule-picker__slot${selectedSlot?.startTime === slot.startTime ? " is-selected" : ""}`} aria-pressed={selectedSlot?.startTime === slot.startTime} onClick={() => { setSelectedSlot(slot); onSelectionChange?.(true); }}>{clockTime(slot.startTime, timezone)}</button>)}</div>
-    {!dateSlots.length ? <p className="appointment-reschedule-picker__empty">No times are available on this date.</p> : null}
+    {!isLoading && !dateSlots.length ? <p className="appointment-reschedule-picker__empty">No times are available on this date.</p> : null}
   </div>;
 }

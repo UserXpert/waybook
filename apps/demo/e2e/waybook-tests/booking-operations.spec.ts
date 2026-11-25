@@ -257,9 +257,39 @@ for (const workspace of workspaces) {
       } else {
         await page.goto(`${calendar}&booking=${moving.id}`);
         const panel = drawer(page, moving);
-        await panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) }).click();
-        await panel.getByRole("button", { name: "11:30", exact: true }).click();
-        await panel.getByRole("button", { name: "Reschedule appointment" }).click();
+        const date = panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) });
+        const slot = panel.getByRole("button", { name: "11:30", exact: true });
+        const reschedule = panel.getByRole("button", { name: "Reschedule appointment" });
+        const nextWeek = panel.getByRole("button", { name: "Next week" });
+        await date.click();
+        await slot.click();
+
+        const beforeUnavailableWeek = await readBooking();
+        const calendarRequests = `**/${workspace.route}/app/calendars**`;
+        let interrupted = false;
+        await page.route(calendarRequests, async (route) => {
+          if (!interrupted && route.request().method() === "POST" && route.request().headers()["next-action"]) {
+            interrupted = true;
+            await route.abort("failed");
+          } else await route.continue();
+        });
+        await nextWeek.click();
+        const alert = panel.getByRole("alert").filter({ hasText: "Could not load availability." });
+        await expect(alert).toBeVisible();
+        await page.unroute(calendarRequests);
+        expect(interrupted).toBe(true);
+        await expect(slot).toHaveAttribute("aria-pressed", "true");
+        await expect(reschedule).toBeEnabled();
+        expect(await readBooking()).toEqual(beforeUnavailableWeek);
+
+        await nextWeek.click();
+        const previousWeek = panel.getByRole("button", { name: "Previous week" });
+        await expect(previousWeek).toBeEnabled();
+        await expect(alert).toHaveCount(0);
+        await previousWeek.click();
+        await date.click();
+        await slot.click();
+        await reschedule.click();
       }
 
       await expect.poll(readBooking).toMatchObject({ state: "confirmed", status: "confirmed", startsAt: start("11:30"), memberId: moving.memberId, locationId: location.id });
