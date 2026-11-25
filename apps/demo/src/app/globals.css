@@ -2504,6 +2504,13 @@ body {
 }
 .tenant-dashboard-page .waybook-calendar-entry__meta em { flex: 0 0 auto; }
 .tenant-dashboard-page .waybook-calendar-entry__service { font-size: .66rem; }
+.tenant-dashboard-page .waybook-calendar-entry__details {
+  display: flex;
+  align-items: center;
+  gap: .28rem;
+  min-width: 0;
+}
+.tenant-dashboard-page .waybook-calendar-entry__resource { flex: none; margin-inline-start: auto; }
 
 /* Keep the read-only historical context near the legend it qualifies, rather
    than consuming space in the scheduling header. */
