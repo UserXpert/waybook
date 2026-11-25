@@ -125,22 +125,37 @@ export async function saveOwnerProfileDetails(_: StaffDetailsState, formData: Fo
   const actor = await requireIdentity();
   try {
     const [saved] = await tenantDb(tenant)<{ id: string }[]>`
-      WITH profile AS (
-        UPDATE team_members
-        SET name = ${name}, email = ${email}, phone = ${phone || null}, calendar_color = COALESCE(${calendarColor}, calendar_color),
-          job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END,
-          specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END,
-          work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END,
-          staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END,
-          updated_at = now()
+      WITH prior AS (
+        SELECT id, name, email, phone, calendar_color, job_title, specialty, work_location, staff_code
+        FROM team_members
         WHERE tenant_id = ${tenant.id} AND id = ${memberId} AND identity_id = ${actor.id}
           AND role = 'owner' AND is_active
-        RETURNING id
+        FOR UPDATE
+      ), profile AS (
+        UPDATE team_members AS member
+        SET name = ${name}, email = ${email}, phone = ${phone || null}, calendar_color = COALESCE(${calendarColor}, member.calendar_color),
+          job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE member.job_title END,
+          specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE member.specialty END,
+          work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE member.work_location END,
+          staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE member.staff_code END,
+          updated_at = now()
+        FROM prior WHERE member.id = prior.id
+        RETURNING member.id, array_remove(ARRAY[
+          CASE WHEN member.name IS DISTINCT FROM prior.name THEN 'name' END,
+          CASE WHEN member.email IS DISTINCT FROM prior.email THEN 'email' END,
+          CASE WHEN member.phone IS DISTINCT FROM prior.phone THEN 'phone' END,
+          CASE WHEN member.calendar_color IS DISTINCT FROM prior.calendar_color THEN 'calendarColor' END,
+          CASE WHEN member.job_title IS DISTINCT FROM prior.job_title THEN 'jobTitle' END,
+          CASE WHEN member.specialty IS DISTINCT FROM prior.specialty THEN 'specialty' END,
+          CASE WHEN member.work_location IS DISTINCT FROM prior.work_location THEN 'workLocation' END,
+          CASE WHEN member.staff_code IS DISTINCT FROM prior.staff_code THEN 'staffCode' END
+        ], NULL) AS fields
+      ), audited AS (
+        INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
+        SELECT ${tenant.id}, ${actor.id}, 'staff.updated', 'team_member', id,
+          jsonb_build_object('fields', fields) FROM profile WHERE cardinality(fields) > 0
       )
-      INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
-      SELECT ${tenant.id}, ${actor.id}, 'staff.updated', 'team_member', id,
-        '{"fields":["name","email","phone","calendarColor","jobTitle","specialty","workLocation","staffCode"]}'::jsonb FROM profile
-      RETURNING target_id AS id
+      SELECT id FROM profile
     `;
     if (!saved) return { error: "Your workspace profile is unavailable." };
   } catch (error) {

@@ -20,9 +20,9 @@ test("both owners use the Staff Details form and share the saved photo with thei
   for (const tenant of tenants) {
     const db = postgres(process.env[tenant.database]!, { max: 1, ssl: false });
     const [original] = await db<{
-      id: string; name: string; email: string; phone: string | null; role: string; isActive: boolean; color: string | null; photo: string | null;
+      id: string; identityId: string; name: string; email: string; phone: string | null; role: string; isActive: boolean; color: string | null; photo: string | null;
     }[]>`
-      SELECT id, name, email, phone, role, is_active AS "isActive", calendar_color AS color, photo_data_url AS photo
+      SELECT id, identity_id AS "identityId", name, email, phone, role, is_active AS "isActive", calendar_color AS color, photo_data_url AS photo
       FROM team_members WHERE role = 'owner' AND email = ${tenant.email}
     `;
     try {
@@ -59,6 +59,26 @@ test("both owners use the Staff Details form and share the saved photo with thei
       await name.fill("   ");
       await save.click();
       await expect(page.getByRole("alert").filter({ hasText: "Enter a name" })).toBeVisible();
+      const profileAndSchedule = async () => (await db`
+        SELECT to_jsonb(tm) - 'name' - 'updated_at' AS profile,
+          (SELECT jsonb_agg(to_jsonb(b) ORDER BY b.id) FROM bookings b WHERE b.team_member_id=tm.id) AS bookings,
+          (SELECT array_agg(location_id ORDER BY location_id) FROM team_member_locations WHERE team_member_id=tm.id) AS locations,
+          (SELECT array_agg(service_id ORDER BY service_id) FROM service_team_members WHERE team_member_id=tm.id) AS services
+        FROM team_members tm WHERE tm.id=${original.id}
+      `)[0];
+      const beforeNameOnly = await profileAndSchedule();
+      const nameOnly = `${tenant.slug} QA Øwner`;
+      await name.fill(nameOnly);
+      await save.click();
+      await expect(page.getByRole("status")).toHaveText("Details saved.");
+      await expect(page.getByRole("heading", { name: nameOnly, exact: true })).toBeVisible();
+      expect(await profileAndSchedule()).toEqual(beforeNameOnly);
+      const [nameAudit] = await db`
+        SELECT actor_identity_id, metadata->'fields' AS fields FROM tenant_audit_events
+        WHERE action='staff.updated' AND target_id=${original.id} ORDER BY created_at DESC,id DESC LIMIT 1
+      `;
+      expect(nameAudit).toEqual({ actor_identity_id: original.identityId, fields: ["name"] });
+
       const nextName = `${tenant.slug} Owner QA`;
       const nextEmail = `contact-${tenant.slug}@example.invalid`;
       const nextPhone = "+45 12 34 56 78";
