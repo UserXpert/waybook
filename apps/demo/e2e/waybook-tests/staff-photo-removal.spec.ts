@@ -60,6 +60,10 @@ for (const [index, tenant] of tenants.entries()) {
       const before = await removals();
       const remove = profile.getByRole("button", { name: `Remove photo for ${original.name}` });
       await expect(remove).toBeVisible();
+      const avatarBounds = (await avatar.boundingBox())!;
+      const removeBounds = (await remove.boundingBox())!;
+      expect(removeBounds.x + removeBounds.width / 2).toBeGreaterThan(avatarBounds.x + avatarBounds.width / 2);
+      expect(Math.abs(removeBounds.y - avatarBounds.y)).toBeLessThanOrEqual(3);
       let promptText = "";
       page.once("dialog", async (prompt) => { promptText = prompt.message(); await prompt.dismiss(); });
       await remove.click();
@@ -83,11 +87,13 @@ for (const [index, tenant] of tenants.entries()) {
       const menuAvatar = menu.getByRole("button", { name: "Upload profile photo" });
       await pickPhoto(page, menuAvatar, photo);
       await expect(opener.locator("img")).toHaveAttribute("src", uri(photo));
+      await expect(menuAvatar.locator("img")).toHaveAttribute("src", uri(photo));
+      await expect(menu.getByRole("menuitem", { name: /Remove.*photo/i })).toHaveCount(0);
+      await opener.click();
       page.once("dialog", (prompt) => prompt.accept());
-      await menu.getByRole("menuitem", { name: "Remove profile photo" }).click();
-      await expect(menu.getByRole("menuitem", { name: "Remove profile photo" })).toHaveCount(0);
-      await expect(menuAvatar).toBeFocused();
-      await expect(menuAvatar.locator("img")).toHaveCount(0);
+      await remove.click();
+      await expect(avatar).toBeFocused();
+      await expect(opener.locator("img")).toHaveCount(0);
       expect(await removals()).toBe(before + 2);
       expect(await owner(otherDb, tenants[1 - index].profileEmail)).toEqual(otherBefore);
 

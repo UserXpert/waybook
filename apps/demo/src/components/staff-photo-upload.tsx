@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { Camera, X } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
@@ -63,7 +63,9 @@ export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { mem
       <span className="staff-photo-upload__camera" aria-hidden="true"><Camera size={14} /></span>
     </button>
     <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => upload(event.target.files?.[0])} />
-    {photoDataUrl ? <button type="button" className="profile-photo-remove" disabled={pending} onClick={() => remove(name)} aria-label={`Remove photo for ${name}`}>Remove photo</button> : null}
+    {photoDataUrl ? <button type="button" className="staff-photo-upload__remove" disabled={pending} onClick={() => remove(name)} aria-label={`Remove photo for ${name}`} title="Remove profile photo">
+      <X size={14} aria-hidden="true" />
+    </button> : null}
     {error ? <span className="staff-photo-upload__error" role="alert">{error}</span> : null}
   </div>;
 }
