@@ -39,7 +39,12 @@ function fullDate(instant: string, timezone: string) {
 }
 
 function price(priceCents: number, currency: string) {
-  return new Intl.NumberFormat("en-DK", { style: "currency", currency, maximumFractionDigits: 0 }).format(priceCents / 100);
+  return new Intl.NumberFormat("en-DK", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: priceCents % 100 ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(priceCents / 100);
 }
 
 export function PublicBookingFlow({ terminology, policyRevision, launcherLabel = "Book now", launcherPosition = "right", bookingTheme = "light", managementEnabled = false, initialManage = false, tenantSlug, tenantName, timezone, currency, services, teamMembers, locations, initialLocationId, initialServiceId, embedSource, embedToken, intro, contact, logoUrl, panelImageUrl, panelOverlayColor, panelTitle, panelCopy, policyVersion, policyUrl, policyText, serviceStepTitle, timeStepTitle, detailsStepTitle, brandColor, showPrices }: Props) {
