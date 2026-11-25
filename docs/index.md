@@ -1,12 +1,12 @@
 # Waybook documentation
 
-Start with the [main README](../README.md) for product context, setup and the release workflow. Waybook is in development; the [delivery backlog](../.waybook/docs/07_delivery_backlog.md) and [pilot readiness record](../.waybook/docs/08_pilot_readiness.md) distinguish implemented and verified work from open items.
+Start with the [main README](../.waybook/docs/project_overview.md) for product context, setup and the release workflow. Waybook is in development; the [delivery backlog](../.waybook/docs/07_delivery_backlog.md) and [pilot readiness record](../.waybook/docs/08_pilot_readiness.md) distinguish implemented and verified work from open items.
 
 ## Find the right document
 
 | If you need to… | Start here |
 | --- | --- |
-| Set up locally, test or release | [Developer onboarding](../README.md#developer-onboarding) and [local-to-production workflow](../.waybook/docs/11_local_release_workflow.md) |
+| Set up locally, test or release | [Developer onboarding](../.waybook/docs/project_overview.md#developer-onboarding) and [local-to-production workflow](../.waybook/docs/11_local_release_workflow.md) |
 | Understand current product decisions and document ownership | [Manifest and routing guide](../.waybook/docs/00_manifest.md) and [documentation entry point](../WAYBOOK_MVP.md) |
 | Understand tenant boundaries, data and routing | [Architecture](../.waybook/docs/01_architecture.md) |
 | Work on identity, permissions or onboarding | [Authentication and provisioning](../.waybook/docs/02_auth_provisioning.md) |
