@@ -9,6 +9,10 @@ on:
 env:
   WAYBOOK_MIGRATION_TEST_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/postgres
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   integration:
     name: DB Integration Tests (Postgres 15)
