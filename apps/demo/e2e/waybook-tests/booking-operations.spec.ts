@@ -200,30 +200,6 @@ for (const workspace of workspaces) {
       await expect.poll(async () => (await assignments()).length).toBe(0);
       expect(await availableAt(winner.memberId, "10:00")).toBe(true);
 
-      if (testInfo.project.name === "desktop") {
-        await page.goto(calendar);
-        const source = page.locator(`a.waybook-week-calendar__entry[href*="booking=${moving.id}"]`);
-        const destination = page.locator(`[data-calendar-team-member-id="${moving.memberId}"][data-calendar-starts-at="${day}T11:30"]`);
-        await source.scrollIntoViewIfNeeded();
-        const sourceBounds = (await source.boundingBox())!;
-        const x = sourceBounds.x + sourceBounds.width / 2;
-        const y = sourceBounds.y + sourceBounds.height / 2;
-        await page.mouse.move(x, y);
-        await page.mouse.down();
-        await page.mouse.move(x + 8, y + 8);
-        await expect(destination).toHaveClass(/is-drop-eligible/);
-        const drop = (await destination.boundingBox())!;
-        await page.mouse.move(drop.x + drop.width / 2, drop.y + drop.height / 2);
-        await page.mouse.up();
-        await expect(page.locator(".calendar-drag-feedback")).toContainText("Appointment moved.");
-      } else {
-        await page.goto(`${calendar}&booking=${moving.id}`);
-        const panel = drawer(page, moving);
-        await panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) }).click();
-        await panel.getByRole("button", { name: "11:30", exact: true }).click();
-        await panel.getByRole("button", { name: "Reschedule appointment" }).click();
-      }
-
       const readBooking = async () => {
         const [booking] = await sql<{ state: string; status: string; startsAt: Date; memberId: string; locationId: string }[]>`
           SELECT b.status, b.starts_at AS "startsAt", b.team_member_id AS "memberId", b.location_id AS "locationId", bb.state
@@ -232,6 +208,60 @@ for (const workspace of workspaces) {
         `;
         return { ...booking, startsAt: booking.startsAt.toISOString() };
       };
+      if (testInfo.project.name.startsWith("desktop")) {
+        await page.goto(`${calendar}&booking=${moving.id}`);
+        const pendingMove = drawer(page, moving);
+        await pendingMove.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
+        await pendingMove.getByRole("button", { name: "Save changes" }).click();
+        await expect.poll(assignments).toEqual([{ bookingId: moving.id }]);
+        await page.goto(calendar);
+        const source = page.locator(`a.waybook-week-calendar__entry[href*="booking=${moving.id}"]`);
+        const destination = page.locator(`[data-calendar-team-member-id="${moving.memberId}"][data-calendar-starts-at="${day}T11:30"]`);
+        async function prepareDrop() {
+          await source.scrollIntoViewIfNeeded();
+          const sourceBounds = (await source.boundingBox())!;
+          const x = sourceBounds.x + sourceBounds.width / 2;
+          const y = sourceBounds.y + sourceBounds.height / 2;
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          await page.mouse.move(x + 8, y + 8);
+          await expect(destination).toHaveClass(/is-drop-eligible/);
+          const drop = (await destination.boundingBox())!;
+          await page.mouse.move(drop.x + drop.width / 2, drop.y + drop.height / 2, { steps: 3 });
+          await page.mouse.move(drop.x + drop.width / 2 + 1, drop.y + drop.height / 2);
+          await expect(destination).toHaveClass(/is-drop-target/);
+        }
+        const beforeInterruptedMove = await readBooking();
+        const beforeAssignments = await assignments();
+        await prepareDrop();
+        const calendarRequests = `**/${workspace.route}/app/calendars**`;
+        let interrupted = false;
+        await page.route(calendarRequests, async (route) => {
+          if (!interrupted && route.request().method() === "POST" && route.request().headers()["next-action"]) {
+            interrupted = true;
+            await route.abort("failed");
+          } else await route.continue();
+        });
+        await page.mouse.up();
+        await expect(page.locator(".calendar-drag-feedback")).toContainText("Could not confirm the move.");
+        await page.unroute(calendarRequests);
+        expect(interrupted).toBe(true);
+        expect(await readBooking()).toEqual(beforeInterruptedMove);
+        expect(await assignments()).toEqual(beforeAssignments);
+
+        await page.reload();
+        await prepareDrop();
+        await page.mouse.up();
+        await expect(page.locator(".calendar-drag-feedback")).toContainText("Appointment moved.");
+        expect(await assignments()).toEqual(beforeAssignments);
+      } else {
+        await page.goto(`${calendar}&booking=${moving.id}`);
+        const panel = drawer(page, moving);
+        await panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) }).click();
+        await panel.getByRole("button", { name: "11:30", exact: true }).click();
+        await panel.getByRole("button", { name: "Reschedule appointment" }).click();
+      }
+
       await expect.poll(readBooking).toMatchObject({ state: "confirmed", status: "confirmed", startsAt: start("11:30"), memberId: moving.memberId, locationId: location.id });
       expect(await availableAt(moving.memberId, "10:00")).toBe(true);
       expect(await availableAt(moving.memberId, "11:30")).toBe(false);

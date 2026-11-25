@@ -160,10 +160,12 @@ export function CalendarBookingDragDrop() {
         const payload = dragPayload ?? JSON.parse(rawPayload) as DragPayload;
         setMessage("Moving appointment…");
         startTransition(async () => {
-          const result = await moveBookingOnCalendar({ bookingId: payload.bookingId, startsAt: destination.startsAt, teamMemberId: destination.teamMemberId });
-          setMessage(result.error ?? "Appointment moved.");
-          if (!result.error) {
-            router.refresh();
+          try {
+            const result = await moveBookingOnCalendar({ bookingId: payload.bookingId, startsAt: destination.startsAt, teamMemberId: destination.teamMemberId });
+            setMessage(result.error ?? "Appointment moved.");
+            if (!result.error) router.refresh();
+          } catch {
+            setMessage("Could not confirm the move. Refresh the calendar before trying again.");
           }
         });
       } catch {
