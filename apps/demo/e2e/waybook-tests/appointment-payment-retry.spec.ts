@@ -15,8 +15,8 @@ for (const workspace of workspaces) {
     try {
       const booking = await db.begin(async (tx) => {
         const [service] = await tx`SELECT id, tenant_id FROM services WHERE is_active ORDER BY id LIMIT 1`;
-        const [location] = await tx`INSERT INTO locations (tenant_id,slug,name,timezone)
-          VALUES (${service.tenant_id}, ${`receipt-retry-${marker}`}, ${name}, 'Europe/Copenhagen') RETURNING id`;
+        const [location] = await tx`INSERT INTO locations (tenant_id,slug,name,timezone,is_active,is_online_bookable)
+          VALUES (${service.tenant_id}, ${`receipt-retry-${marker}`}, ${name}, 'Europe/Copenhagen', false, false) RETURNING id`;
         const [member] = await tx`INSERT INTO team_members (tenant_id,name,email,role)
           VALUES (${service.tenant_id}, ${name}, ${`staff-${marker}@example.test`}, 'staff') RETURNING id`;
         const [customer] = await tx`INSERT INTO customers (tenant_id,name,email)
