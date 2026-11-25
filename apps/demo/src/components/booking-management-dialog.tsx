@@ -53,6 +53,10 @@ export function BookingManagementDialog({ tenantSlug, timezone, open, onClose, o
     setError("");
     setStage(stage === "booking" ? "lookup" : stage === "confirmMove" ? "times" : "booking");
   };
+  const returnToClosedBooking = () => {
+    setBooking(current => current ? { ...current, canChange: false, canCancel: false } : null);
+    setStage("booking");
+  };
   const request = async (action: "lookup" | "cancel" | "reschedule", fields: Record<string, string> = {}) => {
     const version = ++requestVersion.current;
     setBusy(true); setError("");
@@ -61,7 +65,11 @@ export function BookingManagementDialog({ tenantSlug, timezone, open, onClose, o
       const data = await response.json();
       if (response.ok && action !== "lookup") onBookingChanged?.(bookingId);
       if (version !== requestVersion.current) return null;
-      if (!response.ok) { setError(data.error || "Please try again."); return null; }
+      if (!response.ok) {
+        if (data.canChange === false) returnToClosedBooking();
+        else setError(data.error || "Please try again.");
+        return null;
+      }
       return data;
     } catch { if (version === requestVersion.current) setError("We couldn’t connect. Please try again."); return null; }
     finally { if (version === requestVersion.current) setBusy(false); }
@@ -77,7 +85,11 @@ export function BookingManagementDialog({ tenantSlug, timezone, open, onClose, o
       const response = await fetch(`/${tenantSlug}/api/public/manage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "availability", bookingId, email, start: new Date(start.getTime() - 86_400_000).toISOString(), end: new Date(end.getTime() + 86_400_000).toISOString() }) });
       const data = await response.json();
       if (version !== requestVersion.current) return;
-      if (!response.ok) { setError(data.error || "Please try again."); return; }
+      if (!response.ok) {
+        if (data.canChange === false) returnToClosedBooking();
+        else setError(data.error || "Please try again.");
+        return;
+      }
       const unique = new Map<string, Slot>(); for (const provider of data.availability as Provider[]) for (const slot of provider.slots) if (dateKey(new Date(slot.startTime), timezone) === day && new Date(slot.startTime).getTime() > Date.now()) unique.set(slot.startTime, slot); setSlots([...unique.values()].sort((a, b) => a.startTime.localeCompare(b.startTime)));
     } catch { if (version === requestVersion.current) setError("We couldn’t connect. Please try again."); }
     finally { if (version === requestVersion.current) setBusy(false); }

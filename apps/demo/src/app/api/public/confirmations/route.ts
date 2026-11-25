@@ -29,8 +29,14 @@ export async function POST(request: NextRequest) {
   const name = typeof body?.customer?.name === "string" ? body.customer.name : "";
   const email = typeof body?.customer?.email === "string" ? body.customer.email : "";
   const phone = typeof body?.customer?.phone === "string" ? body.customer.phone : null;
-  if (!holdId || !idempotencyKey || !name.trim() || !email.includes("@")) {
-    return NextResponse.json({ error: "A hold, idempotency key, name, and valid email are required." }, { status: 400 });
+  if (!holdId || !idempotencyKey) {
+    return NextResponse.json({ error: "Choose an available time before confirming your booking." }, { status: 400 });
+  }
+  if (!name.trim()) {
+    return NextResponse.json({ error: "Enter your name to confirm your booking." }, { status: 400 });
+  }
+  if (!email.includes("@")) {
+    return NextResponse.json({ error: "Enter a valid email address to confirm your booking." }, { status: 400 });
   }
   try {
     const [settings] = await tenantDb(tenant)<{ bookingPage: BookingPage | string | null }[]>`SELECT booking_page AS "bookingPage" FROM tenant_settings WHERE tenant_id=${tenant.id}`;

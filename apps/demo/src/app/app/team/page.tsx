@@ -3,6 +3,7 @@ import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import { StaffRolePicker } from "@/components/staff-role-picker";
 import { staffPermissionSections, type StaffRoleOption } from "@/lib/waybook/staff-role-fields";
+import { canConfigureStaffPermission } from "@/lib/waybook/read-only-permissions";
 import Link from "next/link";
 import { Pencil } from "lucide-react";
 import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
@@ -186,7 +187,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           </section> : null}
           {tab === "permissions" && canManage ? <section className="staff-workspace__panel staff-workspace__panel--permissions">
             <PanelHeading title="Permissions" text={selected.role === "owner" ? "Workspace owners have full access." : selected.staffRoleId ? "Shared role permissions apply to this profile." : canEditSelectedPermissions ? "Choose what this person can do in the workspace." : "Only a workspace owner can change manager permissions."} />
-            {canEditSelectedPermissions && !selected.staffRoleId ? <StaffPermissionsForm key={selected.id} memberId={selected.id} initial={permissions[0]} workspacePermissionsAvailable={workspacePermissionsAvailable} /> : null}
+            {canEditSelectedPermissions && !selected.staffRoleId ? <StaffPermissionsForm key={selected.id} memberId={selected.id} role={selected.role} initial={permissions[0]} workspacePermissionsAvailable={workspacePermissionsAvailable} /> : null}
             {selected.staffRoleId ? <p>
               Access follows the {selected.staffRoleName} role. {membership.role === "owner" ? <Link href={tenantPath(tenantSlug, `/app/settings?tab=roles&role=${selected.staffRoleId}`)}>Manage role permissions</Link> : null}
             </p> : null}
@@ -220,10 +221,15 @@ function ProfileFacts({ terms, member }: { terms: Awaited<ReturnType<typeof getT
   return <dl className="staff-profile-facts"><div><dt>Email</dt><dd>{member.email}</dd></div><div><dt>Phone</dt><dd>{member.phone ?? "—"}</dd></div><div><dt>Role</dt><dd>{member.staffRoleName ?? (member.role === "staff" ? terms.staff : member.role)}</dd></div><div><dt>Login</dt><dd>{member.identityId ? "Enabled" : "Not created"}</dd></div><div><dt>Specialty</dt><dd>{member.specialty ?? "—"}</dd></div></dl>;
 }
 
-function StaffPermissionsForm({ memberId, initial, workspacePermissionsAvailable }: { memberId: string; initial: StaffPermissions | undefined; workspacePermissionsAvailable: boolean }) {
+function StaffPermissionsForm({ memberId, role, initial, workspacePermissionsAvailable }: { memberId: string; role: string; initial: StaffPermissions | undefined; workspacePermissionsAvailable: boolean }) {
+  const sections = staffPermissionSections.flatMap(({ title, items }) => {
+    if (!workspacePermissionsAvailable && title !== "Calendar" && title !== "Operations") return [];
+    const applicable = items.filter(([key]) => canConfigureStaffPermission(role, key));
+    return applicable.length ? [{ title, items: applicable }] : [];
+  });
   return <form action={saveStaffPermissions} className="staff-permissions-form">
     <input type="hidden" name="memberId" value={memberId} />
-    {staffPermissionSections.filter((section) => workspacePermissionsAvailable || section.title === "Calendar" || section.title === "Operations").map((section) => <fieldset key={section.title}>
+    {sections.map((section) => <fieldset key={section.title}>
       <legend>{section.title}</legend>
       {section.items.map(([key, title, description]) => <label key={key} className="staff-permission-toggle">
         <input type="checkbox" role="switch" name={key} defaultChecked={initial?.[key] ?? false} />

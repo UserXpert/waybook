@@ -39,7 +39,8 @@ export async function lookupManagedBooking(tenant: TenantRecord, credentials: Cr
 
 export async function managedAvailability(tenant: TenantRecord, credentials: Credentials, start: Date, end: Date) {
   const booking = await findBooking(tenantDb(tenant), tenant.id, credentials);
-  if (!booking || !canChange(booking)) return null;
+  if (!booking) return null;
+  if (!canChange(booking)) return "closed" as const;
   const durationMinutes = (new Date(booking.endsAt).getTime() - new Date(booking.startsAt).getTime()) / 60_000;
   return availableSlots(tenant, booking.serviceId, start, end, { locationId: booking.locationId, excludeBookingBlockId: booking.bookingBlockId, durationMinutes });
 }
@@ -83,7 +84,8 @@ export async function rescheduleManagedBooking(tenant: TenantRecord, credentials
     const db = tx as unknown as Sql;
     const booking = await lockBooking(db, tenant, credentials);
     if (!booking) return { status: "not_found" as const, outboxId: null };
-    if (!canChange(booking) || startsAt.getTime() <= Date.now()) return { status: "unavailable" as const, outboxId: null };
+    if (!canChange(booking)) return { status: "closed" as const, outboxId: null };
+    if (startsAt.getTime() <= Date.now()) return { status: "unavailable" as const, outboxId: null };
     const durationMinutes = (new Date(booking.endsAt).getTime() - new Date(booking.startsAt).getTime()) / 60_000;
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
     const providers = await availableSlots(tenant, booking.serviceId, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId: booking.locationId, excludeBookingBlockId: booking.bookingBlockId, durationMinutes }, db);

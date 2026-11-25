@@ -18,12 +18,16 @@ for (const workspace of workspaces) {
       throw new Error("Booking operations QA requires a disposable local database.");
     }
     const sql = postgres(database, { max: 2, ssl: false });
+    const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
     const tag = randomUUID().slice(0, 8);
     const [settings] = await sql<{ tenantId: string; timezone: string; day: string }[]>`
       SELECT tenant_id AS "tenantId", timezone, ((now() AT TIME ZONE timezone)::date + 3)::text AS day
       FROM tenant_settings LIMIT 1
     `;
     const { tenantId, timezone, day } = settings;
+    const [resourcesFeature] = await control<{ is_enabled: boolean }[]>`
+      SELECT is_enabled FROM tenant_feature_states WHERE tenant_id=${tenantId} AND feature_key='resources'
+    `;
     const [primary] = await sql<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id=${tenantId} AND slug='primary'`;
     const [location] = await sql<{ id: string }[]>`
       INSERT INTO locations (tenant_id, slug, name, timezone)
@@ -33,9 +37,9 @@ for (const workspace of workspaces) {
       INSERT INTO services (tenant_id, slug, title, duration_minutes)
       VALUES (${tenantId}, ${`qa-${tag}`}, ${`Z QA session ${tag}`}, 30) RETURNING id
     `;
-    const [resource] = await sql<{ id: string }[]>`
+    const [resource] = await sql<{ id: string; name: string }[]>`
       INSERT INTO resources (tenant_id, name, resource_type, is_mutually_exclusive)
-      VALUES (${tenantId}, ${`Z Exclusive room ${tag}`}, 'room', TRUE) RETURNING id
+      VALUES (${tenantId}, ${`Z Exclusive room ${tag}`}, 'room', TRUE) RETURNING id, name
     `;
     const staff = await sql<{ id: string; name: string }[]>`
       INSERT INTO team_members (tenant_id, name, email, role)
@@ -54,6 +58,9 @@ for (const workspace of workspaces) {
     secondPage.setDefaultTimeout(10_000);
 
     try {
+      if (!resourcesFeature.is_enabled) {
+        await control`UPDATE tenant_feature_states SET is_enabled=true WHERE tenant_id=${tenantId} AND feature_key='resources'`;
+      }
       await sql`INSERT INTO location_hours (tenant_id, location_id, day_of_week, start_time, end_time)
         SELECT ${tenantId}, ${location.id}, day, '09:00', '17:00' FROM generate_series(0,6) AS day`;
       await sql`INSERT INTO service_locations (tenant_id, service_id, location_id) VALUES (${tenantId},${service.id},${location.id})`;
@@ -129,6 +136,22 @@ for (const workspace of workspaces) {
       const firstDrawer = drawer(page, first);
       const secondDrawer = drawer(page, second);
       const firstNameField = firstDrawer.getByLabel("Customer name");
+      const bookingList = `/${workspace.route}/app/bookings?q=${encodeURIComponent(first.name)}`;
+      await page.goto(bookingList);
+      const firstRow = page.locator(".booking-list-row").filter({ hasText: first.name });
+      await firstRow.press("Enter");
+      const listDialog = page.getByRole("dialog", { name: `Appointment with ${first.name}` });
+      const listClose = listDialog.getByRole("link", { name: "Close appointment" });
+      await expect(listClose).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(listDialog.getByRole("button", { name: "Cancel appointment", exact: true })).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(listClose).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(listDialog).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking") && url.searchParams.get("q") === first.name);
+      await expect(firstRow).toBeFocused();
+
       await page.goto(calendar);
       const firstCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${first.id}"]`);
       await firstCard.focus();
@@ -208,14 +231,18 @@ for (const workspace of workspaces) {
         `;
         return { ...booking, startsAt: booking.startsAt.toISOString() };
       };
+      await page.goto(`${calendar}&booking=${moving.id}`);
+      const pendingMove = drawer(page, moving);
+      await pendingMove.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
+      await pendingMove.getByRole("button", { name: "Save changes" }).click();
+      await expect.poll(assignments).toEqual([{ bookingId: moving.id }]);
+      const source = page.locator(`a.waybook-week-calendar__entry[href*="booking=${moving.id}"]`);
+      await page.goto(`${calendar}&employee=${moving.memberId}`);
+      await expect(source.getByRole("img", { name: `Resource: ${resource.name}`, exact: true })).toBeVisible();
+      await page.goto(calendar);
+      await expect(source.getByRole("img", { name: `Resource: ${resource.name}`, exact: true })).toBeVisible();
+
       if (testInfo.project.name.startsWith("desktop")) {
-        await page.goto(`${calendar}&booking=${moving.id}`);
-        const pendingMove = drawer(page, moving);
-        await pendingMove.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
-        await pendingMove.getByRole("button", { name: "Save changes" }).click();
-        await expect.poll(assignments).toEqual([{ bookingId: moving.id }]);
-        await page.goto(calendar);
-        const source = page.locator(`a.waybook-week-calendar__entry[href*="booking=${moving.id}"]`);
         const destination = page.locator(`[data-calendar-team-member-id="${moving.memberId}"][data-calendar-starts-at="${day}T11:30"]`);
         async function prepareDrop() {
           await source.scrollIntoViewIfNeeded();
@@ -293,6 +320,7 @@ for (const workspace of workspaces) {
       }
 
       await expect.poll(readBooking).toMatchObject({ state: "confirmed", status: "confirmed", startsAt: start("11:30"), memberId: moving.memberId, locationId: location.id });
+      expect(await assignments()).toEqual([{ bookingId: moving.id }]);
       expect(await availableAt(moving.memberId, "10:00")).toBe(true);
       expect(await availableAt(moving.memberId, "11:30")).toBe(false);
 
@@ -301,6 +329,7 @@ for (const workspace of workspaces) {
       await panel.getByRole("button", { name: "Cancel appointment" }).click();
       await expect(panel.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
       await expect.poll(readBooking).toMatchObject({ state: "cancelled", status: "cancelled" });
+      expect(await assignments()).toEqual([]);
       await expect(panel.getByRole("button", { name: "Reschedule appointment" })).toHaveCount(0);
       expect(await availableAt(moving.memberId, "11:30")).toBe(true);
     } finally {
@@ -310,7 +339,13 @@ for (const workspace of workspaces) {
       await sql`UPDATE resources SET is_active=FALSE WHERE tenant_id=${tenantId} AND id=${resource.id}`;
       await sql`UPDATE services SET is_active=FALSE WHERE tenant_id=${tenantId} AND id=${service.id}`;
       await sql`UPDATE locations SET is_active=FALSE WHERE tenant_id=${tenantId} AND id=${location.id}`;
-      await sql.end();
+      try {
+        if (!resourcesFeature.is_enabled) {
+          await control`UPDATE tenant_feature_states SET is_enabled=false WHERE tenant_id=${tenantId} AND feature_key='resources'`;
+        }
+      } finally {
+        await Promise.all([sql.end(), control.end()]);
+      }
     }
   });
 }

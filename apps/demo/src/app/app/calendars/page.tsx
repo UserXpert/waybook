@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Wrench } from "lucide-react";
 import type { CSSProperties } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
@@ -25,7 +25,7 @@ import {
   requireTenantWorkspace,
 } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { requirePageFeature } from "@/lib/waybook/features";
+import { isFeatureEnabled, requirePageFeature } from "@/lib/waybook/features";
 import { canManageAppointment, staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { canChangeAttendanceNow, isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 import {
@@ -75,6 +75,24 @@ type TeamBooking = Booking & {
 type Slot = { startTime: string; endTime: string };
 type ScheduleEntry = { startTime: string; endTime: string };
 type ResourceChoice = { id: string; name: string; isMutuallyExclusive: boolean };
+
+function CalendarBookingService({ service, resource }: { service: string; resource: string | null }) {
+  return (
+    <span className="waybook-calendar-entry__details">
+      <span className="waybook-calendar-entry__service">{service}</span>
+      {resource ? (
+        <Wrench
+          className="waybook-calendar-entry__resource"
+          size={12}
+          role="img"
+          aria-label={`Resource: ${resource}`}
+        >
+          <title>{`Resource: ${resource}`}</title>
+        </Wrench>
+      ) : null}
+    </span>
+  );
+}
 type LocationHours = { dayOfWeek: number; startTime: string; endTime: string };
 
 function localDateKey(date: Date, timezone: string) {
@@ -239,6 +257,7 @@ export default async function CalendarsPage({
   await requirePageFeature(tenant.id, "calendars");
   const permissions = await staffPermissionContext(tenant, membership);
   const canManage = permissions.isManager;
+  const showResources = (canManage || permissions.canManageResources) && await isFeatureEnabled(tenant.id, "resources");
   const canManageSchedule = (memberId: string | null) => canManageAppointment(permissions, memberId);
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) {
@@ -962,7 +981,7 @@ export default async function CalendarsPage({
                             <span className="waybook-calendar-entry__time">{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)}</span>
                             <em>{booking.status === "completed" ? "Done" : booking.status.replace("_", " ")}</em>
                           </span>
-                          <span className="waybook-calendar-entry__service">{booking.serviceTitle}</span>
+                          <CalendarBookingService service={booking.serviceTitle} resource={showResources ? booking.resourceName : null} />
                         </Link>
                       ))}
                     </div>
@@ -1191,7 +1210,7 @@ export default async function CalendarsPage({
                             <span className="waybook-calendar-entry__time">{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)}</span>
                             <em>{booking.status === "completed" ? "Done" : booking.status.replace("_", " ")}</em>
                           </span>
-                          <span className="waybook-calendar-entry__service">{booking.serviceTitle}</span>
+                          <CalendarBookingService service={booking.serviceTitle} resource={showResources ? booking.resourceName : null} />
                         </Link>
                       ))}
                     </div>

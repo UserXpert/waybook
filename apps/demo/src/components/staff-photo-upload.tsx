@@ -1,10 +1,13 @@
 "use client";
 
-import { Camera } from "lucide-react";
+import { Camera, X } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
+import type { StaffPhotoResult } from "@/app/app/team/actions";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
-export function useStaffPhotoUpload(memberId: string | null, action: (data: FormData) => Promise<void>) {
+export type StaffPhotoAction = (data: FormData) => Promise<StaffPhotoResult>;
+
+export function useStaffPhotoUpload(memberId: string | null, action: StaffPhotoAction) {
   const input = useRef<HTMLInputElement>(null);
   const uploadButton = useRef<HTMLButtonElement>(null);
   const focusUploadFor = useRef<string | null>(null);
@@ -22,7 +25,11 @@ export function useStaffPhotoUpload(memberId: string | null, action: (data: Form
     setError("");
     startTransition(async () => {
       try {
-        await action(data);
+        const result = await action(data);
+        if (result.error) {
+          setError(`Could not upload photo. ${result.error}`);
+          return;
+        }
         if (removing) focusUploadFor.current = memberId;
         showSuccessToast(removing ? "Profile photo removed." : "Profile photo saved.");
       } catch {
@@ -55,7 +62,7 @@ export function useStaffPhotoUpload(memberId: string | null, action: (data: Form
   return { input, uploadButton, error, pending, upload, remove };
 }
 
-export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { memberId: string; name: string; photoDataUrl: string | null; action: (data: FormData) => Promise<void> }) {
+export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { memberId: string; name: string; photoDataUrl: string | null; action: StaffPhotoAction }) {
   const { input, uploadButton, error, pending, upload, remove } = useStaffPhotoUpload(memberId, action);
   return <div className="staff-photo-upload">
     <button ref={uploadButton} type="button" className="staff-workspace__avatar is-large staff-photo-upload__button" onClick={() => input.current?.click()} disabled={pending} aria-label={`${pending ? "Updating photo for" : "Change photo for"} ${name}`} title="Change profile photo">
@@ -63,7 +70,9 @@ export function StaffPhotoUpload({ memberId, name, photoDataUrl, action }: { mem
       <span className="staff-photo-upload__camera" aria-hidden="true"><Camera size={14} /></span>
     </button>
     <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => upload(event.target.files?.[0])} />
-    {photoDataUrl ? <button type="button" className="profile-photo-remove" disabled={pending} onClick={() => remove(name)} aria-label={`Remove photo for ${name}`}>Remove photo</button> : null}
+    {photoDataUrl ? <button type="button" className="staff-photo-upload__remove" disabled={pending} onClick={() => remove(name)} aria-label={`Remove photo for ${name}`} title="Remove profile photo">
+      <X size={14} aria-hidden="true" />
+    </button> : null}
     {error ? <span className="staff-photo-upload__error" role="alert">{error}</span> : null}
   </div>;
 }

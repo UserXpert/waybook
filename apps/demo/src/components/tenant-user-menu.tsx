@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Camera, ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
 import { applyStoredTenantAppearance } from "@/components/tenant-appearance-controls";
-import { useStaffPhotoUpload } from "@/components/staff-photo-upload";
+import { useStaffPhotoUpload, type StaffPhotoAction } from "@/components/staff-photo-upload";
 
 type TenantUserMenuProps = {
   photo: string | null;
   photoMemberId: string | null;
-  onSavePhoto: (data: FormData) => Promise<void>;
+  onSavePhoto: StaffPhotoAction;
   displayName: string;
   email: string;
   role: string;
@@ -21,7 +21,7 @@ type TenantUserMenuProps = {
 export function TenantUserMenu({ photo, photoMemberId, onSavePhoto, displayName, email, role, staffHref, settingsHref, onSignOut }: TenantUserMenuProps) {
   const [open, setOpen] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
-  const { input, uploadButton, error, pending, upload, remove } = useStaffPhotoUpload(photoMemberId, onSavePhoto);
+  const { input, uploadButton, error, pending, upload } = useStaffPhotoUpload(photoMemberId, onSavePhoto);
   const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
   useEffect(() => {
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -55,7 +55,7 @@ export function TenantUserMenu({ photo, photoMemberId, onSavePhoto, displayName,
           <button ref={uploadButton} type="button" className="tenant-user-menu__avatar-upload" disabled={pending} aria-label={pending ? "Updating profile photo" : "Upload profile photo"} onClick={() => input.current?.click()}>{avatar}{!photo ? <Camera aria-hidden="true" /> : null}</button>
           <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => upload(event.target.files?.[0])} />
         </> : <span className="tenant-user-menu__avatar-upload">{avatar}</span>}
-        <div><strong>{displayName}</strong><span>{email}</span>{photoMemberId && photo ? <button type="button" role="menuitem" className="profile-photo-remove" disabled={pending} onClick={() => remove(displayName)}>Remove profile photo</button> : null}</div><small>{role}</small>
+        <div><strong>{displayName}</strong><span>{email}</span></div><small>{role}</small>
       </header>
       <div className="tenant-user-menu__items">
         {error ? <p role="alert">{error}</p> : null}

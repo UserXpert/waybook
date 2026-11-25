@@ -10,13 +10,15 @@ export function AppointmentPaymentForm({ bookingId, outstandingCents }: { bookin
   const submitting = useRef(false);
   const interrupted = useRef<FormData | null>(null);
   const outstandingDkk = Math.max(0, outstandingCents) / 100;
+  const [kind, setKind] = useState("");
   const [amount, setAmount] = useState(outstandingDkk ? outstandingDkk.toFixed(2) : "");
   const [amountConfirmed, setAmountConfirmed] = useState(false);
   const editingDisabled = pending || retryRequired;
+  const canRecord = kind !== "" && amountConfirmed && Number(amount) > 0;
 
   async function saveEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting.current || (!interrupted.current && (!amountConfirmed || Number(amount) <= 0))) return;
+    if (submitting.current || (!interrupted.current && !canRecord)) return;
     const data = interrupted.current ?? new FormData(event.currentTarget);
     if (!interrupted.current) data.set("entryId", crypto.randomUUID());
     submitting.current = true;
@@ -28,6 +30,7 @@ export function AppointmentPaymentForm({ bookingId, outstandingCents }: { bookin
       setRetryRequired(false);
       setState(result);
       if (result.success) {
+        setKind("");
         setAmount("");
         setAmountConfirmed(false);
       }
@@ -44,13 +47,17 @@ export function AppointmentPaymentForm({ bookingId, outstandingCents }: { bookin
   return <form className="tenant-drawer-form appointment-payment-form" onSubmit={saveEntry}>
     <input type="hidden" name="bookingId" value={bookingId} />
     <div className="tenant-drawer-form__grid">
-      <label>Entry<select name="kind" defaultValue="payment" disabled={editingDisabled}><option value="payment">Payment received</option><option value="refund">Refund issued</option></select></label>
+      <label>Payment<select name="kind" value={kind} onChange={(event) => setKind(event.target.value)} disabled={editingDisabled} required>
+        <option value="" disabled>Select payment action</option>
+        <option value="payment">Payment received</option>
+        <option value="refund">Refund issued</option>
+      </select></label>
       <label>Method<select name="method" defaultValue="card" disabled={editingDisabled}><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
       <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => { setAmount(event.target.value); setAmountConfirmed(true); }} disabled={editingDisabled} required /></label>
     </div>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
-    <button type="submit" disabled={pending || (!retryRequired && (!amountConfirmed || Number(amount) <= 0))}>
+    <button type="submit" disabled={pending || (!retryRequired && !canRecord)}>
       {pending ? "Recording…" : retryRequired ? "Retry entry" : "Record entry"}
     </button>
   </form>;
