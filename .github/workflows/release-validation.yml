@@ -18,7 +18,7 @@ permissions:
 jobs:
   validate-inputs:
     name: Validate release inputs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       BASE_SHA: ${{ inputs.base_sha }}
@@ -67,7 +67,7 @@ jobs:
   schema-history:
     name: migration-history
     needs: validate-inputs
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     env:
       RELEASE_SHA: ${{ inputs.release_sha }}
       BASE_SHA: ${{ inputs.base_sha }}
