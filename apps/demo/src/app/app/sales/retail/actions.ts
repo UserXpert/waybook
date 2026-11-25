@@ -22,10 +22,13 @@ async function managerCommerceContext() {
   return { tenant, identity: await requireIdentity() };
 }
 
-async function checkoutSaved(tenant: Awaited<ReturnType<typeof managerCommerceContext>>["tenant"], saleId: string, message: string): Promise<RetailCheckoutResult> {
+async function checkoutSaved(tenant: Awaited<ReturnType<typeof managerCommerceContext>>["tenant"], saleId: string, message: string, page = ""): Promise<RetailCheckoutResult> {
   revalidatePath("/app/sales/retail");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  return { href: withSuccessToast(`${tenantPath(tenantSlug, "/app/sales/retail")}?sale=${saleId}`, message) };
+  const params = new URLSearchParams();
+  if (/^[1-9]\d{0,8}$/.test(page) && page !== "1") params.set("page", page);
+  params.set("sale", saleId);
+  return { href: withSuccessToast(`${tenantPath(tenantSlug, "/app/sales/retail")}?${params}`, message) };
 }
 
 export async function createRetailCheckout(formData: FormData): Promise<RetailCheckoutResult> {
@@ -107,7 +110,7 @@ export async function addProductToRetailCheckout(formData: FormData): Promise<Re
     return true;
   });
   return saved
-    ? checkoutSaved(tenant, saleId, "Product added to checkout.")
+    ? checkoutSaved(tenant, saleId, "Product added to checkout.", valueFrom(formData, "page"))
     : { error: "This draft checkout or product is no longer available." };
 }
 
@@ -149,5 +152,5 @@ export async function closeRetailCheckout(formData: FormData): Promise<RetailChe
   });
   if (error) return { error };
   revalidatePath("/app/sales");
-  return checkoutSaved(tenant, saleId, "Payment collected.");
+  return checkoutSaved(tenant, saleId, "Payment collected.", valueFrom(formData, "page"));
 }
