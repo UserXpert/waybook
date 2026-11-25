@@ -10,6 +10,10 @@ import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff" };
 const reply = (value: unknown, status = 200) => NextResponse.json(value, { status, headers });
+const bookingChangesUnavailable = () => reply({
+  error: "This booking can no longer be changed online. Please contact the business if you need help.",
+  canChange: false,
+}, 409);
 const bookingReference = /^(?:[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 /** Credentials are sent in the request body, never the URL or browser storage. */
@@ -51,18 +55,21 @@ export async function POST(request: NextRequest) {
       const end = new Date(typeof body.end === "string" ? body.end : "");
       if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start || end.getTime() - start.getTime() > 4 * 86_400_000 || start.getTime() < Date.now() - 2 * 86_400_000 || end.getTime() > Date.now() + 366 * 86_400_000) return reply({ error: "Choose a valid date." }, 400);
       const availability = await managedAvailability(tenant, credentials, start, end);
+      if (availability === "closed") return bookingChangesUnavailable();
       return availability ? reply({ availability }) : reply({ error: "This booking cannot be changed online." }, 409);
     }
     if (action === "cancel") {
       const result = await cancelManagedBooking(tenant, credentials);
       if (result.status === "cancelled") { promptEmailDelivery(tenant, result.outboxId); return reply({ result: result.status }); }
       if (result.status === "financial") return reply({ error: "Please contact the business to cancel this booking because it has payment or package activity." }, 409);
+      if (result.status === "unavailable") return bookingChangesUnavailable();
       return reply({ error: "This booking cannot be cancelled online." }, 409);
     }
     const startsAt = new Date(typeof body.startsAt === "string" ? body.startsAt : "");
     if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() > Date.now() + 366 * 86_400_000) return reply({ error: "Choose a valid time." }, 400);
     const result = await rescheduleManagedBooking(tenant, credentials, startsAt);
     if (result.status === "rescheduled") { promptEmailDelivery(tenant, result.outboxId); return reply({ result: result.status }); }
+    if (result.status === "closed") return bookingChangesUnavailable();
     return reply({ error: "That time is no longer available. Please choose another." }, 409);
   } catch (error) {
     if (error instanceof BookingConflictError) return reply({ error: "That time was just taken. Please choose another." }, 409);
