@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { TransactionSql } from "postgres";
 import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
-import { cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
+import { CatalogueImageError, cataloguePhotoFromForm } from "@/lib/waybook/catalogue-media";
 import { hashPassword, requireIdentity } from "@/lib/waybook/auth";
 import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -77,7 +77,9 @@ function localDatesInRange(start: string, end: string) {
   return dates;
 }
 
-export async function saveStaffPhoto(formData: FormData) {
+export type StaffPhotoResult = { error: string | null };
+
+export async function saveStaffPhoto(formData: FormData): Promise<StaffPhotoResult> {
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "team");
   const memberId = String(formData.get("memberId") ?? "");
@@ -86,8 +88,14 @@ export async function saveStaffPhoto(formData: FormData) {
   const db = await validStaffMember(tenant, memberId);
   const photo = formData.get("photo");
   const removing = formData.get("removePhoto") === "on";
-  if (!removing && (!(photo instanceof File) || photo.size === 0)) throw new Error("Choose a photo to upload.");
-  const photoDataUrl = await cataloguePhotoFromForm(formData, null);
+  if (!removing && (!(photo instanceof File) || photo.size === 0)) return { error: "Choose a photo to upload." };
+  let photoDataUrl: string | null;
+  try {
+    photoDataUrl = await cataloguePhotoFromForm(formData, null);
+  } catch (error) {
+    if (error instanceof CatalogueImageError) return { error: error.message };
+    throw error;
+  }
   const actor = await requireIdentity();
   await db.begin(async (tx) => {
     const [updated] = await tx.unsafe<{ id: string }[]>("UPDATE team_members SET photo_data_url = $1, updated_at = now() WHERE tenant_id = $2 AND id = $3 RETURNING id", [photoDataUrl, tenant.id, memberId]);
@@ -97,6 +105,7 @@ export async function saveStaffPhoto(formData: FormData) {
   revalidateStaff();
   const slug = await currentTenantRouteSlug(tenant.slug);
   revalidatePath(tenantPath(slug, "/app"), "layout");
+  return { error: null };
 }
 
 export type StaffDetailsState = { error?: string; saved?: boolean };

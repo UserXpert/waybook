@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Camera, ChevronDown, LogOut, Settings, UserRound } from "lucide-react";
 import { applyStoredTenantAppearance } from "@/components/tenant-appearance-controls";
-import { useStaffPhotoUpload } from "@/components/staff-photo-upload";
+import { useStaffPhotoUpload, type StaffPhotoAction } from "@/components/staff-photo-upload";
 
 type TenantUserMenuProps = {
   photo: string | null;
   photoMemberId: string | null;
-  onSavePhoto: (data: FormData) => Promise<void>;
+  onSavePhoto: StaffPhotoAction;
   displayName: string;
   email: string;
   role: string;
