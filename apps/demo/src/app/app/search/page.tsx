@@ -11,7 +11,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { tenantDateKey, weekStartForLocalDate } from "@/lib/waybook/today-command-centre";
 
 type ClientResult = { id: string; name: string; email: string; phone: string | null; bookingCount: number; nextBookingAt: Date | null };
-type AppointmentResult = { id: string; startsAt: Date; status: string; customerName: string; customerEmail: string; serviceTitle: string; teamMemberId: string | null; teamMemberName: string | null; locationId: string | null; locationName: string | null };
+type AppointmentResult = { id: string; bookingNumber: string; startsAt: Date; status: string; customerName: string; customerEmail: string; serviceTitle: string; teamMemberId: string | null; teamMemberName: string | null; locationId: string | null; locationName: string | null };
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
@@ -39,7 +39,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       LIMIT 12
     ` : Promise.resolve([] as ClientResult[]),
     canSearchAppointments ? db<AppointmentResult[]>`
-      SELECT b.id, b.starts_at AS "startsAt", b.status, c.name AS "customerName", c.email AS "customerEmail",
+      SELECT b.id, b.booking_number AS "bookingNumber", b.starts_at AS "startsAt", b.status, c.name AS "customerName", c.email AS "customerEmail",
         s.title AS "serviceTitle", b.team_member_id AS "teamMemberId", tm.name AS "teamMemberName",
         b.location_id AS "locationId", l.name AS "locationName"
       FROM bookings b
@@ -49,7 +49,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       LEFT JOIN locations l ON l.id = b.location_id AND l.tenant_id = b.tenant_id
       WHERE b.tenant_id = ${tenant.id}
         ${permissions.isManager ? db`` : db`AND b.team_member_id = ${permissions.teamMemberId}`}
-        AND (c.name ILIKE ${pattern} OR c.email ILIKE ${pattern} OR s.title ILIKE ${pattern} OR coalesce(tm.name, '') ILIKE ${pattern})
+        AND (b.booking_number ILIKE ${pattern} OR c.name ILIKE ${pattern} OR c.email ILIKE ${pattern} OR s.title ILIKE ${pattern} OR coalesce(tm.name, '') ILIKE ${pattern})
       ORDER BY b.starts_at DESC
       LIMIT 24
     ` : Promise.resolve([] as AppointmentResult[]),
@@ -69,9 +69,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="search" />
     <section className="reports-intro"><div><p>SEARCH · DATABASE-BACKED</p><h1>Find a {terms.client} or appointment</h1><span>Search only the records your role can access in {tenant.name}.</span></div></section>
     <section className="waybook-data-card">
-      <div className="waybook-section-heading"><div><p>WORKSPACE SEARCH</p><h2>{search ? `${total} matching result${total === 1 ? "" : "s"}` : "Start a search"}</h2><span>{search ? `Results for “${search}”.` : `Look up a ${terms.client} by contact detail, or an appointment by ${terms.client}, service, or ${terms.staffMember}.`}</span></div><form method="get" className="waybook-list-filter"><label>Search<input name="q" type="search" defaultValue={search} placeholder={`${titleTerminology(terms.client)}, service, or ${terms.staffPlural}`} autoFocus /></label><button type="submit">Search</button></form></div>
+      <div className="waybook-section-heading"><div><p>WORKSPACE SEARCH</p><h2>{search ? `${total} matching result${total === 1 ? "" : "s"}` : "Start a search"}</h2><span>{search ? `Results for “${search}”.` : `Look up a ${terms.client} by contact detail, or an appointment by booking number, ${terms.client}, service, or ${terms.staffMember}.`}</span></div><form method="get" className="waybook-list-filter"><label>Search<input name="q" type="search" defaultValue={search} placeholder={`Booking number, ${terms.client}, or service`} autoFocus /></label><button type="submit">Search</button></form></div>
       {search && canSearchClients ? <section className="search-results"><div className="client-record__section-heading"><div><h3>{titleTerminology(terms.clients)}</h3><p>{clients.length ? `Open the ${terms.client} record or continue to their next booking.` : `No matching ${terms.clients}.`}</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>{titleTerminology(terms.client)}</th><th>Contact</th><th>Visits</th><th>Next appointment</th></tr></thead><tbody>{clients.map((client) => <tr key={client.id}><td><Link className="waybook-row-link" href={clientHref(client.id)}>{client.name}</Link></td><td>{client.email}<small>{client.phone ?? "No phone"}</small></td><td>{client.bookingCount}</td><td>{client.nextBookingAt ? dateTime.format(client.nextBookingAt) : "No upcoming appointment"}</td></tr>)}{clients.length === 0 ? <tr><td colSpan={4}>No {terms.clients} match this search.</td></tr> : null}</tbody></table></div></section> : null}
-      {search && canSearchAppointments ? <section className="search-results"><div className="client-record__section-heading"><div><h3>Appointments</h3><p>{appointments.length ? "Open an appointment in Calendar to manage its status, reschedule, or payment ledger." : "No matching appointments."}</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>When</th><th>{titleTerminology(terms.client)}</th><th>Service</th><th>{titleTerminology(terms.staffPlural)} / location</th><th>Status</th></tr></thead><tbody>{appointments.map((appointment) => { const href = appointmentHref(appointment); return <tr key={appointment.id}><td>{href ? <Link className="waybook-row-link" href={href}>{dateTime.format(appointment.startsAt)}</Link> : dateTime.format(appointment.startsAt)}</td><td>{appointment.customerName}<small>{appointment.customerEmail}</small></td><td>{appointment.serviceTitle}</td><td>{appointment.teamMemberName ?? "Unassigned"}<small>{appointment.locationName ?? "No location"}</small></td><td>{appointment.status.replace("_", " ")}</td></tr>; })}{appointments.length === 0 ? <tr><td colSpan={5}>No appointments match this search.</td></tr> : null}</tbody></table></div></section> : null}
+      {search && canSearchAppointments ? <section className="search-results"><div className="client-record__section-heading"><div><h3>Appointments</h3><p>{appointments.length ? "Open an appointment in Calendar to manage its status, reschedule, or payment ledger." : "No matching appointments."}</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>When</th><th>{titleTerminology(terms.client)}</th><th>Service</th><th>{titleTerminology(terms.staffPlural)} / location</th><th>Status</th></tr></thead><tbody>{appointments.map((appointment) => { const href = appointmentHref(appointment); return <tr key={appointment.id}><td>{href ? <Link className="waybook-row-link" href={href}>{dateTime.format(appointment.startsAt)}</Link> : dateTime.format(appointment.startsAt)}<small>{appointment.bookingNumber}</small></td><td>{appointment.customerName}<small>{appointment.customerEmail}</small></td><td>{appointment.serviceTitle}</td><td>{appointment.teamMemberName ?? "Unassigned"}<small>{appointment.locationName ?? "No location"}</small></td><td>{appointment.status.replace("_", " ")}</td></tr>; })}{appointments.length === 0 ? <tr><td colSpan={5}>No appointments match this search.</td></tr> : null}</tbody></table></div></section> : null}
     </section>
   </main>;
 }

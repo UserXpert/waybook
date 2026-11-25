@@ -34,10 +34,10 @@ for (const tenant of [
       const [block] = await tx<{ id: string }[]>`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
         VALUES (${workspace.id},${staff.id},${workspace.locationId},now()-interval '2 hours',now()-interval '90 minutes','confirmed')
         RETURNING id`;
-      const [booking] = await tx<{ id: string }[]>`INSERT INTO bookings
+      const [booking] = await tx<{ id: string; number: string }[]>`INSERT INTO bookings
         (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,booked_price_cents)
         SELECT ${workspace.id},id,${workspace.serviceId},${staff.id},${workspace.locationId},${client.id},starts_at,ends_at,'arrived','tenant',10000
-        FROM booking_blocks WHERE id=${block.id} RETURNING id`;
+        FROM booking_blocks WHERE id=${block.id} RETURNING id,booking_number AS number`;
       return { client, booking, workspace };
     });
 
@@ -68,6 +68,18 @@ for (const tenant of [
     await expect(page.getByText("Current: arrived", { exact: true })).toBeVisible();
     await page.getByRole("complementary", { name: `Appointment with ${clientName}` })
       .getByRole("button", { name: "Close appointment" }).click();
+
+    await search.click();
+    await query.fill(fixture.booking.number);
+    await query.press("Enter");
+    await expect(page.getByRole("heading", { name: "1 matching result", exact: true })).toBeVisible();
+    await page.getByRole("row").filter({ hasText: fixture.booking.number }).getByRole("link").click();
+    await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars`
+      && url.searchParams.get("booking") === fixture.booking.id
+      && url.searchParams.get("location") === fixture.workspace.locationId);
+    const referenceDrawer = page.getByRole("complementary", { name: `Appointment with ${clientName}` });
+    await expect(referenceDrawer.getByText(fixture.booking.number, { exact: true })).toBeVisible();
+    await referenceDrawer.getByRole("button", { name: "Close appointment" }).click();
 
     await search.click();
     await query.fill(prefix);
