@@ -8,6 +8,32 @@ This runbook supports a small, manually onboarded pilot after the release gates 
 2. Open the calendar for each active location, check the current date and staff filters, and review pending booking changes and overdue arrived appointments.
 3. Until email delivery is verified, review the booking list and contact customers manually through the business's existing approved channel where necessary. Queued outbox records are not delivered emails.
 
+## Manual booking messages
+
+Before accepting pilot bookings, the business owner records the primary operator, backup, approved customer channel, contact verification procedure, coverage hours, and message timing. Review new and changed bookings at opening and before handoff. For staff-made changes, send the update after verifying the saved appointment. For online changes, send it when spotted within the business's agreed response window. Escalate any same-day change that the scheduled review would catch too late.
+
+1. Open **Bookings** in the correct workspace and locate the booking by its reference. Verify the current status, location and date/time in the business's timezone. Ask customers to keep the reference displayed after online booking.
+2. Confirm the recipient through the agreed channel. Send only the booking reference, business location, appointment time and relevant change. Keep clinical or service details out of the message.
+3. Record the reference, event, operator, time, channel and outcome in the business's approved handoff record. Check the last recorded event before sending again. If the send fails, record it as pending and hand it to the backup operator. The Waybook Emails screen shows queued records. Use the handoff record to track manual sends.
+
+**Confirmation**
+
+Your booking [reference] is confirmed for [local date and time, timezone] at [location].
+
+**Reschedule**
+
+Your booking [reference] has moved to [new local date and time, timezone] at [location]. This replaces your previous appointment time.
+
+**Cancellation**
+
+Your booking [reference] for [last scheduled local date and time, timezone] at [location] has been cancelled.
+
+### Rehearsal and sign-off
+
+Use one synthetic booking and separate operator and test-customer sessions. Create it, move it, then cancel it. At each step compare the customer view, the operator's Bookings row and the message received. Check that the reference stays the same, the change quotes the new time, and the cancellation is still visible after reloading. Record the environment, operator role, channel, elapsed time and outcome for each step. Confirm the business's agreed channel, primary and backup coverage, and response window before marking the gate complete.
+
+On 24 November 2026, Codex acted as the operator in Nordic Studio on a local Waybook server at `804e4a9`, using disposable databases and a file-based test inbox. At 1440px and 390px, the operator found each synthetic booking by reference. The test inbox captured one confirmation, one message with the updated time, and one cancellation per layout. The cancelled status persisted after reload. A second check sent the six resulting messages to a disposable inbox over local SMTP. All subjects and message bodies matched on receipt, and the test server rejected a different recipient. The business still needs to agree its actual channel, timing and staffing and exercise the workflow through that channel. [Issue #14](https://github.com/UserXpert/waybook/issues/14)
+
 ## Booking reports
 
 1. Ask the business for its workspace, location, approximate local date and time, and booking number. Avoid copying customer contact details into general logs or chat.
