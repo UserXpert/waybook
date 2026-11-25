@@ -39,6 +39,7 @@ for (const workspace of workspaces) {
       await page.goto(`${path}?booking=${booking.id}&q=${encodeURIComponent(name)}`);
       const form = page.getByRole("complementary", { name: `Appointment with ${name}` }).locator(".appointment-payment-form");
       const amount = form.getByRole("spinbutton", { name: "Amount (DKK)" });
+      const payment = form.getByRole("combobox", { name: "Payment", exact: true });
       const method = form.getByLabel("Method");
       const submit = form.getByRole("button", { name: "Record entry" });
       const retry = form.getByRole("button", { name: "Retry entry" });
@@ -65,11 +66,16 @@ for (const workspace of workspaces) {
         await route.abort("failed");
       });
 
+      await expect(payment).toHaveValue("");
+      await expect(payment.locator("option:checked")).toHaveText("Select payment action");
       await expect(submit).toBeDisabled();
       await amount.fill("0");
       await expect(submit).toBeDisabled();
       await method.selectOption("cash");
       await amount.fill("50.25");
+      await expect(submit).toBeDisabled();
+      expect(await ledger()).toHaveLength(0);
+      await payment.selectOption("payment");
       drop = "after";
       await submit.click();
       await expect.poll(() => replyStatuses).toEqual([200, 200]);
@@ -77,6 +83,8 @@ for (const workspace of workspaces) {
       await expect(form.getByRole("alert")).toContainText("Could not confirm");
       await expect(amount).toHaveValue("50.25");
       await expect(amount).toBeDisabled();
+      await expect(payment).toHaveValue("payment");
+      await expect(payment).toBeDisabled();
       await expect(method).toHaveValue("cash");
       const [original] = await ledger();
       expect(original).toMatchObject({ kind: "payment", amount_cents: 5025, method: "cash" });
@@ -85,8 +93,11 @@ for (const workspace of workspaces) {
       expect(await ledger()).toEqual([original]);
       expect(await eventCount()).toBe(1);
       expect(await auditCount()).toBe(1);
+      await expect(payment).toHaveValue("");
 
       await amount.fill("50.25");
+      await expect(submit).toBeDisabled();
+      await payment.selectOption("payment");
       drop = "before";
       await submit.click();
       await expect(form.getByRole("alert")).toContainText("Could not confirm");
@@ -98,7 +109,7 @@ for (const workspace of workspaces) {
       expect(payments[1]).toMatchObject({ kind: "payment", amount_cents: 5025, method: "cash" });
       expect(payments[1].id).not.toBe(original.id);
 
-      await form.getByLabel("Entry").selectOption("refund");
+      await payment.selectOption("refund");
       await amount.fill("100.50");
       replyStatuses = [];
       drop = "after";
@@ -113,6 +124,7 @@ for (const workspace of workspaces) {
       expect(await ledger()).toEqual(withRefund);
       expect(await eventCount()).toBe(3);
       expect(await auditCount()).toBe(3);
+      await expect(payment).toHaveValue("");
       await expect(submit).toBeDisabled();
     } finally {
       await db.end();

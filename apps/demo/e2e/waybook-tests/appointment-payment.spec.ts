@@ -31,14 +31,17 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(drawer.getByRole("heading", { name: "Sales ledger" })).toBeVisible();
     const form = drawer.locator(".appointment-payment-form");
     const amount = form.getByRole("spinbutton", { name: "Amount (DKK)" });
+    const payment = form.getByRole("combobox", { name: "Payment", exact: true });
     const submit = form.getByRole("button", { name: "Record entry" });
     await expect(submit).toBeDisabled();
+    await payment.selectOption("payment");
     await form.getByLabel("Method").selectOption("cash");
     await amount.fill("301");
     await submit.click();
     await expect(form.getByRole("alert")).toContainText("appointment payment cannot exceed booked service value");
     expect(await db`SELECT id FROM payment_records WHERE booking_id=${booking.id}`).toHaveLength(0);
     await expect(form.getByLabel("Method")).toHaveValue("cash");
+    await expect(payment).toHaveValue("payment");
     await expect(amount).toHaveValue("301");
 
     await amount.fill("150.50");
@@ -46,13 +49,14 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(form.getByRole("status")).toContainText("Payment recorded");
     await expect(submit).toBeDisabled();
     await expect(amount).toHaveValue("");
-    await form.getByLabel("Entry").selectOption("refund");
+    await payment.selectOption("refund");
     await form.getByLabel("Method").selectOption("cash");
     await amount.fill("40.25");
     await submit.click();
     await expect(form.getByRole("status")).toContainText("Refund recorded");
     await expect(submit).toBeDisabled();
-    await expect(form.getByLabel("Entry")).toHaveValue("refund");
+    await expect(payment).toHaveValue("");
+    await payment.selectOption("refund");
     await amount.fill("151");
     await submit.click();
     await expect(form.getByRole("alert")).toContainText("appointment refund cannot exceed collected payment");
@@ -83,6 +87,8 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await page.goto(`/nordic/app/sales?sale=${sale.id}`);
     await page.getByRole("link", { name: "Open appointment", exact: true }).click();
     await expect(drawer).toBeVisible();
+    await expect(payment).toHaveValue("");
+    await expect(submit).toBeDisabled();
     expect(new URL(page.url()).searchParams.get("booking")).toBe(booking.id);
     expect(new URL(page.url()).searchParams.get("day")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   } finally {
