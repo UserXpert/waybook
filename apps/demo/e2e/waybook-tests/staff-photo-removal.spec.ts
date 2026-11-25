@@ -60,8 +60,15 @@ for (const [index, tenant] of tenants.entries()) {
       const before = await removals();
       const remove = profile.getByRole("button", { name: `Remove photo for ${original.name}` });
       await expect(remove).toBeVisible();
+      for (const control of [remove, avatar.locator(".staff-photo-upload__camera")]) {
+        await expect(control).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+        await expect(control.locator("svg")).toHaveCSS("filter", "none");
+      }
       const avatarBounds = (await avatar.boundingBox())!;
+      const photoBounds = (await avatar.locator("img").boundingBox())!;
       const removeBounds = (await remove.boundingBox())!;
+      expect(photoBounds.width).toBeCloseTo(avatarBounds.width, 1);
+      expect(photoBounds.height).toBeCloseTo(avatarBounds.height, 1);
       expect(removeBounds.x + removeBounds.width / 2).toBeGreaterThan(avatarBounds.x + avatarBounds.width / 2);
       expect(Math.abs(removeBounds.y - avatarBounds.y)).toBeLessThanOrEqual(3);
       let promptText = "";

@@ -3359,17 +3359,18 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .tenant-app-menu__loading { border-color: #414148; background: #242428; color: #f1f1f3; }
 
 .staff-workspace__profile-title { min-width: 0; overflow-wrap: anywhere; }
-.staff-workspace__avatar { overflow: hidden; flex-shrink: 0; }
-.staff-workspace__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.staff-workspace__avatar { position: relative; overflow: hidden; flex-shrink: 0; }
+.staff-workspace__avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .staff-photo-upload { position: relative; flex: 0 0 auto; display: grid; justify-items: center; gap: .25rem; }
+:root[data-waybook-theme="dark"] .staff-photo-upload { --staff-photo-icon-color: #fff; }
 .staff-photo-upload__button { position: relative; border: 0; padding: 0; cursor: pointer; overflow: visible; }
 .staff-photo-upload__button img { border-radius: 50%; }
 .staff-photo-upload__button:focus-visible, .staff-photo-upload__remove:focus-visible { outline: 2px solid var(--waybook-accent); outline-offset: 3px; }
 .staff-photo-upload__button:disabled, .staff-photo-upload__remove:disabled { opacity: .65; cursor: wait; }
-.staff-photo-upload__camera { position: absolute; right: -2px; bottom: -2px; display: grid !important; width: 1.45rem; height: 1.45rem; place-items: center; margin: 0 !important; border: 2px solid #fff; border-radius: 50%; background: #242428; color: #fff !important; }
-.staff-photo-upload__remove { position: absolute; top: -2px; right: -2px; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #242428; color: #fff; cursor: pointer; }
+.staff-photo-upload__camera, .staff-photo-upload__remove { position: absolute; right: -2px; display: grid !important; width: 1.5rem; height: 1.5rem; place-items: center; margin: 0 !important; color: var(--staff-photo-icon-color, #000) !important; }
+.staff-photo-upload__camera { bottom: -2px; }
+.staff-photo-upload__remove { top: -2px; padding: 0; border: 0; background: transparent; cursor: pointer; }
 .staff-photo-upload__error { position: absolute; z-index: 2; top: calc(100% + .4rem); left: 0; width: min(18rem, 75vw); margin: 0 !important; padding: .5rem; border-radius: .4rem; background: #fff0f0; color: #9f2020 !important; font-size: .75rem !important; }
-:root[data-waybook-theme="dark"] :is(.staff-photo-upload__camera, .staff-photo-upload__remove) { border-color: #171719; }
 
 :root .tenant-app-menu__scrim { background: rgba(18, 20, 24, .42) !important; backdrop-filter: blur(2px) !important; }
 :root[data-waybook-theme="dark"] .tenant-app-menu__scrim { background: rgba(0, 0, 0, .6) !important; }
