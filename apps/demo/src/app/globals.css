@@ -972,6 +972,9 @@ body {
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace h4 { color: #1f1f22; }
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__profile-header span:not(.staff-workspace__avatar),
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__directory-copy,
+:root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__directory nav small,
+:root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__directory nav i:not(.is-active),
+:root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__panel-heading p:not(:first-child),
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-profile-form label,
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-status-toggle { color: #5b5b62; }
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-profile-form input,
@@ -1029,6 +1032,13 @@ body {
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__tabs a[aria-current="page"] { color: #f4f4f5; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__profile-header,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__tabs { border-color: #303035; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__directory-heading p,
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__profile-header p,
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__panel-heading p:not(:first-child) { color: var(--wb-dark-muted); }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__directory nav i:not(.is-active) {
+  background: var(--wb-dark-border);
+  color: var(--wb-dark-muted);
+}
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__profile-header span:not(.staff-workspace__avatar),
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__directory-copy,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__tabs a,
