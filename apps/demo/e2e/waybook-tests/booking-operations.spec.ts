@@ -129,6 +129,22 @@ for (const workspace of workspaces) {
       const firstDrawer = drawer(page, first);
       const secondDrawer = drawer(page, second);
       const firstNameField = firstDrawer.getByLabel("Customer name");
+      const bookingList = `/${workspace.route}/app/bookings?q=${encodeURIComponent(first.name)}`;
+      await page.goto(bookingList);
+      const firstRow = page.locator(".booking-list-row").filter({ hasText: first.name });
+      await firstRow.press("Enter");
+      const listDialog = page.getByRole("dialog", { name: `Appointment with ${first.name}` });
+      const listClose = listDialog.getByRole("link", { name: "Close appointment" });
+      await expect(listClose).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(listDialog.getByRole("button", { name: "Cancel appointment", exact: true })).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(listClose).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(listDialog).toHaveCount(0);
+      await expect(page).toHaveURL((url) => !url.searchParams.has("booking") && url.searchParams.get("q") === first.name);
+      await expect(firstRow).toBeFocused();
+
       await page.goto(calendar);
       const firstCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${first.id}"]`);
       await firstCard.focus();
