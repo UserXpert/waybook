@@ -281,6 +281,10 @@ test("staff can change their own photo and read-only members cannot", async ({ p
     await expect(button.locator('img')).toHaveAttribute('src', /^data:image\/png;base64,/);
     const [beforeDowngradedUpload] = await tenant<{ photoDataUrl: string | null; auditCount: number }[]>`SELECT tm.photo_data_url AS "photoDataUrl",(SELECT count(*)::int FROM tenant_audit_events WHERE tenant_id=${workspace.id} AND action='staff.photo_updated' AND target_type='team_member' AND target_id=${staffMember.id}) AS "auditCount" FROM team_members tm WHERE tm.tenant_id=${workspace.id} AND tm.id=${staffMember.id}`;
     await control`UPDATE tenant_memberships SET role='read-only' WHERE tenant_id=${workspace.id} AND identity_id=${staff.id}`;
+    page.once("dialog", (prompt) => prompt.accept());
+    await page.getByRole("button", { name: "Remove photo for Test staff" }).click();
+    await expect(page.locator(".staff-photo-upload__error")).toContainText("Could not remove the profile photo");
+
     const deniedChooser = page.waitForEvent('filechooser');
     await button.click();
     await (await deniedChooser).setFiles({ name: 'forged-after-downgrade.png', mimeType: 'image/png', buffer: image });
@@ -291,6 +295,7 @@ test("staff can change their own photo and read-only members cannot", async ({ p
     await page.getByRole('button', { name: 'Apps', exact: true }).click();
     await expect(page.getByRole('dialog').getByRole('link', { name: 'Sales', exact: true })).toHaveCount(0);
     await page.keyboard.press('Escape');
+    await tenant`UPDATE team_members SET photo_data_url=${`data:image/png;base64,${image.toString("base64")}`} WHERE identity_id=${readOnly.id}`;
     const readContext = await browser.newContext({ baseURL: new URL(page.url()).origin });
     const readPage = await readContext.newPage();
     await readPage.goto('/login');
@@ -301,6 +306,11 @@ test("staff can change their own photo and read-only members cannot", async ({ p
     await readPage.goto('/nordic/app/team');
     await expect(readPage.getByRole('heading', { name: 'Test read only' })).toBeVisible();
     await expect(readPage.getByRole('button', { name: /Change photo/ })).toHaveCount(0);
+    await expect(readPage.getByRole("button", { name: /Remove photo/ })).toHaveCount(0);
+    await readPage.getByRole("button", { name: "Account menu for Test read only" }).click();
+    await expect(readPage.getByRole("menuitem", { name: "Remove profile photo" })).toHaveCount(0);
+    await readPage.keyboard.press("Escape");
+
     await readPage.getByRole('button', { name: 'Apps', exact: true }).click();
     await expect(readPage.getByRole('dialog').getByRole('link', { name: 'Sales', exact: true })).toHaveCount(0);
     await readContext.close();

@@ -91,7 +91,7 @@ export async function saveStaffPhoto(formData: FormData) {
   await db.begin(async (tx) => {
     const [updated] = await tx.unsafe<{ id: string }[]>("UPDATE team_members SET photo_data_url = $1, updated_at = now() WHERE tenant_id = $2 AND id = $3 RETURNING id", [photoDataUrl, tenant.id, memberId]);
     if (!updated) throw new Error("Staff member is unavailable.");
-    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'staff.photo_updated', 'team_member', $3, $4::jsonb)", [tenant.id, actor.id, memberId, JSON.stringify({ removed: removing })]);
+    await tx.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'staff.photo_updated', 'team_member', $3, $4::jsonb)", [tenant.id, actor.id, memberId, { removed: removing }]);
   });
   revalidateStaff();
   const slug = await currentTenantRouteSlug(tenant.slug);
