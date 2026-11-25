@@ -38,6 +38,7 @@ for (const tenant of [
     await page.goto(`${bookingList}&booking=${booking.id}`);
     const detail = page.getByRole("complementary", { name: `Appointment with ${customer}` });
     const payment = detail.locator(".appointment-payment-form");
+    await payment.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment");
     await payment.getByLabel("Method").selectOption("cash");
     await payment.getByRole("spinbutton", { name: "Amount (DKK)" }).fill("150.50");
     await payment.getByRole("button", { name: "Record entry" }).click();

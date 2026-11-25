@@ -620,13 +620,14 @@ export type PaymentState = { error: string | null; success: string | null };
 
 /** Appends a tenant-recorded payment or refund; corrections are never destructive. */
 export async function recordPayment(formData: FormData): Promise<PaymentState> {
-  const kind = String(formData.get("kind") ?? "payment");
+  const kind = String(formData.get("kind") ?? "");
   try {
+    if (kind !== "payment" && kind !== "refund") throw new Error("Select a payment action.");
     const entryId = String(formData.get("entryId") ?? "");
     const bookingId = String(formData.get("bookingId") ?? "");
     const method = String(formData.get("method") ?? "card");
     const amount = Number(String(formData.get("amountDkk") ?? "").replace(",", "."));
-    if (!bookingId || !["payment", "refund"].includes(kind) || !["card", "cash", "bank_transfer", "other"].includes(method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
+    if (!bookingId || !["card", "cash", "bank_transfer", "other"].includes(method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
       throw new Error("Enter a valid positive amount and payment method.");
     }
     if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(entryId)) throw new Error("The payment entry could not be identified.");
