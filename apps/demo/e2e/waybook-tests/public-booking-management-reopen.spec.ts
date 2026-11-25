@@ -8,7 +8,7 @@ const workspaces = [
 ];
 
 for (const workspace of workspaces) {
-  test(`reopened Manage booking ignores a previous lookup in ${workspace.route}`, async ({ page }) => {
+  test(`Manage booking ignores previous lookups and retries the same day in ${workspace.route}`, async ({ page }) => {
     const db = postgres(process.env[workspace.database]!, { max: 1, ssl: false });
     const email = `qa-manage-reopen-${randomUUID()}@example.test`;
     try {
@@ -69,6 +69,23 @@ for (const workspace of workspaces) {
         await lookup.click();
         await expect(dialog.getByRole("heading", { name: "Your booking", exact: true })).toBeVisible();
         await expect(dialog).toContainText(preset.title);
+
+        const [appointment] = await db`SELECT starts_at::text AS starts_at,
+          to_char(starts_at AT TIME ZONE 'Europe/Copenhagen', 'YYYY-MM-DD') AS day
+          FROM bookings WHERE booking_number=${number}`;
+        await dialog.getByRole("button", { name: "Reschedule booking" }).click();
+        await expect(dialog.getByRole("status")).toBeHidden();
+        const date = dialog.getByLabel("Day");
+        await page.route(`**/${workspace.route}/api/public/manage`, (route) => route.abort("failed"), { times: 1 });
+        await date.fill(appointment.day);
+        await expect(dialog.getByRole("alert")).toContainText("We couldn’t connect");
+        await expect(date).toHaveValue(appointment.day);
+        await dialog.getByRole("button", { name: "Retry availability" }).click();
+        await expect(dialog.locator(".booking-manage-times button").first()).toBeVisible();
+        await expect(dialog.getByRole("alert")).toBeHidden();
+        await expect(date).toHaveValue(appointment.day);
+        const [unchanged] = await db`SELECT starts_at::text AS starts_at FROM bookings WHERE booking_number=${number}`;
+        expect(unchanged.starts_at).toBe(appointment.starts_at);
       } finally {
         releaseLookup();
       }
