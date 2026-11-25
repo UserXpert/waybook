@@ -54,9 +54,12 @@ for (const tenant of [
     await expect(drawer.getByRole("heading", { name: "Collected payment", exact: true })).toBeVisible();
     await expect(page).toHaveURL(/[?&]page=2/);
     expect(await db`SELECT method, amount_cents FROM commerce_sale_transactions WHERE sale_id=${id}`).toEqual([{ method: "cash", amount_cents: 10050 }]);
+    const success = page.getByRole("status").filter({ hasText: "Payment collected." });
+    await expect(success).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page).toHaveURL((url) => url.search === "?page=2");
     await expect(older).toBeFocused();
+    await expect(success).toHaveCount(0, { timeout: 1200 });
     await pages.getByRole("link", { name: "Previous page" }).click();
     await expect(page).toHaveURL((url) => url.pathname === path && url.search === "");
     await expect(rows).toHaveCount(100);

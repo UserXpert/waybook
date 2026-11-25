@@ -23,12 +23,13 @@ export function cycleDialogTab(event: React.KeyboardEvent<HTMLDialogElement>) {
 
 type DialogDismissal = { closeHref: string; onDismiss?: never } | { onDismiss: () => void; closeHref?: never };
 
-export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, centered = false, showScrim = true, cycleFocus = false, children }: DialogDismissal & {
+export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, centered = false, showScrim = true, cycleFocus = false, dismissSuccessToastOnClose = false, children }: DialogDismissal & {
   title: string;
   initialField?: "name" | "title" | "code" | "scopeType";
   centered?: boolean;
   showScrim?: boolean;
   cycleFocus?: boolean;
+  dismissSuccessToastOnClose?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -56,7 +57,7 @@ export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, 
   }
 
   return (
-    <dialog ref={dialog} className={`tenant-editor-dialog ${centered ? "client-form-modal-layer" : "tenant-drawer-layer"}`} aria-label={title} onKeyDown={cycleFocus ? cycleDialogTab : undefined} onCancel={(event) => {
+    <dialog ref={dialog} className={`tenant-editor-dialog ${centered ? "client-form-modal-layer" : "tenant-drawer-layer"}`} aria-label={title} data-dismiss-success-toast-on-close={dismissSuccessToastOnClose || undefined} onKeyDown={cycleFocus ? cycleDialogTab : undefined} onCancel={(event) => {
       event.preventDefault();
       dismiss();
     }}>

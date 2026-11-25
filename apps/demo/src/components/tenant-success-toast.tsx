@@ -53,15 +53,19 @@ function TenantSuccessToastListener() {
   }, [notification]);
 
   const dialog = notification?.dialog;
+  const dismissOnClose = dialog?.hasAttribute("data-dismiss-success-toast-on-close");
   useEffect(() => {
     if (!dialog) return;
-    const restore = () => setNotification((current) => current?.dialog === dialog ? { ...current, dialog: null } : current);
-    if (!dialog.open) restore();
-    else dialog.addEventListener("close", restore, { once: true });
-    return () => dialog.removeEventListener("close", restore);
-  }, [dialog]);
+    const afterClose = () => setNotification((current) => {
+      if (current?.dialog !== dialog) return current;
+      return dismissOnClose ? null : { ...current, dialog: null };
+    });
+    if (!dialog.open) afterClose();
+    else dialog.addEventListener("close", afterClose, { once: true });
+    return () => dialog.removeEventListener("close", afterClose);
+  }, [dialog, dismissOnClose]);
 
-  if (!notification) return null;
+  if (!notification || (dismissOnClose && !dialog?.open)) return null;
 
   const toast = <div className="waybook-success-toast-region" aria-live="polite" aria-atomic="true">
     <div className="waybook-success-toast" role="status">
