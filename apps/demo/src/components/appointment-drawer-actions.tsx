@@ -8,6 +8,7 @@ import { showSuccessToast } from "@/lib/waybook/toast";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
 import { RescheduleSlotPicker } from "@/components/reschedule-slot-picker";
 import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
+import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import styles from "./appointment-drawer-actions.module.css";
 
 type ServerAction = (formData: FormData) => void | Promise<void>;
@@ -16,6 +17,8 @@ type Props = {
   bookingId: string; customerName: string; customerEmail: string; customerPhone: string | null; status: string;
   timezone: string; days: string[]; slots: Slot[];
   canChangeAttendanceNow: boolean;
+  paymentBalance: AppointmentPaymentBalance | null;
+  onPaymentRecorded?: (bookingId: string) => Promise<void>;
   saveDetails: (formData: FormData) => Promise<BookingDetailsResult>; reschedule: ServerAction; updateStatus: ServerAction;
   resourceId: string | null; resources: { id: string; name: string; isMutuallyExclusive: boolean }[];
 };
@@ -77,7 +80,7 @@ export function AppointmentRescheduleActions({ bookingId, status, timezone, days
   </section>;
 }
 
-export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, canChangeAttendanceNow, saveDetails, reschedule, updateStatus, resourceId, resources }: Props) {
+export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, canChangeAttendanceNow, saveDetails, reschedule, updateStatus, resourceId, resources, paymentBalance, onPaymentRecorded }: Props) {
   const router = useRouter();
   const detailsFormId = useId();
   const detailsFormRef = useRef<HTMLFormElement>(null);
@@ -145,6 +148,6 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
       </form>
     </section>
     <AppointmentRescheduleActions bookingId={bookingId} status={status} timezone={timezone} days={days} slots={slots} reschedule={reschedule} />
-    <section><h3>Sales ledger</h3><p className="appointment-status-current">Record payment received or a refund. Entries are immutable and feed paid-revenue reporting.</p><AppointmentPaymentForm bookingId={bookingId} outstandingCents={0} /></section>
+    {paymentBalance && (paymentBalance.outstandingCents > 0 || paymentBalance.refundableCents > 0) ? <section><h3>Sales ledger</h3><AppointmentPaymentForm bookingId={bookingId} balance={paymentBalance} onRecorded={onPaymentRecorded} /></section> : null}
   </>;
 }

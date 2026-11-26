@@ -4281,3 +4281,18 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 @media (max-width: 600px) {
   .workspace-business-form__fields { grid-template-columns: minmax(0, 1fr); }
 }
+
+.tenant-dashboard-page .appointment-sale-drawer > header {
+  background: var(--wb-dark-surface, #fff);
+}
+:root[data-waybook-tint="blue"][data-waybook-theme="light"] .tenant-dashboard-page .appointment-sale-drawer > header {
+  background: #f4faff;
+}
+.tenant-dashboard-page .appointment-sale-drawer .tenant-drawer-form > .waybook-action--secondary {
+  border-color: var(--ice-field-edge, var(--wb-dark-border, #d4d4d4));
+  background: var(--ice-field, var(--wb-dark-surface, #fff));
+  color: var(--ice-ink, var(--wb-dark-text, #171717));
+}
+.tenant-dashboard-page .appointment-sale-drawer .tenant-drawer-form > .waybook-action--secondary:hover:not(:disabled) {
+  background: var(--waybook-accent-soft);
+}

@@ -36,6 +36,12 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     }).catch(() => { if (request.current === serial) setError("Could not load this appointment. Please try again."); });
   }, []);
 
+  const refreshPayment = async (bookingId: string) => {
+    const serial = request.current;
+    const updated = await getCalendarAppointment(bookingId);
+    if (serial === request.current) setDetail((current) => current?.id === bookingId ? updated : current);
+  };
+
   const close = useCallback(() => {
     ++request.current;
     setSelected(null); setDetail(null); setError("");
@@ -84,7 +90,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
           {capabilities.canEdit ? (
-            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
+            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance} onPaymentRecorded={refreshPayment} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
           ) : <>
             {capabilities.canUpdateStatus || (capabilities.canCancel && detail.status === "cancelled") ? <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} updateStatus={updateBookingStatus} /> : null}
             {capabilities.canReschedule ? <AppointmentRescheduleActions key={detail.id} bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} reschedule={rescheduleBooking} /> : null}

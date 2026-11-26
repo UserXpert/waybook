@@ -3,9 +3,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 
-export function BookingListRow({ href, children }: { href: string; children: React.ReactNode }) {
+export function BookingListRow({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
   const router = useRouter();
-  return <tr tabIndex={0} className="booking-list-row" onClick={event => { if (!(event.target as HTMLElement).closest("a,button,input,select")) router.push(href); }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); router.push(href); } }}>{children}</tr>;
+  return <tr tabIndex={0} className={className ? `booking-list-row ${className}` : "booking-list-row"} onClick={event => { if (!(event.target as HTMLElement).closest("a,button,input,select")) router.push(href); }} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); router.push(href); } }}>{children}</tr>;
 }
 export function CopyBookingValue({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);

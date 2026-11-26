@@ -1,3 +1,4 @@
+import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -453,13 +454,16 @@ export default async function CalendarsPage({
       ORDER BY s.title
     `
     : calendarServices;
-  const eligibleResources = selectedBooking && canManage ? await db<ResourceChoice[]>`
+  const [eligibleResources, paymentBalance] = await Promise.all([
+    selectedBooking && canManage ? db<ResourceChoice[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive"
     FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${selectedBooking.locationId}
     JOIN service_resources sr ON sr.tenant_id=r.tenant_id AND sr.resource_id=r.id AND sr.service_id=${selectedBooking.serviceId}
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
-  ` : [];
+  ` : [],
+    selectedBooking && canManage ? getAppointmentPaymentBalance(db, tenant.id, selectedBooking.id) : null,
+  ]);
   const selectedBookingMember = selectedBooking
     ? members.find((member) => member.id === selectedBooking.teamMemberId)
       ?? (await db<Member[]>`SELECT id,name,email,calendar_color AS "calendarColor" FROM team_members WHERE tenant_id=${tenant.id} AND id=${selectedBooking.teamMemberId} LIMIT 1`)[0]
@@ -1245,7 +1249,7 @@ export default async function CalendarsPage({
           canManage, canManageSchedule: canManageBookingSchedule, canChangeAttendanceNow: canChangeAttendanceNow(selectedBooking),
           canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
           resourceId: canManage ? selectedBooking.resourceId : null,
-          resources: eligibleResources, days: canManageBookingSchedule ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
+          resources: eligibleResources, paymentBalance, days: canManageBookingSchedule ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
         } : null}
       />
       {requestedAppointment && createMember && selectedLocation ? (

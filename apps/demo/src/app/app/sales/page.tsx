@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
+import { BookingListRow } from "@/components/booking-list-controls";
+import { SaleAppointmentDetailsForm } from "@/components/sale-appointment-details-form";
+import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { GiftCardTenderForm } from "@/components/gift-card-tender-form";
 import { controlDb, tenantDb } from "@/lib/waybook/database";
@@ -15,6 +19,7 @@ import { addProductToAppointmentSale, redeemPackageForAppointmentSale } from "./
 type SaleRow = {
   id: string;
   bookingId: string;
+  bookingNumber: string;
   customerId: string;
   currency: string;
   startsAt: Date;
@@ -22,7 +27,10 @@ type SaleRow = {
   bookedPriceCents: number;
   paidCents: number;
   paymentCount: number;
+  lastPaymentAt: Date | null;
   customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
   serviceTitle: string;
   teamMemberId: string | null;
   teamMemberName: string | null;
@@ -91,9 +99,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const search = typeof q === "string" ? q.trim().slice(0, 100) : "";
   const pattern = `%${search}%`;
   const saleRows = db`
-      SELECT cs.id, cs.currency, b.id AS "bookingId", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents",
+      SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
-        count(pr.id)::int AS "paymentCount", c.name AS "customerName", s.title AS "serviceTitle",
+        count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
+        c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
         b.team_member_id AS "teamMemberId", tm.name AS "teamMemberName", b.location_id AS "locationId", l.name AS "locationName"
         ,exists(SELECT 1 FROM commerce_entitlement_entries ce WHERE ce.tenant_id=cs.tenant_id AND ce.booking_id=b.id AND ce.kind='redeem' AND ce.package_id IS NOT NULL) AS "packageRedeemed"
         ,exists(SELECT 1 FROM payment_records gp WHERE gp.tenant_id=cs.tenant_id AND gp.booking_id=b.id AND gp.method='gift_card' AND gp.kind='payment') AS "giftCardRedeemed"
@@ -136,12 +145,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         FROM totals
       ), visible_sales AS (
         SELECT * FROM classified WHERE ${statusFilter}
-        ORDER BY "startsAt" DESC, "bookingId" DESC
+        ORDER BY "lastPaymentAt" DESC NULLS LAST, "startsAt" DESC, "bookingId" DESC
         LIMIT ${salesPageSize}
         OFFSET (SELECT (page - 1) * ${salesPageSize} FROM pagination)
       )
       SELECT visible_sales.*, pagination.* FROM pagination LEFT JOIN visible_sales ON TRUE
-      ORDER BY "startsAt" DESC, "bookingId" DESC
+      ORDER BY "lastPaymentAt" DESC NULLS LAST, "startsAt" DESC, "bookingId" DESC
     `,
     db<Product[]>`SELECT id,title,price_cents AS "priceCents",currency FROM commerce_catalog_items WHERE tenant_id=${tenant.id} AND kind='product' AND is_active=TRUE ORDER BY title`,
     saleId ? db<SaleRow[]>`${saleRows} AND cs.id = ${saleId} ${groupSales}` : [],
@@ -153,7 +162,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     SELECT id, kind, amount_cents AS "amountCents", method, recorded_at AS "recordedAt"
     FROM payment_records
     WHERE tenant_id = ${tenant.id} AND booking_id = ${selectedSale.bookingId}
-    ORDER BY recorded_at DESC
+    ORDER BY recorded_at DESC, id DESC
   ` : [];
   const saleLines = selectedSale ? await db<SaleLine[]>`
     SELECT id,title_snapshot AS title,unit_price_cents AS "unitPriceCents",quantity,discount_cents AS "discountCents"
@@ -201,7 +210,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     return `${salesPath}?${params}`;
   };
   const checkoutHref = (row: SaleRow) => {
-    if (!row.teamMemberId) return null;
+    if (!row.teamMemberId) {
+      const params = new URLSearchParams({ booking: row.bookingId, q: row.bookingNumber });
+      return `${tenantPath(tenantSlug, "/app/bookings")}?${params}`;
+    }
     const day = tenantDateKey(row.startsAt, tenant.timezone);
     const params = new URLSearchParams({ employee: row.teamMemberId, booking: row.bookingId, week: weekStartForLocalDate(day), day, view: "staff" });
     if (row.locationId) params.set("location", row.locationId);
@@ -210,15 +222,28 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
 
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="sales" />
-    <section className="reports-intro"><div><p>SALES · DATABASE-BACKED</p><h1>Checkout</h1><span>Appointment-led sales and immutable payment entries for {tenant.name}.</span></div><Link className="waybook-primary-link" href={tenantPath(tenantSlug, "/app/sales/retail")}>New checkout</Link></section>
+    <section className="reports-intro"><div><h1>Sales</h1></div><Link className="waybook-primary-link" href={tenantPath(tenantSlug, "/app/sales/retail")}>New checkout</Link></section>
     <section className="waybook-data-metrics reports-metrics">
-      <article><span>Open balance</span><strong>{money(Number(outstandingCents))}</strong><small>Outstanding across non-cancelled appointments</small></article>
-      <article><span>Collected</span><strong>{money(Number(collectedCents))}</strong><small>Payments less refunds</small></article>
-      <article><span>Credit due</span><strong>{money(Number(refundDueCents))}</strong><small>Overpayments that need a refund entry</small></article>
+      <article><span>Open balance</span><strong>{money(Number(outstandingCents))}</strong></article>
+      <article><span>Collected</span><strong>{money(Number(collectedCents))}</strong></article>
+      <article><span>Credit due</span><strong>{money(Number(refundDueCents))}</strong></article>
     </section>
     <section className="waybook-data-card">
-      <div className="waybook-section-heading"><div><p>SALES</p><h2>Appointment checkouts</h2><span>Open a sale to collect payment or record a refund against its appointment. Entries append to the immutable ledger.</span></div><form method="get" className="waybook-list-filter"><label>Location<select name="location" defaultValue={selectedLocation?.id ?? ""}><option value="">All locations</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Status<select name="status" defaultValue={selectedStatus}><option value="all">All sales</option><option value="open">Open balance</option><option value="paid">Paid</option><option value="refund">Credit due</option><option value="cancelled">Cancelled</option></select></label><label>Search<input name="q" type="search" defaultValue={search} placeholder={`${clientLabel} or service`} /></label><button type="submit">Apply</button></form></div>
-      <div className="waybook-table-wrap"><table><thead><tr><th>Sale</th><th>Status</th><th>Date</th><th>{clientLabel}</th><th>Service</th><th>Total</th><th>Payments</th></tr></thead><tbody>{sales.map((row) => { const state = settlement(row); const saleName = `Appointment · ${row.serviceTitle}`; return <tr key={row.id} className={selectedSale?.id === row.id ? "is-selected" : undefined}><td><Link className="waybook-row-link" href={saleHref(row)}>{saleName}</Link><small>{row.locationName ?? "No location"}</small></td><td><b className={`sales-status ${state.tone}`}>{state.label}</b><small>{state.detail}</small></td><td><Link className="waybook-row-link" href={saleHref(row)}>{dateTime.format(row.startsAt)}</Link></td><td>{row.customerName}</td><td>{row.serviceTitle}</td><td>{money(row.bookedPriceCents)}</td><td>{row.paymentCount ? money(row.paidCents) : "No entries"}{row.paymentCount ? <small>{row.paymentCount} ledger {row.paymentCount === 1 ? "entry" : "entries"}</small> : row.status !== "cancelled" && !row.packageRedeemed ? <small>Open to checkout</small> : null}</td></tr>; })}{sales.length === 0 ? <tr><td colSpan={7}>No appointment sales match these filters.</td></tr> : null}</tbody></table></div>
+      <div className="waybook-section-heading"><h2>Appointment checkouts</h2><form method="get" className="waybook-list-filter"><label>Location<select name="location" defaultValue={selectedLocation?.id ?? ""}><option value="">All locations</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Status<select name="status" defaultValue={selectedStatus}><option value="all">All sales</option><option value="open">Open balance</option><option value="paid">Paid</option><option value="refund">Credit due</option><option value="cancelled">Cancelled</option></select></label><label>Search<input name="q" type="search" defaultValue={search} placeholder={`${clientLabel} or service`} /></label><button type="submit">Apply</button></form></div>
+      <div className="waybook-table-wrap"><table>
+        <thead><tr><th>Sale</th><th>Status</th><th>Date</th><th>{clientLabel}</th><th>Service</th><th>Total</th><th>Payments</th></tr></thead>
+        <tbody>{sales.map((row) => {
+          const state = settlement(row);
+          const href = saleHref(row);
+          return <BookingListRow key={row.id} href={href} className={selectedSale?.id === row.id ? "is-selected" : undefined}>
+            <td><Link className="waybook-row-link" href={href}>Appointment · {row.serviceTitle}</Link><small>{row.locationName ?? "No location"}</small></td>
+            <td><b className={`sales-status ${state.tone}`}>{state.label}</b><small>{state.detail}</small></td>
+            <td>{dateTime.format(row.startsAt)}</td><td>{row.customerName}</td><td>{row.serviceTitle}</td>
+            <td>{money(row.bookedPriceCents)}</td>
+            <td>{row.paymentCount ? money(row.paidCents) : "No entries"}{row.lastPaymentAt ? <small>{dateTime.format(row.lastPaymentAt)}</small> : null}</td>
+          </BookingListRow>;
+        })}{sales.length === 0 ? <tr><td colSpan={7}>No appointment sales match these filters.</td></tr> : null}</tbody>
+      </table></div>
       {matchingCount > salesPageSize ? <nav className="waybook-list-filter sales-pagination" aria-label="Appointment sales pages">
         <span>Showing {(page - 1) * salesPageSize + 1}–{Math.min(page * salesPageSize, matchingCount)} of {matchingCount}</span>
         {page > 1 ? <Link href={listHref(page - 1)}>Previous page</Link> : null}
@@ -229,25 +254,55 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const state = settlement(selectedSale);
       const balance = selectedSale.packageRedeemed ? 0 : selectedSale.bookedPriceCents - selectedSale.paidCents;
       const productTotalCents = saleLines.reduce((sum, line) => sum + line.unitPriceCents * line.quantity - line.discountCents, 0);
-      const appointmentHref = checkoutHref(selectedSale);
-      const canAddProducts = ["confirmed", "arrived"].includes(selectedSale.status) && products.length > 0;
-      return <div className="tenant-drawer-layer" role="presentation">
-        <Link className="tenant-drawer-scrim" href={saleListHref} aria-label="Close sale details" />
-        <aside className="tenant-drawer appointment-drawer sale-detail" aria-label={`Sale details for ${selectedSale.customerName}`}>
-          <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><Link className="tenant-drawer-close" href={saleListHref} aria-label="Close sale details">Close</Link></header>
+      const activeAppointment = ["confirmed", "arrived"].includes(selectedSale.status);
+      const canAddProducts = activeAppointment && products.length > 0;
+      const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
+      const refundableCents = paymentItems.reduce((sum, item) => item.method === "gift_card" ? sum : sum + (item.kind === "payment" ? item.amountCents : -item.amountCents), 0);
+      const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
+      return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
+        <aside className="tenant-drawer appointment-drawer sale-detail appointment-sale-drawer" data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
+          <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose></header>
           <div className="appointment-drawer__body">
+            <Link className="waybook-primary-link sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>
             <section className="sale-detail__summary"><div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong><small>{selectedSale.locationName ?? "No location"}</small></div><div><span>Service</span><strong>{selectedSale.serviceTitle}</strong><small>{selectedSale.teamMemberName ?? `No assigned ${terminology.staffMember}`}</small></div></section>
-            <section><h3>Service and products</h3><dl className="sale-detail__totals"><div><dt>Booked service</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>{saleLines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{money(line.unitPriceCents * line.quantity - line.discountCents)}</dd></div>)}<div><dt>Products not yet payable</dt><dd>{money(productTotalCents)}</dd></div><div><dt>Payments received</dt><dd>{money(selectedSale.paidCents)}</dd></div><div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}><dt>{balance < 0 ? "Credit due" : balance === 0 ? "Service balance" : "Service outstanding"}</dt><dd>{money(Math.abs(balance))}</dd></div></dl></section>
-            <section><h3>Products</h3>{canAddProducts ? <form action={addProductToAppointmentSale} className="tenant-drawer-form"><input type="hidden" name="saleId" value={selectedSale.id} /><div className="tenant-drawer-form__grid"><label>Product<select name="productId" required><option value="" disabled>Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" min={1} max={99} defaultValue={1} required /></label></div><p className="tenant-drawer-note">Products are priced snapshots. They can be added only before the appointment reaches a terminal status; tendering remains a later checkout step.</p><button type="submit">Add product</button></form> : <p className="tenant-drawer-note">Products can be added only to confirmed or arrived appointments with an active product catalogue. Completed, cancelled, and no-show appointments are read-only.</p>}</section>
-            <section><h3>Package</h3>{selectedSale.packageRedeemed ? <p className="tenant-drawer-note">A package visit has been redeemed for this appointment. The debit is immutable; cancellation/reversal needs its dedicated lifecycle.</p> : ["confirmed", "arrived"].includes(selectedSale.status) && selectedSale.paidCents === 0 && eligiblePackages.length ? <form action={redeemPackageForAppointmentSale} className="tenant-drawer-form"><input type="hidden" name="saleId" value={selectedSale.id} /><label>Eligible {terminology.client} package<select name="packageId" required defaultValue=""><option value="" disabled>Select package</option>{eligiblePackages.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.remainingUnits} visit{item.remainingUnits === 1 ? "" : "s"} remaining{item.expiresAt ? ` · expires ${new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.expiresAt)}` : ""}</option>)}</select></label><p className="tenant-drawer-note">Redeems one matching visit and settles this service appointment. Package and payment tender cannot be mixed yet.</p><button type="submit">Redeem package visit</button></form> : <p className="tenant-drawer-note">No eligible package can be redeemed. Redemptions require a confirmed or arrived appointment, no payment entries, and a matching active {terminology.client} package with visits remaining.</p>}</section>
-            <section><h3>Gift card</h3>{selectedSale.giftCardRedeemed ? <p className="tenant-drawer-note">A gift card has been used for this appointment. Any cancellation refund returns to that card.</p> : selectedSale.currency !== "DKK" ? <p className="tenant-drawer-note">Gift-card tender is currently available for DKK appointments.</p> : !selectedSale.packageRedeemed && ["confirmed", "arrived"].includes(selectedSale.status) && balance > 0 ? <GiftCardTenderForm saleId={selectedSale.id} balanceCents={balance} /> : <p className="tenant-drawer-note">Gift cards can be used for an active appointment with a service balance and no package redemption.</p>}</section>
-            <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="tenant-drawer-note">No payment entries have been recorded for this appointment.</p>}</section>
-            <section><h3>Appointment activity</h3>{activity.length ? <><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="tenant-drawer-note">Showing the 100 most recent events.</p> : null}</> : <p className="tenant-drawer-note">No appointment activity has been recorded.</p>}</section>
-            <section><h3>Sale details</h3><p className="sale-detail__note">Payment and refund entries are permanent. Refunds cannot exceed the amount collected. Completed, cancelled, and no-show appointments cannot be reopened.</p></section>
-            {appointmentHref ? <Link className="waybook-primary-link sale-detail__action" href={appointmentHref}>Open appointment</Link> : null}
+            <section><h3>Totals</h3><dl className="sale-detail__totals">
+              <div><dt>Booked service</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>
+              {saleLines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{money(line.unitPriceCents * line.quantity - line.discountCents)}</dd></div>)}
+              {saleLines.length > 0 ? <div><dt>Products pending checkout</dt><dd>{money(productTotalCents)}</dd></div> : null}
+              <div><dt>Net payments</dt><dd>{money(selectedSale.paidCents)}</dd></div>
+              {selectedSale.status !== "cancelled" ? <div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}>
+                <dt>{balance < 0 ? "Credit due" : "Service balance"}</dt><dd>{money(Math.abs(balance))}</dd>
+              </div> : null}
+            </dl></section>
+            {outstandingCents > 0 || refundableCents > 0 ? <section><h3>Payment details</h3>
+              <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={{ outstandingCents, refundableCents }} secondary />
+            </section> : null}
+            {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
+              <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
+            </section> : null}
+            {canAddProducts ? <section><h3>Products</h3><form action={addProductToAppointmentSale} className="tenant-drawer-form">
+              <input type="hidden" name="saleId" value={selectedSale.id} />
+              <div className="tenant-drawer-form__grid">
+                <label>Product<select name="productId" defaultValue="" required><option value="" disabled>Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label>
+                <label>Quantity<input name="quantity" type="number" min={1} max={99} defaultValue={1} required /></label>
+              </div>
+              <button className="waybook-action waybook-action--secondary" type="submit">Add product</button>
+            </form></section> : null}
+            {selectedSale.packageRedeemed || activeAppointment ? <section><h3>Package</h3>
+              {selectedSale.packageRedeemed ? <p className="sale-detail__note">A package visit has been redeemed.</p> : canRedeemPackage ? <form action={redeemPackageForAppointmentSale} className="tenant-drawer-form">
+                <input type="hidden" name="saleId" value={selectedSale.id} />
+                <label>Eligible {terminology.client} package<select name="packageId" required defaultValue=""><option value="" disabled>Select package</option>{eligiblePackages.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.remainingUnits} visit{item.remainingUnits === 1 ? "" : "s"} remaining{item.expiresAt ? ` · expires ${new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.expiresAt)}` : ""}</option>)}</select></label>
+                <button className="waybook-action waybook-action--secondary" type="submit">Redeem package visit</button>
+              </form> : <p className="sale-detail__note">No eligible package can be redeemed.</p>}
+            </section> : null}
+            {selectedSale.giftCardRedeemed || (activeAppointment && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
+              {selectedSale.giftCardRedeemed ? <p className="sale-detail__note">A gift card has been used for this appointment.</p> : <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />}
+            </section> : null}
+            <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
+            {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
           </div>
         </aside>
-      </div>;
+      </TenantEditorDialog>;
     })() : null}
   </main>;
 }

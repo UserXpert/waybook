@@ -1,5 +1,6 @@
 "use server";
 
+import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
 import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
 import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
@@ -123,12 +124,15 @@ export async function getCalendarAppointment(bookingId: string) {
   if (!booking) throw new Error("Booking is unavailable.");
   const { teamMemberId, ...detail } = booking;
   const canManageSchedule = canManageAppointment(permissions, teamMemberId);
-  const resources = permissions.isManager ? await db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
+  const [resources, paymentBalance] = await Promise.all([
+    permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
     JOIN service_resources sr ON sr.tenant_id=r.tenant_id AND sr.resource_id=r.id AND sr.service_id=${booking.serviceId}
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
-  ` : [];
+  ` : [],
+    permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
+  ]);
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -151,6 +155,7 @@ export async function getCalendarAppointment(bookingId: string) {
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
     canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
     resources,
+    paymentBalance,
     days,
     slots,
     timezone: tenant.timezone,
@@ -664,7 +669,7 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
     return { error: error instanceof Error ? error.message : "Could not record this payment.", success: null };
   }
   revalidateCalendars();
-  return { error: null, success: kind === "refund" ? "Refund recorded in the immutable sales ledger." : "Payment recorded in the immutable sales ledger." };
+  return { error: null, success: kind === "refund" ? "Refund recorded." : "Payment recorded." };
 }
 
 export type ManualBookingState = { error: string | null; success: string | null };

@@ -34,6 +34,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     const payment = form.getByRole("combobox", { name: "Payment", exact: true });
     const submit = form.getByRole("button", { name: "Record entry" });
     await expect(submit).toBeDisabled();
+    await expect(amount).toHaveValue("250.50");
     await payment.selectOption("payment");
     await form.getByLabel("Method").selectOption("cash");
     await amount.fill("301");
@@ -48,7 +49,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await submit.click();
     await expect(form.getByRole("status")).toContainText("Payment recorded");
     await expect(submit).toBeDisabled();
-    await expect(amount).toHaveValue("");
+    await expect(amount).toHaveValue("100.00");
     await payment.selectOption("refund");
     await form.getByLabel("Method").selectOption("cash");
     await amount.fill("40.25");
@@ -91,6 +92,28 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(submit).toBeDisabled();
     expect(new URL(page.url()).searchParams.get("booking")).toBe(booking.id);
     expect(new URL(page.url()).searchParams.get("day")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await expect(amount).toHaveValue("140.25");
+
+    await page.goto(`/nordic/app/sales?q=${encodeURIComponent(customerName)}`);
+    await page.getByRole("cell", { name: customerName, exact: true }).click();
+    const saleDrawer = page.getByRole("dialog", { name: "Appointment checkout" });
+    await expect(saleDrawer.getByRole("link", { name: "Open appointment" })).toBeVisible();
+    await saleDrawer.getByLabel("Phone").fill("+45 31 22 33 44");
+    await saleDrawer.getByRole("button", { name: "Save details" }).click();
+    await expect(saleDrawer.getByText("Details saved.", { exact: true })).toBeVisible();
+    expect((await db`SELECT phone FROM customers WHERE email=${customerEmail}`)[0].phone).toBe("+45 31 22 33 44");
+
+    const salePayment = saleDrawer.locator(".appointment-payment-form");
+    await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("140.25");
+    await salePayment.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment", { timeout: 5000 });
+    await salePayment.getByRole("button", { name: "Record entry" }).click();
+    await expect(salePayment.getByRole("status")).toHaveText("Payment recorded.");
+    await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("");
+    await expect(saleDrawer.getByText("Payment · card", { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(saleDrawer).toHaveCount(0);
+    await page.goto("/nordic/app/sales");
+    await expect(page.locator("tbody tr").first()).toContainText(customerName);
   } finally {
     await db.end();
   }
