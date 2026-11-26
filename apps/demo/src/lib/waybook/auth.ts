@@ -2,9 +2,10 @@ import "server-only";
 
 import { cache } from "react";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { controlDb } from "./database";
+import { loginPathForTenant } from "./tenant-routes";
 
 const SESSION_COOKIE = "waybook_session";
 
@@ -64,11 +65,11 @@ export async function signOut() {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (token) await controlDb`UPDATE sessions SET revoked_at = now() WHERE token_hash = ${hash(token)}`;
   (await cookies()).delete(SESSION_COOKIE);
-  redirect("/login");
+  redirect(loginPathForTenant((await headers()).get("x-waybook-tenant-route")));
 }
 
-export async function requireIdentity() {
+export async function requireIdentity(loginPath = "/login") {
   const identity = await currentIdentity();
-  if (!identity) redirect("/login");
+  if (!identity) redirect(loginPath);
   return identity;
 }

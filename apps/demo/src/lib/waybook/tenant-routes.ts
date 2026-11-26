@@ -10,6 +10,10 @@ export function tenantPath(tenantSlug: string, path = "/app"): string {
   return `/${tenantSlug}${path}`;
 }
 
+export function loginPathForTenant(tenantSlug: string | null): string {
+  return tenantSlug ? tenantPath(tenantSlug, "/login") : "/login";
+}
+
 /** Maps a registered local tenant hostname to its stable same-origin path prefix. */
 export function routeSlugFromHostname(hostname: string, fallback: string): string {
   const normalized = hostname.trim().toLowerCase().replace(/:\d+$/, "");

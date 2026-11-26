@@ -1,16 +1,40 @@
+import { headers } from "next/headers";
+import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-page-media";
+import { tenantDb } from "@/lib/waybook/database";
 import { googleSignInAvailable } from "@/lib/waybook/google-auth";
+import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
+import { loginPathForTenant } from "@/lib/waybook/tenant-routes";
+import { ClientLogo } from "./client-logo";
 import { startGoogleSignIn } from "./google-actions";
 import { login } from "./actions";
 import { PasswordField } from "./password-field";
 import { FeatureMessages } from "./feature-messages";
+
+async function getClientLogo(requestHeaders: Headers) {
+  try {
+    const tenant = await tenantForPublicRequest(requestHeaders);
+    if (!tenant) return null;
+    const [settings] = await tenantDb(tenant)<{ bookingPage: { logoUrl?: unknown } | string | null }[]>`
+      SELECT booking_page AS "bookingPage"
+      FROM tenant_settings WHERE tenant_id = ${tenant.id} LIMIT 1
+    `;
+    const src = publicBookingImageUrl(parseBookingPage(settings?.bookingPage).logoUrl);
+    return src ? { src, name: tenant.name } : null;
+  } catch {
+    return null;
+  }
+}
 
 export default async function Login({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; reset?: string; google?: string; access?: string }>;
 }) {
-  const { error, reset, google, access } = await searchParams;
-  const googleAvailable = await googleSignInAvailable();
+  const [{ error, reset, google, access }, requestHeaders, googleAvailable] = await Promise.all([
+    searchParams, headers(), googleSignInAvailable(),
+  ]);
+  const clientLogo = await getClientLogo(requestHeaders);
+  const loginPath = loginPathForTenant(requestHeaders.get("x-waybook-tenant-route"));
 
   return (
     <main className="waybook-login-page">
@@ -18,6 +42,7 @@ export default async function Login({
         <img className="waybook-login-brand" src="/brand/waybook-logo.svg" alt="Waybook" />
 
         <section className="waybook-login-panel" aria-labelledby="login-title">
+          {clientLogo ? <ClientLogo {...clientLogo} /> : null}
           <div className="waybook-login-panel__inner">
             <h1 id="login-title">Sign in to Waybook</h1>
             <p className="waybook-login-intro">Use your work account to access your workspace.</p>
@@ -32,7 +57,7 @@ export default async function Login({
               <PasswordField />
               <div className="waybook-login-options">
                 <label><input name="rememberMe" type="checkbox" />Remember me</label>
-                <a href="/login?reset=1">Forgot password?</a>
+                <a href={`${loginPath}?reset=1`}>Forgot password?</a>
               </div>
               {error ? <span className="waybook-login-error" role="alert">Invalid email or password.</span> : null}
               <button type="submit">Sign in</button>

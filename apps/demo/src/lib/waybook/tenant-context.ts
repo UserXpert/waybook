@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { requireIdentity } from "./auth";
 import { closeOverdueConfirmedBookings } from "./overdue-bookings";
+import { loginPathForTenant } from "./tenant-routes";
 import { findTenantByHostname, findTenantByRouteSlug, findTenantMembershipByRouteSlug, tenantDb, type TenantRecord } from "./database";
 
 export type TenantMembership = { tenantId: string; role: string };
@@ -34,8 +35,8 @@ async function assertActiveStaffMembership(tenant: TenantRecord, identityId: str
  * for server actions, rather than guessing from a single membership.
  */
 async function resolveTenantWorkspace(requestHeaders?: Headers): Promise<{ tenant: TenantRecord; membership: TenantMembership; isControlView: boolean }> {
-  const identity = await requireIdentity();
   const routeSlug = (requestHeaders ?? await headers()).get("x-waybook-tenant-route");
+  const identity = await requireIdentity(requestHeaders ? "/login" : loginPathForTenant(routeSlug));
   // A lost rewrite header must never select a different workspace.
   if (!routeSlug) notFound();
   if (routeSlug) {
