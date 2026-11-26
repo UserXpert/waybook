@@ -37,11 +37,11 @@ for (const [index, tenant] of tenants.entries()) {
     `)[0].count;
     try {
       await signIn(page, tenant);
-      const path = `/${tenant.route}/app/team?employee=${original.id}`;
+      const path = `/${tenant.route}/app/team?${new URLSearchParams({ employee: original.id, q: tenant.profileEmail })}`;
       await page.goto(path);
       const profile = page.locator(".staff-workspace__profile-header");
       const avatar = profile.getByRole("button", { name: `Change photo for ${original.name}` });
-      const row = page.getByRole("complementary", { name: "Staff directory" }).locator(`a[href*="employee=${original.id}"]`);
+      const row = page.getByRole("complementary", { name: /^(Staff|Practitioner) directory$/ }).locator(`a[href*="employee=${original.id}"]`);
       const opener = page.getByRole("button", { name: `Account menu for ${original.name}` });
       const photo = await sharp({ create: { width: 8, height: 8, channels: 3, background: tenant.colour } }).png().toBuffer();
       const replacement = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#64b8db" } }).png().toBuffer();
@@ -63,8 +63,8 @@ for (const [index, tenant] of tenants.entries()) {
       const before = await removals();
       const remove = profile.getByRole("button", { name: `Remove photo for ${original.name}` });
       await expect(remove).toBeVisible();
-      for (const control of [remove, avatar.locator(".staff-photo-upload__camera")]) {
-        await expect(control).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      for (const control of [remove, avatar.locator(".staff-photo-badge--camera")]) {
+        await expect(control).toHaveCSS("background-color", "rgb(255, 255, 255)");
         await expect(control.locator("svg")).toHaveCSS("filter", "none");
       }
       const avatarBounds = (await avatar.boundingBox())!;

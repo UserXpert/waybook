@@ -22,12 +22,13 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
   let editCustomerId: string | null = null;
   try {
     const [settings] = await db<{ tenantId: string }[]>`SELECT tenant_id AS "tenantId" FROM tenant_settings LIMIT 1`;
-    const [member] = await db<{ id: string; locationId: string }[]>`SELECT tm.id,tml.location_id AS "locationId" FROM team_members tm JOIN team_member_locations tml ON tml.tenant_id=tm.tenant_id AND tml.team_member_id=tm.id JOIN locations l ON l.id=tml.location_id AND l.tenant_id=tm.tenant_id
+    const [member] = await db<{ id: string; email: string; locationId: string }[]>`SELECT tm.id,tm.email,tml.location_id AS "locationId" FROM team_members tm JOIN team_member_locations tml ON tml.tenant_id=tm.tenant_id AND tml.team_member_id=tm.id JOIN locations l ON l.id=tml.location_id AND l.tenant_id=tm.tenant_id
       WHERE tm.tenant_id=${settings.tenantId} AND tm.role='owner' AND tm.is_active AND l.slug='primary' AND l.is_active LIMIT 1`;
     const [service] = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id=${settings.tenantId} AND slug='studio-session'`;
     const fixtureDate = new Date("2031-01-01T12:00:00Z");
     fixtureDate.setUTCDate(fixtureDate.getUTCDate() + (Number.parseInt(unique.slice(0, 6), 16) % 365));
     const day = fixtureDate.toISOString().slice(0, 10);
+    const board = `/nordic/app/calendars?${new URLSearchParams({ view: "team", day, location: member.locationId, staff: member.email })}`;
     const fixture = await db.begin(async (tx) => {
       const [customer] = await tx<{ id: string }[]>`INSERT INTO customers (tenant_id,name,email) VALUES (${settings.tenantId},${`Terminal guard ${unique}`},${`terminal-${unique}@example.invalid`}) RETURNING id`;
       const [block] = await tx<{ id: string }[]>`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES (${settings.tenantId},${member.id},${member.locationId},${`${day}T09:00:00Z`},${`${day}T10:00:00Z`},'confirmed') RETURNING id`;
@@ -55,7 +56,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
     await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/nordic\/app/, { timeout: 30_000 });
-    await page.goto(`/nordic/app/calendars?view=team&day=${day}&booking=${editBookingId}`);
+    await page.goto(`${board}&booking=${editBookingId}`);
     const attemptedName = `Blocked edit ${unique}`;
     let staleSaveSeen = false;
     await page.route("**/nordic/app/calendars**", async (route) => {
@@ -70,26 +71,21 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
       await route.continue();
     });
     await page.getByLabel("Customer name").fill(attemptedName);
-    const staleSaveResponse = page.waitForResponse((response) =>
-      response.request().method() === "POST"
-      && Boolean(response.request().headers()["next-action"])
-      && response.url().includes("/nordic/app/calendars"),
-    );
     await page.getByRole("button", { name: "Save changes" }).click();
-    expect((await staleSaveResponse).status()).toBeGreaterThanOrEqual(400);
+    await expect(page.getByRole("alert").filter({ hasText: "Cancelled appointments cannot be edited." })).toBeVisible();
     expect(staleSaveSeen).toBe(true);
     const [afterStaleSave] = await db<{ name: string; resourceAssignments: number; bookingEvents: number; auditEvents: number }[]>`SELECT c.name,(SELECT count(*)::int FROM booking_resource_assignments WHERE tenant_id=${settings.tenantId} AND booking_id=${editBookingId} AND released_at IS NULL) AS "resourceAssignments",(SELECT count(*)::int FROM booking_events WHERE tenant_id=${settings.tenantId} AND booking_id=${editBookingId}) AS "bookingEvents",(SELECT count(*)::int FROM tenant_audit_events WHERE tenant_id=${settings.tenantId} AND target_type='booking' AND target_id=${editBookingId}) AS "auditEvents" FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id WHERE b.id=${editBookingId}`;
     expect(afterStaleSave).toMatchObject({ name: `Edit guard ${unique}`, resourceAssignments: 0, bookingEvents: 0, auditEvents: 0 });
     await page.unroute("**/nordic/app/calendars**");
-    await page.goto(`/nordic/app/calendars?view=team&day=${day}`);
+    await page.goto(board);
     const card = page.locator(`a.waybook-week-calendar__entry[href*="booking=${bookingId}"]`);
     await expect(card).toBeVisible();
     if (testInfo.project.use.isMobile || testInfo.project.name === "mobile") {
       await db.unsafe("UPDATE bookings SET status='no_show' WHERE id=$1 AND tenant_id=$2", [bookingId, settings.tenantId]);
-      await page.goto(`/nordic/app/calendars?view=team&day=${day}&booking=${bookingId}`);
+      await page.goto(`${board}&booking=${bookingId}`);
       await expect(card).toHaveAttribute("draggable", "false");
       await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
-      await page.goto(`/nordic/app/calendars?view=team&day=${day}&booking=${completedBookingId}`);
+      await page.goto(`${board}&booking=${completedBookingId}`);
       const completedCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${completedBookingId}"]`);
       await expect(completedCard).toHaveAttribute("draggable", "false");
       await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
@@ -157,10 +153,10 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
     const [locked] = await db<{ state: string; status: string; startsAt: Date }[]>`SELECT bb.state,b.status,b.starts_at AS "startsAt" FROM bookings b JOIN booking_blocks bb ON bb.id=b.booking_block_id WHERE b.id=${bookingId}`;
     expect(locked).toMatchObject({ state: "confirmed", status: "no_show" });
     expect(locked.startsAt.toISOString()).toBe(`${day}T09:00:00.000Z`);
-    await page.goto(`/nordic/app/calendars?view=team&day=${day}&booking=${bookingId}`);
+    await page.goto(`${board}&booking=${bookingId}`);
     await expect(card).toHaveAttribute("draggable", "false");
     await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
-    await page.goto(`/nordic/app/calendars?view=team&day=${day}&booking=${completedBookingId}`);
+    await page.goto(`${board}&booking=${completedBookingId}`);
     const completedCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${completedBookingId}"]`);
     await expect(completedCard).toHaveAttribute("draggable", "false");
     await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);

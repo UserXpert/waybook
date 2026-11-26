@@ -228,7 +228,7 @@ test("Apps menu groups, search, keyboard and navigation work", async ({ page }) 
   await apps.click();
   const dialog = page.getByRole("dialog", { name: "Apps & settings" });
   await expect(dialog).toBeVisible();
-  for (const group of ["Operations", "Commerce", "Setup", "Insights"]) await expect(dialog.getByRole("heading", { name: group, exact: true })).toBeVisible();
+  for (const group of ["Operations", "Commerce", "Setup", "Activity & insights"]) await expect(dialog.getByRole("heading", { name: group, exact: true })).toBeVisible();
   const columns = await dialog.locator(".tenant-app-menu__groups").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
   const width = page.viewportSize()!.width;
   expect(columns).toBe(width <= 540 ? 1 : width <= 900 ? 2 : 4);

@@ -107,7 +107,7 @@ for (const tenant of [
     await page.goto(`${app}/sales?sale=${later.saleId}`);
     await expect(page.getByText(/No eligible package can be redeemed/)).toBeVisible();
     await expect(redeem).toHaveCount(0);
-    const packageList = `${app}/packages`;
+    const packageList = `${app}/packages?sort=newest`;
     await page.goto(packageList);
     const detailsLink = page.getByRole("link", { name: `Open ${title} for ${clientName}`, exact: true });
     await detailsLink.press("Enter");
@@ -119,7 +119,7 @@ for (const tenant of [
     const balance = details.getByText("Visits remaining", { exact: true });
     await expect(balance.locator("..").getByText("0", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL((url) => url.pathname === packageList && url.search === "");
+    await expect(page).toHaveURL(packageList);
     await expect(detailsLink).toBeFocused();
 
     await page.goto(`/${tenant.route}/book`);
