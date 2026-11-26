@@ -69,7 +69,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
     <input type="hidden" name="bookingId" value={bookingId} />
     {checkout ? <p className="sale-detail__note">Record money already received for the appointment.</p> : null}
     <div className="tenant-drawer-form__grid">
-      {checkout ? <input type="hidden" name="kind" value="payment" /> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
+      {checkout ? <><input type="hidden" name="kind" value="payment" /><input type="hidden" name="expectedBalanceCents" value={outstandingCents} /></> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
         <option value="" disabled>Select payment action</option>
         {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
         <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>

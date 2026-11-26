@@ -604,8 +604,8 @@ async function persistBookingStatus(
   );
   if (!block) throw new Error("Booking availability is unavailable.");
 
-  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date; bookedPriceCents: number; noShowChargeCents: number }[]>(
-    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt", booked_price_cents AS "bookedPriceCents", no_show_charge_cents AS "noShowChargeCents" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
+    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
     [booking.id, tenant.id],
   );
   if (!current) throw new Error("Booking is unavailable.");
@@ -634,7 +634,11 @@ async function persistBookingStatus(
     if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
       throw new Error("A payment is already recorded. Edit or delete it before recording another.");
     }
-    if (current.bookedPriceCents === 0 && current.noShowChargeCents === 0) {
+    const [cart] = await transaction.unsafe<{ canAddFee: boolean }[]>(`
+      SELECT chargeable_cents = 0 AND NOT package_redeemed AS "canAddFee"
+      FROM appointment_checkout_amounts($1, $2)
+    `, [tenant.id, booking.id]);
+    if (cart?.canAddFee) {
       await transaction.unsafe("UPDATE bookings SET no_show_charge_cents=$1, updated_at=now() WHERE tenant_id=$2 AND id=$3",
         [noShowPayment.amountCents, tenant.id, booking.id]);
     }
@@ -723,6 +727,7 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
   const kind = String(formData.get("kind") ?? "");
   try {
     if (kind !== "payment" && kind !== "refund") throw new Error("Select a payment action.");
+    const expectedBalance = formData.get("expectedBalanceCents");
     const entryId = String(formData.get("entryId") ?? "");
     const bookingId = String(formData.get("bookingId") ?? "");
     const method = String(formData.get("method") ?? "card");
@@ -756,6 +761,18 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
         if (locked.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
         if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
           throw new Error("A payment is already recorded. Edit or delete it before recording another.");
+        }
+        if (expectedBalance !== null) {
+          const [cart] = await transaction.unsafe<{ balance: string }[]>(`
+            SELECT greatest(cart.chargeable_cents - coalesce((
+              SELECT sum(CASE WHEN kind='payment' THEN amount_cents ELSE -amount_cents END)
+              FROM payment_records WHERE tenant_id=$1 AND booking_id=$2
+            ), 0), 0)::text AS balance
+            FROM appointment_checkout_amounts($1, $2) cart
+          `, [tenant.id, booking.id]);
+          if (!cart || cart.balance !== expectedBalance) {
+            throw new Error("The checkout balance changed. Go back to checkout and review the total.");
+          }
         }
       }
       await insertManualPaymentEntry(transaction, tenant.id, booking.id, kind,

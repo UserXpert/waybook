@@ -6,14 +6,11 @@ export type AppointmentPaymentBalance = { outstandingCents: number; refundableCe
 export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantDb>, tenantId: string, bookingId: string) {
   const [[balance], payments] = await Promise.all([
     db<Omit<AppointmentPaymentBalance, "payments">[]>`
-    SELECT CASE WHEN b.status = 'cancelled' OR package.redeemed THEN 0
-        ELSE greatest(b.booked_price_cents + b.no_show_charge_cents - payment.net, 0) END::int AS "outstandingCents",
-      greatest(payment.regular_net, 0)::int AS "refundableCents", package.redeemed AS "packageRedeemed"
+    SELECT CASE WHEN b.status = 'cancelled' THEN 0
+        ELSE greatest(cart.chargeable_cents - payment.net, 0) END::int AS "outstandingCents",
+      greatest(payment.regular_net, 0)::int AS "refundableCents", cart.package_redeemed AS "packageRedeemed"
     FROM bookings b
-    CROSS JOIN LATERAL (SELECT EXISTS (
-        SELECT 1 FROM commerce_entitlement_entries ce
-        WHERE ce.tenant_id = b.tenant_id AND ce.booking_id = b.id AND ce.kind = 'redeem' AND ce.package_id IS NOT NULL
-      ) AS redeemed) package
+    CROSS JOIN LATERAL appointment_checkout_amounts(b.tenant_id, b.id) cart
     CROSS JOIN LATERAL (
       SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0) AS net,
         coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END)
@@ -29,15 +26,14 @@ export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantD
 export async function canCompleteNoShow(db: Pick<ReturnType<typeof tenantDb>, "unsafe">, tenantId: string, bookingId: string) {
   const [booking] = await db.unsafe<{ eligible: boolean }[]>(`
     SELECT (
-      b.booked_price_cents + b.no_show_charge_cents = 0 OR EXISTS (
-        SELECT 1 FROM commerce_entitlement_entries ce
-        WHERE ce.tenant_id = b.tenant_id AND ce.booking_id = b.id AND ce.kind = 'redeem' AND ce.package_id IS NOT NULL
-      ) OR coalesce((
+      cart.chargeable_cents = 0 OR coalesce((
         SELECT sum(CASE pr.kind WHEN 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END)
         FROM payment_records pr WHERE pr.tenant_id = b.tenant_id AND pr.booking_id = b.id
       ), 0) > 0
     ) AS eligible
-    FROM bookings b WHERE b.tenant_id = $1 AND b.id = $2
+    FROM bookings b
+    CROSS JOIN LATERAL appointment_checkout_amounts(b.tenant_id, b.id) cart
+    WHERE b.tenant_id = $1 AND b.id = $2
   `, [tenantId, bookingId]);
   return booking?.eligible ?? false;
 }

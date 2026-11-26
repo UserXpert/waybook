@@ -167,7 +167,7 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
   const [paymentAmount, setPaymentAmount] = useState("");
   const [selection, setSelection] = useState({ from: "", to: "" });
   const selectedStatus = selection.from === status ? selection.to : "";
-  const inlinePayment = status === "no_show" && paymentBalance && !paymentBalance.packageRedeemed && paymentBalance.payments.length === 0;
+  const inlinePayment = status === "no_show" && paymentBalance && (!paymentBalance.packageRedeemed || paymentBalance.outstandingCents > 0) && paymentBalance.payments.length === 0;
   const paymentEntered = Boolean(inlinePayment && paymentAmount.trim());
   const detailsChanged = details.name !== savedDetails.name || details.email !== savedDetails.email || details.phone !== savedDetails.phone || resource !== savedDetails.resource;
 

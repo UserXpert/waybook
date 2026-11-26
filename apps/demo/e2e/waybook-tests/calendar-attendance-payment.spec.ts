@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-for (const bookedCents of [25050, 0]) test(`calendar saves payment and completion together for a ${bookedCents ? "paid service" : "zero-price no-show"}`, async ({ page }, testInfo) => {
+for (const [bookedCents, productCents] of [[25050, 0], [0, 0], [0, 3750]]) test(`calendar saves payment and completion together for a ${bookedCents ? "paid service" : productCents ? "product-only cart" : "zero-price no-show"}`, async ({ page }, testInfo) => {
+  const due = bookedCents + productCents;
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const marker = randomUUID().slice(0, 8);
   const name = `Calendar attendance ${marker}`;
@@ -24,6 +25,11 @@ for (const bookedCents of [25050, 0]) test(`calendar saves payment and completio
         (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents)
         VALUES (${settings.tenant_id},${block.id},${service.id},${member.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'arrived',${bookedCents})
         RETURNING id`;
+      if (productCents) {
+        await tx`INSERT INTO commerce_sale_lines (tenant_id,sale_id,line_kind,title_snapshot,unit_price_cents)
+          SELECT tenant_id,id,'product','No-show cart fixture',${productCents}
+          FROM commerce_sales WHERE tenant_id=${settings.tenant_id} AND booking_id=${result.id}`;
+      }
       return { ...result, customerId: customer.id, startsAt: new Date(block.starts_at), location: location.id, employee: member.id };
     });
 
@@ -65,7 +71,7 @@ for (const bookedCents of [25050, 0]) test(`calendar saves payment and completio
     await save.click();
     await expect.poll(readStatus).toBe("no_show");
     await expect(complete).toBeEnabled();
-    const amount = drawer.getByLabel(bookedCents ? "Amount (DKK)" : "No-show fee (DKK)", { exact: true });
+    const amount = drawer.getByLabel(due ? "Amount (DKK)" : "No-show fee (DKK)", { exact: true });
     await expect(drawer.getByRole("heading", { name: "Payment details" })).toBeVisible();
     await expect(amount).toBeVisible();
     await expect(save).toBeDisabled();
@@ -74,7 +80,7 @@ for (const bookedCents of [25050, 0]) test(`calendar saves payment and completio
     await drawer.getByLabel("Phone", { exact: true }).fill(phone);
     const savedPhone = async () => (await db`SELECT phone FROM customers WHERE id=${booking.customerId}`)[0].phone;
 
-    if (bookedCents) {
+    if (due) {
       await save.click();
       await expect(drawer.getByRole("alert")).toContainText("Record a payment before marking this no-show as completed.");
       expect(await readStatus()).toBe("no_show");
@@ -82,12 +88,12 @@ for (const bookedCents of [25050, 0]) test(`calendar saves payment and completio
       await expect(drawer.getByLabel("Phone", { exact: true })).toHaveValue(phone);
       await amount.fill("300");
       await save.click();
-      await expect(drawer.getByRole("alert")).toContainText("appointment payment cannot exceed booked service value");
+      await expect(drawer.getByRole("alert")).toContainText(productCents ? "appointment payment cannot exceed the checkout total" : "appointment payment cannot exceed booked service value");
       expect(await readStatus()).toBe("no_show");
       expect(await db`SELECT id FROM payment_records WHERE booking_id=${booking.id}`).toHaveLength(0);
     }
 
-    const paymentCents = bookedCents || 12550;
+    const paymentCents = due || 12550;
     await amount.fill((paymentCents / 100).toFixed(2));
     await drawer.getByRole("combobox", { name: "Method", exact: true }).selectOption("cash");
     await expect(drawer.getByRole("button", { name: "Record entry", exact: true })).toHaveCount(0);
@@ -96,7 +102,7 @@ for (const bookedCents of [25050, 0]) test(`calendar saves payment and completio
       await staleTab.goto(url);
       const staleDrawer = staleTab.getByRole("dialog", { name: `Appointment with ${name}` });
       await staleDrawer.getByRole("button", { name: "Completed", exact: true }).click();
-      await staleDrawer.getByLabel(bookedCents ? "Amount (DKK)" : "No-show fee (DKK)", { exact: true }).fill("100");
+      await staleDrawer.getByLabel(due ? "Amount (DKK)" : "No-show fee (DKK)", { exact: true }).fill("100");
 
       await expect(complete).toHaveAttribute("aria-pressed", "true");
       expect(await readStatus()).toBe("no_show");
@@ -112,9 +118,9 @@ for (const bookedCents of [25050, 0]) test(`calendar saves payment and completio
         { kind: "payment", amount_cents: paymentCents, method: "cash" },
       ]);
       expect((await db`SELECT booked_price_cents, no_show_charge_cents FROM bookings WHERE id=${booking.id}`)[0]).toEqual({
-        booked_price_cents: bookedCents, no_show_charge_cents: bookedCents ? 0 : paymentCents,
+        booked_price_cents: bookedCents, no_show_charge_cents: due ? 0 : paymentCents,
       });
-      if (!bookedCents) {
+      if (!due) {
         const [sale] = await db`SELECT id FROM commerce_sales WHERE booking_id=${booking.id}`;
         await staleTab.goto(`/nordic/app/sales?sale=${sale.id}`);
         await expect(staleTab.getByRole("dialog", { name: "Appointment checkout" }).getByText("No-show fee", { exact: true })).toBeVisible();

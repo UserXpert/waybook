@@ -18,7 +18,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import { tenantDateKey, weekStartForLocalDate } from "@/lib/waybook/today-command-centre";
-import { addProductToAppointmentSale, redeemPackageForAppointmentSale } from "./actions";
+import { addProductToAppointmentSale, redeemPackageForAppointmentSale, removeProductFromAppointmentSale } from "./actions";
 
 type SaleRow = {
   id: string;
@@ -31,6 +31,7 @@ type SaleRow = {
   bookedPriceCents: number;
   noShowChargeCents: number;
   paidCents: number;
+  chargeableCents: number;
   paymentCount: number;
   lastPaymentAt: Date | null;
   customerName: string;
@@ -83,14 +84,16 @@ function activityLabel(eventType: string, clientLabel: string) {
     "payment.gift_card_refund": "Gift card refunded",
     "payment.corrected": "Payment updated",
     "payment.deleted": "Payment deleted",
+    "commerce.product_added": "Product added",
+    "commerce.product_removed": "Product removed",
   };
   return labels[eventType] ?? eventType.replaceAll(/[._]/g, " ");
 }
 
 function settlement(row: SaleRow) {
   if (row.status === "cancelled") return { label: "Cancelled", detail: "No checkout", tone: "is-cancelled" };
-  if (row.packageRedeemed) return { label: "Package", detail: "Service visit redeemed", tone: "is-paid" };
-  const balance = row.bookedPriceCents + row.noShowChargeCents - row.paidCents;
+  const balance = row.chargeableCents - row.paidCents;
+  if (row.packageRedeemed && row.chargeableCents === 0) return { label: "Package", detail: "Service visit redeemed", tone: "is-paid" };
   if (balance === 0) return { label: "Paid", detail: `${money(row.paidCents)} collected`, tone: "is-paid" };
   if (balance > 0) return { label: "Open", detail: `${money(balance)} due`, tone: "is-open" };
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
@@ -132,7 +135,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
         c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
         b.team_member_id AS "teamMemberId", tm.name AS "teamMemberName", b.location_id AS "locationId", l.name AS "locationName"
-        ,exists(SELECT 1 FROM commerce_entitlement_entries ce WHERE ce.tenant_id=cs.tenant_id AND ce.booking_id=b.id AND ce.kind='redeem' AND ce.package_id IS NOT NULL) AS "packageRedeemed"
+        ,cart.package_redeemed AS "packageRedeemed",cart.chargeable_cents::int AS "chargeableCents"
         ,exists(SELECT 1 FROM payment_records gp WHERE gp.tenant_id=cs.tenant_id AND gp.booking_id=b.id AND gp.method='gift_card' AND gp.kind='payment') AS "giftCardRedeemed"
       FROM commerce_sales cs
       JOIN bookings b ON b.id = cs.booking_id AND b.tenant_id = cs.tenant_id
@@ -140,9 +143,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id
       LEFT JOIN locations l ON l.id = b.location_id AND l.tenant_id = b.tenant_id
       LEFT JOIN team_members tm ON tm.id = b.team_member_id AND tm.tenant_id = b.tenant_id
+      CROSS JOIN LATERAL appointment_checkout_amounts(b.tenant_id, b.id) cart
       LEFT JOIN payment_records pr ON pr.booking_id = b.id AND pr.tenant_id = b.tenant_id
       WHERE cs.tenant_id = ${tenant.id}`;
-  const groupSales = db`GROUP BY cs.id, b.id, c.id, s.id, l.id, tm.id`;
+  const groupSales = db`GROUP BY cs.id, b.id, c.id, s.id, l.id, tm.id, cart.package_redeemed, cart.chargeable_cents`;
   const statusFilter = selectedStatus === "all" ? db`TRUE` : db`settlement_status = ${selectedStatus}`;
   const [locations, results, products, [selectedSale]] = await Promise.all([
     db<Location[]>`SELECT id, name FROM locations WHERE tenant_id = ${tenant.id} AND is_active = TRUE ORDER BY CASE WHEN slug = 'primary' THEN 0 ELSE 1 END, name`,
@@ -156,19 +160,19 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       ), classified AS (
         SELECT *, CASE
           WHEN status = 'cancelled' THEN 'cancelled'
-          WHEN "packageRedeemed" OR "bookedPriceCents" + "noShowChargeCents" = "paidCents" THEN 'paid'
-          WHEN "bookedPriceCents" + "noShowChargeCents" > "paidCents" THEN 'open'
+          WHEN "chargeableCents" = "paidCents" THEN 'paid'
+          WHEN "chargeableCents" > "paidCents" THEN 'open'
           ELSE 'refund'
         END AS settlement_status
         FROM scoped
         WHERE ${selectedActivity === "all" ? db`TRUE` : db`("lastPaymentAt" IS NOT NULL) = ${selectedActivity === "with"}`}
       ), totals AS (
         SELECT count(*) FILTER (WHERE ${statusFilter})::int AS "matchingCount",
-          coalesce(sum(greatest(0, "bookedPriceCents" + "noShowChargeCents" - "paidCents"))
-            FILTER (WHERE status <> 'cancelled' AND NOT "packageRedeemed"), 0) AS "outstandingCents",
+          coalesce(sum(greatest(0, "chargeableCents" - "paidCents"))
+            FILTER (WHERE status <> 'cancelled'), 0) AS "outstandingCents",
           coalesce(sum("paidCents"), 0) AS "collectedCents",
-          coalesce(sum(greatest(0, "paidCents" - "bookedPriceCents" - "noShowChargeCents"))
-            FILTER (WHERE status <> 'cancelled' AND NOT "packageRedeemed"), 0) AS "refundDueCents"
+          coalesce(sum(greatest(0, "paidCents" - "chargeableCents"))
+            FILTER (WHERE status <> 'cancelled'), 0) AS "refundDueCents"
         FROM classified
       ), pagination AS (
         SELECT totals.*, least(${requestedPage}::int, greatest(1, ("matchingCount" + ${salesPageSize} - 1) / ${salesPageSize})) AS page
@@ -297,7 +301,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <td><Link className="waybook-row-link" href={href}>Appointment · {row.serviceTitle}</Link><small>{row.locationName ?? "No location"}</small></td>
             <td><b className={`sales-status ${state.tone}`}>{state.label}</b><small>{state.detail}</small></td>
             <td>{dateTime.format(row.startsAt)}</td><td>{row.customerName}</td><td>{row.serviceTitle}</td>
-            <td>{money(row.bookedPriceCents + row.noShowChargeCents)}</td>
+            <td>{money(row.chargeableCents)}</td>
             <td>{row.paymentCount ? money(row.paidCents) : "No entries"}{row.lastPaymentAt ? <small>Last entry {dateTime.format(row.lastPaymentAt)}</small> : null}</td>
           </BookingListRow>;
         })}{sales.length === 0 ? <tr><td colSpan={7}>No appointment sales match these filters.</td></tr> : null}</tbody>
@@ -310,10 +314,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     </section>
     {selectedSale ? (() => {
       const state = settlement(selectedSale);
-      const balance = selectedSale.packageRedeemed ? 0 : selectedSale.bookedPriceCents + selectedSale.noShowChargeCents - selectedSale.paidCents;
-      const productTotalCents = saleLines.reduce((sum, line) => sum + line.unitPriceCents * line.quantity - line.discountCents, 0);
+      const balance = selectedSale.chargeableCents - selectedSale.paidCents;
       const activeAppointment = ["confirmed", "arrived"].includes(selectedSale.status);
-      const canAddProducts = activeAppointment && products.length > 0;
+      const canChangeProducts = activeAppointment && paymentItems.length === 0;
+      const availableProducts = products.filter((product) => product.currency === selectedSale.currency);
       const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
       const recorded = paymentBalance?.payments ?? [];
       const canRecordPayment = paymentBalance && recorded.length === 0 && outstandingCents > 0;
@@ -330,10 +334,11 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               <div><dt>Booked service</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>
               {selectedSale.noShowChargeCents > 0 ? <div><dt>No-show fee</dt><dd>{money(selectedSale.noShowChargeCents)}</dd></div> : null}
               {saleLines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{money(line.unitPriceCents * line.quantity - line.discountCents)}</dd></div>)}
-              {saleLines.length > 0 ? <div><dt>Products pending checkout</dt><dd>{money(productTotalCents)}</dd></div> : null}
+              {selectedSale.packageRedeemed ? <div><dt>Package coverage</dt><dd>−{money(selectedSale.bookedPriceCents)}</dd></div> : null}
+              <div><dt>Checkout total</dt><dd>{money(selectedSale.chargeableCents)}</dd></div>
               <div><dt>Net payments</dt><dd>{money(selectedSale.paidCents)}</dd></div>
               {selectedSale.status !== "cancelled" ? <div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}>
-                <dt>{balance < 0 ? "Credit due" : "Service balance"}</dt><dd>{money(Math.abs(balance))}</dd>
+                <dt>{balance < 0 ? "Credit due" : "Balance due"}</dt><dd>{money(Math.abs(balance))}</dd>
               </div> : null}
             </dl></section>
             {paymentStep && paymentBalance ? <section><h3>Payments</h3>
@@ -347,14 +352,20 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
                 <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
               </section> : null}
-              {canAddProducts ? <section><h3>Products</h3><form action={addProductToAppointmentSale} className="tenant-drawer-form">
+              {canChangeProducts && (availableProducts.length > 0 || saleLines.length > 0) ? <section><h3>Products</h3>
+                {saleLines.map((line) => <form key={line.id} action={removeProductFromAppointmentSale} className="tenant-drawer-form">
+                  <input type="hidden" name="saleId" value={selectedSale.id} />
+                  <input type="hidden" name="lineId" value={line.id} />
+                  <button className="waybook-action waybook-action--secondary" type="submit">Remove {line.title}</button>
+                </form>)}
+                {availableProducts.length > 0 ? <form action={addProductToAppointmentSale} className="tenant-drawer-form">
                 <input type="hidden" name="saleId" value={selectedSale.id} />
                 <div className="tenant-drawer-form__grid">
-                  <label>Product<select name="productId" defaultValue="" required><option value="" disabled>Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label>
+                  <label>Product<select name="productId" defaultValue="" required><option value="" disabled>Select product</option>{availableProducts.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label>
                   <label>Quantity<input name="quantity" type="number" min={1} max={99} defaultValue={1} required /></label>
                 </div>
                 <button className="waybook-action waybook-action--secondary" type="submit">Add product</button>
-              </form></section> : null}
+              </form> : null}</section> : null}
               {selectedSale.packageRedeemed || activeAppointment ? <section><h3>Package</h3>
                 {selectedSale.packageRedeemed ? <p className="sale-detail__note">A package visit has been redeemed.</p> : canRedeemPackage ? <form action={redeemPackageForAppointmentSale} className="tenant-drawer-form">
                   <input type="hidden" name="saleId" value={selectedSale.id} />

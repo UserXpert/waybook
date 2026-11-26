@@ -170,3 +170,80 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await db.end();
   }
 });
+
+test("appointment and products share one reviewed checkout balance", async ({ page }) => {
+  page.setDefaultTimeout(8_000);
+  const uri = new URL(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!);
+  if (!["localhost", "127.0.0.1"].includes(uri.hostname) || !uri.pathname.startsWith("/waybook_e2e_")) {
+    throw new Error("Appointment checkout requires a disposable local database.");
+  }
+  const db = postgres(uri.toString(), { max: 1, ssl: false });
+  const suffix = randomUUID().slice(0, 8);
+  const productTitle = `Checkout product ${suffix}`;
+  try {
+    const fixture = await db.begin(async (tx) => {
+      const [settings] = await tx`SELECT tenant_id, currency FROM tenant_settings LIMIT 1`;
+      const tenantId = settings.tenant_id;
+      const [location] = await tx`SELECT id FROM locations WHERE tenant_id=${tenantId} AND slug='primary'`;
+      const [service] = await tx`SELECT id FROM services WHERE tenant_id=${tenantId} AND slug='studio-session'`;
+      const [staff] = await tx`INSERT INTO team_members (tenant_id,name,email,role) VALUES (${tenantId},${`Checkout staff ${suffix}`},${`cart-staff-${suffix}@example.test`},'staff') RETURNING id`;
+      const [client] = await tx`INSERT INTO customers (tenant_id,name,email) VALUES (${tenantId},${`Checkout client ${suffix}`},${`cart-client-${suffix}@example.test`}) RETURNING id`;
+      const [block] = await tx`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
+        VALUES (${tenantId},${staff.id},${location.id},now()-interval '2 hours',now()-interval '1 hour','confirmed') RETURNING id,starts_at,ends_at`;
+      const [booking] = await tx`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents)
+        VALUES (${tenantId},${block.id},${service.id},${staff.id},${location.id},${client.id},${block.starts_at},${block.ends_at},'arrived',12500) RETURNING id`;
+      const [sale] = await tx`SELECT id FROM commerce_sales WHERE tenant_id=${tenantId} AND booking_id=${booking.id}`;
+      const [product] = await tx`INSERT INTO commerce_catalog_items (tenant_id,kind,title,price_cents,currency)
+        VALUES (${tenantId},'product',${productTitle},3750,${settings.currency}) RETURNING id`;
+      return { tenantId, booking, sale, product };
+    });
+    await page.goto("/login");
+    await page.getByLabel("Work email").fill("owner@nordic.local");
+    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/nordic\/app/);
+    const reviewPath = `/nordic/app/sales?sale=${fixture.sale.id}`;
+    const review = page.getByRole("dialog", { name: "Appointment checkout" });
+    await page.goto(reviewPath);
+    await review.getByRole("combobox", { name: "Product", exact: true }).selectOption(fixture.product.id);
+    await review.getByLabel("Quantity", { exact: true }).fill("2");
+    await review.getByRole("button", { name: "Add product", exact: true }).click();
+    await expect(review.getByText(`${productTitle} × 2`, { exact: true })).toBeVisible();
+    await review.getByRole("link", { name: "Go to payments" }).click();
+    await expect(review.getByLabel("Amount (DKK)")).toHaveValue("200.00");
+    await review.getByLabel("Method").selectOption("cash");
+
+    const other = await page.context().newPage();
+    try {
+      await other.goto(reviewPath);
+      await other.getByRole("button", { name: `Remove ${productTitle}` }).click();
+      await expect(other.getByText(`${productTitle} × 2`, { exact: true })).toHaveCount(0);
+      await review.getByRole("button", { name: "Record payment", exact: true }).click();
+      await expect(review.getByRole("alert")).toContainText("The checkout balance changed.");
+      await expect(review.getByLabel("Amount (DKK)")).toHaveValue("200.00");
+    } finally {
+      await other.close();
+    }
+    await review.getByRole("link", { name: "Back to checkout" }).click();
+    await review.getByRole("combobox", { name: "Product", exact: true }).selectOption(fixture.product.id);
+    await review.getByLabel("Quantity", { exact: true }).fill("2");
+    await review.getByRole("button", { name: "Add product", exact: true }).click();
+    await expect(review.getByText(`${productTitle} × 2`, { exact: true })).toBeVisible();
+    await review.getByRole("link", { name: "Go to payments" }).click();
+    await expect(review.getByLabel("Amount (DKK)")).toHaveValue("200.00");
+    await review.getByLabel("Method").selectOption("cash");
+    await review.getByLabel("Amount (DKK)").fill("200.01");
+    await review.getByRole("button", { name: "Record payment", exact: true }).click();
+    await expect(review.getByRole("alert")).toContainText("appointment payment cannot exceed the checkout total");
+    await review.getByLabel("Amount (DKK)").fill("200.00");
+    await review.getByRole("button", { name: "Record payment", exact: true }).click();
+    await expect(review.getByText("Paid SALE", { exact: true })).toBeVisible();
+    await expect(review.getByRole("button", { name: `Remove ${productTitle}` })).toHaveCount(0);
+    expect(await db`SELECT kind,amount_cents,method FROM payment_records WHERE tenant_id=${fixture.tenantId} AND booking_id=${fixture.booking.id}`).toEqual([
+      { kind: "payment", amount_cents: 20000, method: "cash" },
+    ]);
+    await expect(db`UPDATE commerce_sale_lines SET quantity=1 WHERE tenant_id=${fixture.tenantId} AND sale_id=${fixture.sale.id}`).rejects.toThrow("products cannot be changed after an appointment payment");
+  } finally {
+    await db.end();
+  }
+});

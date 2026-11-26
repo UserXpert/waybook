@@ -12,7 +12,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { withSuccessToast } from "@/lib/waybook/toast";
 import { giftCardCodeHashes, normaliseGiftCardCode } from "@/lib/waybook/gift-card-code";
 
-const quantityFrom = (value: FormDataEntryValue | null) => Number.parseInt(String(value ?? ""), 10);
+const quantityFrom = (value: FormDataEntryValue | null) => Number(value);
 
 export async function addProductToAppointmentSale(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -27,15 +27,15 @@ export async function addProductToAppointmentSale(formData: FormData) {
   const identity = await requireIdentity();
   const db = tenantDb(tenant);
   await db.begin(async (transaction) => {
-    const [sale] = await transaction.unsafe<{ id: string; bookingId: string; status: string; bookingStatus: string }[]>(
-      "SELECT cs.id,cs.booking_id AS \"bookingId\",cs.status,b.status AS \"bookingStatus\" FROM commerce_sales cs JOIN bookings b ON b.id=cs.booking_id AND b.tenant_id=cs.tenant_id WHERE cs.id=$1 AND cs.tenant_id=$2 FOR UPDATE OF cs,b",
+    const [sale] = await transaction.unsafe<{ id: string; bookingId: string; status: string; bookingStatus: string; currency: string }[]>(
+      "SELECT cs.id,cs.booking_id AS \"bookingId\",cs.status,cs.currency,b.status AS \"bookingStatus\" FROM commerce_sales cs JOIN bookings b ON b.id=cs.booking_id AND b.tenant_id=cs.tenant_id WHERE cs.id=$1 AND cs.tenant_id=$2 FOR UPDATE OF cs,b",
       [saleId, tenant.id],
     );
-    const [product] = await transaction.unsafe<{ id: string; title: string; priceCents: number }[]>(
-      "SELECT id,title,price_cents AS \"priceCents\" FROM commerce_catalog_items WHERE id=$1 AND tenant_id=$2 AND kind='product' AND is_active=TRUE FOR SHARE",
+    const [product] = await transaction.unsafe<{ id: string; title: string; priceCents: number; currency: string }[]>(
+      "SELECT id,title,price_cents AS \"priceCents\",currency FROM commerce_catalog_items WHERE id=$1 AND tenant_id=$2 AND kind='product' AND is_active=TRUE FOR SHARE",
       [productId, tenant.id],
     );
-    if (!sale || !product) throw new Error("The appointment sale or product is no longer available.");
+    if (!sale || !product || product.currency !== sale.currency) throw new Error("The appointment sale or product is no longer available.");
     if (sale.status !== "open" || !["confirmed", "arrived"].includes(sale.bookingStatus)) throw new Error("Products can only be added to confirmed or arrived appointments with an open sale.");
     const [line] = await transaction.unsafe<{ id: string }[]>(
       "INSERT INTO commerce_sale_lines (tenant_id,sale_id,catalog_item_id,line_kind,title_snapshot,unit_price_cents,quantity) VALUES ($1,$2,$3,'product',$4,$5,$6) RETURNING id",
@@ -55,6 +55,36 @@ export async function addProductToAppointmentSale(formData: FormData) {
   revalidatePath("/app/calendars");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`, "Product added to sale."));
+}
+
+export async function removeProductFromAppointmentSale(formData: FormData) {
+  const { tenant, membership } = await requireTenantWorkspace();
+  await requireFeature(tenant.id, "booking-essentials");
+  if (!(await staffPermissionContext(tenant, membership)).isManager) throw new Error("You do not have permission to remove appointment products.");
+
+  const saleId = String(formData.get("saleId") ?? "");
+  const lineId = String(formData.get("lineId") ?? "");
+  const identity = await requireIdentity();
+  const db = tenantDb(tenant);
+  await db.begin(async (transaction) => {
+    const [sale] = await transaction.unsafe<{ bookingId: string }[]>(`
+      SELECT b.id AS "bookingId"
+      FROM commerce_sales cs JOIN bookings b ON b.id=cs.booking_id AND b.tenant_id=cs.tenant_id
+      WHERE cs.id=$1 AND cs.tenant_id=$2 AND cs.status='open' FOR UPDATE OF b
+    `, [saleId, tenant.id]);
+    if (!sale) throw new Error("The appointment sale is no longer available.");
+    const [line] = await transaction.unsafe<{ id: string }[]>(`
+      DELETE FROM commerce_sale_lines WHERE tenant_id=$1 AND sale_id=$2 AND id=$3 AND line_kind='product'
+      RETURNING id
+    `, [tenant.id, saleId, lineId]);
+    if (!line) return;
+    const metadata = JSON.stringify({ saleId, lineId, bookingId: sale.bookingId });
+    await transaction.unsafe("INSERT INTO booking_events (tenant_id,booking_id,actor_identity_id,event_type,metadata) VALUES ($1,$2,$3,'commerce.product_removed',$4::jsonb)", [tenant.id, sale.bookingId, identity.id, metadata]);
+    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata) VALUES ($1,$2,'appointment_sale.product_removed','commerce_sale',$3,$4::jsonb)", [tenant.id, identity.id, saleId, metadata]);
+  });
+  revalidatePath("/app/sales");
+  revalidatePath("/app/bookings");
+  revalidatePath("/app/calendars");
 }
 
 export async function redeemPackageForAppointmentSale(formData: FormData) {
