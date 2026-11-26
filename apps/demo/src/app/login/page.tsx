@@ -10,18 +10,19 @@ import { login } from "./actions";
 import { PasswordField } from "./password-field";
 import { FeatureMessages } from "./feature-messages";
 
-async function getClientLogo(requestHeaders: Headers) {
+async function getClientBranding(requestHeaders: Headers) {
+  const tenant = await tenantForPublicRequest(requestHeaders).catch(() => null);
+  if (!tenant) return null;
+
   try {
-    const tenant = await tenantForPublicRequest(requestHeaders);
-    if (!tenant) return null;
     const [settings] = await tenantDb(tenant)<{ bookingPage: { logoUrl?: unknown } | string | null }[]>`
       SELECT booking_page AS "bookingPage"
       FROM tenant_settings WHERE tenant_id = ${tenant.id} LIMIT 1
     `;
     const src = publicBookingImageUrl(parseBookingPage(settings?.bookingPage).logoUrl);
-    return src ? { src, name: tenant.name } : null;
+    return { src, name: tenant.name };
   } catch {
-    return null;
+    return { src: undefined, name: tenant.name };
   }
 }
 
@@ -30,10 +31,10 @@ export default async function Login({
 }: {
   searchParams: Promise<{ error?: string; reset?: string; google?: string; access?: string }>;
 }) {
-  const [{ error, reset, google, access }, requestHeaders, googleAvailable] = await Promise.all([
-    searchParams, headers(), googleSignInAvailable(),
+  const requestHeaders = await headers();
+  const [{ error, reset, google, access }, clientBranding, googleAvailable] = await Promise.all([
+    searchParams, getClientBranding(requestHeaders), googleSignInAvailable(),
   ]);
-  const clientLogo = await getClientLogo(requestHeaders);
   const loginPath = loginPathForTenant(requestHeaders.get("x-waybook-tenant-route"));
 
   return (
@@ -42,9 +43,9 @@ export default async function Login({
         <img className="waybook-login-brand" src="/brand/waybook-logo.svg" alt="Waybook" />
 
         <section className="waybook-login-panel" aria-labelledby="login-title">
-          {clientLogo ? <ClientLogo {...clientLogo} /> : null}
+          {clientBranding?.src ? <ClientLogo src={clientBranding.src} name={clientBranding.name} /> : null}
           <div className="waybook-login-panel__inner">
-            <h1 id="login-title">Sign in to Waybook</h1>
+            <h1 id="login-title">{clientBranding ? "Welcome back" : "Sign in to Waybook"}</h1>
             <p className="waybook-login-intro">Use your work account to access your workspace.</p>
             {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
             {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
@@ -72,7 +73,7 @@ export default async function Login({
             ) : null}
           </div>
           <p className="waybook-login-signup">
-            New business? <a href="https://waybook-website.vercel.app/en#venteliste">Sign up for early access</a>
+            New business? <a href="https://waybook-website.vercel.app/en#venteliste">{clientBranding ? "Request access" : "Sign up for early access"}</a>
           </p>
         </section>
 
