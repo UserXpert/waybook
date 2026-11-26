@@ -88,13 +88,8 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
             expect(await deliver()).toBe(503);
             expect(await receipts(id)).toEqual([]);
           }
-          expect(await Promise.all([deliver(), deliver()])).toEqual([204, 204]);
-          expect(await attempts(id)).toEqual([{ id: reserved.id, state: index === 2 ? "settled" : "expired", session_id: sessionId }]);
-          await page.reload();
           if (index === 2) {
-            await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
             const receipt = { id: reserved.id, amount_cents: 6503, method: "card" };
-            expect(await receipts(id)).toEqual([receipt]);
             const paymentIntent = `pi_${sessionId.slice(8)}`;
             const externalId = `re_dashboard${paymentIntent.slice(3)}`;
             const externalResource = { object: "refund", id: externalId, amount: 503, currency: "dkk", payment_intent: paymentIntent };
@@ -106,14 +101,19 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
             expect(await deliverStripe(sender.request, endpoint, {
               ...external, data: { object: { ...externalResource, amount: 1 } },
             })).toBe(503);
-            expect(await receipts(id)).toEqual([receipt]);
+            expect(await receipts(id)).toEqual([]);
+            expect(await attempts(id)).toEqual([{ id: reserved.id, state: "pending", session_id: null }]);
             const importRefund = () => deliverStripe(sender.request, endpoint, external);
             expect(await Promise.all([importRefund(), importRefund()])).toEqual([204, 204]);
+            expect(await attempts(id)).toEqual([{ id: reserved.id, state: "settled", session_id: sessionId }]);
             const [imported] = await db`SELECT id, state, created_by_identity_id FROM stripe_sandbox_refund_attempts WHERE refund_id = ${externalId}`;
             expect(imported).toMatchObject({ state: "succeeded", created_by_identity_id: null });
             const importedReceipt = { id: imported.id, amount_cents: 503, method: "card" };
             expect(await receipts(id)).toEqual([receipt, importedReceipt]);
+            expect(await Promise.all([deliver(), deliver()])).toEqual([204, 204]);
+            expect(await receipts(id)).toEqual([receipt, importedReceipt]);
             await page.reload();
+            await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
             await expect(sale.getByText("Refund recorded", { exact: true }).locator("..")).toContainText("Stripe sandbox");
             await sale.getByRole("button", { name: "Finish checkout" }).click();
             const refundAmount = sale.getByLabel("Refund amount (DKK)");
@@ -172,6 +172,9 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
               }
             }
           } else {
+            expect(await Promise.all([deliver(), deliver()])).toEqual([204, 204]);
+            expect(await attempts(id)).toEqual([{ id: reserved.id, state: "expired", session_id: sessionId }]);
+            await page.reload();
             await expect(sale.getByRole("button", { name: "Record payment" })).toBeVisible();
             expect(await receipts(id)).toEqual([]);
           }

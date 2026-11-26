@@ -176,8 +176,13 @@ the exact refund through Stripe. The sale activity identifies Stripe as the
 source. Refunding an appointment in Stripe before staff finish checkout still
 allows them to finish the original appointment.
 
-Hosted sandbox verification, events delivered before the original Stripe
-payment is recorded, and existing-account connection remain part of
+If the refund notification arrives ahead of the checkout notification, Waybook
+finds the provider's Checkout Session by payment intent on the same account.
+It verifies the original pending attempt and records the payment before
+applying the refund. Duplicate checkout and refund notifications preserve one
+payment receipt and one refund entry.
+
+Hosted sandbox verification and existing-account connection remain part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)

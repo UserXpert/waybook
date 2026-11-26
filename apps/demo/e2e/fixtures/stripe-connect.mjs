@@ -46,8 +46,12 @@ globalThis.fetch = async (input, init) => {
     }
     const refundId = url.pathname.split("/").at(-1);
     if (request.method === "GET" && /^re_dashboard[A-Za-z0-9]+$/.test(refundId)) {
-      const intent = `pi_${refundId.slice("re_dashboard".length)}`;
-      if (![...sessions.values()].some(({ checkout }) => checkout.payment_intent === intent)) return error(404);
+      const suffix = refundId.slice("re_dashboard".length);
+      const intent = `pi_${suffix}`;
+      const session = sessions.get(`cs_test_${suffix}`);
+      if (session?.checkout.amount_total !== 6503 || session.checkout.status === "expired") return error(404);
+      // The Dashboard refund exists after the card paid on Stripe, before Waybook received the success event.
+      Object.assign(session.checkout, { status: "complete", payment_status: "paid", payment_intent: intent, url: null });
       return Response.json({ id: refundId, object: "refund", payment_intent: intent, amount: 503, currency: "dkk",
         metadata: {}, status: "succeeded" });
     }
@@ -62,6 +66,12 @@ globalThis.fetch = async (input, init) => {
   if (url.pathname.startsWith("/v1/checkout/sessions")) {
     const account = request.headers.get("Stripe-Account");
     if (account !== "acct_checkoutFixture") return error(403);
+    if (request.method === "GET" && url.pathname === "/v1/checkout/sessions") {
+      const intent = url.searchParams.get("payment_intent");
+      if (!intent?.startsWith("pi_") || url.searchParams.get("limit") !== "2") return error(400);
+      return Response.json({ object: "list", has_more: false,
+        data: [...sessions.values()].map(({ checkout }) => checkout).filter((checkout) => checkout.payment_intent === intent) });
+    }
     if (url.pathname === "/v1/checkout/sessions" && request.method === "POST") {
       const body = new URLSearchParams(await request.text());
       const key = request.headers.get("Idempotency-Key");

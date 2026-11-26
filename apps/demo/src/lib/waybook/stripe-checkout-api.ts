@@ -2,6 +2,7 @@ import type { StripeSandboxConfig } from "./stripe-connect-api";
 
 const checkoutSessions = "https://api.stripe.com/v1/checkout/sessions";
 const sessionIdPattern = /^cs_test_[A-Za-z0-9]+$/;
+const attemptIdPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
 export type SandboxCheckoutAttempt = {
   id: string;
@@ -64,28 +65,17 @@ function verifySession(
 }
 
 export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: typeof fetch = fetch) {
-  async function call(
-    attempt: SandboxCheckoutAttempt,
-    operation: "create" | "retrieve" | "expire",
-    sessionId?: string,
-    body?: URLSearchParams,
-  ) {
-    if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(config.secretKey) ||
-        !/^acct_[A-Za-z0-9]+$/.test(attempt.accountId) ||
-        !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(attempt.id) ||
-        !Number.isInteger(attempt.amountCents) || attempt.amountCents <= 0 || attempt.amountCents > 10_000_000 ||
-        !Number.isSafeInteger(attempt.expiresAtSeconds) || attempt.expiresAtSeconds <= 0 ||
-        (sessionId !== undefined && !sessionIdPattern.test(sessionId))) {
+  async function stripeRequest(accountId: string, url: string, method: "GET" | "POST", body?: URLSearchParams, key?: string) {
+    if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(config.secretKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
       throw new Error("Invalid Stripe sandbox checkout context.");
     }
-    const sessionPath = sessionId ? `${checkoutSessions}/${sessionId}` : checkoutSessions;
-    const response = await request(operation === "expire" ? `${sessionPath}/expire` : sessionPath, {
-      method: operation === "retrieve" ? "GET" : "POST",
+    const response = await request(url, {
+      method,
       headers: {
         Authorization: `Bearer ${config.secretKey}`,
         "Stripe-Version": "2026-11-18.endive",
-        "Stripe-Account": attempt.accountId,
-        ...(operation === "create" ? { "Idempotency-Key": attempt.id } : {}),
+        "Stripe-Account": accountId,
+        ...(key ? { "Idempotency-Key": key } : {}),
       },
       body,
       redirect: "error",
@@ -93,10 +83,45 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error("Stripe sandbox checkout is temporarily unavailable.");
+    return response;
+  }
+
+  async function call(
+    attempt: SandboxCheckoutAttempt,
+    operation: "create" | "retrieve" | "expire",
+    sessionId?: string,
+    body?: URLSearchParams,
+  ) {
+    if (!attemptIdPattern.test(attempt.id) ||
+        !Number.isInteger(attempt.amountCents) || attempt.amountCents <= 0 || attempt.amountCents > 10_000_000 ||
+        !Number.isSafeInteger(attempt.expiresAtSeconds) || attempt.expiresAtSeconds <= 0 ||
+        (sessionId !== undefined && !sessionIdPattern.test(sessionId))) {
+      throw new Error("Invalid Stripe sandbox checkout context.");
+    }
+    const sessionPath = sessionId ? `${checkoutSessions}/${sessionId}` : checkoutSessions;
+    const response = await stripeRequest(attempt.accountId, operation === "expire" ? `${sessionPath}/expire` : sessionPath,
+      operation === "retrieve" ? "GET" : "POST", body, operation === "create" ? attempt.id : undefined);
     return verifySession(await response.json(), attempt, sessionId);
   }
 
   return {
+    async findByPaymentIntent(accountId: string, paymentIntentId: string) {
+      if (!/^pi_[A-Za-z0-9]+$/.test(paymentIntentId)) throw new Error("Invalid Stripe payment intent.");
+      const query = new URLSearchParams({ payment_intent: paymentIntentId, limit: "2" });
+      const response = await stripeRequest(accountId, `${checkoutSessions}?${query}`, "GET");
+      const page = await response.json() as { object?: unknown; has_more?: unknown; data?: SessionResponse[] } | null;
+      if (page?.object !== "list" || page.has_more !== false || !Array.isArray(page.data) || page.data.length > 1) {
+        throw new Error("Stripe did not confirm a unique checkout session for the payment.");
+      }
+      if (page.data.length === 0) return null;
+      const session = page.data[0];
+      if (session?.object !== "checkout.session" || session.livemode !== false || session.mode !== "payment" ||
+          session.payment_intent !== paymentIntentId || typeof session.id !== "string" || !sessionIdPattern.test(session.id)) {
+        throw new Error("Stripe returned an unexpected checkout session for the payment.");
+      }
+      const attemptId = session.client_reference_id;
+      return typeof attemptId === "string" && attemptIdPattern.test(attemptId) ? { id: session.id, attemptId } : null;
+    },
     create(attempt: SandboxCheckoutAttempt) {
       const returnUrl = new URL(attempt.returnPath, config.origin);
       if (returnUrl.origin !== config.origin || returnUrl.username || returnUrl.password ||

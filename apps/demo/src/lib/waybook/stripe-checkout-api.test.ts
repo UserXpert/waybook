@@ -78,6 +78,33 @@ test("retrieval distinguishes paid, expired and processing sessions", async () =
   }
 });
 
+test("lookup identifies the Checkout Session for a single connected payment intent", async () => {
+  const session = { ...open, status: "complete", payment_status: "paid", payment_intent: "pi_fixture" };
+  const page = { object: "list", has_more: false, data: [session] };
+  const stripe = stripeCheckoutSandbox(config, async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.url, "https://api.stripe.com/v1/checkout/sessions?payment_intent=pi_fixture&limit=2");
+    assert.equal(request.method, "GET");
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    assert.equal(request.headers.get("Idempotency-Key"), null);
+    return Response.json(page);
+  });
+  assert.deepEqual(await stripe.findByPaymentIntent(attempt.accountId, "pi_fixture"), { id: sessionId, attemptId: attempt.id });
+
+  for (const details of [
+    { data: [session, { ...session, id: "cs_test_other" }] },
+    { has_more: true },
+    { data: [null] },
+    { data: [{ ...session, livemode: true }] },
+    { data: [{ ...session, payment_intent: "pi_other" }] },
+  ]) {
+    const unexpected = stripeCheckoutSandbox(config, async () => Response.json({ ...page, ...details }));
+    await assert.rejects(() => unexpected.findByPaymentIntent(attempt.accountId, "pi_fixture"), /Stripe/);
+  }
+  const unrelated = stripeCheckoutSandbox(config, async () => Response.json({ ...page, data: [] }));
+  assert.equal(await unrelated.findByPaymentIntent(attempt.accountId, "pi_fixture"), null);
+});
+
 test("checkout rejects mismatched sessions, forged redirects and contradictory outcomes", async () => {
   for (const details of [
     { id: "cs_live_fixture" }, { id: "cs_test_unrelated" }, { livemode: true },

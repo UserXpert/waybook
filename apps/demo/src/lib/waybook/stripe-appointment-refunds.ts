@@ -1,7 +1,7 @@
 import "server-only";
 
 import { tenantDb } from "./database";
-import { appointmentStripeAccount } from "./stripe-appointment-checkout";
+import { appointmentStripeAccount, recoverStripeCheckoutByPaymentIntent } from "./stripe-appointment-checkout";
 import type { StripeSandboxConfig } from "./stripe-connect-api";
 import type { StripeDashboardRefundNotification, StripeRefundNotification } from "./stripe-sandbox-webhook";
 import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
@@ -202,12 +202,27 @@ export async function settleStripeRefundNotification(
 
 async function recordDashboardRefund(db: Database, tenantId: string, config: StripeSandboxConfig, notification: StripeDashboardRefundNotification) {
   const { accountId, paymentIntentId, amountCents, refundId } = notification;
-  const [linked] = await db.unsafe<{ bookingId: string }[]>(`
+  const linkedPayment = async () => (await db.unsafe<{ bookingId: string }[]>(`
     SELECT booking_id AS "bookingId" FROM stripe_sandbox_checkout_attempts
     WHERE tenant_id = $1 AND account_id = $2 AND payment_intent_id = $3 AND state = 'settled'
-  `, [tenantId, accountId, paymentIntentId]);
-  if (!linked) return;
+  `, [tenantId, accountId, paymentIntentId]))[0];
+  let linked = await linkedPayment();
+  if (!linked) {
+    const [pending] = await db.unsafe(`
+      SELECT id FROM stripe_sandbox_checkout_attempts
+      WHERE tenant_id = $1 AND account_id = $2 AND state = 'pending' LIMIT 1
+    `, [tenantId, accountId]);
+    if (!pending) linked = await linkedPayment();
+    if (!pending && !linked) return;
+  }
   const refund = await stripeRefundSandbox(config).retrieveDashboard(notification, refundId);
+  if (!linked) {
+    const recovered = await recoverStripeCheckoutByPaymentIntent(db, tenantId, config, notification);
+    // A simultaneous checkout notification can settle the intent during lookup.
+    linked = await linkedPayment();
+    if (!linked && !recovered) return;
+    if (!linked) throw new Error("The verified checkout payment is not in the ledger yet.");
+  }
   const context = { db, tenantId, bookingId: linked.bookingId };
   await db.begin(async (sql) => {
     await lockBooking(sql, context);

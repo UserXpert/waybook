@@ -172,3 +172,24 @@ export async function settleStripeCheckoutNotification(config: StripeSandboxConf
   // The same appointment lock protects manual checks and webhook retries.
   await reconcileAttempt({ db, tenantId: tenant.id, bookingId: attempt.bookingId }, attempt, session);
 }
+
+export async function recoverStripeCheckoutByPaymentIntent(
+  db: TenantDatabase, tenantId: string, config: StripeSandboxConfig,
+  { accountId, paymentIntentId }: { accountId: string; paymentIntentId: string },
+) {
+  const stripe = stripeCheckoutSandbox(config);
+  const candidate = await stripe.findByPaymentIntent(accountId, paymentIntentId);
+  if (!candidate) return false;
+  const [attempt] = await db.unsafe<Attempt[]>(`
+    ${selectAttempt} WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND state <> 'expired'
+  `, [tenantId, accountId, candidate.attemptId]);
+  if (!attempt) return false;
+  if (attempt.sessionId && attempt.sessionId !== candidate.id) throw new Error("The Stripe session changed unexpectedly.");
+  const session = await stripe.retrieve(attempt, candidate.id);
+  if (session.state !== "paid" || session.paymentIntentId !== paymentIntentId) {
+    throw new Error("Stripe has not confirmed the original checkout payment.");
+  }
+  const result = await reconcileAttempt({ db, tenantId, bookingId: attempt.bookingId }, attempt, session);
+  if (result.state !== "paid") throw new Error("The original Stripe payment could not be recorded.");
+  return true;
+}
