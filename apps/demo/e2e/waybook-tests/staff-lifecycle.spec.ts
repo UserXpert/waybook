@@ -18,12 +18,17 @@ for (const workspaceCase of workspaces) test(`staff grants and deactivation gove
   const app = `/${workspaceCase.route}/app`;
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
   const tenant = postgres(process.env[workspaceCase.database]!, { max: 1, ssl: false });
-  const email = `lifecycle-qa-${randomUUID()}@example.test`;
+  const testId = randomUUID();
+  const email = `lifecycle-qa-${testId}@example.test`;
   const name = "Z QA staff lifecycle";
+  const colleagueName = `Z QA time-off colleague ${testId.slice(0, 8)}`;
   const staffContext = await browser.newContext({ baseURL, viewport: page.viewportSize() ?? undefined });
   let identityId: string | undefined;
   let memberId: string | undefined;
   let colleagueId: string | undefined;
+  let bookingId: string | undefined;
+  let blockId: string | undefined;
+  let customerId: string | undefined;
   try {
     const [workspace] = await control`SELECT id FROM tenants WHERE slug=${workspaceCase.slug}`;
     const [owner] = await control`SELECT password_hash FROM identities WHERE email=${workspaceCase.owner}`;
@@ -33,7 +38,7 @@ for (const workspaceCase of workspaces) test(`staff grants and deactivation gove
     const [member] = await tenant`INSERT INTO team_members (tenant_id,identity_id,role,name,email) VALUES (${workspace.id},${identityId},'staff',${name},${email}) RETURNING id`;
     memberId = member.id;
     const [colleague] = await tenant`INSERT INTO team_members (tenant_id,role,name,email)
-      VALUES (${workspace.id},'staff','Z QA time-off colleague',${`colleague-${email}`}) RETURNING id`;
+      VALUES (${workspace.id},'staff',${colleagueName},${`colleague-${email}`}) RETURNING id`;
     colleagueId = colleague.id;
     const profile = `${app}/team?employee=${memberId}`;
     const timeOff = profile + "&tab=time-off";
@@ -51,14 +56,14 @@ for (const workspaceCase of workspaces) test(`staff grants and deactivation gove
     await staff.reload();
     await expect(save).toBeEnabled();
     await staff.goto(colleagueTimeOff);
-    await expect(staff.getByRole("heading", { name: "Z QA time-off colleague", exact: true })).toHaveCount(0);
+    await expect(staff.getByRole("heading", { name: colleagueName, exact: true })).toHaveCount(0);
 
     await tenant`UPDATE staff_permissions SET can_manage_team_time_off=true
       WHERE tenant_id=${workspace.id} AND team_member_id=${member.id}`;
     await staff.goto(timeOff);
-    await staff.getByRole("link", { name: /Z QA time-off colleague/ }).click();
+    await staff.getByRole("link", { name: new RegExp(colleagueName) }).click();
     await expect(staff).toHaveURL(colleagueTimeOff);
-    await expect(staff.getByRole("heading", { name: "Z QA time-off colleague", exact: true })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: colleagueName, exact: true })).toBeVisible();
     await expect(staff.getByText(`colleague-${email}`, { exact: true })).toHaveCount(0);
     await save.click();
     await expect(staff.getByText("Time off saved.", { exact: true })).toBeVisible();
@@ -89,10 +94,18 @@ for (const workspaceCase of workspaces) test(`staff grants and deactivation gove
     await signIn(page, workspaceCase.owner);
     await expect(page).toHaveURL((url) => url.pathname === app);
     await page.goto(profile);
-    await page.getByLabel(`Actions for ${name}`).click();
+    const actions = page.getByLabel(`Actions for ${name}`);
+    await actions.click();
+    await expect(page.getByRole("button", { name: "Delete", exact: true })).toHaveCount(0);
+    await page.getByRole("heading", { name, exact: true }).click();
+    await expect(page.getByRole("button", { name: "Deactivate", exact: true })).toBeHidden();
+    await actions.click();
     await page.getByRole("button", { name: "Deactivate", exact: true }).click();
     await expect(page.getByText("Staff access updated.", { exact: true })).toBeVisible();
     expect(await tenant`SELECT is_active FROM team_members WHERE id=${memberId}`).toEqual([{ is_active: false }]);
+    await actions.click();
+    await expect(page.getByRole("button", { name: "Delete", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
 
     await save.click();
     await expect(staff).toHaveURL(/\/login\?access=inactive/);
@@ -129,9 +142,50 @@ for (const workspaceCase of workspaces) test(`staff grants and deactivation gove
     expect(await tenant`SELECT is_active, archived_at IS NOT NULL AS archived FROM team_members WHERE id=${memberId}`).toEqual([{ is_active: true, archived: false }]);
     await signIn(staff, email);
     await expect(staff).toHaveURL((url) => url.pathname === `${app}/calendars`);
+
+    const [service] = await tenant`SELECT id FROM services WHERE tenant_id=${workspace.id} LIMIT 1`;
+    const [customer] = await tenant`INSERT INTO customers (tenant_id,name,email) VALUES (${workspace.id},'QA lifecycle customer',${`customer-${email}`}) RETURNING id`;
+    customerId = customer.id;
+    const [booking] = await tenant`
+      WITH block AS (
+        INSERT INTO booking_blocks (tenant_id,team_member_id,starts_at,ends_at,state)
+        VALUES (${workspace.id},${memberId},now()-interval '1 day',now()-interval '1 day'+interval '30 minutes','confirmed')
+        RETURNING id,starts_at,ends_at
+      )
+      INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,customer_id,starts_at,ends_at,status,source,booked_price_cents)
+      SELECT ${workspace.id},id,${service.id},${memberId},${customer.id},starts_at,ends_at,'completed','tenant',0 FROM block
+      RETURNING id,booking_block_id
+    `;
+    bookingId = booking.id;
+    blockId = booking.booking_block_id;
+    await actions.click();
+    const archiveBeforeDeletion = workspaceCase.route === "nordic";
+    await page.getByRole("button", { name: archiveBeforeDeletion ? "Archive" : "Deactivate", exact: true }).click();
+    await expect(page.getByRole("heading", { name, exact: true }).locator("..")).toContainText("Inactive");
+    await actions.click();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    const confirmation = page.getByRole("form", { name: "Delete staff profile" });
+    await expect(confirmation.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await confirmation.getByRole("button", { name: "Cancel" }).click();
+    await expect(actions).toBeFocused();
+    await actions.click();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await confirmation.getByRole("button", { name: "Delete profile" }).click();
+    await expect(page.getByRole("heading", { name, exact: true })).toHaveCount(0);
+    expect(await tenant`SELECT is_active, deleted_at IS NOT NULL AS deleted FROM team_members WHERE id=${memberId}`).toEqual([{ is_active: false, deleted: true }]);
+    expect(await tenant`SELECT status, team_member_id FROM bookings WHERE id=${bookingId}`).toEqual([{ status: "completed", team_member_id: memberId }]);
+    expect(await overridesFor(member.id)).toHaveLength(1);
+    await staff.goto(`${app}/calendars`);
+    await expect(staff).toHaveURL(/\/login\?access=inactive/);
   } finally {
     try {
       await staffContext.close();
+      if (bookingId) {
+        await tenant`DELETE FROM commerce_sales WHERE booking_id=${bookingId}`;
+        await tenant`DELETE FROM bookings WHERE id=${bookingId}`;
+      }
+      if (blockId) await tenant`DELETE FROM booking_blocks WHERE id=${blockId}`;
+      if (customerId) await tenant`DELETE FROM customers WHERE id=${customerId}`;
       if (colleagueId) await tenant`DELETE FROM team_members WHERE id=${colleagueId}`;
       if (memberId) await tenant`DELETE FROM team_members WHERE id=${memberId}`;
       if (identityId) {

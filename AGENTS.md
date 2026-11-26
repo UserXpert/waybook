@@ -13,6 +13,10 @@ This block is written and re-added by `turbo` before repository-scoped commands 
 
 - Never use bold text inside form fields. Entered values, placeholders, and selected dropdown values should use regular font weight; labels may be emphasized.
 
+## Dashboard notifications
+
+- Use `WaybookNotificationBanner` for dashboard notification banners. Keep the icon, message, and optional action vertically aligned, use the shared secondary style for actions, and leave at least `1rem` below the navigation when the banner follows it. Render banners only while the relevant condition applies.
+
 ## Waybook development and release process
 
 For implementation, release, or local-server work, follow [.waybook/docs/11_local_release_workflow.md](.waybook/docs/11_local_release_workflow.md):

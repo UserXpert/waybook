@@ -7,6 +7,8 @@ test("Settings appearance follows the system and retains explicit choices after 
   await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/nordic\/app/);
+  await expect(page.locator(".tenant-dashboard-page")).toHaveCSS("background-image", /login-blue-background/);
+  await expect(page.getByRole("link", { name: "New appointment", exact: true })).toHaveCSS("background-color", "rgb(49, 92, 130)");
   await page.goto("/nordic/app/settings");
 
   const html = page.locator("html");
@@ -16,6 +18,8 @@ test("Settings appearance follows the system and retains explicit choices after 
   const light = modes.getByRole("button", { name: "Light", exact: true });
   await expect(system).toHaveAttribute("aria-pressed", "true");
   await expect(html).toHaveAttribute("data-waybook-theme", "light");
+  await expect(html).toHaveAttribute("data-waybook-tint", "blue");
+  await expect(html).toHaveAttribute("data-waybook-background", "ripple");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
   await light.focus();
@@ -28,11 +32,12 @@ test("Settings appearance follows the system and retains explicit choices after 
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
 
   const tints = page.getByRole("group", { name: "Accent tint" });
-  for (const tint of ["Neutral", "Blue", "Violet", "Rose", "Teal", "Coral", "Amber"]) {
-    const swatch = tints.getByRole("button", { name: tint, exact: true });
+  await expect(tints.getByRole("button", { name: "Ice Blue", exact: true })).toHaveAttribute("aria-pressed", "true");
+  for (const [id, label] of Object.entries({ neutral: "Neutral", blue: "Ice Blue", violet: "Violet", rose: "Rose", teal: "Teal", coral: "Coral", amber: "Amber" })) {
+    const swatch = tints.getByRole("button", { name: label, exact: true });
     await swatch.click();
     await expect(swatch).toHaveAttribute("aria-pressed", "true");
-    await expect(html).toHaveAttribute("data-waybook-tint", tint.toLowerCase());
+    await expect(html).toHaveAttribute("data-waybook-tint", id);
     const offset = await swatch.evaluate((button) => {
       const outer = button.getBoundingClientRect();
       const inner = button.querySelector("i")!.getBoundingClientRect();
@@ -49,5 +54,76 @@ test("Settings appearance follows the system and retains explicit choices after 
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
   await expect(html).toHaveAttribute("data-waybook-tint", "amber");
   await system.click();
+  await expect(html).toHaveAttribute("data-waybook-theme", "light");
+});
+
+test("Workspace background stays selected when appearance colours change", async ({ page }) => {
+  await page.goto("/nordic/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/nordic\/app$/);
+  await page.goto("/nordic/app/settings");
+
+  const html = page.locator("html");
+  const dashboard = page.locator(".tenant-dashboard-page");
+  const backgrounds = page.getByRole("group", { name: "Background pattern" });
+  const tints = page.getByRole("group", { name: "Accent tint" });
+  await expect(backgrounds.getByRole("button", { name: "Ripple" })).toHaveAttribute("aria-pressed", "true");
+  await expect(backgrounds.getByRole("button")).toHaveCount(10);
+  await expect(backgrounds).toHaveText("");
+  const ripplePreview = backgrounds.getByRole("button", { name: "Ripple" }).locator("[data-pattern]");
+  const plain = backgrounds.getByRole("button", { name: "Plain", exact: true });
+  const plainPreview = plain.locator("[data-pattern]");
+  await expect.poll(() => ripplePreview.evaluate((preview) => getComputedStyle(preview, "::before").filter)).toBe("grayscale(1)");
+  await expect(plainPreview).toHaveCSS("background-image", "none");
+  await backgrounds.getByRole("button", { name: "Background 2" }).click();
+  await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.webp/);
+  await tints.getByRole("button", { name: "Violet" }).click();
+  await expect(html).toHaveAttribute("data-waybook-background", "photo-1");
+  await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.webp/);
+  await page.getByRole("group", { name: "Colour mode" }).getByRole("button", { name: "Dark" }).click();
+  await page.reload();
+  await expect(html).toHaveAttribute("data-waybook-theme", "dark");
+  await expect(html).toHaveAttribute("data-waybook-tint", "violet");
+  await expect(backgrounds.getByRole("button", { name: "Background 2" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ripplePreview).toHaveCSS("filter", "none");
+  await expect.poll(() => ripplePreview.evaluate((preview) => getComputedStyle(preview, "::before").filter)).toBe("grayscale(1) invert(1)");
+  await expect.poll(() => plainPreview.evaluate((preview) => getComputedStyle(preview, "::before").content)).toBe("none");
+
+  await tints.getByRole("button", { name: "Neutral" }).click();
+  await plain.click();
+  await page.reload();
+  await expect(plain).toHaveAttribute("aria-pressed", "true");
+  await expect(plain).toHaveCSS("border-color", "rgb(170, 170, 176)");
+  await expect(dashboard).toHaveCSS("background-image", "none");
+  await expect(dashboard).toHaveCSS("background-color", "color(srgb 0.13051 0.13051 0.137725)");
+  await expect(plainPreview).toHaveCSS("background-color", "color(srgb 0.13051 0.13051 0.137725)");
+  const modes = page.getByRole("group", { name: "Colour mode" });
+  await modes.getByRole("button", { name: "Light" }).click();
+  await expect(dashboard).toHaveCSS("background-image", "none");
+  await expect(dashboard).toHaveCSS("background-color", "rgb(242, 244, 247)");
+  await modes.getByRole("button", { name: "Dark" }).click();
+  await backgrounds.getByRole("button", { name: "Ripple" }).click();
+  await expect(dashboard).toHaveCSS("background-image", /login-blue-background/);
+  await expect(dashboard).toHaveCSS("background-color", "rgb(14, 14, 16)");
+  await tints.getByRole("button", { name: "Ice Blue" }).click();
+  await expect(dashboard).toHaveCSS("background-image", /login-blue-background/);
+  await expect(dashboard).toHaveCSS("background-color", "rgb(17, 22, 28)");
+  const headerStyles = page.getByRole("group", { name: "Header", exact: true });
+  const header = page.locator('header[aria-label="Tenant dashboard navigation"]');
+  await expect(headerStyles.getByRole("button")).toHaveCount(2);
+  await expect(html).toHaveAttribute("data-waybook-header", "light");
+  await headerStyles.getByRole("button", { name: "Dark", exact: true }).click();
+  await headerStyles.getByRole("button", { name: "Light", exact: true }).click();
+  await expect(html).toHaveAttribute("data-waybook-header", "light");
+  await expect(html).toHaveAttribute("data-waybook-theme", "dark");
+  await expect(header.locator(".tenant-dashboard-nav__logo--light")).toBeVisible();
+  await page.reload();
+  await expect(headerStyles.getByRole("button", { name: "Light", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await headerStyles.getByRole("button", { name: "Dark", exact: true }).click();
+  await page.getByRole("group", { name: "Colour mode" }).getByRole("button", { name: "Light", exact: true }).click();
+  await expect(header).toHaveCSS("background-color", "rgb(16, 16, 16)");
+  await expect(header.locator(".tenant-dashboard-nav__logo--dark")).toBeVisible();
   await expect(html).toHaveAttribute("data-waybook-theme", "light");
 });

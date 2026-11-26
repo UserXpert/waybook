@@ -25,18 +25,559 @@ body {
 .waybook-initializing p { color: #5b786f; font-size: .72rem; font-weight: 600; letter-spacing: .14em; }
 .waybook-initializing h1 { font-size: clamp(1.8rem, 4vw, 3rem); letter-spacing: -.05em; }
 .waybook-initializing span { max-width: 32rem; color: #65746e; font-size: .94rem; }
-.waybook-login-page { min-height: 100vh; display: grid; place-items: center; padding: clamp(1rem, 4vw, 4rem); background: #dfe4e1; color: #152821; }.waybook-login-shell { display: grid; grid-template-columns: minmax(26rem, 1.08fr) minmax(27rem, .92fr); width: min(100%, 106rem); min-height: min(48rem, calc(100vh - 4rem)); overflow: hidden; border: 1px solid rgba(20,43,35,.08); border-radius: clamp(1.5rem, 3vw, 2.75rem); background: #fff; box-shadow: 0 2rem 5rem rgba(24,42,34,.14); }.waybook-login-showcase { position: relative; isolation: isolate; display: flex; min-height: 42rem; flex-direction: column; overflow: hidden; padding: clamp(2rem, 4vw, 3.5rem); background: #d7f0e4; }.waybook-login-showcase::before,.waybook-login-showcase::after { position: absolute; z-index: -1; width: 36rem; height: 36rem; border-radius: 50%; content: ""; }.waybook-login-showcase::before { top: -13rem; right: -12rem; background: radial-gradient(circle, rgba(255,255,255,.92) 0 8%, rgba(255,255,255,.26) 9% 25%, transparent 26%); opacity: .85; }.waybook-login-showcase::after { bottom: -18rem; left: -14rem; border: 1px solid rgba(24,74,56,.13); box-shadow: 0 0 0 4rem rgba(255,255,255,.1), 0 0 0 8rem rgba(24,74,56,.045); }.waybook-login-logo { width: min(13rem, 68%); height: auto; }.waybook-login-orbit { position: absolute; top: 22%; left: 14%; z-index: -1; width: 20rem; height: 20rem; border: 1px solid rgba(21,68,51,.15); border-radius: 50%; box-shadow: 0 0 0 2.6rem rgba(255,255,255,.16), 0 0 0 5.2rem rgba(21,68,51,.04); }.waybook-login-widget { width: min(31rem, 96%); margin: auto; border: 1px solid rgba(255,255,255,.85); border-radius: 1.35rem; padding: 1.25rem; background: rgba(255,255,255,.78); box-shadow: 0 1.4rem 3.3rem rgba(21,66,49,.16); backdrop-filter: blur(14px); transform: rotate(-2deg); }.waybook-login-widget__header,.waybook-login-widget__booking { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.waybook-login-widget__header { color: #597067; font-size: .72rem; font-weight: 600; }.waybook-login-widget__header b { border-radius: 99px; padding: .3rem .55rem; background: #ddf8e9; color: #24724f; font-size: .66rem; }.waybook-login-widget__metric { display: grid; grid-template-columns: auto 1fr auto; align-items: flex-end; gap: .45rem; margin: 1.6rem 0 1.3rem; }.waybook-login-widget__metric strong { color: #173f39; font-size: 3.2rem; line-height: .9; letter-spacing: -.09em; }.waybook-login-widget__metric span { align-self: center; color: #587068; font-size: .75rem; line-height: 1.25; }.waybook-login-widget__metric em,.waybook-login-widget__booking em { color: #237552; font-size: .67rem; font-style: normal; font-weight: 600; }.waybook-login-widget__booking { margin-top: .65rem; border: 1px solid #e2ece6; border-radius: .8rem; padding: .7rem; background: rgba(255,255,255,.8); }.waybook-login-widget__booking i { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: .65rem; background: #bce6d2; color: #1e6047; font-size: .62rem; font-style: normal; font-weight: 600; }.waybook-login-widget__booking span { display: grid; flex: 1; gap: .1rem; }.waybook-login-widget__booking b { font-size: .75rem; }.waybook-login-widget__booking small { color: #73877e; font-size: .64rem; }.waybook-login-widget__progress { height: .35rem; margin-top: 1.15rem; overflow: hidden; border-radius: 99px; background: #deebe4; }.waybook-login-widget__progress span { display: block; width: 72%; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#55b58b,#237552); }.waybook-login-showcase__footer { margin-top: auto; }.waybook-login-showcase__footer p { max-width: 8ch; font-family: Georgia, serif; font-size: clamp(2rem, 4vw, 3.8rem); font-weight: 600; line-height: .97; letter-spacing: -.055em; }.waybook-login-showcase__footer span { display: block; max-width: 19rem; margin-top: 1rem; color: #4d6b60; font-size: .84rem; line-height: 1.55; }.waybook-login-panel { display: grid; place-items: center; padding: clamp(2rem, 7vw, 7rem); background: #fff; }.waybook-login-panel__inner { width: min(100%, 25rem); }.waybook-login-mobile-logo { display: none; }.waybook-login-eyebrow { color: #4f8170; font-size: .67rem; font-weight: 600; letter-spacing: .16em; }.waybook-login-panel h1 { margin-top: .55rem; color: #152821; font-family: Georgia, serif; font-size: clamp(2.1rem, 3vw, 3rem); line-height: 1; letter-spacing: -.055em; }.waybook-login-intro { margin: .8rem 0 2rem; color: #6a7d75; font-size: .9rem; }.waybook-login { display: grid; gap: 1rem; text-align: left; }.waybook-login label { display: grid; gap: .45rem; color: #29443a; font-size: .76rem; font-weight: 600; }.waybook-login-label-row { display: flex; justify-content: space-between; gap: 1rem; }.waybook-login-label-row a { color: #287154; font-size: .7rem; text-decoration: none; }.waybook-login-label-row a:hover { text-decoration: underline; }.waybook-login input { width: 100%; height: 3rem; border: 1px solid #d8e2dc; border-radius: .65rem; padding: 0 .85rem; background: #fff; color: #152821; font: inherit; font-size: .86rem; outline-color: #4caa7e; }.waybook-login input::placeholder { color: #a3aea9; }.waybook-login > button { height: 3.15rem; border: 0; border-radius: .7rem; background: #173f39; color: #fff; cursor: pointer; font: inherit; font-size: .85rem; font-weight: 600; }.waybook-login > button:hover { background: #285a4d; }.waybook-login-error { color: #ad3838; font-size: .75rem; }.waybook-login-notice { margin: 0 0 1.25rem; border-left: 3px solid #54a97f; padding: .75rem .85rem; background: #eef8f2; color: #385d4d; font-size: .76rem; line-height: 1.45; }.waybook-login-divider { display: flex; align-items: center; gap: .75rem; margin: 1.4rem 0; color: #a0aaa5; font-size: .69rem; text-align: center; }.waybook-login-divider::before,.waybook-login-divider::after { flex: 1; height: 1px; background: #e3e9e6; content: ""; }.waybook-login-providers { display: grid; gap: .65rem; }.waybook-login-providers button { display: flex; height: 3rem; align-items: center; justify-content: center; gap: .55rem; border: 1px solid #dbe4df; border-radius: .65rem; background: #fff; color: #687b73; font: inherit; font-size: .78rem; font-weight: 600; }.waybook-login-providers button:disabled { cursor: not-allowed; opacity: .72; }.waybook-login-providers b { display: inline-grid; width: 1rem; place-items: center; color: #263f35; font-size: 1rem; }.waybook-login-provider-note { margin-top: .9rem; color: #91a098; font-size: .67rem; line-height: 1.45; text-align: center; }
-/* Login deliberately uses only neutral greys until tenant theme tokens exist. */
-.waybook-login-page { background: #e4e4e4; color: #202020; }
-.waybook-login-shell { grid-template-columns: minmax(26rem, 1fr) minmax(27rem, 1fr); width: min(100%, 105rem); min-height: min(45rem, calc(100vh - 5rem)); border-color: #e0e0e0; border-radius: 2.1rem; box-shadow: 0 1rem 2.5rem rgba(0,0,0,.06); }
-.waybook-login-showcase { min-height: 40rem; padding: 3rem; background: #f5f5f5; }
-.waybook-login-showcase::before { top: 3.5rem; right: -5rem; width: 38rem; height: 38rem; background-image: radial-gradient(#1f1f1f 1px, transparent 1.2px); background-size: 7px 7px; background-position: center; opacity: .15; }
-.waybook-login-showcase::after { bottom: -21rem; left: -12rem; border-color: #d6d6d6; box-shadow: 0 0 0 4rem rgba(255,255,255,.5), 0 0 0 8rem rgba(0,0,0,.025); }
-.waybook-login-logo { width: 11rem; }.waybook-login-orbit { top: 22%; left: 16%; width: 18rem; height: 18rem; border-color: #dedede; box-shadow: 0 0 0 2.5rem rgba(255,255,255,.55), 0 0 0 5rem rgba(0,0,0,.025); }
-.waybook-login-widget { position: relative; z-index: 1; width: min(34rem, 104%); margin: auto -2rem 4.5rem auto; border-color: #ededed; border-radius: 1rem; padding: 1.25rem 1.4rem; background: rgba(255,255,255,.92); box-shadow: 0 1.1rem 2.8rem rgba(0,0,0,.12); backdrop-filter: none; transform: none; }
-.waybook-login-widget__header { color: #555; }.waybook-login-widget__header b { background: #ececec; color: #333; }.waybook-login-widget__metric { margin: 1.25rem 0; }.waybook-login-widget__metric strong { color: #151515; font-size: 2.55rem; }.waybook-login-widget__metric span { color: #666; }.waybook-login-widget__metric em,.waybook-login-widget__booking em { color: #454545; }.waybook-login-widget__booking { border-color: #e8e8e8; background: #fff; }.waybook-login-widget__booking i { background: #e6e6e6; color: #303030; }.waybook-login-widget__booking small { color: #777; }.waybook-login-widget__progress { background: #e9e9e9; }.waybook-login-widget__progress span { background: #252525; }
-.waybook-login-showcase__footer p { max-width: 13ch; font-family: var(--waybook-ui-font); font-size: clamp(1.45rem, 2.2vw, 2.25rem); font-weight: 600; line-height: 1.08; letter-spacing: -.045em; }.waybook-login-showcase__footer span { color: #666; }
-.waybook-login-panel { padding: clamp(2rem, 6vw, 6rem); }.waybook-login-panel__inner { width: min(100%, 24.5rem); }.waybook-login-eyebrow { color: #777; }.waybook-login-panel h1 { color: #1e1e1e; font-family: var(--waybook-ui-font); font-size: clamp(1.8rem, 2.5vw, 2.35rem); font-weight: 600; letter-spacing: -.055em; }.waybook-login-intro { margin: .65rem 0 1.65rem; color: #676767; font-size: .84rem; }.waybook-login label { color: #303030; }.waybook-login-label-row a { color: #333; }.waybook-login input { border-color: #d8d8d8; color: #242424; outline-color: #777; }.waybook-login input::placeholder { color: #a6a6a6; }.waybook-login > button { background: #111; }.waybook-login > button:hover { background: #333; }.waybook-login-error { color: #8b3030; }.waybook-login-notice { border-left-color: #777; background: #f1f1f1; color: #494949; }.waybook-login-divider { color: #888; }.waybook-login-divider::before,.waybook-login-divider::after { background: #e4e4e4; }.waybook-login-providers button { border-color: #dedede; color: #575757; background: #fff; }.waybook-login-providers b { color: #252525; }.waybook-login-provider-note { color: #888; }
+.waybook-login-page {
+  --login-field-border: #d9dbe3;
+  min-height: 100svh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  row-gap: .8rem;
+  padding: clamp(1.25rem, 3vw, 3rem);
+  background: #d8ebfc url("/brand/login-blue-background.jpg") center / cover no-repeat;
+  color: #1e202b;
+  font-family: var(--waybook-ui-font);
+}
+
+.waybook-login-shell {
+  --login-frame-radius: 38px;
+  --login-frame-border: 8px;
+  --login-inner-radius: calc(var(--login-frame-radius) - var(--login-frame-border));
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, .94fr) minmax(0, 1fr);
+  width: min(100%, 92rem);
+  min-height: clamp(36rem, 84svh, 55rem);
+  border: var(--login-frame-border) solid #fff;
+  border-radius: var(--login-frame-radius);
+  corner-shape: squircle;
+  box-shadow: 0 1.5rem 5rem #254b7529;
+}
+
+.waybook-login-brand {
+  position: absolute;
+  z-index: 1;
+  top: clamp(1.5rem, 3vw, 2.75rem);
+  left: clamp(1.5rem, 3vw, 2.75rem);
+  width: 9rem;
+  height: auto;
+}
+
+.waybook-login-art {
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  gap: clamp(1.5rem, 4vh, 3rem);
+  padding: clamp(5.5rem, 11vh, 7.25rem) clamp(1.5rem, 3vw, 2.75rem) clamp(1.5rem, 3vw, 2.75rem);
+  border-radius: var(--login-inner-radius);
+  corner-shape: squircle;
+  background: linear-gradient(180deg, #ffffff36, transparent 40%, #f2f8ff7a);
+}
+
+@media (min-width: 761px) {
+  .waybook-login-art { position: relative; }
+
+  /* Extend the white panel into the two corners while the artwork stays continuous. */
+  .waybook-login-art::before,
+  .waybook-login-art::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    width: var(--login-inner-radius);
+    height: var(--login-inner-radius);
+    background: #fff;
+    clip-path: path("M 0 0 H 30 V 30 C 30 5 25 0 0 0 Z");
+    pointer-events: none;
+  }
+
+  .waybook-login-art::before { top: 0; }
+  .waybook-login-art::after { bottom: 0; transform: scaleY(-1); }
+
+  @supports (corner-bottom-left-shape: superellipse(-2)) {
+    .waybook-login-art::before,
+    .waybook-login-art::after {
+      border-bottom-left-radius: var(--login-inner-radius);
+      corner-bottom-left-shape: superellipse(-2);
+      clip-path: none;
+    }
+  }
+}
+
+.waybook-login-schedule {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 29rem);
+  justify-self: center;
+  padding: clamp(.75rem, 1.7vw, 1.4rem);
+  border: 1px solid #fff;
+  border-radius: 1.125rem;
+  background: rgb(255 255 255 / 40%);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 1rem 2.5rem #284e7426;
+  font-size: .85rem;
+}
+
+.waybook-login-schedule__header,
+.waybook-login-schedule__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem .65rem;
+}
+
+.waybook-login-schedule__header { justify-content: space-between; }
+.waybook-login-schedule__header > span {
+  padding: .25rem .55rem;
+  border-radius: 999px;
+  background: #e6f0fb;
+  color: #284662;
+  font-size: .72rem;
+  font-weight: 600;
+}
+
+.waybook-login-schedule__total > strong {
+  font-size: 2.25rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -.06em;
+}
+
+.waybook-login-schedule__total > b { margin-left: auto; }
+.waybook-login-schedule__total > span,
+.waybook-login-schedule__bookings small { color: #4f5d70; }
+
+.waybook-login-schedule__bookings {
+  display: grid;
+  gap: .55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.waybook-login-schedule__bookings li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .55rem;
+  padding: .65rem;
+  border: 1px solid #dce5f0;
+  border-radius: .9rem;
+  background: rgb(255 255 255 / 74%);
+}
+
+.waybook-login-schedule__bookings small { display: block; margin-top: .15rem; }
+.waybook-login-schedule__bookings b,
+.waybook-login-schedule__total > b { color: #344d66; font-size: .75rem; }
+
+.waybook-login-schedule__initials {
+  display: grid;
+  place-items: center;
+  width: 1.95rem;
+  aspect-ratio: 1;
+  border-radius: .55rem;
+  background: #e6f0fb;
+  color: #284662;
+  font-size: .7rem;
+  font-weight: 600;
+}
+
+.waybook-login-schedule__bar {
+  height: .32rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #344d66 72%, #dce5f0 72%);
+}
+
+.waybook-login-showcase-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: .5rem;
+}
+
+.waybook-login-feature-messages { display: grid; }
+.waybook-login-feature-messages > div {
+  grid-area: 1 / 1;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 320ms ease-out 140ms, transform 320ms ease-out 140ms;
+}
+
+.waybook-login-feature-messages > [aria-hidden="true"] {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(.35rem);
+  transition: opacity 140ms ease-in, transform 140ms ease-in, visibility 0s 140ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waybook-login-feature-messages > div,
+  .waybook-login-feature-messages > [aria-hidden="true"] {
+    transform: none;
+    transition: none;
+  }
+}
+
+.waybook-login-showcase-copy p {
+  margin: 0 0 .65rem;
+  font-size: clamp(1.65rem, 2.9vw, 2.7rem);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -.05em;
+}
+
+.waybook-login-showcase-copy span {
+  display: block;
+  max-width: 34ch;
+  color: #31445d;
+  font-size: .95rem;
+  line-height: 1.5;
+}
+
+.waybook-login-showcase-copy button {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid #ffffffbf;
+  border-radius: .65rem;
+  background: #ffffff75;
+  color: #31445d;
+  cursor: pointer;
+}
+
+.waybook-login-showcase-copy button:hover { background: #ffffffbf; }
+
+.waybook-login-panel {
+  grid-area: 1 / 2;
+  display: grid;
+  grid-template-rows: minmax(3rem, 1fr) auto minmax(3rem, 1fr);
+  place-items: center;
+  padding: clamp(1.75rem, 3vw, 2.5rem) clamp(2rem, 5vw, 5rem);
+  border-radius: 0 var(--login-inner-radius) var(--login-inner-radius) 0;
+  corner-shape: squircle;
+  background: #fff;
+}
+
+.waybook-login-panel__inner {
+  grid-row: 2;
+  width: min(100%, 27rem);
+}
+
+.waybook-login-client-logo {
+  grid-row: 1;
+  align-self: start;
+  display: block;
+  max-width: min(10rem, 100%);
+  max-height: 2.75rem;
+  object-fit: contain;
+}
+
+.waybook-login-client-logo[data-white="true"] { filter: brightness(0); }
+
+.waybook-login-signup {
+  grid-row: 3;
+  align-self: end;
+  margin: 0;
+  color: #555966;
+  font-size: .85rem;
+  text-align: center;
+}
+
+.waybook-login-signup a {
+  color: #4f3a80;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.waybook-login-signup a:hover { color: #302052; }
+
+.waybook-login-copyright {
+  color: #31445d;
+  font-size: .75rem;
+  text-align: center;
+}
+
+.waybook-login-copyright small { font-size: inherit; }
+
+.waybook-login-panel h1 {
+  margin: 0;
+  font-size: clamp(1.625rem, 2.5vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -.055em;
+  text-align: center;
+}
+
+.waybook-login-intro {
+  margin: .9rem 0 clamp(2rem, 4vh, 3.15rem);
+  color: #555966;
+  font-size: .95rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.waybook-login,
+.waybook-login-password,
+.waybook-login label {
+  display: grid;
+}
+
+.waybook-login { gap: 1.35rem; }
+.waybook-login-password { gap: .55rem; }
+
+.waybook-login label {
+  gap: .55rem;
+  font-size: .9rem;
+  font-weight: 500;
+}
+
+.waybook-login :is(input:not([type="checkbox"]), select),
+.waybook-login > button,
+.waybook-login-providers button {
+  width: 100%;
+  min-height: 3.15rem;
+  border: 1px solid transparent;
+  border-radius: .9375rem;
+  font: inherit;
+}
+
+.waybook-login :is(input:not([type="checkbox"]), select) {
+  padding: .65rem 1rem;
+  border-color: var(--login-field-border);
+  background: #f5f7fb;
+  color: #1e202b;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.waybook-login input::placeholder { color: #646875; }
+
+.waybook-login-intake { gap: .85rem; }
+.waybook-login-intake .waybook-login-intake__consent {
+  display: flex;
+  align-items: start;
+  font-weight: 400;
+}
+.waybook-login-intake__consent input { margin: .2rem 0 0; }
+.waybook-login-intake__back { margin: 1rem 0 0; text-align: center; font-size: .85rem; }
+.waybook-login-intake__back a { color: #4f3a80; }
+
+.waybook-login-password__field { position: relative; }
+.waybook-login-password__field input:not([type="checkbox"]) { padding-right: 3.5rem; }
+.waybook-login-password__field button {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: .25rem;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: .75rem;
+  background: transparent;
+  color: #555966;
+  cursor: pointer;
+}
+
+.waybook-login-password__field button:hover { background: #e8ecf2; }
+
+.waybook-login-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .35rem .75rem;
+  margin-top: -.75rem;
+}
+
+.waybook-login-options label,
+.waybook-login-options a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  font-size: .85rem;
+  font-weight: 400;
+}
+
+.waybook-login-options label { cursor: pointer; }
+.waybook-login-options input {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  border: 1px solid var(--login-field-border);
+  border-radius: .25rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.waybook-login-options input:checked { border-color: #242039; background: #242039; }
+.waybook-login-options input:checked::before {
+  content: "";
+  width: .28rem;
+  height: .52rem;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
+
+@media (forced-colors: active) {
+  .waybook-login-options input { appearance: auto; }
+  .waybook-login-options input:checked::before { content: none; }
+}
+
+.waybook-login-options a {
+  color: #4f3a80;
+  text-decoration: none;
+}
+
+.waybook-login-options a:hover { color: #302052; }
+
+.waybook-login > button,
+.waybook-login-providers button {
+  corner-shape: squircle;
+  padding: .65rem 1rem;
+  font-size: .93rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.waybook-login > button {
+  background-color: #000;
+  color: #fff;
+  transition: background-color 200ms ease-out;
+}
+
+@media (hover: hover) {
+  .waybook-login > button:hover { background-color: #242039; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waybook-login > button { transition: none; }
+}
+
+.waybook-login-providers { margin-top: .75rem; }
+.waybook-login-providers button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  border-color: #d9dbe3;
+  background: #fff;
+  color: #242039;
+}
+
+.waybook-login-providers img { object-fit: contain; }
+.waybook-login-providers button:hover { background: #f5f6f9; }
+
+.waybook-login-panel :is(input, select, button, a):focus-visible,
+.waybook-login-showcase-copy button:focus-visible {
+  outline: 2px solid #6a4fa2;
+  outline-offset: 3px;
+}
+
+.waybook-login-error,
+.waybook-login-notice {
+  margin: 0 0 .75rem;
+  padding: .65rem .8rem;
+  border-radius: .55rem;
+  font-size: .86rem;
+  line-height: 1.4;
+}
+
+.waybook-login > .waybook-login-error { margin: 0; }
+.waybook-login-error { background: #fff0f0; color: #8e2636; }
+.waybook-login-notice { background: #f3f0fb; color: #413365; }
+
+.staff-access-requests ul {
+  display: grid;
+  margin: 0;
+  padding: 0 clamp(1.25rem, 4vw, 1.75rem);
+  list-style: none;
+}
+
+.staff-access-requests li {
+  display: grid;
+  gap: .75rem;
+  border-bottom: 1px solid var(--wb-dark-border-subtle, #e7e7ea);
+  padding: 1rem 0;
+}
+
+.staff-access-requests__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem .6rem;
+  overflow-wrap: anywhere;
+}
+
+.staff-access-requests__contact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .25rem .65rem;
+  margin: .5rem 0 0;
+  font-size: .85rem;
+}
+
+.staff-access-requests__contact dt {
+  color: var(--wb-dark-muted, #65656d);
+}
+
+.staff-access-requests__contact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.staff-access-requests__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .75rem;
+}
+
+.staff-access-requests form p { margin: .5rem 0; font-size: .85rem; }
+.staff-access-requests__empty { padding: 1.25rem 1.75rem; }
+
+@media (max-width: 760px) {
+  .waybook-login-page { align-content: start; padding: .65rem; }
+
+  .waybook-login-shell {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+    --login-frame-radius: 24px;
+    --login-frame-border: 5px;
+  }
+
+  .waybook-login-brand { top: 1.5rem; left: 1.25rem; }
+  .waybook-login-panel {
+    grid-area: 1 / 1;
+    grid-template-rows: none;
+    row-gap: 2.25rem;
+    border-radius: var(--login-inner-radius);
+    padding: 6rem 1.25rem 2rem;
+  }
+  .waybook-login-panel__inner,
+  .waybook-login-client-logo,
+  .waybook-login-signup { grid-row: auto; }
+  .waybook-login-panel h1, .waybook-login-intro { text-align: left; }
+  .waybook-login-art { grid-area: 2 / 1; padding: 1.65rem .9rem; border-radius: 0 0 var(--login-inner-radius) var(--login-inner-radius); }
+}
+
+.waybook-login-email-join {
+  grid-area: auto;
+  grid-template-rows: auto;
+  width: min(100%, 32rem);
+  padding: clamp(1.5rem, 5vw, 3rem);
+  border-radius: 1.5rem;
+}
+
+.waybook-login-email-join .waybook-login-panel__inner { grid-row: auto; }
+
 .waybook-data-page { min-height: 100vh; background: #f6f7f5; color: #17211d; padding: clamp(1.25rem, 5vw, 4rem); }.waybook-data-page > header { max-width: 1100px; margin: 0 auto 2rem; display: flex; justify-content: space-between; gap: 1rem; align-items: start; }.waybook-data-page header p { color: #5b786f; font-size: .68rem; font-weight: 600; letter-spacing: .12em; }.waybook-data-page h1 { margin-top: .35rem; font-size: clamp(2rem, 4vw, 3.2rem); letter-spacing: -.055em; line-height: 1; }.waybook-data-page header span { display: block; color: #67766f; margin-top: .6rem; font-size: .82rem; }.waybook-data-card,.waybook-data-metrics { max-width: 1100px; margin: 0 auto; border: 1px solid #dce5df; border-radius: .7rem; background: #fff; }.waybook-data-card { padding: 1.2rem; overflow-x: auto; }.waybook-data-card h2 { font-size: 1rem; margin-bottom: .9rem; }.waybook-data-card p { max-width: 48rem; color: #607069; line-height: 1.6; font-size: .88rem; }.waybook-data-card table { width: 100%; border-collapse: collapse; min-width: 740px; }.waybook-data-card th,.waybook-data-card td { text-align: left; border-top: 1px solid #e7ece9; padding: .75rem .6rem; color: #52615a; font-size: .77rem; }.waybook-data-card th { color: #6c7a73; font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; }.waybook-data-card td:first-child { color: #1d2d26; font-weight: 600; }.waybook-data-card small { display: block; color: #78867f; font-weight: 400; margin-top: .15rem; }.waybook-data-card form { margin: 0; }.waybook-data-metrics { display: grid; grid-template-columns: repeat(3,1fr); overflow: hidden; margin-bottom: 1.25rem; }.waybook-data-metrics article { padding: 1.25rem; border-left: 1px solid #e3e9e5; }.waybook-data-metrics article:first-child { border-left: 0; }.waybook-data-metrics span { display: block; color: #68776f; font-size: .75rem; }.waybook-data-metrics strong { display: block; font-size: 2rem; margin-top: .25rem; letter-spacing: -.06em; }
 .waybook-nav { max-width: 1100px; margin: -1rem auto 1.25rem; display: flex; gap: .45rem; }.waybook-nav a { border: 1px solid #dce5df; border-radius: .4rem; color: #53645c; background: #fff; padding: .45rem .65rem; font-size: .76rem; font-weight: 600; text-decoration: none; }.waybook-nav a[aria-current="page"] { color: #fff; background: #173f39; border-color: #173f39; }.waybook-customer-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: .75rem; align-items: end; }.waybook-customer-form label { display: grid; gap: .3rem; color: #53645c; font-size: .72rem; font-weight: 600; }.waybook-customer-form input { min-width: 0; height: 2.35rem; border: 1px solid #cfd9d4; border-radius: .4rem; padding: 0 .65rem; font: inherit; }.waybook-customer-form button { height: 2.35rem; }.waybook-permission-note { max-width: 1100px; margin: 0 auto 1.25rem; color: #63736b; font-size: .82rem; }
 .tenant-dashboard-page { padding-left: calc(15.5rem + clamp(1.25rem, 5vw, 4rem)); }.tenant-dashboard-nav { position: fixed; inset: 0 auto 0 0; z-index: 10; display: flex; width: 15.5rem; flex-direction: column; padding: 1.5rem .85rem; background: #173f39; color: #eaf2ed; }.tenant-dashboard-nav__workspace { display: grid; gap: .4rem; margin: .35rem .45rem 2.25rem; }.tenant-dashboard-nav__workspace span,.tenant-dashboard-nav__label { color: #9db6ac; font-size: .64rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }.tenant-dashboard-nav__workspace strong { color: #fff; font-size: 1rem; line-height: 1.3; }.tenant-dashboard-nav nav { display: grid; gap: .25rem; }.tenant-dashboard-nav a { border-radius: .45rem; color: #dce9e3; padding: .7rem .75rem; font-size: .84rem; font-weight: 600; text-decoration: none; }.tenant-dashboard-nav a:hover,.tenant-dashboard-nav a:focus-visible { background: #28544c; color: #fff; outline: 0; }.tenant-dashboard-nav a[aria-current="page"] { background: #eef7f1; color: #173f39; }.tenant-dashboard-nav__label { margin: 1.35rem .75rem .25rem; }
@@ -44,21 +585,6 @@ body {
 @media (max-width: 760px) { .tenant-dashboard-page { padding-left: 1.25rem; }.tenant-dashboard-nav { position: static; width: auto; margin: -1.25rem -1.25rem 1.5rem; padding: 1rem 1.25rem; }.tenant-dashboard-nav__workspace { margin: 0 0 1rem; }.tenant-dashboard-nav nav { display: flex; flex-wrap: wrap; gap: .35rem; }.tenant-dashboard-nav a { padding: .5rem .65rem; }.tenant-dashboard-nav__label { display: none; } }
 @media (max-width: 600px) { .waybook-data-page { padding: 1.25rem; }.tenant-dashboard-page { padding-left: 1.25rem; }.waybook-data-page > header { flex-direction: column; }.waybook-data-metrics { grid-template-columns: 1fr; }.waybook-data-metrics article { border-left: 0; border-top: 1px solid #e3e9e5; }.waybook-data-metrics article:first-child { border-top: 0; }.waybook-customer-form,.waybook-booking-grid,.waybook-booking-details { grid-template-columns: 1fr; }.waybook-slot-list { grid-template-columns: 1fr; }.waybook-booking-details h2,.waybook-booking-details p,.waybook-booking-details button { grid-column: auto; } }
 @media (max-width: 850px) { .waybook-booking-shell { display: block; padding: 0; background: #f7f9fd; }.waybook-booking-rail { min-height: auto; border-radius: 0; padding: 1.8rem 1.5rem; }.waybook-booking-rail h1 { max-width: 13ch; margin: 1.4rem 0; font-size: 2.8rem; }.waybook-booking-rail > span,.waybook-booking-illustration { display: none; }.waybook-booking-logo { margin-top: 1.25rem; font-size: 1.7rem; }.waybook-booking-main { min-height: calc(100vh - 18rem); border-radius: 0; }.waybook-booking-header { grid-template-columns: 2.7rem 1fr 2.7rem; gap: .7rem; padding: 1.5rem 1.25rem 0; }.waybook-booking-header button { width: 2.5rem; height: 2.5rem; font-size: 1.6rem; }.waybook-booking-header button:last-child { font-size: 2.2rem; }.waybook-booking-stage { padding: 2.6rem 1.25rem; }.waybook-booking-stage > h2 { font-size: 2.55rem; }.waybook-service-list { margin: 2rem 0; }.waybook-service-list button { grid-template-columns: 3.5rem 1fr auto; gap: .8rem; padding: 1rem; }.waybook-service-list button > b { width: 3.1rem; height: 3.1rem; border-radius: .8rem; font-size: 1.8rem; }.waybook-service-list strong { font-size: 1.1rem; }.waybook-service-list small { font-size: .82rem; }.waybook-day-list { gap: .45rem; margin: 2rem 0; }.waybook-day-list button { min-height: 5.8rem; border-radius: .7rem; }.waybook-day-list small { font-size: .75rem; }.waybook-day-list strong { font-size: 1.5rem; }.waybook-time-grid { grid-template-columns: 1fr; }.waybook-customer-stage { grid-template-columns: 1fr; }.waybook-customer-stage > p,.waybook-customer-stage > h2,.waybook-customer-stage > span,.waybook-customer-stage article,.waybook-customer-stage .waybook-primary-button,.waybook-customer-stage .waybook-stage-status { grid-column: auto; } }
-@media (max-width: 800px) { .waybook-login-page { padding: 0; background: #fff; }.waybook-login-shell { display: block; min-height: 100vh; border: 0; border-radius: 0; box-shadow: none; }.waybook-login-showcase { display: none; }.waybook-login-panel { min-height: 100vh; align-items: flex-start; padding: 2rem 1.5rem; }.waybook-login-panel__inner { width: 100%; max-width: 28rem; }.waybook-login-mobile-logo { display: block; width: 10.5rem; height: auto; margin-bottom: 3.5rem; } }
-
-/* Login reference framing and neutral rotating image treatment. */
-.waybook-login-page { padding: clamp(.65rem, 1.5vw, 1.35rem); background: #dedede; }
-.waybook-login-shell { min-height: min(42rem, calc(100vh - 5rem)); border: 12px solid #fff; border-radius: 2.2rem; box-shadow: 0 .8rem 2.2rem rgba(0,0,0,.06); }
-.waybook-login-showcase { min-height: 0; border: 1px solid #ededed; border-radius: 1.15rem 0 0 1.15rem; padding: 2.35rem 2.55rem; background: #f7f7f7; }
-.waybook-login-backgrounds { position: absolute; inset: 0; z-index: -2; overflow: hidden; }.waybook-login-backgrounds span { position: absolute; inset: 0; background-position: center; background-size: cover; filter: grayscale(1); mix-blend-mode: multiply; opacity: 0; animation: waybook-login-background-cycle 24s infinite; }.waybook-login-backgrounds .is-background-one { background-image: url('/brand/login-background-1.png'); animation-delay: 0s; }.waybook-login-backgrounds .is-background-two { background-image: url('/brand/login-background-2.png'); animation-delay: 8s; }.waybook-login-backgrounds .is-background-four { background-image: url('/brand/login-background-4.png'); animation-delay: 16s; }
-@keyframes waybook-login-background-cycle { 0%, 29% { opacity: .18; } 34%, 95% { opacity: 0; } 100% { opacity: .18; } }
-.waybook-login-showcase::before,.waybook-login-showcase::after { display: none; }
-.waybook-login-logo { position: relative; width: 9.6rem; }.waybook-login-orbit { display: none; }
-.waybook-login-widget { align-self: center; width: min(30rem, 94%); margin: auto; border: 1px solid rgba(255,255,255,.96); border-radius: 1.15rem; padding: 1.25rem 1.35rem; background: rgba(255,255,255,.91); box-shadow: 0 1rem 2.3rem rgba(0,0,0,.15); }.waybook-login-showcase__footer { position: relative; }.waybook-login-showcase__footer p { max-width: 15ch; font-size: clamp(1.3rem, 2vw, 2rem); }.waybook-login-showcase__footer span { color: #616161; }
-.waybook-login-panel { padding: clamp(2rem, 5vw, 5.5rem); }.waybook-login-panel h1 { font-size: clamp(1.65rem, 2.2vw, 2.1rem); }.waybook-login-intro { margin-bottom: 1.5rem; }
-@media (prefers-reduced-motion: reduce) { .waybook-login-backgrounds span { animation: none; }.waybook-login-backgrounds .is-background-one { opacity: .18; } }
-@media (max-width: 800px) { .waybook-login-page { padding: 0; }.waybook-login-shell { border: 0; border-radius: 0; }.waybook-login-showcase { display: none; } }
-
 /* ---------------------------------------------------------------------------
    Waybook dashboard application
    --------------------------------------------------------------------------- */
@@ -194,7 +720,7 @@ body {
 .appointment-volume { margin: .9rem auto; padding: 1.45rem; }.appointment-volume__heading p { margin: 0 0 .4rem; color: #b96a4e; font-size: .66rem; font-weight: 600; letter-spacing: .1em; }.appointment-volume__heading h2 { margin: 0; color: #2f5d3a; }.appointment-volume__heading span { display: block; max-width: 45rem; margin-top: .35rem; color: #6b7b63; font-size: .78rem; }.appointment-volume__body { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: 1.35rem; margin-top: 1.25rem; }.appointment-volume__grid { display: grid; grid-template-columns: 3rem repeat(7, minmax(2.25rem, 1fr)); gap: .32rem; align-items: center; }.appointment-volume__grid > strong,.appointment-volume__grid > span,.appointment-volume__corner { color: #60735f; font-size: .65rem; font-weight: 600; text-align: center; }.appointment-volume__grid > span { text-align: right; padding-right: .25rem; }.appointment-volume__grid i { display: grid; min-height: 1.55rem; place-items: center; border-radius: .3rem; background: color-mix(in srgb, #8dbb76 calc(var(--volume) * 100%), #edf2e9); color: #2f5d3a; font-size: .64rem; font-style: normal; }.appointment-volume__grid i b { font-weight: 600; }.appointment-volume__summary { align-self: end; border-radius: .75rem; padding: 1rem; background: #fbf3e8; }.appointment-volume__summary strong { color: #2f5d3a; font-size: .8rem; }.appointment-volume__summary p { margin: .35rem 0 0; color: #637562; font-size: .75rem; line-height: 1.5; }
 @media (max-width: 760px) { .appointment-volume { padding: 1.2rem; }.appointment-volume__body { grid-template-columns: 1fr; }.appointment-volume__grid { overflow-x: auto; grid-template-columns: 3rem repeat(7, 3.1rem); } }
 .staff-workspace { display: grid; grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); min-height: calc(100vh - 2rem); max-width: 1220px; margin: 0 auto; overflow: hidden; border: 1px solid #dce7e1; border-radius: .9rem; background: #fff; box-shadow: 0 .7rem 2.4rem rgba(27, 55, 43, .08); }
-.staff-workspace__directory { border-right: 1px solid #e0e9e3; background: #f7faf8; padding: 1.35rem; }.staff-workspace__directory-heading { display: flex; align-items: start; justify-content: space-between; gap: .8rem; }.staff-workspace__directory-heading p,.staff-workspace__profile-header p,.staff-workspace__panel-heading p { margin: 0 0 .35rem; color: #5b786f; font-size: .66rem; font-weight: 600; letter-spacing: .1em; }.staff-workspace__directory h1 { margin: 0; color: #1f3329; font-size: 1.75rem; letter-spacing: -.05em; }.staff-workspace__directory .waybook-primary-link { padding: .55rem .65rem; }.staff-workspace__directory-copy { margin: 1.15rem 0; color: #67766f; font-size: .78rem; line-height: 1.45; }.staff-workspace__directory nav { display: grid; gap: .3rem; }.staff-workspace__directory nav a { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; border: 1px solid transparent; border-radius: .65rem; padding: .65rem; color: #263b31; text-decoration: none; }.staff-workspace__directory nav a:hover { border-color: #d5e3dc; background: #fff; }.staff-workspace__directory nav a[aria-current="page"] { border-color: #b9d2c6; background: #e8f2ed; }.staff-workspace__directory nav strong,.staff-workspace__directory nav small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.staff-workspace__directory nav strong { font-size: .8rem; }.staff-workspace__directory nav small { margin-top: .15rem; color: #718179; font-size: .68rem; }.staff-workspace__directory nav i { border-radius: 999px; padding: .2rem .38rem; background: #e9eeeb; color: #74827b; font-size: .62rem; font-style: normal; font-weight: 600; }.staff-workspace__directory nav i.is-active { background: #dff0e5; color: #27604f; }.staff-workspace__avatar { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; background: #dceee5; color: #285e51; font-size: .78rem; font-weight: 600; }.staff-workspace__avatar.is-large { width: 4.5rem; height: 4.5rem; background: #d1e6d9; font-size: 1.6rem; }.staff-workspace__content { min-width: 0; padding: 2rem; background: #fff; }.staff-workspace__profile-header { display: flex; align-items: center; gap: 1rem; padding-bottom: 1.6rem; border-bottom: 1px solid #dce7e1; }.staff-workspace__profile-header h2 { margin: 0; color: #1d3429; font-size: clamp(1.5rem, 3vw, 2.25rem); letter-spacing: -.055em; }.staff-workspace__profile-header span:not(.staff-workspace__avatar) { display: block; margin-top: .35rem; color: #64756d; font-size: .82rem; }.staff-workspace__tabs { display: flex; gap: .15rem; overflow-x: auto; margin: 1.1rem 0 1.5rem; border-bottom: 1px solid #dce7e1; }.staff-workspace__tabs a { flex: 0 0 auto; border-bottom: 2px solid transparent; padding: .65rem .8rem; color: #67766f; font-size: .78rem; font-weight: 600; text-decoration: none; }.staff-workspace__tabs a[aria-current="page"] { border-color: #276b5c; color: #173f39; }.staff-workspace__panel { max-width: 48rem; }.staff-workspace__panel-heading { margin-bottom: 1.25rem; }.staff-workspace__panel-heading h3 { margin: 0; color: #263b31; font-size: 1.2rem; letter-spacing: -.03em; }.staff-workspace__panel-heading p:not(:first-child),.staff-workspace__panel-heading h3 + p { margin: .35rem 0 0; color: #718179; font-size: .8rem; line-height: 1.45; letter-spacing: normal; font-weight: 400; }.staff-profile-form,.staff-hours-form,.staff-timeoff-form { display: grid; gap: 1rem; }.staff-profile-form__grid,.staff-hours-form__times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }.staff-profile-form label,.staff-hours-form label,.staff-timeoff-form > label { display: grid; gap: .35rem; color: #4e6258; font-size: .72rem; font-weight: 600; }.staff-profile-form input:not([type="checkbox"]),.staff-profile-form select,.staff-profile-form textarea,.staff-hours-form input,.staff-timeoff-form > label input { min-width: 0; width: 100%; border: 1px solid #cfd9d4; border-radius: .45rem; padding: .62rem .7rem; background: #fff; color: #263b31; font: inherit; }.staff-profile-form input:not([type="checkbox"]),.staff-profile-form select,.staff-hours-form input,.staff-timeoff-form > label input { height: 2.45rem; }.staff-profile-form textarea { resize: vertical; }.staff-profile-form fieldset,.staff-hours-form fieldset,.staff-timeoff-form fieldset { display: flex; flex-wrap: wrap; gap: .65rem 1rem; border: 1px solid #d8e4dd; border-radius: .6rem; padding: .85rem; }.staff-profile-form legend,.staff-hours-form legend,.staff-timeoff-form legend { padding: 0 .25rem; color: #52655c; font-size: .72rem; font-weight: 600; }.staff-profile-form fieldset label,.staff-hours-form fieldset label,.staff-timeoff-form fieldset label { display: flex; align-items: center; gap: .4rem; color: #3e5148; font-size: .78rem; }.staff-profile-form__check { display: flex !important; align-items: center; gap: .45rem; }.staff-hours-form fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }.staff-hours-form fieldset label { border-radius: .45rem; padding: .55rem; background: #f7faf8; }.staff-timeoff-form fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }.staff-timeoff-form small { color: #74837c; font-weight: 500; }.staff-profile-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }.staff-profile-facts div { border: 1px solid #e0e9e3; border-radius: .55rem; padding: .75rem; }.staff-profile-facts dt { color: #718179; font-size: .68rem; font-weight: 600; }.staff-profile-facts dd { margin: .3rem 0 0; color: #2f4339; font-size: .8rem; }.staff-workspace__empty { display: grid; min-height: 18rem; place-content: center; color: #64756d; text-align: center; }.staff-workspace__empty h2 { margin: 0; color: #263b31; }.staff-workspace__empty p { margin: .5rem 0 0; font-size: .82rem; }
+.staff-workspace__directory { border-right: 1px solid #e0e9e3; background: #f7faf8; padding: 1.35rem; }.staff-workspace__directory-heading { display: flex; align-items: start; justify-content: space-between; gap: .8rem; }.staff-workspace__directory-heading p,.staff-workspace__profile-header p,.staff-workspace__panel-heading p { margin: 0 0 .35rem; color: #5b786f; font-size: .66rem; font-weight: 600; letter-spacing: .1em; }.staff-workspace__directory h1 { margin: 0; color: #1f3329; font-size: 1.75rem; letter-spacing: -.05em; }.staff-workspace__directory .waybook-primary-link { padding: .55rem .65rem; }.staff-workspace__directory-copy { margin: 1.15rem 0; color: #67766f; font-size: .78rem; line-height: 1.45; }.staff-workspace__directory nav { display: grid; gap: .3rem; }.staff-workspace__directory nav a { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; border: 1px solid transparent; border-radius: .65rem; padding: .65rem; color: #263b31; text-decoration: none; }.staff-workspace__directory nav a:hover { border-color: #d5e3dc; background: #fff; }.staff-workspace__directory nav a[aria-current="page"] { border-color: #b9d2c6; background: #e8f2ed; }.staff-workspace__directory nav strong,.staff-workspace__directory nav small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.staff-workspace__directory nav strong { font-size: .8rem; }.staff-workspace__directory nav small { margin-top: .15rem; color: #718179; font-size: .68rem; }.staff-workspace__directory nav i { border-radius: 999px; padding: .2rem .38rem; background: #e9eeeb; color: #74827b; font-size: .62rem; font-style: normal; font-weight: 600; }.staff-workspace__directory nav i.is-active { background: #dff0e5; color: #27604f; }.staff-workspace__avatar { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; background: #dceee5; color: #285e51; font-size: .78rem; font-weight: 600; }.staff-workspace__avatar.is-large { width: 4.5rem; height: 4.5rem; background: #d1e6d9; font-size: 1.6rem; }.staff-workspace__content { min-width: 0; padding: 2rem; background: #fff; }.staff-workspace__profile-header { display: flex; align-items: center; gap: 1rem; padding-bottom: 1.6rem; border-bottom: 1px solid #dce7e1; }.staff-workspace__profile-header h2 { margin: 0; color: #1d3429; font-size: clamp(1.5rem, 3vw, 2.25rem); letter-spacing: -.055em; }.staff-workspace__profile-title > span { display: block; margin-top: .35rem; color: #64756d; font-size: .82rem; }.staff-workspace__tabs { display: flex; gap: .15rem; overflow-x: auto; margin: 1.1rem 0 1.5rem; border-bottom: 1px solid #dce7e1; }.staff-workspace__tabs a { flex: 0 0 auto; border-bottom: 2px solid transparent; padding: .65rem .8rem; color: #67766f; font-size: .78rem; font-weight: 600; text-decoration: none; }.staff-workspace__tabs a[aria-current="page"] { border-color: #276b5c; color: #173f39; }.staff-workspace__panel { max-width: 48rem; }.staff-workspace__panel-heading { margin-bottom: 1.25rem; }.staff-workspace__panel-heading h3 { margin: 0; color: #263b31; font-size: 1.2rem; letter-spacing: -.03em; }.staff-workspace__panel-heading p:not(:first-child),.staff-workspace__panel-heading h3 + p { margin: .35rem 0 0; color: #718179; font-size: .8rem; line-height: 1.45; letter-spacing: normal; font-weight: 400; }.staff-profile-form,.staff-hours-form,.staff-timeoff-form { display: grid; gap: 1rem; }.staff-profile-form__grid,.staff-hours-form__times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }.staff-profile-form label,.staff-hours-form label,.staff-timeoff-form > label { display: grid; gap: .35rem; color: #4e6258; font-size: .72rem; font-weight: 600; }.staff-profile-form input:not([type="checkbox"]),.staff-profile-form select,.staff-profile-form textarea,.staff-hours-form input,.staff-timeoff-form > label input { min-width: 0; width: 100%; border: 1px solid #cfd9d4; border-radius: .45rem; padding: .62rem .7rem; background: #fff; color: #263b31; font: inherit; }.staff-profile-form input:not([type="checkbox"]),.staff-profile-form select,.staff-hours-form input,.staff-timeoff-form > label input { height: 2.45rem; }.staff-profile-form textarea { resize: vertical; }.staff-profile-form fieldset,.staff-hours-form fieldset,.staff-timeoff-form fieldset { display: flex; flex-wrap: wrap; gap: .65rem 1rem; border: 1px solid #d8e4dd; border-radius: .6rem; padding: .85rem; }.staff-profile-form legend,.staff-hours-form legend,.staff-timeoff-form legend { padding: 0 .25rem; color: #52655c; font-size: .72rem; font-weight: 600; }.staff-profile-form fieldset label,.staff-hours-form fieldset label,.staff-timeoff-form fieldset label { display: flex; align-items: center; gap: .4rem; color: #3e5148; font-size: .78rem; }.staff-profile-form__check { display: flex !important; align-items: center; gap: .45rem; }.staff-hours-form fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }.staff-hours-form fieldset label { border-radius: .45rem; padding: .55rem; background: #f7faf8; }.staff-timeoff-form fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }.staff-timeoff-form small { color: #74837c; font-weight: 500; }.staff-profile-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }.staff-profile-facts div { border: 1px solid #e0e9e3; border-radius: .55rem; padding: .75rem; }.staff-profile-facts dt { color: #718179; font-size: .68rem; font-weight: 600; }.staff-profile-facts dd { margin: .3rem 0 0; color: #2f4339; font-size: .8rem; }.staff-workspace__empty { display: grid; min-height: 18rem; place-content: center; color: #64756d; text-align: center; }.staff-workspace__empty h2 { margin: 0; color: #263b31; }.staff-workspace__empty p { margin: .5rem 0 0; font-size: .82rem; }
 @media (max-width: 760px) { .staff-workspace { display: block; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }.staff-workspace__directory { border-right: 0; border-bottom: 1px solid #dce7e1; }.staff-workspace__directory nav { grid-auto-flow: column; grid-auto-columns: minmax(12rem, 75%); overflow-x: auto; }.staff-workspace__content { padding: 1.25rem; }.staff-workspace__profile-header { padding-bottom: 1.25rem; }.staff-workspace__avatar.is-large { width: 3.4rem; height: 3.4rem; font-size: 1.2rem; }.staff-workspace__tabs { margin-bottom: 1.25rem; } }
 @media (max-width: 480px) { .staff-profile-form__grid,.staff-hours-form__times,.staff-hours-form fieldset,.staff-timeoff-form fieldset,.staff-profile-facts { grid-template-columns: 1fr; }.staff-workspace__directory { padding: 1.1rem; }.staff-workspace__content { padding: 1.1rem; }.staff-workspace__directory-heading { align-items: center; }.staff-workspace__directory .waybook-primary-link { font-size: .72rem; } }
 .staff-drawer__body { display: grid; gap: 1.35rem; padding: 1.5rem 1.75rem 2rem; }.staff-drawer__body section { border-top: 1px solid #e6ece8; padding-top: 1.25rem; }.staff-drawer__body h3 { margin: 0; color: #263b31; font-size: .92rem; }.staff-drawer__body section > p { margin: .45rem 0 0; color: #718179; font-size: .78rem; line-height: 1.45; }.staff-drawer__body .tenant-drawer-form { padding: .9rem 0 0; }.staff-exception-list { display: grid; gap: .55rem; margin-top: .75rem; }.staff-exception-list article { display: grid; grid-template-columns: 6.5rem 1fr; gap: .15rem .65rem; border: 1px solid #e0e9e3; border-radius: .5rem; padding: .7rem; }.staff-exception-list strong { color: #33463e; font-size: .78rem; }.staff-exception-list span { color: #50645a; font-size: .75rem; }.staff-exception-list small { grid-column: 1 / -1; color: #74837c; font-size: .7rem; }
@@ -225,14 +751,14 @@ body {
 @media (max-width: 640px) { .staff-shift-schedule__heading { align-items: start; flex-direction: column; }.staff-shift-schedule__list li { grid-template-columns: 2.7rem minmax(0,1fr); }.staff-shift-schedule__edit { grid-column: 2; justify-self: start; }.staff-shift-modal-layer { padding: .75rem; }.staff-shift-modal header,.staff-shift-modal__body,.staff-shift-modal footer { padding-left: 1.25rem; padding-right: 1.25rem; }.staff-shift-modal__row { grid-template-columns: 1fr; }.staff-shift-modal__remove { width: fit-content; } }
 
 /* Tenant overview: four focused operational widgets. */
-.tenant-dashboard-page .dashboard-four { max-width: 1160px; margin: 0 auto; padding: 1.4rem 0 3.5rem; }.dashboard-four__header { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.3rem; }.dashboard-four__header p,.dashboard-widget__title p { margin: 0 0 .4rem; color: #b96a4e; font-size: .66rem; font-weight: 600; letter-spacing: .12em; }.dashboard-four__header h1 { margin: 0; color: #2f5d3a; font-size: clamp(2rem, 4vw, 3.25rem); letter-spacing: -.065em; }.dashboard-four__header span { display: block; margin-top: .4rem; color: #6b7b63; font-size: .86rem; }.dashboard-four__header .waybook-primary-link { flex: 0 0 auto; border-radius: 999px; background: #2f5d3a; color: #fffdf9; }.dashboard-four__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }.tenant-dashboard-page .dashboard-widget { min-height: 25rem; margin: 0; padding: 1.35rem; border: 1px solid rgba(47,93,58,.11); border-radius: 1.1rem; background: #fffdf9; box-shadow: 0 .75rem 2rem rgba(47,93,58,.055); }.dashboard-widget__title { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }.dashboard-widget__title h2 { margin: 0; color: #203e2c; font-size: 1.2rem; letter-spacing: -.035em; }.dashboard-widget__title > a { color: #b96a4e; font-size: .76rem; font-weight: 600; text-decoration: none; white-space: nowrap; }.dashboard-widget__empty { margin: 2rem 0 0; color: #6b7b63; font-size: .86rem; line-height: 1.55; }.upcoming-list { margin: 1.2rem 0 0; padding: 0; list-style: none; }.upcoming-list li { display: grid; grid-template-columns: 3rem minmax(0,1fr) auto; align-items: center; gap: .85rem; padding: 1rem 0; border-top: 1px solid #edf0e7; }.upcoming-list time { display: grid; place-items: center; min-height: 3.15rem; border-radius: .65rem; background: #fbf3e8; color: #2f5d3a; }.upcoming-list time b { font-size: 1rem; line-height: 1; }.upcoming-list time span { margin-top: .18rem; font-size: .63rem; font-weight: 600; text-transform: uppercase; }.upcoming-list strong,.upcoming-list span { display: block; }.upcoming-list strong { color: #294434; font-size: .86rem; }.upcoming-list li > div span { margin-top: .25rem; overflow: hidden; color: #6d7c72; font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }.appointment-status { border-radius: 999px; padding: .45rem .65rem; color: #295d44; background: #e2efd9; font-size: .7rem; font-weight: 600; text-decoration: none; }.appointment-status--arrived { color: #97492f; background: #f8e1d5; }.workload-list { display: grid; gap: 1rem; margin-top: 1.35rem; }.workload-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.workload-list__identity { display: flex; align-items: center; gap: .7rem; min-width: 0; }.workload-list__identity > i { display: grid; flex: 0 0 2.3rem; width: 2.3rem; height: 2.3rem; place-items: center; border-radius: 50%; background: #f3c1a9; color: #2f5d3a; font-size: .83rem; font-style: normal; font-weight: 600; }.workload-list__identity strong,.workload-list__identity span { display: block; }.workload-list__identity strong { overflow: hidden; color: #294434; font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }.workload-list__identity span { margin-top: .18rem; color: #758378; font-size: .7rem; }.workload-list__measure { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: .25rem; min-width: 8.4rem; text-align: right; }.workload-list__measure b { color: #2f5d3a; font-size: 1rem; }.workload-list__measure span { color: #718079; font-size: .68rem; }.workload-list__measure > i { grid-column: 1 / -1; display: block; width: 100%; height: .35rem; margin-top: .35rem; overflow: hidden; border-radius: 999px; background: #edf0e7; }.workload-list__measure > i::after { display: block; width: var(--workload); height: 100%; border-radius: inherit; background: #8dbb76; content: ""; }.dashboard-widget__note { margin: 1.3rem 0 0; color: #718079; font-size: .68rem; line-height: 1.5; }.outcome-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 1.3rem 0 0; border-top: 1px solid #edf0e7; border-left: 1px solid #edf0e7; }.outcome-grid > div { min-height: 8.65rem; padding: 1rem; border-right: 1px solid #edf0e7; border-bottom: 1px solid #edf0e7; }.outcome-grid dt { color: #536e5a; font-size: .72rem; font-weight: 600; }.outcome-grid dd { margin: .55rem 0; color: #203e2c; font-size: 2.35rem; font-weight: 600; letter-spacing: -.075em; line-height: 1; }.outcome-grid small { font-size: .67rem; }.outcome-grid .is-positive { color: #487b3e; }.outcome-grid .is-negative { color: #b96a4e; }.target-widget { display: grid; grid-template-columns: minmax(10.5rem, .9fr) minmax(0, 1fr); align-items: center; gap: 1.25rem; min-height: 18rem; }.target-widget__ring { position: relative; display: grid; width: min(13.5rem, 100%); aspect-ratio: 1; place-items: center; border-radius: 50%; background: conic-gradient(#2f5d3a var(--progress, 0deg), #edf0e7 0); }.target-widget__ring::before { position: absolute; width: calc(min(13.5rem, 100%) - 1.45rem); aspect-ratio: 1; border-radius: 50%; background: #fffdf9; content: ""; }.target-widget__ring > div { z-index: 1; padding: 1rem; text-align: center; }.target-widget__ring span,.target-widget__ring strong,.target-widget__ring small { display: block; }.target-widget__ring span,.target-widget__ring small { color: #728079; font-size: .7rem; }.target-widget__ring strong { margin: .3rem 0; color: #2f5d3a; font-size: 1.35rem; letter-spacing: -.06em; }.target-widget h3 { margin: 0; color: #2f5d3a; font-size: 1.25rem; letter-spacing: -.04em; }.target-widget p { margin: .55rem 0; color: #6b7b63; font-size: .78rem; line-height: 1.5; }.target-widget > div:last-child > b { color: #b96a4e; font-size: .78rem; }.target-widget--empty .target-widget__ring { background: #edf0e7; }.target-widget--empty .waybook-primary-link { display: inline-block; margin-top: .4rem; border-radius: 999px; background: #2f5d3a; color: #fffdf9; }
-@media (max-width: 760px) { .tenant-dashboard-page .dashboard-four { padding-top: .4rem; }.dashboard-four__header { align-items: start; flex-direction: column; margin-bottom: 1rem; }.dashboard-four__header .waybook-primary-link { width: 100%; text-align: center; }.dashboard-four__grid { grid-template-columns: 1fr; }.tenant-dashboard-page .dashboard-widget { min-height: 0; padding: 1.2rem; }.target-widget { min-height: 0; }.target-widget__ring { width: 11.5rem; }.target-widget__ring::before { width: 10.05rem; }.workload-list article { display: grid; grid-template-columns: minmax(0,1fr) 6.5rem; }.workload-list__measure { min-width: 0; }.tenant-dashboard-page .tenant-dashboard-nav__workspace { max-width: calc(100% - 5.6rem); }.tenant-dashboard-page .tenant-dashboard-nav__signout { flex: 0 0 auto; white-space: nowrap; } }
+.tenant-dashboard-page .dashboard-four { max-width: 1160px; margin: 0 auto; padding: 1.4rem 0 3.5rem; }.dashboard-four__header { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.3rem; }.dashboard-four__header p,.dashboard-widget__title p { margin: 0 0 .4rem; color: #b96a4e; font-size: .66rem; font-weight: 600; letter-spacing: .12em; }.dashboard-four__header h1 { margin: 0; color: #2f5d3a; font-size: clamp(2rem, 4vw, 3.25rem); letter-spacing: -.065em; }.dashboard-four__header span { display: block; margin-top: .4rem; color: #6b7b63; font-size: .86rem; }.dashboard-four__header .waybook-primary-link { flex: 0 0 auto; border-radius: 999px; background: #2f5d3a; color: #fffdf9; }.dashboard-four__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }.tenant-dashboard-page .dashboard-widget { min-height: 25rem; margin: 0; padding: 1.35rem; border: 1px solid rgba(47,93,58,.11); border-radius: 1.1rem; background: #fffdf9; box-shadow: 0 .75rem 2rem rgba(47,93,58,.055); }.dashboard-widget__title { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }.dashboard-widget__title h2 { margin: 0; color: #203e2c; font-size: 1.2rem; letter-spacing: -.035em; }.dashboard-widget__title > a { color: #b96a4e; font-size: .76rem; font-weight: 600; text-decoration: none; white-space: nowrap; }.dashboard-widget__empty { margin: 2rem 0 0; color: #6b7b63; font-size: .86rem; line-height: 1.55; }.upcoming-list { margin: 1.2rem 0 0; padding: 0; list-style: none; }.upcoming-list li { display: grid; grid-template-columns: 3rem minmax(0,1fr) auto; align-items: center; gap: .85rem; padding: 1rem 0; border-top: 1px solid #edf0e7; }.upcoming-list time { display: grid; place-items: center; min-height: 3.15rem; border-radius: .65rem; background: #fbf3e8; color: #2f5d3a; }.upcoming-list time b { font-size: 1rem; line-height: 1; }.upcoming-list time span { margin-top: .18rem; font-size: .63rem; font-weight: 600; text-transform: uppercase; }.upcoming-list strong,.upcoming-list span { display: block; }.upcoming-list strong { color: #294434; font-size: .86rem; }.upcoming-list li > div span { margin-top: .25rem; overflow: hidden; color: #6d7c72; font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }.appointment-status { border-radius: 999px; padding: .45rem .65rem; color: #295d44; background: #e2efd9; font-size: .7rem; font-weight: 600; text-decoration: none; }.appointment-status--arrived { color: #97492f; background: #f8e1d5; }.workload-list { display: grid; gap: 1rem; margin-top: 1.35rem; }.workload-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }.workload-list__identity { display: flex; align-items: center; gap: .7rem; min-width: 0; }.workload-list__identity > i { display: grid; flex: 0 0 2.3rem; width: 2.3rem; height: 2.3rem; place-items: center; border-radius: 50%; background: #f3c1a9; color: #2f5d3a; font-size: .83rem; font-style: normal; font-weight: 600; }.workload-list__identity strong,.workload-list__identity span { display: block; }.workload-list__identity strong { overflow: hidden; color: #294434; font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }.workload-list__identity span { margin-top: .18rem; color: #758378; font-size: .7rem; }.workload-list__measure { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: .25rem; min-width: 8.4rem; text-align: right; }.workload-list__measure b { color: #2f5d3a; font-size: 1rem; }.workload-list__measure span { color: #718079; font-size: .68rem; }.workload-list__measure > i { grid-column: 1 / -1; display: block; width: 100%; height: .35rem; margin-top: .35rem; overflow: hidden; border-radius: 999px; background: #edf0e7; }.workload-list__measure > i::after { display: block; width: var(--workload); height: 100%; border-radius: inherit; background: #8dbb76; content: ""; }.dashboard-widget__note { margin: 1.3rem 0 0; color: #718079; font-size: .68rem; line-height: 1.5; }.outcome-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 1.3rem 0 0; border-top: 1px solid #edf0e7; border-left: 1px solid #edf0e7; }.outcome-grid > div { min-height: 8.65rem; padding: 1rem; border-right: 1px solid #edf0e7; border-bottom: 1px solid #edf0e7; }.outcome-grid dt { color: #536e5a; font-size: .72rem; font-weight: 600; }.outcome-grid dd { margin: .55rem 0; color: #203e2c; font-size: 2.35rem; font-weight: 600; letter-spacing: -.075em; line-height: 1; }.outcome-grid small { font-size: .67rem; }.outcome-grid .is-positive { color: #487b3e; }.outcome-grid .is-negative { color: #b96a4e; }.target-widget { display: grid; grid-template-columns: minmax(10.5rem, .9fr) minmax(0, 1fr); align-items: center; gap: 1.25rem; min-height: 18rem; }.target-widget__ring { position: relative; display: grid; width: min(13.5rem, 100%); aspect-ratio: 1; place-items: center; border-radius: 50%; }.target-widget__ring > div { z-index: 1; padding: 1rem; text-align: center; }.target-widget__ring span,.target-widget__ring strong,.target-widget__ring small { display: block; }.target-widget__ring span,.target-widget__ring small { color: #728079; font-size: .7rem; }.target-widget__ring strong { margin: .3rem 0; color: #2f5d3a; font-size: 1.35rem; letter-spacing: -.06em; }.target-widget h3 { margin: 0; color: #2f5d3a; font-size: 1.25rem; letter-spacing: -.04em; }.target-widget p { margin: .55rem 0; color: #6b7b63; font-size: .78rem; line-height: 1.5; }.target-widget > div:last-child > b { color: #b96a4e; font-size: .78rem; }.target-widget--empty .waybook-primary-link { display: inline-block; margin-top: .4rem; border-radius: 999px; background: #2f5d3a; color: #fffdf9; }
+@media (max-width: 760px) { .tenant-dashboard-page .dashboard-four { padding-top: .4rem; }.dashboard-four__header { align-items: start; flex-direction: column; margin-bottom: 1rem; }.dashboard-four__header .waybook-primary-link { width: 100%; text-align: center; }.dashboard-four__grid { grid-template-columns: 1fr; }.tenant-dashboard-page .dashboard-widget { min-height: 0; padding: 1.2rem; }.target-widget { min-height: 0; }.target-widget__ring { width: 11.5rem; }.workload-list article { display: grid; grid-template-columns: minmax(0,1fr) 6.5rem; }.workload-list__measure { min-width: 0; }.tenant-dashboard-page .tenant-dashboard-nav__workspace { max-width: calc(100% - 5.6rem); }.tenant-dashboard-page .tenant-dashboard-nav__signout { flex: 0 0 auto; white-space: nowrap; } }
 @media (max-width: 430px) { .upcoming-list li { grid-template-columns: 2.7rem minmax(0,1fr); }.upcoming-list .appointment-status { grid-column: 2; justify-self: start; }.target-widget { grid-template-columns: 1fr; justify-items: center; text-align: center; }.target-widget > div:last-child > b { display: block; }.outcome-grid > div { min-height: 7.6rem; padding: .85rem; }.outcome-grid dd { font-size: 2rem; } }
 
 /* Monochrome application shell: focused primary navigation and app drawer. */
 .tenant-dashboard-page { background: #f4f4f3; color: #171717; }.tenant-dashboard-page .tenant-dashboard-nav { position: sticky; inset: 0 auto auto 0; z-index: 30; display: grid; width: auto; min-height: 4.6rem; margin: 0 calc(clamp(1.25rem, 5vw, 4rem) * -1); padding: 0 clamp(1.25rem, 5vw, 4rem); grid-template-columns: minmax(9rem, 1fr) auto minmax(9rem, 1fr); align-items: center; gap: 1rem; border: 0; background: #0d0d0d; box-shadow: none; color: #fff; }.tenant-dashboard-page .tenant-dashboard-nav__workspace { display: flex; align-items: baseline; gap: .48rem; min-width: 0; margin: 0; }.tenant-dashboard-page .tenant-dashboard-nav__workspace span { color: #a3a3a3; font-size: .62rem; letter-spacing: .13em; }.tenant-dashboard-page .tenant-dashboard-nav__workspace strong { overflow: hidden; color: #fff; font-size: .83rem; text-overflow: ellipsis; white-space: nowrap; }.tenant-dashboard-page .tenant-dashboard-nav nav { display: flex; width: auto; align-items: center; justify-content: center; gap: .18rem; overflow: visible; }.tenant-dashboard-page .tenant-dashboard-nav nav a { border-radius: .55rem; padding: .62rem .78rem; color: #b9b9b9; font-size: .78rem; font-weight: 600; }.tenant-dashboard-page .tenant-dashboard-nav nav a:hover,.tenant-dashboard-page .tenant-dashboard-nav nav a:focus-visible { background: #262626; color: #fff; }.tenant-dashboard-page .tenant-dashboard-nav nav a[aria-current="page"] { background: #262626; box-shadow: none; color: #fff; }.tenant-dashboard-page .tenant-dashboard-nav__signout { justify-self: end; width: auto; margin: 0; padding: 0; border: 0; }.tenant-dashboard-page .tenant-dashboard-nav__signout button { width: auto; border: 1px solid #3d3d3d; border-radius: 999px; padding: .48rem .72rem; background: transparent; color: #d4d4d4; font-size: .7rem; text-align: center; }.tenant-dashboard-page .tenant-dashboard-nav__signout button:hover { background: #262626; color: #fff; }
 .tenant-app-menu { justify-self: end; }.tenant-app-menu > button { display: inline-flex; align-items: center; gap: .42rem; border: 0; border-radius: .55rem; padding: .6rem .72rem; background: transparent; color: #dedede; font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; }.tenant-app-menu > button:hover,.tenant-app-menu > button:focus-visible { background: #262626; color: #fff; outline: 0; }.tenant-app-menu > button span { font-size: 1.05rem; line-height: .8; }.tenant-app-menu__layer { position: fixed; z-index: 70; inset: 0; display: grid; place-items: start center; padding: min(12vh, 7.5rem) 1.25rem 1.25rem; }.tenant-app-menu__scrim { position: absolute; inset: 0; border: 0; background: rgba(0,0,0,.62); }.tenant-app-menu__dialog { position: relative; width: min(100%, 68rem); max-height: min(74vh, 44rem); overflow: auto; border: 1px solid #303030; border-radius: 1rem; padding: 1.45rem; background: #fff; box-shadow: 0 1.7rem 5rem rgba(0,0,0,.35); color: #171717; }.tenant-app-menu__dialog > header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }.tenant-app-menu__dialog header p { margin: 0 0 .35rem; color: #737373; font-size: .64rem; font-weight: 600; letter-spacing: .13em; }.tenant-app-menu__dialog h2 { margin: 0; color: #171717; font-size: 1.55rem; letter-spacing: -.045em; }.tenant-app-menu__dialog header > button { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border: 1px solid #dfdfdf; border-radius: 50%; background: #fff; color: #404040; font-size: 1.45rem; line-height: 1; cursor: pointer; }.tenant-app-menu__search { display: flex; align-items: center; gap: .55rem; margin-top: 1.2rem; border-radius: .7rem; padding: .72rem .85rem; background: #f2f2f2; color: #737373; }.tenant-app-menu__search span { font-size: 1.1rem; }.tenant-app-menu__search input { width: 100%; border: 0; outline: 0; background: transparent; color: #171717; font: inherit; }.tenant-app-menu__search input::placeholder { color: #858585; }.tenant-app-menu__groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.35rem; margin-top: 1.55rem; }.tenant-app-menu__groups section h3 { margin: 0 0 .7rem; color: #737373; font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }.tenant-app-menu__groups section > div { display: grid; gap: .35rem; }.tenant-app-menu__groups a { display: flex; align-items: center; gap: .7rem; border-radius: .65rem; padding: .62rem; color: #252525; text-decoration: none; }.tenant-app-menu__groups a:hover,.tenant-app-menu__groups a:focus-visible,.tenant-app-menu__groups a[aria-current="page"] { background: #f1f1f1; outline: 0; }.tenant-app-menu__groups a i { display: grid; flex: 0 0 2rem; width: 2rem; height: 2rem; place-items: center; border-radius: .5rem; background: #e4e4e4; color: #171717; font-size: .8rem; font-style: normal; font-weight: 600; }.tenant-app-menu__groups a span { min-width: 0; }.tenant-app-menu__groups a strong,.tenant-app-menu__groups a small { display: block; }.tenant-app-menu__groups a strong { color: #202020; font-size: .82rem; }.tenant-app-menu__groups a small { overflow: hidden; margin-top: .1rem; color: #787878; font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }.tenant-app-menu__empty { margin: 1.5rem 0 .2rem; color: #737373; font-size: .82rem; }
-.tenant-dashboard-page .dashboard-four { max-width: 1160px; }.dashboard-four__header p,.dashboard-widget__title p { color: #737373; }.dashboard-four__header h1 { color: #171717; }.dashboard-four__header span { color: #666; }.dashboard-four__header .waybook-primary-link,.target-widget--empty .waybook-primary-link { background: #171717; color: #fff; }.tenant-dashboard-page .dashboard-widget { border-color: #dedede; background: #fff; box-shadow: none; }.dashboard-widget__title h2,.upcoming-list strong,.workload-list__identity strong,.outcome-grid dd,.target-widget h3,.target-widget__ring strong { color: #171717; }.dashboard-widget__title > a,.target-widget > div:last-child > b { color: #525252; }.upcoming-list li,.outcome-grid,.outcome-grid > div { border-color: #e5e5e5; }.upcoming-list time { background: #f2f2f2; color: #171717; }.appointment-status { background: #e9e9e9; color: #262626; }.appointment-status--arrived { background: #262626; color: #fff; }.workload-list__identity > i { background: #e3e3e3; color: #1f1f1f; }.workload-list__measure b { color: #171717; }.workload-list__measure > i { background: #e6e6e6; }.workload-list__measure > i::after { background: #262626; }.outcome-grid .is-positive { color: #3f3f3f; }.outcome-grid .is-negative { color: #6a6a6a; }.target-widget__ring { background: conic-gradient(#171717 var(--progress, 0deg), #e5e5e5 0); }.target-widget__ring::before { background: #fff; }.target-widget--empty .target-widget__ring { background: #e5e5e5; }.dashboard-widget__note,.target-widget p,.target-widget__ring span,.target-widget__ring small { color: #707070; }
+.tenant-dashboard-page .dashboard-four { max-width: 1160px; }.dashboard-four__header p,.dashboard-widget__title p { color: #737373; }.dashboard-four__header h1 { color: #171717; }.dashboard-four__header span { color: #666; }.dashboard-four__header .waybook-primary-link,.target-widget--empty .waybook-primary-link { background: #171717; color: #fff; }.tenant-dashboard-page .dashboard-widget { border-color: #dedede; background: #fff; box-shadow: none; }.dashboard-widget__title h2,.upcoming-list strong,.workload-list__identity strong,.outcome-grid dd,.target-widget h3,.target-widget__ring strong { color: #171717; }.dashboard-widget__title > a,.target-widget > div:last-child > b { color: #525252; }.upcoming-list li,.outcome-grid,.outcome-grid > div { border-color: #e5e5e5; }.upcoming-list time { background: #f2f2f2; color: #171717; }.appointment-status { background: #e9e9e9; color: #262626; }.appointment-status--arrived { background: #262626; color: #fff; }.workload-list__identity > i { background: #e3e3e3; color: #1f1f1f; }.workload-list__measure b { color: #171717; }.workload-list__measure > i { background: #e6e6e6; }.workload-list__measure > i::after { background: #262626; }.outcome-grid .is-positive { color: #3f3f3f; }.outcome-grid .is-negative { color: #6a6a6a; }.dashboard-widget__note,.target-widget p,.target-widget__ring span,.target-widget__ring small { color: #707070; }
 @media (max-width: 760px) { .tenant-dashboard-page .tenant-dashboard-nav { position: relative; min-height: auto; margin: 0 -1.25rem 1.2rem; padding: .8rem 1.25rem; grid-template-columns: minmax(0,1fr) auto auto; gap: .35rem; }.tenant-dashboard-page .tenant-dashboard-nav nav { order: 4; width: 100%; justify-content: flex-start; overflow-x: auto; }.tenant-dashboard-page .tenant-dashboard-nav__signout button { padding: .45rem .58rem; font-size: .66rem; }.tenant-app-menu__layer { padding: 4rem .75rem .75rem; }.tenant-app-menu__dialog { max-height: calc(100vh - 4.75rem); padding: 1.1rem; }.tenant-app-menu__groups { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 460px) { .tenant-dashboard-page .tenant-dashboard-nav__signout { display: none; }.tenant-dashboard-page .tenant-dashboard-nav { grid-template-columns: minmax(0,1fr) auto; }.tenant-app-menu__groups { grid-template-columns: 1fr; }.tenant-app-menu__groups section > div { grid-template-columns: 1fr; } }
 
@@ -241,7 +767,7 @@ body {
 @media (max-width: 460px) { .tenant-dashboard-page .tenant-dashboard-nav__signout { display: block; } }
 
 /* Tenant account control: compact identity trigger with a focused, usable menu. */
-.tenant-dashboard-page .tenant-user-menu { grid-column: 3; grid-row: 1; position: relative; justify-self: end; }.tenant-user-menu > button { display: inline-flex; align-items: center; gap: .48rem; max-width: 15rem; border: 0; border-radius: .7rem; padding: .36rem .5rem; background: transparent; color: #fff; cursor: pointer; font: inherit; text-align: left; }.tenant-user-menu > button:hover,.tenant-user-menu > button:focus-visible { background: #262626; outline: 0; }.tenant-user-menu > button > i,.tenant-user-menu__popover header > i { display: grid; flex: 0 0 2.3rem; width: 2.3rem; height: 2.3rem; place-items: center; border-radius: 50%; background: #3b3b3b; color: #fff; font-size: .72rem; font-style: normal; font-weight: 600; }.tenant-user-menu > button span { display: grid; min-width: 0; gap: .06rem; }.tenant-user-menu > button strong,.tenant-user-menu > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tenant-user-menu > button strong { font-size: .76rem; }.tenant-user-menu > button small { color: #ababab; font-size: .65rem; }.tenant-user-menu > button > b { color: #bdbdbd; font-size: 1rem; font-weight: 600; }.tenant-user-menu__layer { position: fixed; z-index: 70; inset: 0; }.tenant-user-menu__scrim { position: absolute; inset: 0; border: 0; background: transparent; }.tenant-user-menu__popover { position: absolute; top: 4.25rem; right: clamp(1.25rem, 5vw, 4rem); width: min(calc(100vw - 2rem), 20rem); overflow: hidden; border: 1px solid #dedede; border-radius: .9rem; background: #fff; box-shadow: 0 1.2rem 3rem rgba(0,0,0,.2); color: #171717; }.tenant-user-menu__popover header { display: flex; align-items: center; gap: .75rem; padding: 1rem; }.tenant-user-menu__popover header > i { background: #171717; }.tenant-user-menu__popover header div { display: grid; min-width: 0; gap: .1rem; }.tenant-user-menu__popover header strong { color: #171717; font-size: .86rem; }.tenant-user-menu__popover header span { overflow: hidden; color: #696969; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }.tenant-user-menu__popover header small { width: fit-content; margin-top: .18rem; border-radius: 999px; padding: .2rem .4rem; background: #f0f0f0; color: #555; font-size: .6rem; font-weight: 600; }.tenant-user-menu__items { display: grid; gap: .15rem; border-top: 1px solid #ededed; padding: .45rem; }.tenant-user-menu__items a,.tenant-user-menu__popover form button { display: flex; width: 100%; align-items: center; gap: .65rem; border: 0; border-radius: .55rem; padding: .65rem; background: transparent; color: #252525; font: inherit; font-size: .78rem; text-align: left; text-decoration: none; cursor: pointer; }.tenant-user-menu__items a:hover,.tenant-user-menu__items a:focus-visible,.tenant-user-menu__popover form button:hover,.tenant-user-menu__popover form button:focus-visible { background: #f1f1f1; outline: 0; }.tenant-user-menu__items a > b,.tenant-user-menu__popover form button > b { display: grid; flex: 0 0 1.65rem; width: 1.65rem; height: 1.65rem; place-items: center; border-radius: .45rem; background: #e7e7e7; color: #252525; font-size: .78rem; }.tenant-user-menu__items a span { display: grid; gap: .12rem; }.tenant-user-menu__items a small { color: #747474; font-size: .64rem; }.tenant-user-menu__popover form { margin: 0; border-top: 1px solid #ededed; padding: .45rem; }.tenant-user-menu__popover form button { color: #4b4b4b; }
+.tenant-dashboard-page .tenant-user-menu { grid-column: 3; grid-row: 1; position: relative; justify-self: end; }.tenant-user-menu > button { display: inline-flex; align-items: center; gap: .48rem; max-width: 15rem; border: 0; border-radius: .7rem; padding: .36rem .5rem; background: transparent; color: #fff; cursor: pointer; font: inherit; text-align: left; }.tenant-user-menu > button:hover,.tenant-user-menu > button:focus-visible { background: #262626; outline: 0; }.tenant-user-menu > button > i,.tenant-user-menu__popover header > i { display: grid; flex: 0 0 2.3rem; width: 2.3rem; height: 2.3rem; place-items: center; border-radius: 50%; background: #3b3b3b; color: #fff; font-size: .72rem; font-style: normal; font-weight: 600; }.tenant-user-menu > button span { display: grid; min-width: 0; gap: .06rem; }.tenant-user-menu > button strong,.tenant-user-menu > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.tenant-user-menu > button strong { font-size: .76rem; }.tenant-user-menu > button small { color: #ababab; font-size: .65rem; }.tenant-user-menu > button > b { color: #bdbdbd; font-size: 1rem; font-weight: 600; }.tenant-user-menu__layer { position: fixed; z-index: 70; inset: 0; }.tenant-user-menu__scrim { position: absolute; inset: 0; border: 0; background: transparent; }.tenant-user-menu__popover { position: absolute; top: 4.25rem; right: clamp(1.25rem, 5vw, 4rem); width: min(calc(100vw - 2rem), 20rem); overflow: hidden; border: 1px solid #dedede; border-radius: .9rem; background: #fff; box-shadow: 0 1.2rem 3rem rgba(0,0,0,.2); color: #171717; }.tenant-user-menu__popover header { display: flex; align-items: center; gap: .75rem; padding: 1rem; }.tenant-user-menu__popover header > i { background: #171717; }.tenant-user-menu__popover header div { display: grid; min-width: 0; gap: .1rem; }.tenant-user-menu__popover header strong { color: #171717; font-size: .86rem; }.tenant-user-menu__popover header > div > span { overflow: hidden; color: #696969; font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }.tenant-user-menu__popover header small { width: fit-content; margin-top: .18rem; border-radius: 999px; padding: .2rem .4rem; background: #f0f0f0; color: #555; font-size: .6rem; font-weight: 600; }.tenant-user-menu__items { display: grid; gap: .15rem; border-top: 1px solid #ededed; padding: .45rem; }.tenant-user-menu__items a,.tenant-user-menu__popover form button { display: flex; width: 100%; align-items: center; gap: .65rem; border: 0; border-radius: .55rem; padding: .65rem; background: transparent; color: #252525; font: inherit; font-size: .78rem; text-align: left; text-decoration: none; cursor: pointer; }.tenant-user-menu__items a:hover,.tenant-user-menu__items a:focus-visible,.tenant-user-menu__popover form button:hover,.tenant-user-menu__popover form button:focus-visible { background: #f1f1f1; outline: 0; }.tenant-user-menu__items a > b,.tenant-user-menu__popover form button > b { display: grid; flex: 0 0 1.65rem; width: 1.65rem; height: 1.65rem; place-items: center; border-radius: .45rem; background: #e7e7e7; color: #252525; font-size: .78rem; }.tenant-user-menu__items a span { display: grid; gap: .12rem; }.tenant-user-menu__items a small { color: #747474; font-size: .64rem; }.tenant-user-menu__popover form { margin: 0; border-top: 1px solid #ededed; padding: .45rem; }.tenant-user-menu__popover form button { color: #4b4b4b; }
 @media (max-width: 760px) { .tenant-dashboard-page .tenant-user-menu { grid-column: auto; grid-row: auto; }.tenant-user-menu > button { max-width: 9rem; }.tenant-user-menu__popover { top: 4rem; right: .75rem; } }
 @media (max-width: 460px) { .tenant-user-menu > button { padding-right: .1rem; }.tenant-user-menu > button span,.tenant-user-menu > button > b { display: none; } }
 
@@ -259,7 +785,7 @@ body {
 @media (max-width: 760px) { .tenant-dashboard-page .waybook-week-calendar__scroll { overflow-x: auto; padding: 0; }.tenant-dashboard-page .waybook-week-calendar__grid { min-width: 45rem; }.tenant-dashboard-page .team-day-calendar__grid { min-width: 38rem !important; }.tenant-dashboard-page .waybook-calendar-toolbar { padding: 1rem; }.tenant-dashboard-page .calendar-selectors { padding: .75rem 1rem; }.tenant-dashboard-page .waybook-calendar-toolbar__actions { justify-content: flex-start; } }
 
 /* Clients: create and edit only when asked, without sacrificing the list. */
-.client-list-actions { display: flex; align-items: end; gap: .7rem; }.tenant-dashboard-page .client-list-actions .waybook-primary-link { flex: 0 0 auto; border-radius: .45rem; background: #171717; color: #fff; white-space: nowrap; }.tenant-dashboard-page .customer-table-row td { padding: 0; }.tenant-dashboard-page .customer-table-row td > a { display: block; min-height: 100%; padding: .85rem .8rem; color: inherit; text-decoration: none; }.tenant-dashboard-page .customer-table-row:hover td > a,.tenant-dashboard-page .customer-table-row:focus-within td > a { background: #f4f4f4; }.tenant-dashboard-page .customer-table-row small { display: block; margin-top: .2rem; color: #737373; }.client-form-modal-layer { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 1.5rem; }.client-form-modal__scrim { position: absolute; inset: 0; background: rgba(18,18,18,.52); backdrop-filter: blur(3px); }.client-form-modal { position: relative; width: min(100%, 48rem); max-height: min(88vh, 52rem); overflow: auto; border: 1px solid #dedede; border-radius: .9rem; background: #fff; box-shadow: 0 1.8rem 5rem rgba(0,0,0,.28); color: #171717; animation: client-form-modal-in 160ms cubic-bezier(.2,.8,.2,1) both; }.client-form-modal header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #e5e5e5; padding: 1.35rem 1.5rem 1rem; }.client-form-modal header p { margin: 0 0 .32rem; color: #737373; font-size: .65rem; font-weight: 600; letter-spacing: .12em; }.client-form-modal header h2 { margin: 0; color: #171717; font-size: 1.4rem; letter-spacing: -.04em; }.client-form-modal header span { display: block; margin-top: .35rem; color: #666; font-size: .78rem; }.client-form-modal__close { display: grid; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; place-items: center; border: 1px solid #dedede; border-radius: 50%; color: #404040; font-size: 1.35rem; text-decoration: none; }.client-form-modal__body { display: grid; gap: 1rem; padding: 1.25rem 1.5rem 1.5rem; }.client-form-modal .waybook-customer-form { grid-template-columns: 1fr 1fr; gap: .9rem; padding: 0; background: transparent; }.client-form-modal .waybook-customer-form label { color: #525252; }.client-form-modal .waybook-customer-form input,.client-form-modal .waybook-customer-form textarea { border-color: #d4d4d4; border-radius: .45rem; background: #fff; color: #171717; }.client-form-modal .waybook-customer-form button { justify-self: start; border-radius: .45rem; background: #171717; color: #fff; }.client-form-modal .waybook-customer-form label:nth-of-type(4),.client-form-modal .waybook-customer-form label:nth-of-type(5),.client-form-modal .waybook-customer-form p,.client-form-modal .waybook-customer-form button { grid-column: 1 / -1; }.client-form-modal .appointment-drawer__summary { background: #f4f4f4; }.client-form-modal .waybook-primary-link { width: fit-content; border-radius: .45rem; background: #171717; color: #fff; }.client-form-modal .customer-history li { border-color: #e5e5e5; }.client-form-modal .customer-history strong,.client-form-modal .customer-history b { color: #171717; }
+.client-list-actions { display: flex; align-items: end; gap: .7rem; }.tenant-dashboard-page .client-list-actions .waybook-primary-link { flex: 0 0 auto; border-radius: .45rem; background: #171717; color: #fff; white-space: nowrap; }.tenant-dashboard-page .customer-table-row td { padding: 0; }.tenant-dashboard-page .customer-table-row td > a { display: block; min-height: 100%; padding: .85rem .8rem; color: inherit; text-decoration: none; }.tenant-dashboard-page .customer-table-row:hover td,.tenant-dashboard-page .customer-table-row:focus-within td { background: #f4f4f4; }.tenant-dashboard-page .customer-table-row small { display: block; margin-top: .2rem; color: #737373; }.client-form-modal-layer { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 1.5rem; }.client-form-modal__scrim { position: absolute; inset: 0; background: rgba(18,18,18,.52); backdrop-filter: blur(3px); }.client-form-modal { position: relative; width: min(100%, 48rem); max-height: min(88vh, 52rem); overflow: auto; border: 1px solid #dedede; border-radius: .9rem; background: #fff; box-shadow: 0 1.8rem 5rem rgba(0,0,0,.28); color: #171717; animation: client-form-modal-in 160ms cubic-bezier(.2,.8,.2,1) both; }.client-form-modal header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #e5e5e5; padding: 1.35rem 1.5rem 1rem; }.client-form-modal header p { margin: 0 0 .32rem; color: #737373; font-size: .65rem; font-weight: 600; letter-spacing: .12em; }.client-form-modal header h2 { margin: 0; color: #171717; font-size: 1.4rem; letter-spacing: -.04em; }.client-form-modal header span { display: block; margin-top: .35rem; color: #666; font-size: .78rem; }.client-form-modal__close { display: grid; flex: 0 0 2.2rem; width: 2.2rem; height: 2.2rem; place-items: center; border: 1px solid #dedede; border-radius: 50%; color: #404040; font-size: 1.35rem; text-decoration: none; }.client-form-modal__body { display: grid; gap: 1rem; padding: 1.25rem 1.5rem 1.5rem; }.client-form-modal .waybook-customer-form { grid-template-columns: 1fr 1fr; gap: .9rem; padding: 0; background: transparent; }.client-form-modal .waybook-customer-form label { color: #525252; }.client-form-modal .waybook-customer-form input,.client-form-modal .waybook-customer-form textarea { border-color: #d4d4d4; border-radius: .45rem; background: #fff; color: #171717; }.client-form-modal .waybook-customer-form button { justify-self: start; border-radius: .45rem; background: #171717; color: #fff; }.client-form-modal .waybook-customer-form label:nth-of-type(4),.client-form-modal .waybook-customer-form label:nth-of-type(5),.client-form-modal .waybook-customer-form p,.client-form-modal .waybook-customer-form button { grid-column: 1 / -1; }.client-form-modal .appointment-drawer__summary { background: #f4f4f4; }.client-form-modal .waybook-primary-link { width: fit-content; border-radius: .45rem; background: #171717; color: #fff; }.client-form-modal .customer-history li { border-color: #e5e5e5; }.client-form-modal .customer-history strong,.client-form-modal .customer-history b { color: #171717; }
 @keyframes client-form-modal-in { from { opacity: 0; transform: translateY(.45rem) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (max-width: 680px) { .client-list-actions { align-items: stretch; flex-direction: column; }.client-list-actions .waybook-list-filter { width: 100%; }.client-form-modal-layer { padding: .75rem; align-items: end; }.client-form-modal { width: 100%; max-height: calc(100vh - 1.5rem); }.client-form-modal header,.client-form-modal__body { padding-left: 1.1rem; padding-right: 1.1rem; }.client-form-modal .waybook-customer-form { grid-template-columns: 1fr; }.client-form-modal .waybook-customer-form label:nth-of-type(4),.client-form-modal .waybook-customer-form label:nth-of-type(5),.client-form-modal .waybook-customer-form p,.client-form-modal .waybook-customer-form button { grid-column: auto; }.client-form-modal .waybook-customer-form button { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .client-form-modal { animation: none; } }
@@ -278,16 +804,22 @@ body {
 /* User-selected appearance: local browser preferences, with an intentionally
    restrained tint so booking states never rely on the chosen accent alone. */
 :root { --waybook-accent: #262626; --waybook-accent-soft: #e9e9e9; --waybook-accent-ink: #171717; }
-:root[data-waybook-tint="blue"] { --waybook-accent: #2563eb; --waybook-accent-soft: #dbeafe; --waybook-accent-ink: #1d4ed8; }
 :root[data-waybook-tint="violet"] { --waybook-accent: #7c3aed; --waybook-accent-soft: #ede9fe; --waybook-accent-ink: #6d28d9; }
 :root[data-waybook-tint="rose"] { --waybook-accent: #db2777; --waybook-accent-soft: #fce7f3; --waybook-accent-ink: #be185d; }
 :root[data-waybook-tint="teal"] { --waybook-accent: #0f9f9a; --waybook-accent-soft: #d9f5f2; --waybook-accent-ink: #0b7672; }
 :root[data-waybook-tint="coral"] { --waybook-accent: #e76f51; --waybook-accent-soft: #fde3dc; --waybook-accent-ink: #c8563b; }
 :root[data-waybook-tint="amber"] { --waybook-accent: #d89018; --waybook-accent-soft: #fdf0d5; --waybook-accent-ink: #ad6e0f; }
+:root[data-waybook-theme="dark"][data-waybook-tint="neutral"] {
+  --waybook-accent: #757575;
+  --waybook-accent-soft: #414145;
+  --waybook-accent-ink: #dedee2;
+  --waybook-accent-indicator: #aaaab0;
+  --waybook-accent-hover: #626268;
+}
 .tenant-dashboard-page .waybook-primary-link,.tenant-dashboard-page .tenant-drawer-form button:not(.staff-multi-toggle),.tenant-dashboard-page .appointment-drawer__status-actions button { border-color: var(--waybook-accent); background: var(--waybook-accent); }.tenant-dashboard-page .waybook-primary-link:hover,.tenant-dashboard-page .tenant-drawer-form button:hover,.tenant-dashboard-page .appointment-drawer__status-actions button:hover { background: var(--waybook-accent-ink); }.tenant-dashboard-page .tenant-dashboard-nav nav a[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--waybook-accent); }.tenant-dashboard-page .staff-workspace__tabs a[aria-current="page"] { border-color: var(--waybook-accent); color: var(--waybook-accent-ink); }.tenant-dashboard-page .staff-status-toggle input:checked + span,.tenant-dashboard-page .staff-multi-toggle input:checked + span { background: var(--waybook-accent); }
-.tenant-appearance { display: grid; gap: .55rem; border-top: 1px solid #ededed; padding: .8rem; }.tenant-appearance header { display: flex; align-items: center; gap: .42rem; color: #3f3f3f; font-size: .72rem; font-weight: 600; }.tenant-appearance header svg { width: .9rem; height: .9rem; }.tenant-appearance__themes,.tenant-appearance__tints { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }.tenant-appearance__tints { grid-template-columns: repeat(4, 1fr); }.tenant-appearance button { display: inline-flex; min-height: 2rem; align-items: center; justify-content: center; gap: .28rem; border: 1px solid #dedede; border-radius: .42rem; background: #fff; color: #555; font: inherit; font-size: .62rem; font-weight: 600; cursor: pointer; }.tenant-appearance button:hover,.tenant-appearance button:focus-visible { border-color: #a3a3a3; outline: 0; }.tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); color: var(--waybook-accent-ink); }.tenant-appearance button svg { width: .8rem; height: .8rem; }.tenant-appearance__tints i { width: .55rem; height: .55rem; border-radius: 50%; background: #404040; }.tenant-appearance__tints button:nth-child(2) i { background: #2563eb; }.tenant-appearance__tints button:nth-child(3) i { background: #7c3aed; }.tenant-appearance__tints button:nth-child(4) i { background: #db2777; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page { background: #111; color: #f5f5f5; }.tenant-dashboard-page .tenant-dashboard-nav { background: #090909; }.tenant-dashboard-page .tenant-dashboard-nav nav a[aria-current="page"] { background: #1f1f1f; }.tenant-dashboard-page .waybook-data-card,.tenant-dashboard-page .waybook-data-metrics,.tenant-dashboard-page .staff-workspace,.tenant-dashboard-page .staff-workspace__panel,.tenant-dashboard-page .tenant-drawer,.tenant-user-menu__popover { border-color: #303030; background: #1a1a1a; box-shadow: none; }.tenant-dashboard-page .waybook-data-card h2,.tenant-dashboard-page .waybook-data-card h3,.tenant-dashboard-page .waybook-data-card td:first-child,.tenant-dashboard-page .waybook-data-card td strong,.tenant-dashboard-page .waybook-data-metrics strong,.tenant-dashboard-page .staff-workspace h1,.tenant-dashboard-page .staff-workspace h2,.tenant-dashboard-page .staff-workspace h3,.tenant-dashboard-page .staff-workspace h4,.tenant-dashboard-page .tenant-drawer > header h2,.tenant-dashboard-page .tenant-drawer__summary strong { color: #f5f5f5; }.tenant-dashboard-page .waybook-data-card p,.tenant-dashboard-page .waybook-data-card span,.tenant-dashboard-page .waybook-data-card small,.tenant-dashboard-page .waybook-data-metrics span,.tenant-dashboard-page .waybook-data-metrics small,.tenant-dashboard-page .tenant-drawer > header p,.tenant-dashboard-page .tenant-drawer > header span,.tenant-dashboard-page .tenant-drawer-note { color: #b6b6b6; }.tenant-dashboard-page .waybook-data-card th,.tenant-dashboard-page .waybook-data-card tr:hover td,.tenant-dashboard-page .staff-workspace__directory,.tenant-dashboard-page .staff-profile-facts,.tenant-dashboard-page .staff-exception-list article,.tenant-dashboard-page .staff-shift-schedule__summary,.tenant-dashboard-page .appointment-drawer__summary { border-color: #303030; background: #242424; }.tenant-dashboard-page .waybook-data-card td,.tenant-dashboard-page .waybook-data-card th,.tenant-dashboard-page .staff-workspace__tabs,.tenant-dashboard-page .tenant-drawer > header { border-color: #303030; }.tenant-dashboard-page .waybook-row-link,.tenant-dashboard-page .waybook-service-card strong { color: #f5f5f5; }.tenant-dashboard-page .waybook-service-card,.tenant-dashboard-page .waybook-list-filter input,.tenant-dashboard-page .waybook-list-filter select,.tenant-dashboard-page .tenant-drawer-form input:not([type="checkbox"]),.tenant-dashboard-page .tenant-drawer-form select,.tenant-dashboard-page .tenant-drawer-form textarea,.tenant-dashboard-page .staff-profile-form input,.tenant-dashboard-page .staff-profile-form textarea,.tenant-dashboard-page .staff-profile-form select,.tenant-dashboard-page .staff-timeoff-form input,.tenant-dashboard-page .staff-timeoff-form select,.tenant-dashboard-page .staff-hours-form input { border-color: #404040; background: #242424; color: #f5f5f5; }.tenant-dashboard-page .waybook-list-filter nav a,.tenant-dashboard-page nav.waybook-list-filter a { border-color: #404040; background: #242424; color: #ddd; }.tenant-dashboard-page .waybook-list-filter nav a[aria-current="page"],.tenant-dashboard-page nav.waybook-list-filter a[aria-current="page"] { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }.tenant-dashboard-page .tenant-drawer-scrim,.tenant-app-menu__scrim,.tenant-user-menu__scrim { background: rgba(0,0,0,.76); }.tenant-user-menu__popover header strong,.tenant-user-menu__items a,.tenant-user-menu__popover form button,.tenant-appearance header { color: #f5f5f5; }.tenant-user-menu__popover header span,.tenant-user-menu__items a small { color: #b6b6b6; }.tenant-user-menu__items,.tenant-user-menu__popover form,.tenant-appearance { border-color: #303030; }.tenant-user-menu__items a:hover,.tenant-user-menu__popover form button:hover { background: #292929; }.tenant-user-menu__items a > b,.tenant-user-menu__popover form button > b { background: #303030; color: #f5f5f5; }.tenant-appearance button { border-color: #454545; background: #242424; color: #ddd; }.tenant-appearance button:hover { border-color: #777; }
-:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-dashboard-nav { background: #0d0d0d; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace__panel,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover { border-color: #dedede; background: #fff; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card h2,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card h3,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card td:first-child,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card td strong,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics strong,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h1,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h2,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h3,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h4,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header h2,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer__summary strong { color: #171717; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card p,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card span,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card small,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics span,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics small,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header p,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header span,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-note { color: #666; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card th,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card tr:hover td,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace__directory,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-profile-facts,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-exception-list article,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-shift-schedule__summary,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .appointment-drawer__summary { border-color: #e2e2e2; background: #fafafa; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card td,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card th,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace__tabs,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header { border-color: #e5e5e5; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-row-link,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-service-card strong { color: #171717; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-service-card,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-list-filter input,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-list-filter select,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-form input:not([type="checkbox"]),:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-form select,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-form textarea { border-color: #d4d4d4; background: #fff; color: #171717; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-scrim,:root:not([data-waybook-theme="dark"]) .tenant-app-menu__scrim,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__scrim { background: rgba(244,244,243,.97); }:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover header strong,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__items a,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover form button,:root:not([data-waybook-theme="dark"]) .tenant-appearance header { color: #252525; }:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover header span,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__items a small { color: #747474; }:root:not([data-waybook-theme="dark"]) .tenant-user-menu__items,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover form,:root:not([data-waybook-theme="dark"]) .tenant-appearance { border-color: #ededed; }:root:not([data-waybook-theme="dark"]) .tenant-appearance button { border-color: #dedede; background: #fff; color: #555; }
+.tenant-appearance { display: grid; gap: .55rem; border-top: 1px solid #ededed; padding: .8rem; }.tenant-appearance header { display: flex; align-items: center; gap: .42rem; color: #3f3f3f; font-size: .72rem; font-weight: 600; }.tenant-appearance header svg { width: .9rem; height: .9rem; }.tenant-appearance__themes,.tenant-appearance__tints { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }.tenant-appearance__tints { grid-template-columns: repeat(4, 1fr); }.tenant-appearance button { display: inline-flex; min-height: 2rem; align-items: center; justify-content: center; gap: .28rem; border: 1px solid #dedede; border-radius: .42rem; background: #fff; color: #555; font: inherit; font-size: .62rem; font-weight: 600; cursor: pointer; }.tenant-appearance button:hover,.tenant-appearance button:focus-visible { border-color: #a3a3a3; outline: 0; }.tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); color: var(--waybook-accent-ink); }.tenant-appearance button svg { width: .8rem; height: .8rem; }.tenant-appearance__tints i { width: .55rem; height: .55rem; border-radius: 50%; background: #404040; }.tenant-appearance__tints button[aria-label="Ice Blue"] i { background: #315c82; }.tenant-appearance__tints button:nth-child(3) i { background: #7c3aed; }.tenant-appearance__tints button:nth-child(4) i { background: #db2777; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page { background: #111; color: #f5f5f5; }.tenant-dashboard-page .tenant-dashboard-nav { background: #090909; }.tenant-dashboard-page .tenant-dashboard-nav nav a[aria-current="page"] { background: #1f1f1f; }.tenant-dashboard-page .waybook-data-card,.tenant-dashboard-page .waybook-data-metrics,.tenant-dashboard-page .staff-workspace,.tenant-dashboard-page .staff-workspace__panel,.tenant-dashboard-page .tenant-drawer,.tenant-user-menu__popover { border-color: #303030; background: #1a1a1a; box-shadow: none; }.tenant-dashboard-page .waybook-data-card h2,.tenant-dashboard-page .waybook-data-card h3,.tenant-dashboard-page .waybook-data-card td:first-child,.tenant-dashboard-page .waybook-data-card td strong,.tenant-dashboard-page .waybook-data-metrics strong,.tenant-dashboard-page .staff-workspace h1,.tenant-dashboard-page .staff-workspace h2,.tenant-dashboard-page .staff-workspace h3,.tenant-dashboard-page .staff-workspace h4,.tenant-dashboard-page .tenant-drawer > header h2,.tenant-dashboard-page .tenant-drawer__summary strong { color: #f5f5f5; }.tenant-dashboard-page .waybook-data-card p,.tenant-dashboard-page .waybook-data-card span,.tenant-dashboard-page .waybook-data-card small,.tenant-dashboard-page .waybook-data-metrics span,.tenant-dashboard-page .waybook-data-metrics small,.tenant-dashboard-page .tenant-drawer > header p,.tenant-dashboard-page .tenant-drawer > header span,.tenant-dashboard-page .tenant-drawer-note { color: #b6b6b6; }.tenant-dashboard-page .waybook-data-card th,.tenant-dashboard-page .waybook-data-card tr:hover td,.tenant-dashboard-page .staff-workspace__directory,.tenant-dashboard-page .staff-profile-facts,.tenant-dashboard-page .staff-exception-list article,.tenant-dashboard-page .staff-shift-schedule__summary,.tenant-dashboard-page .appointment-drawer__summary { border-color: #303030; background: #242424; }.tenant-dashboard-page .waybook-data-card td,.tenant-dashboard-page .waybook-data-card th,.tenant-dashboard-page .staff-workspace__tabs,.tenant-dashboard-page .tenant-drawer > header { border-color: #303030; }.tenant-dashboard-page .waybook-row-link,.tenant-dashboard-page .waybook-service-card strong { color: #f5f5f5; }.tenant-dashboard-page .waybook-service-card,.tenant-dashboard-page .waybook-list-filter input,.tenant-dashboard-page .waybook-list-filter select,.tenant-dashboard-page .tenant-drawer-form input:not([type="checkbox"]),.tenant-dashboard-page .tenant-drawer-form select,.tenant-dashboard-page .tenant-drawer-form textarea,.tenant-dashboard-page .staff-profile-form input,.tenant-dashboard-page .staff-profile-form textarea,.tenant-dashboard-page .staff-profile-form select,.tenant-dashboard-page .staff-timeoff-form input,.tenant-dashboard-page .staff-timeoff-form select,.tenant-dashboard-page .staff-hours-form input { border-color: #404040; background: #242424; color: #f5f5f5; }.tenant-dashboard-page .waybook-list-filter nav a,.tenant-dashboard-page nav.waybook-list-filter a { border-color: #404040; background: #242424; color: #ddd; }.tenant-dashboard-page .waybook-list-filter nav a[aria-current="page"],.tenant-dashboard-page nav.waybook-list-filter a[aria-current="page"] { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }.tenant-dashboard-page .tenant-drawer-scrim,.tenant-app-menu__scrim,.tenant-user-menu__scrim { background: rgba(0,0,0,.76); }.tenant-user-menu__popover header strong,.tenant-user-menu__items a,.tenant-user-menu__popover form button,.tenant-appearance header { color: #f5f5f5; }.tenant-user-menu__popover header > div > span,.tenant-user-menu__items a small { color: #b6b6b6; }.tenant-user-menu__items,.tenant-user-menu__popover form,.tenant-appearance { border-color: #303030; }.tenant-user-menu__items a:hover,.tenant-user-menu__popover form button:hover { background: #292929; }.tenant-user-menu__items a > b,.tenant-user-menu__popover form button > b { background: #303030; color: #f5f5f5; }.tenant-appearance button { border-color: #454545; background: #242424; color: #ddd; }.tenant-appearance button:hover { border-color: #777; }
+:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-dashboard-nav { background: #0d0d0d; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace__panel,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover { border-color: #dedede; background: #fff; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card h2,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card h3,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card td:first-child,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card td strong,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics strong,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h1,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h2,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h3,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace h4,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header h2,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer__summary strong { color: #171717; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card p,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card span,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card small,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics span,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-metrics small,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header p,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header span,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-note { color: #666; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card th,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card tr:hover td,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace__directory,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-profile-facts,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-exception-list article,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-shift-schedule__summary,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .appointment-drawer__summary { border-color: #e2e2e2; background: #fafafa; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card td,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-data-card th,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .staff-workspace__tabs,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer > header { border-color: #e5e5e5; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-row-link,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-service-card strong { color: #171717; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-service-card,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-list-filter input,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .waybook-list-filter select,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-form input:not([type="checkbox"]),:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-form select,:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-form textarea { border-color: #d4d4d4; background: #fff; color: #171717; }:root:not([data-waybook-theme="dark"]) .tenant-dashboard-page .tenant-drawer-scrim,:root:not([data-waybook-theme="dark"]) .tenant-app-menu__scrim,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__scrim { background: rgba(244,244,243,.97); }:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover header strong,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__items a,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover form button,:root:not([data-waybook-theme="dark"]) .tenant-appearance header { color: #252525; }:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover header > div > span,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__items a small { color: #747474; }:root:not([data-waybook-theme="dark"]) .tenant-user-menu__items,:root:not([data-waybook-theme="dark"]) .tenant-user-menu__popover form,:root:not([data-waybook-theme="dark"]) .tenant-appearance { border-color: #ededed; }:root:not([data-waybook-theme="dark"]) .tenant-appearance button { border-color: #dedede; background: #fff; color: #555; }
 
 /* Desktop account panel: it is a popover, not a full-page drawer. */
 .tenant-user-menu__scrim { background: rgba(0,0,0,.32) !important; backdrop-filter: blur(2px); }.tenant-user-menu__popover { top: 4.85rem; right: max(1.5rem, calc((100vw - 1160px) / 2)); width: 25rem; border: 1px solid #dedede; border-radius: 1rem; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.24); }.tenant-appearance { gap: .7rem; padding: .9rem 1rem 1rem; }.tenant-appearance header { color: #262626; font-size: .76rem; }.tenant-appearance__themes,.tenant-appearance__tints { gap: .4rem; }.tenant-appearance button { min-height: 2.3rem; border: 1px solid #d4d4d4; border-radius: .5rem; padding: .4rem .35rem; background: #fff; color: #404040; font-size: .7rem; line-height: 1; white-space: nowrap; }.tenant-appearance button:hover,.tenant-appearance button:focus-visible { border-color: #8a8a8a; background: #fafafa; outline: 0; }.tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); box-shadow: inset 0 0 0 1px var(--waybook-accent); color: var(--waybook-accent-ink); }.tenant-appearance__tints button { justify-content: flex-start; padding-left: .5rem; }.tenant-appearance__tints i { flex: 0 0 .55rem; }.tenant-user-menu__popover .tenant-appearance + form { border-top: 1px solid #ededed; }
@@ -300,7 +832,8 @@ body {
 
 /* Shared drawer action baseline. Keep submit controls as usable controls rather
    than relying on browser-default button metrics in newly added drawers. */
-.tenant-dashboard-page .tenant-drawer-form > button:not(.staff-multi-toggle) {
+.tenant-dashboard-page .tenant-drawer-form > button:not(.staff-multi-toggle),
+.tenant-dashboard-page .waybook-action {
   min-height: 2.5rem;
   border: 1px solid var(--waybook-accent);
   border-radius: .45rem;
@@ -314,14 +847,34 @@ body {
   cursor: pointer;
 }
 
+.tenant-dashboard-page .waybook-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.tenant-dashboard-page .waybook-action:hover { background: var(--waybook-accent-hover, var(--waybook-accent-ink)); }
+.tenant-dashboard-page .waybook-action:focus-visible {
+  outline: 2px solid var(--waybook-accent);
+  outline-offset: 2px;
+}
+.tenant-dashboard-page .waybook-action:disabled { opacity: .55; cursor: default; }
+.tenant-dashboard-page .waybook-action--secondary {
+  border-color: var(--wb-dark-border, #d4d4d4);
+  background: var(--wb-dark-surface, #fff);
+  color: var(--wb-dark-text, #171717);
+}
+.tenant-dashboard-page .waybook-action--secondary:hover { background: var(--wb-dark-raised, #f4f4f5); }
+.tenant-dashboard-page .waybook-action--danger { border-color: #963e36; background: #963e36; }
+.tenant-dashboard-page .waybook-action--danger:hover { border-color: #79312b; background: #79312b; }
+
 .tenant-dashboard-page .tenant-inline-form { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.2fr) 6rem auto; align-items: end; gap: .65rem; }
 .tenant-dashboard-page .tenant-inline-form label { display: grid; gap: .35rem; color: #525252; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .tenant-dashboard-page .tenant-inline-form select,.tenant-dashboard-page .tenant-inline-form input { box-sizing: border-box; width: 100%; height: 2.45rem; border: 1px solid #d4d4d4; border-radius: .45rem; padding: 0 .68rem; background: #fff; color: #171717; font: inherit; font-size: .82rem; text-transform: none; }
 .tenant-dashboard-page .tenant-inline-form button { min-height: 2.45rem; border: 1px solid var(--waybook-accent); border-radius: .45rem; padding: 0 .85rem; background: var(--waybook-accent); color: #fff; font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
 @media (max-width: 760px) { .tenant-dashboard-page .tenant-inline-form { grid-template-columns: 1fr; }.tenant-dashboard-page .tenant-inline-form button { width: 100%; } }
 :root[data-waybook-theme="dark"] .tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: color-mix(in srgb, var(--waybook-accent) 24%, #242424); box-shadow: inset 0 0 0 1px var(--waybook-accent); color: #fff; }
-.tenant-user-menu__popover > form > button { min-height: 2.45rem; border: 1px solid #e7c5c1; border-radius: .55rem; background: #fffafa; color: #a12d24; font-weight: 600; }.tenant-user-menu__popover > form > button > b { background: #fde8e6; color: #b42318; }.tenant-user-menu__popover > form > button:hover,.tenant-user-menu__popover > form > button:focus-visible { border-color: #d67168; background: #fde8e6; color: #8d241d; }
-:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button { border-color: #66342f; background: #271918; color: #ffb4ab; }:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button > b { background: #48221e; color: #ffb4ab; }:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button:hover,:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button:focus-visible { background: #38201d; }
 
 /* Dark theme: a deliberate black workspace, not light calendar fragments on a
    dark canvas. High-contrast text remains readable at normal desktop scale. */
@@ -397,10 +950,8 @@ body {
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .appointment-status { background: #29292d; color: #e9e9ec; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .appointment-status--arrived { background: var(--waybook-accent); color: #fff; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .workload-list__identity > i { background: #2b2b2e; color: #f1f1f3; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .workload-list__measure > i,:root[data-waybook-theme="dark"] .tenant-dashboard-page .target-widget--empty .target-widget__ring { background: #2b2b2e; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .workload-list__measure > i { background: #2b2b2e; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .workload-list__measure > i::after { background: var(--waybook-accent); }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .target-widget__ring { background: conic-gradient(var(--waybook-accent) var(--progress, 0deg), #303034 0); }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .target-widget__ring::before { background: var(--wb-dark-surface); }
 
 /* Overview: compact operational grid with intentionally scrollable appointments. */
 @media (min-width: 1020px) {
@@ -446,7 +997,7 @@ body {
 .tenant-dashboard-page .tenant-drawer-scrim { background: rgba(12,12,14,.42); backdrop-filter: blur(4px); }
 .tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button { border-color: #d2d2d5; background: #f2f2f3; color: #8b8b91; box-shadow: none; }
 .tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle):disabled,.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:disabled { border-color: #dedee1; background: #f4f4f5; color: #99999f; cursor: not-allowed; }
-.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle):not(.appointment-reschedule-picker__day):not(.appointment-reschedule-picker__slot):not(.calendar-search-picker__clear):not(:disabled),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:not(:disabled) { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }
+.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle):not(.appointment-reschedule-picker__day):not(.appointment-reschedule-picker__slot):not(.calendar-search-picker__clear):not([role="option"]):not(:disabled),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:not(:disabled) { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button { border-color: #d4d4d7; background: #fff; color: #55555b; box-shadow: none; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button:not(:disabled):hover,.tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button:not(:disabled):focus-visible { border-color: #a7a7ad; background: #f4f4f5; color: #252529; outline: 0; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button.is-selected { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); color: var(--waybook-accent-ink); box-shadow: inset 0 0 0 1px var(--waybook-accent); }
@@ -487,22 +1038,19 @@ body {
 .tenant-nav-tools { display: flex; align-items: center; gap: .2rem; }
 .tenant-nav-tools > button,.tenant-nav-tools > a,.tenant-nav-tools__search > button { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border: 0; border-radius: .55rem; background: transparent; color: #c4c4c8; cursor: pointer; }
 .tenant-nav-tools > a { text-decoration: none; }
-.tenant-nav-tools > button:hover,.tenant-nav-tools > a:hover,.tenant-nav-tools__search > button:hover { background: #262626; color: #fff; }
+.tenant-nav-tools > button:hover,.tenant-nav-tools > a:hover { background: #262626; color: #fff; }
 .tenant-nav-tools > button:disabled { cursor: default; opacity: .35; }
 .tenant-nav-tools > button svg,.tenant-nav-tools > a svg,.tenant-nav-tools__search svg { width: 1rem; height: 1rem; }
 .tenant-nav-tools__search { display: flex; width: min(19rem, 32vw); align-items: center; gap: .3rem; border: 1px solid #3d3d42; border-radius: .55rem; padding-left: .6rem; background: #1b1b1d; color: #bdbdc4; }
 .tenant-nav-tools__search input { width: 100%; min-width: 0; height: 2.25rem; border: 0; outline: 0; background: transparent; color: #f4f4f5; font: inherit; font-size: .76rem; }
 .tenant-nav-tools__search input::placeholder { color: #929299; }
-@media (max-width: 760px) { .tenant-nav-account-actions { grid-column: 3; grid-row: 1; }.tenant-dashboard-page .tenant-nav-tools__search { position: absolute; top: calc(100% + .45rem); right: .75rem; width: min(19rem, calc(100vw - 1.5rem)); background: #151517; box-shadow: 0 .8rem 2rem rgba(0,0,0,.3); } }
 
 /* Account menu: the person and their role lead; preferences are compact. */
 .tenant-user-menu__popover header { position: relative; }
-.tenant-user-menu__avatar-upload { position: relative; display: grid; flex: 0 0 2.9rem; width: 2.9rem; height: 2.9rem; place-items: center; overflow: hidden; border: 0; border-radius: 50%; padding: 0; background: transparent; cursor: pointer; }
-.tenant-user-menu__avatar-upload { overflow: visible; }
+.tenant-user-menu__avatar-upload { position: relative; display: grid; flex: 0 0 2.9rem; width: 2.9rem; height: 2.9rem; place-items: center; border: 0; border-radius: 50%; padding: 0; background: transparent; font-family: inherit; cursor: pointer; }
 .tenant-user-menu__avatar-upload > i,.tenant-user-menu > button > i { overflow: hidden; background: #f3f1ed; color: #232326; }
-.tenant-user-menu__avatar-upload > i { width: 100%; height: 100%; border-radius: 50%; }
+.tenant-user-menu__avatar-upload > i { width: 100%; height: 100%; border-radius: 50%; font-size: .9rem; font-style: normal; font-weight: 600; }
 .tenant-user-menu__avatar-upload img,.tenant-user-menu > button > i img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.tenant-user-menu__avatar-upload > svg { position: absolute; z-index: 2; right: -.34rem; bottom: -.34rem; width: 1.25rem; height: 1.25rem; box-sizing: content-box; border: 2px solid #fff; border-radius: 50%; padding: .18rem; background: #202024; box-shadow: 0 1px 4px rgba(0,0,0,.24); color: #fff; }
 .catalogue-row { display: flex; align-items: center; gap: .7rem; }.catalogue-row > img { width: 2.5rem; height: 2.5rem; flex: 0 0 2.5rem; border-radius: .45rem; object-fit: cover; background: #ececee; }.catalogue-row > span { display: grid; gap: .18rem; }.catalogue-photo-preview { display: block; width: min(12rem, 100%); aspect-ratio: 1; border: 1px solid #d8d8dc; border-radius: .65rem; object-fit: cover; }
 .tenant-user-menu__popover header > small { margin-left: auto; align-self: flex-start; white-space: nowrap; }
 .tenant-user-menu__popover header div { gap: 0; }
@@ -970,7 +1518,7 @@ body {
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace h2,
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace h3,
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace h4 { color: #1f1f22; }
-:root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__profile-header span:not(.staff-workspace__avatar),
+:root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__profile-title > span,
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__directory-copy,
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__directory nav small,
 :root[data-waybook-theme="light"] .tenant-dashboard-page .staff-workspace__directory nav i:not(.is-active),
@@ -1039,7 +1587,7 @@ body {
   background: var(--wb-dark-border);
   color: var(--wb-dark-muted);
 }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__profile-header span:not(.staff-workspace__avatar),
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__profile-title > span,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__directory-copy,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-workspace__tabs a,
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-profile-form label,
@@ -1075,11 +1623,11 @@ body {
 :root[data-waybook-theme="dark"] .tenant-user-menu__popover { border-color: #343439; background: #19191b; color: #f4f4f5; }
 :root[data-waybook-theme="dark"] .tenant-user-menu__items a { color: #eeeeef; }
 :root[data-waybook-theme="dark"] .tenant-user-menu__items a small,
-:root[data-waybook-theme="dark"] .tenant-user-menu__popover header span { color: #b5b5bc; }
+:root[data-waybook-theme="dark"] .tenant-user-menu__popover header > div > span { color: #b5b5bc; }
 :root[data-waybook-theme="dark"] .tenant-user-menu__items a:hover,
 :root[data-waybook-theme="dark"] .tenant-user-menu__items a:focus-visible { background: #2a2a2d; color: #fff; }
-:root[data-waybook-theme="light"] .tenant-appearance button[aria-pressed="true"] { border-color: #252528; background: #f1f1f2; box-shadow: inset 0 0 0 1px #252528; color: #17171a; }
-:root[data-waybook-theme="dark"] .tenant-appearance button[aria-pressed="true"] { border-color: #f4f4f5; background: #2a2a2e; box-shadow: inset 0 0 0 1px #f4f4f5; color: #fff; }
+:root[data-waybook-theme="light"] .tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); box-shadow: inset 0 0 0 1px var(--waybook-accent); color: #17171a; }
+:root[data-waybook-theme="dark"] .tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent-indicator, var(--waybook-accent)); background: #2a2a2e; box-shadow: inset 0 0 0 1px var(--waybook-accent-indicator, var(--waybook-accent)); color: #fff; }
 
 /* Circular controls are visual anchors.  Their text or icon must remain
    centred by the layout box, rather than relying on font ascenders or an
@@ -1161,7 +1709,7 @@ body {
 /* Online-booking tabs share one predictable two-column editor/preview frame. */
 .online-booking-tabs .online-booking-tab--codes { display:none; min-width:0; }
 .online-booking-tabs:has(#booking-tab-codes:checked) .online-booking-tab--codes { display:block; }
-.online-booking-tabs:has(#booking-tab-codes:checked) label[for="booking-tab-codes"] { color:#171717; box-shadow:inset 0 -2px #2346f5; }
+.online-booking-tabs:has(#booking-tab-codes:checked) label[for="booking-tab-codes"] { color:#171717; box-shadow:inset 0 -2px var(--ice-focus, #2346f5); }
 .online-booking-tabs:has(#booking-tab-embed:checked) { grid-template-columns:minmax(24rem,.92fr) minmax(28rem,1.08fr); }
 .online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-persistent-preview { display:block; grid-column:2; grid-row:2; }
 .online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-tab--embed { grid-column:1; }
@@ -1246,7 +1794,7 @@ body {
 
 /* Online booking is a focused editor: each tab has one job and the embed never
    competes with controls below it. */
-.online-booking-tabs { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:clamp(1.25rem,3vw,3rem); width:100%; max-width:none; margin:0; }.online-booking-tabs > input { position:absolute; opacity:0; pointer-events:none; }.online-booking-tabs > nav { grid-column:1 / -1; display:flex; gap:.25rem; margin-bottom:1.15rem; border-bottom:1px solid #dedee2; }.online-booking-tabs > nav label { padding:.72rem .9rem; color:#74747b; font-size:.8rem; font-weight:600; cursor:pointer; }.online-booking-tab { grid-column:1; }.online-booking-tabs:has(#booking-tab-overview:checked) .online-booking-tab--overview,.online-booking-tabs:has(#booking-tab-services:checked) .online-booking-tab--services,.online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-tab--embed,.online-booking-tabs:has(#booking-tab-policy:checked) .online-booking-tab--policy { display:block; }.online-booking-tabs:has(#booking-tab-overview:checked) label[for="booking-tab-overview"],.online-booking-tabs:has(#booking-tab-services:checked) label[for="booking-tab-services"],.online-booking-tabs:has(#booking-tab-embed:checked) label[for="booking-tab-embed"],.online-booking-tabs:has(#booking-tab-policy:checked) label[for="booking-tab-policy"] { color:#171717; box-shadow:inset 0 -2px #2346f5; }.online-booking-tab__content,.embed-studio { border:1px solid #dedee2; border-radius:1rem; background:#fff; }.online-booking-tab__content { padding:clamp(1.25rem,3vw,2.25rem); }.online-booking-tab__heading { max-width:42rem; margin-bottom:1.6rem; }.online-booking-tab__heading h2,.embed-studio__intro h2 { margin:.12rem 0 .35rem; font-size:clamp(1.5rem,2.5vw,2.1rem); letter-spacing:-.055em; }.online-booking-tab__heading span,.embed-studio__intro span { color:#707078; font-size:.88rem; line-height:1.5; }.online-booking-tab--overview { display:grid; gap:1rem; }.online-booking-tab--overview .online-booking-share-card { grid-template-columns:1fr; max-width:none; margin:0; padding:1.25rem; }.online-booking-tab--services .online-booking-settings__services { grid-template-columns:1fr; }.online-booking-policy__fields { display:grid; grid-template-columns:1fr; gap:1rem; }.online-booking-policy__fields label,.online-booking-settings__grid label { display:grid; gap:.4rem; font-size:.8rem; font-weight:600; color:#3d3d43; }.online-booking-policy__fields input { width:100%; min-width:0; }.online-booking-persistent-preview { position:sticky; top:1rem; grid-column:2; grid-row:2; min-width:0; align-self:start; padding:1rem; border:1px solid #dedee2; border-radius:1rem; background:#fff; }.online-booking-persistent-preview > .online-booking-kicker { margin-bottom:.65rem; }.embed-studio__preview--snapshot { width:100%; max-width:none; }.online-booking-tabs:has(#booking-tab-embed:checked) { grid-template-columns:1fr; }.online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-persistent-preview { display:none; }.online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-tab--embed { grid-column:1; }
+.online-booking-tabs { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); column-gap:clamp(1.25rem,3vw,3rem); width:100%; max-width:none; margin:0; }.online-booking-tabs > input { position:absolute; opacity:0; pointer-events:none; }.online-booking-tabs > nav { grid-column:1 / -1; display:flex; gap:.25rem; margin-bottom:1.15rem; border-bottom:1px solid #dedee2; }.online-booking-tabs > nav label { padding:.72rem .9rem; color:#74747b; font-size:.8rem; font-weight:600; cursor:pointer; }.online-booking-tab { grid-column:1; }.online-booking-tabs:has(#booking-tab-overview:checked) .online-booking-tab--overview,.online-booking-tabs:has(#booking-tab-services:checked) .online-booking-tab--services,.online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-tab--embed,.online-booking-tabs:has(#booking-tab-policy:checked) .online-booking-tab--policy { display:block; }.online-booking-tabs:has(#booking-tab-overview:checked) label[for="booking-tab-overview"],.online-booking-tabs:has(#booking-tab-services:checked) label[for="booking-tab-services"],.online-booking-tabs:has(#booking-tab-embed:checked) label[for="booking-tab-embed"],.online-booking-tabs:has(#booking-tab-policy:checked) label[for="booking-tab-policy"] { color:#171717; box-shadow:inset 0 -2px var(--ice-focus, #2346f5); }.online-booking-tab__content,.embed-studio { border:1px solid #dedee2; border-radius:1rem; background:#fff; }.online-booking-tab__content { padding:clamp(1.25rem,3vw,2.25rem); }.online-booking-tab__heading { max-width:42rem; margin-bottom:1.6rem; }.online-booking-tab__heading h2,.embed-studio__intro h2 { margin:.12rem 0 .35rem; font-size:clamp(1.5rem,2.5vw,2.1rem); letter-spacing:-.055em; }.online-booking-tab__heading span,.embed-studio__intro span { color:#707078; font-size:.88rem; line-height:1.5; }.online-booking-tab--overview { display:grid; gap:1rem; }.online-booking-tab--overview .online-booking-share-card { grid-template-columns:1fr; max-width:none; margin:0; padding:1.25rem; }.online-booking-tab--services .online-booking-settings__services { grid-template-columns:1fr; }.online-booking-policy__fields { display:grid; grid-template-columns:1fr; gap:1rem; }.online-booking-policy__fields label,.online-booking-settings__grid label { display:grid; gap:.4rem; font-size:.8rem; font-weight:600; color:#3d3d43; }.online-booking-policy__fields input { width:100%; min-width:0; }.online-booking-persistent-preview { position:sticky; top:1rem; grid-column:2; grid-row:2; min-width:0; align-self:start; padding:1rem; border:1px solid #dedee2; border-radius:1rem; background:#fff; }.online-booking-persistent-preview > .online-booking-kicker { margin-bottom:.65rem; }.embed-studio__preview--snapshot { width:100%; max-width:none; }.online-booking-tabs:has(#booking-tab-embed:checked) { grid-template-columns:1fr; }.online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-persistent-preview { display:none; }.online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-tab--embed { grid-column:1; }
 .embed-studio { overflow:hidden; }.embed-studio__intro { display:flex; align-items:end; justify-content:space-between; gap:1rem; padding:clamp(1.25rem,3vw,2rem); border-bottom:1px solid #e5e5e8; }.embed-studio__status { display:inline-flex; align-items:center; gap:.42rem; color:#5f6068; font-size:.75rem; font-weight:600; white-space:nowrap; }.embed-studio__status i { width:.5rem; height:.5rem; border-radius:50%; background:#26a15a; }.embed-studio__workspace { display:grid; grid-template-columns:minmax(18rem,.72fr) minmax(0,1.28fr); min-height:40rem; }.embed-studio__controls { display:grid; align-content:start; gap:.85rem; padding:1.1rem; border-right:1px solid #e5e5e8; background:#fbfbfc; }.embed-studio__controls section { display:grid; gap:.6rem; padding:.85rem; border:1px solid #e2e2e6; border-radius:.7rem; background:#fff; }.embed-studio__controls section > b { font-size:.78rem; }.embed-studio__controls label { display:grid; gap:.3rem; color:#54545b; font-size:.7rem; font-weight:600; }.embed-studio__controls input,.embed-studio__controls select,.embed-studio__controls textarea { width:100%; min-width:0; box-sizing:border-box; border:1px solid #d8d8de; border-radius:.45rem; padding:.55rem; background:#fff; color:#212126; font:inherit; }.embed-studio__controls small { color:#7b7b83; font-size:.65rem; }.embed-studio__code p { margin:-.25rem 0 0; color:#777780; font-size:.68rem; }.embed-studio__code div { display:flex; gap:.35rem; padding:.35rem; border:1px solid #e1e1e5; border-radius:.45rem; }.embed-studio__code code { min-width:0; flex:1; overflow:hidden; font-size:.6rem; text-overflow:ellipsis; white-space:nowrap; }.embed-studio__code button { border:0; border-radius:.32rem; padding:.35rem .45rem; background:#202124; color:#fff; font-size:.65rem; font-weight:600; }
 .embed-studio__preview-shell { display:grid; place-items:center; padding:clamp(1rem,3vw,2rem); background:radial-gradient(circle at 20% 10%,#e8efff,transparent 32%),#f3f5f9; }.embed-studio__preview { position:relative; width:100%; max-width:48rem; aspect-ratio:1.42/1; overflow:hidden; border:1px solid #d9dce5; border-radius:1.25rem; background:rgba(27,32,45,.78); box-shadow:0 1.5rem 3.5rem rgba(33,43,69,.18); }.embed-studio__modal { position:absolute; inset:7% 5%; display:grid; grid-template-columns:.78fr 1.22fr; overflow:hidden; border-radius:.95rem; background:#fff; box-shadow:0 1rem 2.5rem #0003; }.embed-studio__brand { display:grid; align-content:space-between; gap:1rem; padding:clamp(1rem,3vw,2rem); background-color:var(--embed-panel); background-image:linear-gradient(135deg,#2346f5,#1532ca); background-position:center; background-size:cover; color:#fff; }.embed-studio__brand img { max-width:8rem; max-height:2rem; object-fit:contain; object-position:left; }.embed-studio__brand small,.embed-studio__brand em { font-size:.62rem; font-style:normal; font-weight:600; letter-spacing:.08em; opacity:.82; }.embed-studio__brand h3 { max-width:11ch; margin:0; font-size:clamp(1.25rem,2.5vw,2.35rem); line-height:1.04; letter-spacing:-.055em; }.embed-studio__brand p { margin:.7rem 0 0; font-size:clamp(.68rem,1.2vw,.92rem); line-height:1.45; }.embed-studio__flow { display:grid; grid-template-rows:auto auto auto 1fr auto; align-content:start; gap:clamp(.55rem,1.4vw,1rem); padding:clamp(1rem,3vw,2rem); color:#202126; }.embed-studio__flow header { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:1rem; }.embed-studio__flow header button { width:1.85rem; height:1.85rem; border:1px solid var(--embed-accent); border-radius:50%; background:#fff; color:var(--embed-accent); font-size:1.35rem; line-height:1; }.embed-studio__flow header i { height:.42rem; border-radius:999px; background:linear-gradient(90deg,var(--embed-accent) 34%,#eaecf3 34%); }.embed-studio__flow > p { margin:0; color:#7b7b83; font-size:.62rem; font-weight:600; letter-spacing:.1em; }.embed-studio__flow h3 { margin:0; font-size:clamp(1.15rem,2.5vw,2.1rem); letter-spacing:-.055em; }.embed-studio__flow > span { color:#777780; font-size:clamp(.65rem,1.15vw,.86rem); }.embed-studio__cards { display:grid; gap:.55rem; align-content:start; }.embed-studio__cards button { display:flex; align-items:center; justify-content:space-between; gap:.5rem; border:1px solid #dfe1e8; border-radius:.55rem; padding:.7rem .75rem; background:#fff; text-align:left; }.embed-studio__cards b { font-size:clamp(.68rem,1.2vw,.88rem); }.embed-studio__cards small { color:#777780; font-size:.67rem; font-weight:600; }.embed-studio__flow footer { align-self:end; text-align:center; color:#85858c; font-size:.6rem; }
 .embed-studio__launcher { position:absolute; z-index:2; bottom:5%; display:inline-flex; border-radius:999px; padding:.58rem .85rem; background:var(--embed-accent); color:#fff; box-shadow:0 .45rem 1rem rgba(0,0,0,.22); font-size:.72rem; font-weight:600; }.embed-studio__launcher.is-left { left:7%; }.embed-studio__launcher.is-right { right:7%; }
@@ -1261,7 +1809,7 @@ body {
 @media (min-width:801px) { .online-booking-tabs { grid-template-columns:minmax(24rem,.92fr) minmax(28rem,1.08fr); }.online-booking-tab--overview .online-booking-settings__grid { grid-template-columns:1fr 1fr; }.online-booking-tab--overview .online-booking-settings__wide { grid-column:1 / -1; } }
 .online-booking-tabs:has(#booking-tab-embed:checked) { grid-template-columns:minmax(24rem,.92fr) minmax(28rem,1.08fr); }.online-booking-tabs:has(#booking-tab-embed:checked) .online-booking-persistent-preview { display:block; }.embed-studio--compact .embed-studio__workspace { display:block; }.embed-studio--compact .embed-studio__controls { border-right:0; }.embed-studio--compact .embed-studio__preview-shell { display:none; }.embed-studio--compact .embed-studio__intro { align-items:start; }
 @media (max-width:800px) { .online-booking-tabs:has(#booking-tab-embed:checked) { grid-template-columns:1fr; } }
-.online-booking-tabs .online-booking-tab--codes { display:none; min-width:0; }.online-booking-tabs:has(#booking-tab-codes:checked) .online-booking-tab--codes { display:block; }.online-booking-tabs:has(#booking-tab-codes:checked) label[for="booking-tab-codes"] { color:#171717; box-shadow:inset 0 -2px #2346f5; }.online-booking-codes { display:grid; min-width:0; gap:1rem; overflow:hidden; padding:clamp(1.25rem,3vw,2.25rem); border:1px solid #dedee2; border-radius:1rem; background:#fff; }.online-booking-codes article { display:grid; min-width:0; gap:.7rem; padding:1rem; border:1px solid #e3e3e8; border-radius:.7rem; background:#fcfcfd; }.online-booking-codes h3 { margin:0; font-size:1rem; }.online-booking-codes p { margin:.28rem 0 0; color:#72727a; font-size:.8rem; line-height:1.45; }.online-booking-codes__value { display:flex; min-width:0; align-items:center; gap:.6rem; padding:.45rem .5rem .45rem .7rem; border:1px solid #dedee4; border-radius:.55rem; background:#fff; }.online-booking-codes__value code { min-width:0; flex:1; overflow:hidden; color:#34343b; font-size:.72rem; text-overflow:ellipsis; white-space:nowrap; }.online-booking-codes__value button { flex:0 0 auto; border:0; border-radius:.42rem; padding:.52rem .7rem; background:#202124; color:#fff; font-size:.72rem; font-weight:600; }.online-booking-tabs > input[type="hidden"] { display:none; }
+.online-booking-tabs .online-booking-tab--codes { display:none; min-width:0; }.online-booking-tabs:has(#booking-tab-codes:checked) .online-booking-tab--codes { display:block; }.online-booking-tabs:has(#booking-tab-codes:checked) label[for="booking-tab-codes"] { color:#171717; box-shadow:inset 0 -2px var(--ice-focus, #2346f5); }.online-booking-codes { display:grid; min-width:0; gap:1rem; overflow:hidden; padding:clamp(1.25rem,3vw,2.25rem); border:1px solid #dedee2; border-radius:1rem; background:#fff; }.online-booking-codes article { display:grid; min-width:0; gap:.7rem; padding:1rem; border:1px solid #e3e3e8; border-radius:.7rem; background:#fcfcfd; }.online-booking-codes h3 { margin:0; font-size:1rem; }.online-booking-codes p { margin:.28rem 0 0; color:#72727a; font-size:.8rem; line-height:1.45; }.online-booking-codes__value { display:flex; min-width:0; align-items:center; gap:.6rem; padding:.45rem .5rem .45rem .7rem; border:1px solid #dedee4; border-radius:.55rem; background:#fff; }.online-booking-codes__value code { min-width:0; flex:1; overflow:hidden; color:#34343b; font-size:.72rem; text-overflow:ellipsis; white-space:nowrap; }.online-booking-codes__value button { flex:0 0 auto; border:0; border-radius:.42rem; padding:.52rem .7rem; background:#202124; color:#fff; font-size:.72rem; font-weight:600; }.online-booking-tabs > input[type="hidden"] { display:none; }
 
 /* Appointment details are the stable reference point; mutable controls follow. */
 .tenant-dashboard-page .appointment-drawer__details {
@@ -1349,7 +1897,7 @@ body {
 
 /* Sales follows the established compact operations table: settlement is a
    readable state, while the adjacent detail keeps the amount actionable. */
-.tenant-dashboard-page .sales-status {
+.tenant-dashboard-page :is(.sales-status, .waybook-status-badge) {
   display: inline-flex;
   width: fit-content;
   border-radius: 999px;
@@ -1381,9 +1929,9 @@ body {
 .tenant-dashboard-page .resource-schedule__bookings { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
 .tenant-dashboard-page .resource-schedule__bookings a { color: #222228; font-weight: 600; text-decoration: none; }
 .tenant-dashboard-page .resource-schedule__bookings a:hover { text-decoration: underline; text-underline-offset: .16em; }
-.tenant-dashboard-page .sales-status.is-paid { background: #e4f2e9; color: #246542; }
-.tenant-dashboard-page .sales-status.is-open { background: #f4f0e7; color: #775b22; }
-.tenant-dashboard-page .sales-status.is-refund { background: #f7e8e8; color: #9a3e3e; }
+.tenant-dashboard-page :is(.sales-status.is-paid, .waybook-status-badge.waybook-status-badge--success) { background: #e4f2e9; color: #246542; }
+.tenant-dashboard-page :is(.sales-status.is-open, .waybook-status-badge.waybook-status-badge--warning) { background: #f4f0e7; color: #775b22; }
+.tenant-dashboard-page :is(.sales-status.is-refund, .waybook-status-badge.waybook-status-badge--error) { background: #f7e8e8; color: #9a3e3e; }
 .tenant-dashboard-page .sales-status.is-cancelled { background: #eeeeef; color: #74747b; }
 .tenant-dashboard-page .waybook-data-card tr.is-selected td { background: #f5f5f7; }
 .sale-detail__summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; background: transparent; padding: 0; }
@@ -1398,10 +1946,10 @@ body {
 .sale-detail__totals .is-credit dd { color: #a04242; }
 .sale-detail__totals .is-settled dd { color: #287051; }
 .sale-detail__action { display: block; width: 100%; text-align: center; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status { background: #2a2a2f; color: #d4d4d9; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status.is-paid { background: #193b28; color: #bfe5ca; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status.is-open { background: #3c321f; color: #ead69e; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status.is-refund { background: #3c2325; color: #f0b9bc; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status, .waybook-status-badge) { background: #2a2a2f; color: #d4d4d9; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status.is-paid, .waybook-status-badge.waybook-status-badge--success) { background: #193b28; color: #bfe5ca; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status.is-open, .waybook-status-badge.waybook-status-badge--warning) { background: #3c321f; color: #ead69e; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status.is-refund, .waybook-status-badge.waybook-status-badge--error) { background: #3c2325; color: #f0b9bc; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-data-card tr.is-selected td,:root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__summary > div { background: #242426; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__summary > div,.tenant-dashboard-page .sale-detail__totals > div { border-color: #343438; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__summary strong,:root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__totals dd,:root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__totals > div:last-child { color: #f5f5f6; }
@@ -1564,6 +2112,46 @@ body {
 .tenant-dashboard-page .manual-appointment__slot-picker .appointment-reschedule-picker__slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; }
 .tenant-dashboard-page .manual-appointment__slot-picker .appointment-reschedule-picker__slot { min-height: 2.75rem; padding: .45rem .6rem; font-size: .86rem; font-weight: 600; }
 .tenant-dashboard-page .manual-appointment__slot-picker-empty { grid-column: 1 / -1; padding: .65rem 0; color: #78787f; font-size: .82rem; }
+.tenant-dashboard-page .manual-appointment__step,
+.tenant-dashboard-page .manual-appointment__client-fields { display: grid; gap: .65rem; min-width: 0; }
+.tenant-dashboard-page .manual-appointment__step-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.tenant-dashboard-page .manual-appointment__client-fields h3 { margin: 0; font-size: .82rem; font-weight: 600; }
+.tenant-dashboard-page .manual-appointment__client-fields small { font-weight: 400; opacity: .8; }
+.tenant-dashboard-page .manual-appointment__selection,
+.tenant-dashboard-page .manual-appointment__review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: .5rem;
+  background: var(--wb-dark-raised, #fff);
+}
+.tenant-dashboard-page :is(.manual-appointment__selection, .manual-appointment__review) > div { display: grid; gap: .2rem; min-width: 0; overflow-wrap: anywhere; }
+.tenant-dashboard-page :is(.manual-appointment__selection, .manual-appointment__review) span { font-size: .75rem; }
+.tenant-dashboard-page .appointment-drawer .manual-appointment .waybook-action--secondary:not(:disabled) {
+  border-color: var(--wb-dark-border, #d4d4d4);
+  background: var(--wb-dark-surface, #fff);
+  color: var(--wb-dark-text, #171717);
+}
+.tenant-dashboard-page .appointment-drawer .manual-appointment .waybook-action--secondary:not(:disabled):hover {
+  background: var(--wb-dark-raised, #f4f4f5);
+}
+@media (max-width: 520px) {
+  .tenant-dashboard-page .manual-appointment__review > button { width: 100%; }
+}
+.tenant-dashboard-page .appointment-drawer .manual-appointment .calendar-search-picker__results button {
+  inline-size: 100%;
+  padding: .65rem .75rem;
+  border-radius: 0;
+  font-weight: 400;
+}
+.tenant-dashboard-page .appointment-drawer .manual-appointment .calendar-search-picker > input:focus {
+  outline: 2px solid var(--waybook-accent-ink);
+  outline-offset: 1px;
+}
 .tenant-dashboard-page .manual-appointment__selectors .calendar-search-picker { min-width: 0; }
 .waybook-icon-button { display: grid; box-sizing: border-box; place-items: center; padding: 0; line-height: 1; }
 .waybook-icon-button > svg { display: block; width: 1em; height: 1em; overflow: visible; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
@@ -1890,16 +2478,16 @@ body {
 .tenant-dashboard-page .staff-workspace .staff-profile-form > button,
 .tenant-dashboard-page .staff-workspace .staff-hours-form > button,
 .tenant-dashboard-page .staff-workspace .waybook-primary-link {
-  border-color: #1c1c1f !important;
-  background: #1c1c1f !important;
+  border-color: var(--ice-primary, #1c1c1f) !important;
+  background: var(--ice-primary, #1c1c1f) !important;
   color: #fff !important;
 }
 .tenant-dashboard-page .staff-workspace .staff-timeoff-form > button:hover,
 .tenant-dashboard-page .staff-workspace .staff-profile-form > button:hover,
 .tenant-dashboard-page .staff-workspace .staff-hours-form > button:hover,
 .tenant-dashboard-page .staff-workspace .waybook-primary-link:hover {
-  border-color: #36363b !important;
-  background: #36363b !important;
+  border-color: var(--ice-action-hover, #36363b) !important;
+  background: var(--ice-action-hover, #36363b) !important;
 }
 
 .tenant-dashboard-page .staff-permissions-form { display: grid; gap: 1.4rem; max-width: 54rem; }
@@ -2709,7 +3297,7 @@ body {
 /* Online booking location and policy settings */
 .online-booking-tabs .online-booking-tab--locations,.online-booking-tabs .online-booking-tab--policy { display:none; }
 .online-booking-tabs:has(#booking-tab-locations:checked) .online-booking-tab--locations,.online-booking-tabs:has(#booking-tab-policy:checked) .online-booking-tab--policy { display:block; }
-.online-booking-tabs:has(#booking-tab-locations:checked) label[for="booking-tab-locations"],.online-booking-tabs:has(#booking-tab-policy:checked) label[for="booking-tab-policy"] { color:#171717; box-shadow:inset 0 -2px #2346f5; }
+.online-booking-tabs:has(#booking-tab-locations:checked) label[for="booking-tab-locations"],.online-booking-tabs:has(#booking-tab-policy:checked) label[for="booking-tab-policy"] { color:#171717; box-shadow:inset 0 -2px var(--ice-focus, #2346f5); }
 .online-booking-persistent-preview { background:transparent; border:0; padding:0; }
 .online-booking-persistent-preview > .online-booking-kicker { margin:.2rem 0 .65rem; }
 .online-booking-settings__services > div > input[type=hidden] { display:none; }
@@ -2824,7 +3412,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .online-booking-page .embed-studio__intro h2,:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab__heading h2 { color:#f4f5f6; }
 :root[data-waybook-theme="dark"] .online-booking-page .embed-studio__intro,:root[data-waybook-theme="dark"] .online-booking-page .embed-studio__controls,:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab__content { background:#202124; color:#e7e8ea; border-color:#3b3d41; }
 :root[data-waybook-theme="dark"] .online-booking-page .embed-studio__controls section,:root[data-waybook-theme="dark"] .online-booking-page .online-booking-settings__services > div,:root[data-waybook-theme="dark"] .online-booking-page .online-booking-policy__fields { background:#292b2e; color:#f1f2f3; border-color:#414348; }
-:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab textarea,:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab select { background:#17191b; color:#f1f2f3; border-color:#4a4d51; }
+:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=file]),:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab textarea,:root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab select { background:var(--ice-field, #17191b); color:var(--ice-ink, #f1f2f3); border-color:var(--ice-field-edge, #4a4d51); }
 :root[data-waybook-theme="dark"] .online-booking-page .embed-studio__colour { background:#17191b; border-color:#4a4d51; }
 :root[data-waybook-theme="dark"] .online-booking-page .online-booking-tab small,:root[data-waybook-theme="dark"] .online-booking-page .embed-studio__intro span { color:#b5b9bf; }
 
@@ -3015,7 +3603,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .assignment-picker .assignment-picker__bulk button { border-color:#505058; background:#29292d; color:#ededf0; }
 
 /* Dark-mode corrections for client records, catalogue cards and commerce forms. */
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .customer-table-row:is(:hover,:focus-within) td > a { background:#29292d; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .customer-table-row:is(:hover,:focus-within) td { background:#29292d; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-service-card:is(:hover,:focus-visible) { background:#303034; border-color:#606068; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-service-card b { color:#d6d6dc; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .client-record__header-actions > a:first-child { border-color:#55555c; color:#efeff2; }
@@ -3031,8 +3619,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .staff-profile-form legend { color:#c6c6cc; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.waybook-form-toggle,.tenant-drawer-check) > input:checked + span,:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-drawer-check > input:checked { background:#549b78; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-form-toggle > input:not(:checked) + span,:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-drawer-check > input:not(:checked) { background:#62626a; }
-.tenant-dashboard-page .waitlist-filter { display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:.8rem; }
-.tenant-dashboard-page .waitlist-filter a { display:inline-flex; padding:.5rem .7rem; font-size:.78rem; font-weight:600; text-decoration:none; }
 .tenant-dashboard-page input[type="file"]::file-selector-button { border:1px solid #cfcfd4; border-radius:.35rem; margin-right:.65rem; padding:.4rem .65rem; background:#f4f4f5; color:#252529; font:inherit; cursor:pointer; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page input[type="file"]::file-selector-button { border-color:#55555b; background:#343438; color:#f1f1f3; }
 
@@ -3068,9 +3654,43 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-workspace__sidebar a:hover,.tenant-dashboard-page .email-workspace__sidebar a[aria-current="page"] { background:#e9e9ec; color:#171717; }
 .tenant-dashboard-page .email-workspace__sidebar a[aria-current="page"] { font-weight:600; }
 .tenant-dashboard-page .email-workspace__main { min-width:0; padding:1.5rem 1.75rem; }
-.tenant-dashboard-page .email-delivery-warning { display:flex; flex-wrap:wrap; gap:.4rem .8rem; margin-bottom:1.25rem; border:1px solid #dfc791; border-radius:.55rem; padding:.75rem .9rem; background:#fff8e8; color:#624714; font-size:.8rem; line-height:1.45; }
-.tenant-dashboard-page .email-delivery-warning a { color:inherit; font-weight:600; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-delivery-warning { border-color:#66512e; background:#302719; color:#f1dca6; }
+.tenant-dashboard-page .waybook-feedback {
+  border: 1px solid transparent;
+  border-radius: .55rem;
+  padding: .75rem .9rem;
+  font-size: .8rem;
+  line-height: 1.45;
+}
+.tenant-dashboard-page .waybook-feedback--warning { border-color:#dfc791; background:#fff8e8; color:#624714; }
+.tenant-dashboard-page .waybook-feedback--error { background:#fcebea; color:#963e36; }
+.tenant-dashboard-page .waybook-feedback--success { background:#e8f5ed; color:#27604f; }
+.tenant-dashboard-page .waybook-feedback--info {
+  border-color: color-mix(in srgb, var(--waybook-accent) 25%, var(--wb-dark-surface, #fff));
+  background: color-mix(in srgb, var(--waybook-accent) 9%, var(--wb-dark-surface, #fff));
+}
+.tenant-dashboard-page .waybook-notification-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  padding: .5rem .75rem;
+}
+.tenant-dashboard-nav + .waybook-notification-banner { margin-top: 1rem; }
+.waybook-notification-banner > p {
+  display: flex;
+  flex: 1 1 10rem;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.waybook-notification-banner > p > svg { flex: none; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--warning { border-color:#66512e; background:#302719; color:#f1dca6; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--error { background:#4a1f1e; color:#ffc1bb; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--success { background:#123b2b; color:#a8ebc8; }
 .tenant-dashboard-page .email-workspace__heading h1 { margin:0; color:#171717; font-size:1.5rem; letter-spacing:-.03em; }
 .tenant-dashboard-page .email-workspace__heading p { margin:.4rem 0 0; color:#707078; font-size:.82rem; }
 .tenant-dashboard-page .email-workspace .emails-search { margin:1.4rem 0 1rem; }
@@ -3175,7 +3795,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .waybook-week-calendar__entry.is-booking > strong { font-weight: 400; }
 
 /* Readable text across the dashboard and customer booking journey. */
-.dashboard-four__header h1 { font-size: clamp(2rem, 3vw, 2.75rem); letter-spacing: -.045em; }
+.dashboard-four__header h1 { font-size: clamp(1.55rem, 2.3vw, 2.1rem); letter-spacing: -.035em; }
 .tenant-dashboard-page .waybook-data-card th,
 .tenant-dashboard-page .waybook-list-filter label,
 .tenant-dashboard-page .calendar-selectors label,
@@ -3234,8 +3854,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .waybook-week-calendar__corner { font-size: .8125rem; }
 .tenant-dashboard-page .embed-studio__intro h2,
 .tenant-dashboard-page .email-workspace__sidebar h2 { font-weight: 500; letter-spacing: -.025em; }
-.tenant-nav-tools__notifications { position: relative; }
-.tenant-nav-tools__notification-dot { position: absolute; top: .35rem; right: .35rem; width: .5rem; height: .5rem; border: 1px solid #151517; border-radius: 50%; background: #f97360; }
 .tenant-dashboard-page .team-day-calendar__staff strong,
 .tenant-dashboard-page .waybook-week-calendar__entry.is-booking > strong { font-weight: 400; }
 
@@ -3299,7 +3917,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .workspace-settings__nav a { padding: .7rem .85rem; border-radius: .6rem; color: inherit; text-decoration: none; font-size: .88rem; }
 .workspace-settings__nav a:hover, .workspace-settings__nav a:focus-visible, .workspace-settings__nav a[aria-current] { background: color-mix(in srgb, var(--waybook-accent) 9%, transparent); }
 .workspace-settings__nav a[aria-current] { font-weight: 600; }
-.workspace-settings__content { display: grid; gap: 1rem; }
+.workspace-settings__content { display: grid; gap: 1rem; min-width: 0; }
 .workspace-settings__panel { padding: 1.5rem; border: 1px solid #e5e5e8; border-radius: .9rem; background: #fff; }
 .workspace-settings__panel h2 { margin: 0; font-size: 1.15rem; font-weight: 500; }
 .workspace-settings__panel > p { margin: .35rem 0 1.25rem; }
@@ -3322,15 +3940,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .workspace-settings__heading span, :root[data-waybook-theme="dark"] .workspace-settings__panel > p, :root[data-waybook-theme="dark"] .workspace-settings__links small { color: #b5b5bf; }
 @media (max-width: 760px) { .tenant-dashboard-page .workspace-settings { padding-top: 1rem; }.workspace-settings__layout { grid-template-columns: 1fr; gap: 1rem; }.workspace-settings__nav { display: flex; flex-wrap: wrap; }.workspace-settings__panel { padding: 1.1rem; }.workspace-settings__links { grid-template-columns: 1fr; } }
 
-/* Workspace-wide tint and translucent surfaces. Booking previews retain their own theme. */
-:root[data-waybook-theme="light"] .tenant-dashboard-page {
-  background: radial-gradient(ellipse at 15% 5%, color-mix(in srgb, var(--waybook-accent) 12%, #fff) 0%, transparent 45%), radial-gradient(ellipse at 80% 24%, color-mix(in srgb, var(--waybook-accent) 22%, #f6f6fc) 0%, transparent 55%), #f5f5fa;
-  background-attachment: fixed;
-}
-:root[data-waybook-theme="dark"] .tenant-dashboard-page {
-  background: radial-gradient(ellipse at 15% 5%, color-mix(in srgb, var(--waybook-accent) 14%, #16161b) 0%, transparent 45%), radial-gradient(ellipse at 80% 24%, color-mix(in srgb, var(--waybook-accent) 22%, #15151d) 0%, transparent 55%), #101014;
-  background-attachment: fixed;
-}
+/* Translucent workspace surfaces. Booking previews retain their own theme. */
 :root[data-waybook-theme="light"] .tenant-dashboard-page :is(.waybook-data-card, .waybook-data-metrics, .staff-workspace, .staff-workspace__panel, .email-workspace, .workspace-settings__panel, .online-booking-tab__content, .embed-studio) {
   background-color: rgba(255, 255, 255, .8);
   border-color: rgba(255, 255, 255, .85);
@@ -3354,10 +3964,10 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 /* Account menu labels and icons follow the selected appearance. */
 :root[data-waybook-theme="light"] .tenant-dashboard-page .tenant-user-menu__items a > span { color: #242428; }
 :root[data-waybook-theme="light"] .tenant-dashboard-page .tenant-user-menu__items a small,
-:root[data-waybook-theme="light"] .tenant-dashboard-page .tenant-user-menu__popover header span { color: #595a62; }
+:root[data-waybook-theme="light"] .tenant-dashboard-page .tenant-user-menu__popover header > div > span { color: #595a62; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-user-menu__items a > span { color: #f1f1f3; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-user-menu__items a small,
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-user-menu__popover header span { color: #c4c4cc; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-user-menu__popover header > div > span { color: #c4c4cc; }
 :root .tenant-dashboard-page .tenant-user-menu__popover :is(.tenant-user-menu__items a, form button) > b {
   background: color-mix(in srgb, var(--waybook-accent) 12%, transparent);
   color: var(--waybook-accent-ink);
@@ -3368,9 +3978,49 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 .tenant-dashboard-page .tenant-user-menu__popover header div { display: flex; flex-direction: column; justify-content: center; gap: .15rem; }
 .tenant-dashboard-page .tenant-user-menu__popover header div :is(strong, span) { line-height: 1.3; margin: 0; }
-.tenant-dashboard-page .tenant-user-menu__items a > b { flex: 0 0 2.65rem; width: 2.65rem; height: 2.65rem; }
-.tenant-dashboard-page .tenant-user-menu__items a > b svg { width: 1.2rem; height: 1.2rem; }
-.tenant-dashboard-page .tenant-user-menu__popover > form > button { width: auto; }
+.tenant-dashboard-page .tenant-user-menu__popover :is(.tenant-user-menu__items a, .tenant-user-menu__signout button) > b {
+  flex: 0 0 2.65rem;
+  width: 2.65rem;
+  height: 2.65rem;
+}
+.tenant-dashboard-page .tenant-user-menu__popover :is(.tenant-user-menu__items a, .tenant-user-menu__signout button) > b svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.tenant-dashboard-page .tenant-user-menu__popover > .tenant-user-menu__signout > button {
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  padding: 0 .65rem;
+  background: transparent;
+  color: var(--ice-ink, var(--wb-dark-text, #252525));
+  font-weight: 400;
+  line-height: 1.3;
+}
+.tenant-dashboard-page .tenant-user-menu__signout button > span { color: inherit; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-user-menu__signout button:is(:hover, :focus-visible) {
+  background: var(--wb-dark-raised, #292929);
+}
+:root[data-waybook-theme] :is(.tenant-app-menu__dialog, .tenant-user-menu__popover) {
+  background-color: color-mix(in srgb, var(--ice-layer, var(--wb-dark-surface, #f8f8f9)) 90%, transparent);
+  border-color: var(--ice-edge, var(--wb-dark-border, #dedee0));
+  backdrop-filter: blur(16px);
+}
+:root[data-waybook-theme="light"] :is(
+  .tenant-app-menu__groups a,
+  .tenant-user-menu__items a,
+  .tenant-user-menu__popover .tenant-user-menu__signout button
+):is(:hover, :focus-visible) {
+  background: #fff;
+}
+:root[data-waybook-theme] :is(
+  .tenant-app-menu__groups a,
+  .tenant-user-menu__items a,
+  .tenant-user-menu__popover .tenant-user-menu__signout button
+):focus-visible {
+  outline: 2px solid var(--ice-focus, var(--waybook-accent));
+  outline-offset: -2px;
+}
 @media (max-width: 760px) { .tenant-dashboard-page .tenant-user-menu__popover { right: -.5rem; width: min(calc(100vw - 3rem), 25rem); } }
 .tenant-app-menu__loading { position: fixed; z-index: 90; top: 5rem; right: 1rem; border: 1px solid #dedee3; border-radius: .6rem; padding: .65rem .9rem; background: #fff; color: #242428; box-shadow: 0 .4rem 1.5rem #0002; font-size: .8rem; }
 :root[data-waybook-theme="dark"] .tenant-app-menu__loading { border-color: #414148; background: #242428; color: #f1f1f3; }
@@ -3379,14 +4029,28 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .staff-workspace__avatar { position: relative; overflow: hidden; flex-shrink: 0; }
 .staff-workspace__avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .staff-photo-upload { position: relative; flex: 0 0 auto; display: grid; justify-items: center; gap: .25rem; }
-:root[data-waybook-theme="dark"] .staff-photo-upload { --staff-photo-icon-color: #fff; }
 .staff-photo-upload__button { position: relative; border: 0; padding: 0; cursor: pointer; overflow: visible; }
 .staff-photo-upload__button img { border-radius: 50%; }
 .staff-photo-upload__button:focus-visible, .staff-photo-upload__remove:focus-visible { outline: 2px solid var(--waybook-accent); outline-offset: 3px; }
 .staff-photo-upload__button:disabled, .staff-photo-upload__remove:disabled { opacity: .65; cursor: wait; }
-.staff-photo-upload__camera, .staff-photo-upload__remove { position: absolute; right: -2px; display: grid !important; width: 1.5rem; height: 1.5rem; place-items: center; margin: 0 !important; color: var(--staff-photo-icon-color, #000) !important; }
-.staff-photo-upload__camera { bottom: -2px; }
-.staff-photo-upload__remove { top: -2px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.tenant-dashboard-page .staff-photo-badge {
+  position: absolute;
+  z-index: 1;
+  inset-inline-end: -.15rem;
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--wb-dark-border, #e0e0e3);
+  border-radius: 50%;
+  background: var(--wb-dark-surface, #fff);
+  color: var(--wb-dark-text, #171717);
+}
+.staff-photo-badge svg { display: block; width: .95rem; height: .95rem; }
+.staff-photo-badge--camera { bottom: -.15rem; pointer-events: none; }
+.staff-photo-upload__remove { top: -.15rem; cursor: pointer; }
 .staff-photo-upload__error { position: absolute; z-index: 2; top: calc(100% + .4rem); left: 0; width: min(18rem, 75vw); margin: 0 !important; padding: .5rem; border-radius: .4rem; background: #fff0f0; color: #9f2020 !important; font-size: .75rem !important; }
 
 :root .tenant-app-menu__scrim { background: rgba(18, 20, 24, .42) !important; backdrop-filter: blur(2px) !important; }
@@ -3651,3 +4315,396 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 
 .retail-checkout-form fieldset { display: contents; }
 .retail-checkout-form__error { grid-column: 1 / -1; }
+
+.workspace-business-form {
+  display: grid;
+  gap: 1.2rem;
+  max-width: 42rem;
+}
+.workspace-business-form__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .8rem 1rem;
+}
+.workspace-business-form label {
+  display: grid;
+  min-width: 0;
+  gap: .3rem;
+  font-size: .82rem;
+}
+.workspace-business-form input:not([type="hidden"]) {
+  width: 100%;
+  min-width: 0;
+  padding: .55rem .65rem;
+  border: 1px solid var(--wb-dark-border, #d8dbe0);
+  border-radius: .45rem;
+  background: var(--wb-dark-raised, #fff);
+  color: inherit;
+  font: inherit;
+}
+.workspace-business-form fieldset {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+  margin: 0;
+  padding: .75rem;
+  border: 1px solid var(--wb-dark-border, #d8dbe0);
+  border-radius: .55rem;
+}
+.workspace-business-form legend { padding-inline: .3rem; font-size: .82rem; }
+.workspace-business-form__logo-preview {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  padding: .75rem;
+  border-radius: .55rem;
+  background: #767676;
+}
+.workspace-business-form__logo { display: block; max-width: min(11rem, 100%); max-height: 4rem; object-fit: contain; }
+.tenant-dashboard-page .workspace-business-form__remove { top: -.25rem; inset-inline-end: -.25rem; cursor: pointer; }
+.workspace-business-form__logo-removal { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .8rem; }
+.workspace-business-form > button { justify-self: start; }
+.workspace-settings__panel > .workspace-settings__links { margin-top: .8rem; }
+@media (max-width: 600px) {
+  .workspace-business-form__fields { grid-template-columns: minmax(0, 1fr); }
+}
+
+.tenant-dashboard-page .appointment-sale-drawer > header {
+  background: var(--wb-dark-surface, #fff);
+}
+:root[data-waybook-tint="blue"][data-waybook-theme="light"] .tenant-dashboard-page .appointment-sale-drawer > header {
+  background: #f4faff;
+}
+.tenant-dashboard-page .appointment-sale-drawer .tenant-drawer-form > .waybook-action--secondary {
+  border-color: var(--ice-field-edge, var(--wb-dark-border, #d4d4d4));
+  background: var(--ice-field, var(--wb-dark-surface, #fff));
+  color: var(--ice-ink, var(--wb-dark-text, #171717));
+}
+.tenant-dashboard-page .appointment-sale-drawer .tenant-drawer-form > .waybook-action--secondary:hover:not(:disabled) {
+  background: var(--waybook-accent-soft);
+}
+
+.recorded-appointment-payments, .recorded-appointment-payments__form { display: grid; gap: .75rem; }
+.recorded-appointment-payments__item {
+  display: grid;
+  gap: .65rem;
+  border: 1px solid var(--ice-edge, var(--wb-dark-border, #dedede));
+  border-radius: .65rem;
+  padding: .8rem;
+}
+.recorded-appointment-payments__item > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .7rem; }
+.recorded-appointment-payments__item span { font-size: .8rem; color: var(--ice-muted, var(--wb-dark-muted, #606065)); }
+.recorded-appointment-payments__actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+.recorded-appointment-payments + .appointment-payment-form { margin-top: .85rem; }
+
+.appointment-attendance { display: grid; gap: .65rem; margin-top: .6rem; }
+.tenant-dashboard-page .appointment-drawer .appointment-attendance .appointment-drawer__status-actions button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close {
+  flex: 0 0 2.35rem;
+  min-height: 2.35rem;
+  padding: 0;
+  border: 1px solid var(--ice-edge, var(--wb-dark-border, #d4d4d7));
+  border-radius: 50%;
+  background: transparent !important;
+  color: var(--ice-ink, var(--wb-dark-text, #35353a));
+}
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close:hover {
+  background: var(--ice-field, var(--wb-dark-raised, #f3f3f4)) !important;
+}
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close:focus-visible {
+  outline: 2px solid var(--ice-focus, var(--waybook-accent));
+  outline-offset: 2px;
+}
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close:is(:hover, :focus-visible) {
+  color: var(--ice-ink, var(--wb-dark-text, #35353a));
+}
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close:hover:not(:focus-visible) {
+  outline: none;
+}
+
+.tenant-dashboard-page .sales-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.4fr) minmax(15rem, 1.4fr) minmax(0, 1fr) auto;
+  margin: .85rem 0 1.1rem;
+}
+.tenant-dashboard-page .sales-filters :is(input, select) { width: 100%; min-width: 0; font-weight: 400; }
+.tenant-dashboard-page .sales-filters > button { align-self: end; }
+@media (max-width: 1190px) {
+  .tenant-dashboard-page .sales-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .tenant-dashboard-page .sales-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sales-filters label:has(select[name="activity"], select[name="sort"]) { grid-column: 1 / -1; }
+}
+
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four {
+  --overview-ink: #181a1e;
+  --overview-muted-ink: #565c64;
+  --overview-accent-ink: color-mix(in srgb, var(--waybook-accent-ink) 72%, #182534);
+  --overview-secondary-accent: color-mix(in srgb, var(--overview-accent-ink) 60%, var(--overview-muted-ink));
+  --overview-edge: color-mix(in srgb, var(--waybook-accent) 23%, transparent);
+  --overview-divider: color-mix(in srgb, var(--overview-ink) 10%, transparent);
+  --overview-surface: #fff;
+  --overview-sheen: rgb(255 255 255 / 42%);
+  --overview-icon-surface: var(--overview-surface);
+  --overview-tint-strong: color-mix(in srgb, var(--waybook-accent) 20%, transparent);
+}
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .dashboard-four {
+  --overview-ink: #f0f2f5;
+  --overview-muted-ink: #b9bec6;
+  --overview-accent-ink: color-mix(in srgb, var(--waybook-accent) 32%, #f0f2fb);
+  --overview-edge: color-mix(in srgb, var(--waybook-accent) 32%, #30333a);
+  --overview-divider: color-mix(in srgb, var(--overview-ink) 15%, transparent);
+  --overview-surface: rgb(255 255 255 / 5%);
+  --overview-sheen: rgb(255 255 255 / 3%);
+  --overview-icon-surface: #30343b;
+}
+:root[data-waybook-theme="dark"][data-waybook-tint="neutral"] .tenant-dashboard-page .dashboard-four {
+  --overview-accent-ink: var(--waybook-accent-ink);
+}
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .dashboard-four__header h1, .dashboard-widget__title h2, .target-widget h3, .workload-list__stats b
+) { color: var(--overview-ink); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .outcome-grid dd, .revenue-list dd, .target-widget__ring strong, .dashboard-widget__icon
+) { color: var(--overview-accent-ink); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .dashboard-widget__title > a, .target-widget > div:last-child > b, .target-subtargets b
+) { color: var(--overview-secondary-accent); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .dashboard-four__header span, .dashboard-widget__title p, .outcome-grid dt, .revenue-list dt,
+  .target-widget__ring span, .target-widget__ring small, .target-subtargets small
+) { color: var(--overview-muted-ink); }
+.dashboard-widget__heading {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  min-width: 0;
+}
+.dashboard-widget__heading p { text-transform: uppercase; }
+.dashboard-widget__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--overview-divider);
+  border-radius: .6rem;
+  background: var(--overview-icon-surface);
+}
+.dashboard-widget__icon svg { width: 1.1rem; height: 1.1rem; }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .dashboard-widget {
+  background-image: linear-gradient(155deg, var(--overview-sheen), transparent 72%);
+}
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .outcome-grid, .outcome-grid > div, .revenue-list > div, .upcoming-list li, .target-subtargets
+) { border-color: var(--overview-divider); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .upcoming-list time, .upcoming-list .appointment-status--confirmed, .workload-list__identity > i
+) {
+  background: var(--overview-surface);
+  color: var(--overview-accent-ink);
+}
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .upcoming-list .appointment-status--confirmed {
+  color: var(--overview-muted-ink);
+  font-size: 0.6rem;
+  font-weight: 500;
+}
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .upcoming-list time span { color: var(--overview-muted-ink); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .upcoming-list .appointment-status--arrived {
+  background: var(--overview-tint-strong);
+  color: var(--overview-accent-ink);
+  box-shadow: inset 0 0 0 1px var(--overview-edge);
+}
+.tenant-dashboard-page .dashboard-four .outcome-grid > div { background: var(--overview-surface); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i { background: var(--overview-divider); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i.is-booked { background: var(--waybook-accent-indicator, var(--waybook-accent)); }
+.tenant-dashboard-page .target-widget__ring { background: var(--overview-surface); }
+.target-widget__ring > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.target-widget__track { stroke: var(--overview-edge); }
+.target-widget__progress { stroke: var(--waybook-accent-indicator, var(--waybook-accent)); }
+
+.tenant-dashboard-page .dated-list-filters {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: end;
+  margin: .85rem 0 1.1rem;
+}
+.tenant-dashboard-page .dated-list-filters > label { flex: 1 1 8rem; min-width: 0; }
+.tenant-dashboard-page .dated-list-filters > label :is(input, select) { width: 100%; min-width: 0; font-weight: 400; }
+.tenant-dashboard-page .table-date-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  grid-column: span 2;
+  flex: 1 1 15rem;
+  gap: .45rem;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.tenant-dashboard-page .table-date-range legend { margin-bottom: .4rem; padding: 0; color: inherit; font-size: .74rem; font-weight: 600; }
+.tenant-dashboard-page .table-date-range label { min-width: 0; }
+.tenant-dashboard-page .table-date-range input { width: 100%; min-width: 0; max-width: 100%; font-weight: 400; }
+@media (min-width: 1191px) {
+  .tenant-dashboard-page .sales-filters .table-date-range { grid-column: span 1; }
+}
+
+
+.tenant-dashboard-page :is(.waitlist-register, .waitlist-form) {
+  --waitlist-line: var(--wb-dark-border, #d9e1e8);
+  --waitlist-surface: var(--wb-dark-raised, #fff);
+  --waitlist-muted: var(--wb-dark-muted, #5c6570);
+  --waitlist-accent: var(--waybook-accent-ink);
+}
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.waitlist-register, .waitlist-form) {
+  --waitlist-accent: color-mix(in srgb, var(--waybook-accent) 36%, #f2f2f5);
+}
+.waitlist-intro .waybook-primary-link { display: inline-flex; align-items: center; gap: .45rem; }
+.waitlist-intro .waybook-primary-link svg { width: 1rem; height: 1rem; }
+.waitlist-filter { display: flex; flex-wrap: wrap; gap: .35rem; }
+.waitlist-filter a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.35rem;
+  padding-inline: .75rem;
+  border: 1px solid transparent;
+  border-radius: .55rem;
+  color: var(--waitlist-muted);
+  font-size: .78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.waitlist-filter a:is(:hover, :focus-visible) { background: var(--waitlist-surface); color: inherit; }
+.waitlist-filter a[aria-current="page"] {
+  border-color: var(--waitlist-line);
+  background: var(--waitlist-surface);
+  box-shadow: inset 0 -2px var(--waybook-accent-indicator, var(--waybook-accent));
+  color: var(--waitlist-accent);
+}
+.waitlist-date-filters { max-width: 37rem; }
+.waitlist-row__label { display: none; }
+.waitlist-table :is(.waitlist-row__client, .waitlist-row__request) { overflow-wrap: anywhere; }
+.waitlist-table :is(.waitlist-row__added, .waitlist-row__preference) time { white-space: nowrap; }
+.waitlist-table .waitlist-row__added { color: var(--waitlist-muted); }
+.waitlist-table .waitlist-row__status .waybook-status-badge { white-space: nowrap; }
+.waitlist-status-form { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.tenant-dashboard-page .waitlist-status-form select {
+  min-width: 0;
+  min-height: 2.25rem;
+  padding: .25rem .45rem;
+  border: 1px solid var(--waitlist-line);
+  border-radius: .45rem;
+  background: var(--waitlist-surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+}
+.tenant-dashboard-page .waitlist-status-form .waybook-action {
+  min-height: 2.25rem;
+  padding: .25rem .65rem;
+}
+.waitlist-status-form button:disabled { opacity: .55; cursor: default; }
+.waitlist-find-slot, .waitlist-form .client-picker__actions :is(button, a) {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  min-height: 2.25rem;
+  padding: .35rem .6rem;
+  border: 1px solid var(--waitlist-line);
+  border-radius: .45rem;
+  background: var(--waitlist-surface);
+  color: var(--waitlist-accent);
+  font: inherit;
+  font-size: .76rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.waitlist-find-slot { margin-bottom: .4rem; }
+.waitlist-openings { display: grid; justify-items: start; gap: .5rem; }
+.waitlist-openings__list { margin: 0; padding: 0; list-style: none; display: grid; gap: .35rem; width: 100%; }
+.waitlist-openings__list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.waitlist-openings__list small { margin-top: .12rem; }
+.waitlist-openings p { margin: 0; }
+.waitlist-find-slot svg { width: .9rem; height: .9rem; }
+.tenant-dashboard-page .waitlist-find-slot:is(:hover, :focus-visible),
+.tenant-dashboard-page .waitlist-form .client-picker__actions :is(button, a):is(:hover, :focus-visible) {
+  border-color: var(--waitlist-accent);
+  color: var(--waitlist-accent);
+}
+.waitlist-form .client-picker__actions button { cursor: pointer; }
+.waitlist-empty {
+  display: grid;
+  justify-items: center;
+  gap: .45rem;
+  padding: 2rem 1rem;
+  border: 1px dashed var(--waitlist-line);
+  border-radius: .65rem;
+  color: var(--waitlist-muted);
+  text-align: center;
+}
+.waitlist-empty svg { width: 1.25rem; height: 1.25rem; color: var(--waitlist-accent); }
+.waitlist-empty p { margin: 0; }
+.tenant-dashboard-page .waitlist-form .client-picker__fields { display: grid; gap: .4rem; }
+.waitlist-form .client-picker__actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.tenant-dashboard-page .waitlist-form :is(.waitlist-form__request, .waitlist-form__window) {
+  display: grid;
+  gap: .7rem;
+  min-width: 0;
+  margin: 0;
+  padding: .75rem;
+  border: 1px solid var(--waitlist-line);
+  border-radius: .65rem;
+}
+.tenant-dashboard-page .waitlist-form :is(.waitlist-form__request label, .waitlist-form__date) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .35rem;
+  min-width: 0;
+}
+.waitlist-form :is(.waitlist-form__request, .waitlist-form__window) :is(input:not([type="hidden"]), select) {
+  width: 100%;
+  min-width: 0;
+}
+.tenant-dashboard-page .waitlist-form .waitlist-time-range { margin-top: 0; }
+.waitlist-form legend small { margin-inline-start: .2rem; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waitlist-form .waitlist-time-range__copy b { color: var(--wb-dark-text); }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waitlist-form :is(legend, .waitlist-time-range__copy) small {
+  color: var(--waitlist-muted);
+}
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.waitlist-form, .waitlist-date-filters) input[type="date"] {
+  color-scheme: dark;
+}
+
+@media (max-width: 820px) {
+  .tenant-dashboard-page .waitlist-table-wrap { border: 0; border-radius: 0; }
+  .tenant-dashboard-page table.waitlist-table { display: block; width: 100%; min-width: 0; }
+  .waitlist-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .waitlist-table tbody { display: grid; gap: .7rem; }
+  .tenant-dashboard-page .waitlist-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: .65rem;
+    padding: .85rem;
+    border: 1px solid var(--waitlist-line);
+    border-radius: .65rem;
+  }
+  .tenant-dashboard-page .waitlist-table tbody td { display: block; min-width: 0; padding: 0; border: 0; background: transparent; }
+  .waitlist-row__client { grid-area: 1 / 1; }
+  .waitlist-row__status { grid-area: 1 / 2; justify-self: end; }
+  .waitlist-row__label { display: block; margin-bottom: .15rem; color: var(--waitlist-muted); font-size: .69rem; }
+  .tenant-dashboard-page .waitlist-table .waitlist-row__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--waitlist-line);
+    padding-top: .6rem;
+  }
+  .waitlist-find-slot { margin-bottom: 0; }
+}

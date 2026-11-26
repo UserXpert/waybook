@@ -1,3 +1,5 @@
+import { TableDateFields } from "@/components/table-date-fields";
+import { dateFilterParams, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { notFound } from "next/navigation";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
@@ -24,8 +26,8 @@ const money = (cents: number, currency: string) => new Intl.NumberFormat("en-DK"
 const pageSize = 150;
 const uuidPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
-export default async function PackagesPage({ searchParams }: { searchParams: Promise<{ new?: string; setup?: string; package?: string; page?: string }> }) {
-  const { new: createNew, setup, package: issued, page: rawPage } = await searchParams;
+export default async function PackagesPage({ searchParams }: { searchParams: Promise<{ new?: string; setup?: string; package?: string; page?: string } & TableDateParams> }) {
+  const { new: createNew, setup, package: issued, page: rawPage, sort, from, to } = await searchParams;
   const selectedId = typeof issued === "string" && uuidPattern.test(issued) ? issued : null;
   const requestedPage = typeof rawPage === "string" && /^[1-9]\d{0,8}$/.test(rawPage) ? Number(rawPage) : 1;
   const { tenant, membership } = await requireTenantWorkspace();
@@ -34,6 +36,9 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
   const slug = await currentTenantRouteSlug(tenant.slug);
   if (!(await staffPermissionContext(tenant, membership)).isManager) notFound();
   const db = tenantDb(tenant);
+  const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
+  const dateRange = dateRangeWhere(db, "cp.created_at", dates);
+  const dateOrder = tableDateOrder(db, "cp.created_at", "cp.id", dates);
   const packageScope = db`
     FROM commerce_packages cp
     JOIN customers c ON c.id=cp.customer_id AND c.tenant_id=cp.tenant_id
@@ -51,21 +56,26 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
   `;
   const [definitionRows, [total], [selected]] = await Promise.all([
     db<(Omit<Definition, "photoDataUrl"> & { metadata: unknown })[]>`SELECT ci.id,ci.title,ci.currency,ci.price_cents AS "priceCents",ci.is_active AS "isActive",ci.metadata,d.service_id AS "serviceId",s.title AS "serviceTitle",d.included_units AS units,d.expires_after_days AS "expiryDays",count(cp.id)::int AS "issuedCount" FROM commerce_catalog_items ci JOIN commerce_package_service_entitlements d ON d.catalog_item_id=ci.id AND d.tenant_id=ci.tenant_id JOIN services s ON s.id=d.service_id AND s.tenant_id=d.tenant_id LEFT JOIN commerce_packages cp ON cp.catalog_item_id=ci.id AND cp.tenant_id=ci.tenant_id WHERE ci.tenant_id=${tenant.id} AND ci.kind='package' GROUP BY ci.id,s.id,d.id ORDER BY ci.is_active DESC,ci.created_at DESC`,
-    db<{ count: number }[]>`SELECT count(*)::int AS count ${packageScope}`,
+    db<{ count: number }[]>`SELECT count(*)::int AS count ${packageScope} ${dateRange}`,
     selectedId ? db<ClientPackage[]>`${packageSummary} AND cp.id=${selectedId}` : [],
   ]);
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total.count / pageSize)));
   const offset = (page - 1) * pageSize;
   const clientPackages = await db<ClientPackage[]>`
-    ${packageSummary} ORDER BY cp.created_at DESC,cp.id DESC LIMIT ${pageSize} OFFSET ${offset}
+    ${packageSummary} ${dateRange} ORDER BY ${dateOrder} LIMIT ${pageSize} OFFSET ${offset}
   `;
   const definitions: Definition[] = definitionRows.map(({ metadata, ...row }) => ({
     ...row, photoDataUrl: readCatalogueMetadata(metadata).photoDataUrl ?? null,
   }));
   const path = tenantPath(slug, "/app/packages");
-  const registerHref = (pageNumber: number) => pageNumber > 1 ? `${path}?page=${pageNumber}` : path;
+  const registerHref = (pageNumber: number, id?: string) => {
+    const params = dateFilterParams(new URLSearchParams(), dates);
+    if (pageNumber > 1) params.set("page", String(pageNumber));
+    if (id) params.set("package", id);
+    return params.size ? `${path}?${params}` : path;
+  };
   const closeHref = registerHref(page);
-  const packageHref = (id: string) => `${closeHref}${page > 1 ? "&" : "?"}package=${id}`;
+  const packageHref = (id: string) => registerHref(page, id);
   const editingDefinition = setup && setup !== "new" ? definitions.find((item) => item.id === setup) ?? null : null;
   const setupOpen = setup === "new" || Boolean(editingDefinition);
   const date = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" });
@@ -73,7 +83,7 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={slug} tenantName={tenant.name} active="packages" />
     <section className="reports-intro"><div><p>{terms.client.toUpperCase()} VALUE · DATABASE-BACKED</p><h1>Packages</h1><span>Define service visit packages and track each {terms.client}’s remaining visits.</span></div></section>
-    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>{titleTerminology(terms.client)} packages</h2><p>Issued {terms.client} packages are immutable visit ledgers.</p></div><Link className="waybook-primary-link" href={`${path}?new=1`}>Add package</Link></div><div className="waybook-table-wrap"><table><thead><tr><th>{titleTerminology(terms.client)}</th><th>Package</th><th>Visits remaining</th><th>Expiry</th><th>Issued</th></tr></thead><tbody>{clientPackages.map((item) => <TableRowLink key={item.id} href={packageHref(item.id)} label={`Open ${item.title} for ${item.customerName}`} className={selected?.id === item.id ? "is-selected" : undefined}><td>{item.customerName}</td><td><strong>{item.title}</strong><small>{item.serviceTitle}</small></td><td>{item.remainingUnits}</td><td>{item.expiresAt ? date.format(item.expiresAt) : "No expiry"}</td><td>{date.format(item.createdAt)}</td></TableRowLink>)}{clientPackages.length === 0 ? <tr><td colSpan={5}>No {terms.client} packages yet. Create a definition, then add it to a {terms.client}.</td></tr> : null}</tbody></table></div>
+    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>{titleTerminology(terms.client)} packages</h2><p>Issued {terms.client} packages are immutable visit ledgers.</p></div><Link className="waybook-primary-link" href={`${path}?new=1`}>Add package</Link></div><form method="get" className="waybook-list-filter dated-list-filters"><TableDateFields dates={dates} label="Issued date range" /><button type="submit">Apply</button></form><div className="waybook-table-wrap"><table><thead><tr><th>{titleTerminology(terms.client)}</th><th>Package</th><th>Visits remaining</th><th>Expiry</th><th>Issued</th></tr></thead><tbody>{clientPackages.map((item) => <TableRowLink key={item.id} href={packageHref(item.id)} label={`Open ${item.title} for ${item.customerName}`} className={selected?.id === item.id ? "is-selected" : undefined}><td>{item.customerName}</td><td><strong>{item.title}</strong><small>{item.serviceTitle}</small></td><td>{item.remainingUnits}</td><td>{item.expiresAt ? date.format(item.expiresAt) : "No expiry"}</td><td>{date.format(item.createdAt)}</td></TableRowLink>)}{clientPackages.length === 0 ? <tr><td colSpan={5}>No {terms.client} packages yet. Create a definition, then add it to a {terms.client}.</td></tr> : null}</tbody></table></div>
       {total.count > pageSize ? <nav className="waybook-list-filter sales-pagination" aria-label="Issued package pages">
         <span>Showing {offset + 1}–{Math.min(offset + pageSize, total.count)} of {total.count}</span>
         {page > 1 ? <Link href={registerHref(page - 1)}>Previous page</Link> : null}

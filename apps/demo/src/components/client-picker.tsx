@@ -43,5 +43,24 @@ export function ClientPicker({ name, label, required = false, initial, terminolo
       setNextCursor(data.nextCursor);
     } finally { setIsLoadingMore(false); }
   };
-  return <div><label>{fieldLabel}<input type="hidden" name={name} value={selected?.id ?? ""} required={required} /><input value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} placeholder={canSearchPhone ? "Search name, email, or phone" : "Search name or email"} aria-label={`${fieldLabel} search`} autoComplete="off" />{selected ? <small>Selected: {selected.name}{selected.email ? ` · ${selected.email}` : ""}</small> : null}<select value={selected?.id ?? ""} onChange={(event) => setSelected(items.find((item) => item.id === event.target.value) ?? null)} required={required} aria-label={fieldLabel}><option value="">{required ? `Select a ${terminology.client}` : `Not linked to a ${terminology.client}`}</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.email}</option>)}</select>{nextCursor ? <button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? "Loading…" : `Load more ${terminology.clients}`}</button> : null}</label>{canCreateClient ? <a href={createClientHref}>Create a new {terminology.client}</a> : null}</div>;
+  return <div className="client-picker">
+    <label className="client-picker__fields">
+      {fieldLabel}
+      <input type="hidden" name={name} value={selected?.id ?? ""} required={required} />
+      <input value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }}
+        placeholder={canSearchPhone ? "Search name, email, or phone" : "Search name or email"} aria-label={`${fieldLabel} search`} autoComplete="off" />
+      <select value={selected?.id ?? ""} onChange={(event) => setSelected(items.find((item) => item.id === event.target.value) ?? null)}
+        required={required} aria-label={fieldLabel}>
+        <option value="">{required ? `Select a ${terminology.client}` : `Not linked to a ${terminology.client}`}</option>
+        {items.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.email}</option>)}
+      </select>
+      {selected ? <small>Selected: {selected.name}{selected.email ? ` · ${selected.email}` : ""}</small> : null}
+    </label>
+    {nextCursor || canCreateClient ? <div className="client-picker__actions">
+      {nextCursor ? <button type="button" onClick={() => void loadMore()} disabled={isLoadingMore}>
+        {isLoadingMore ? "Loading…" : `Load more ${terminology.clients}`}
+      </button> : null}
+      {canCreateClient ? <a href={createClientHref}>Create a new {terminology.client}</a> : null}
+    </div> : null}
+  </div>;
 }

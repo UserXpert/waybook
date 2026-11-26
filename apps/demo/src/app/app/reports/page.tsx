@@ -1,3 +1,5 @@
+import { TableDateFields } from "@/components/table-date-fields";
+import { dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
@@ -15,8 +17,8 @@ type ServicePerformance = { id: string; title: string; bookingCount: number; del
 type StaffPerformance = { id: string; name: string; bookingCount: number; deliveredCount: number; bookedValueCents: number };
 type BookingHealth = { totalCount: number; cancelledCount: number; noShowCount: number; averageLeadHours: number | null };
 type LeadTimeBucket = { bucket: string; count: number };
-type PaymentSummary = { paymentCents: number; refundCents: number };
-type PaymentActivity = { id: string; kind: string; amountCents: number; method: string; recordedAt: Date; customerName: string; serviceTitle: string };
+type PaymentSummary = { paymentCents: number; refundCents: number; adjustmentCents: number };
+type PaymentActivity = { id: string; adjustment: boolean; kind: string; amountCents: number; method: string; recordedAt: Date; customerName: string; serviceTitle: string };
 type LocationPerformance = { id: string; name: string; bookingCount: number; bookedValueCents: number; paidRevenueCents: number };
 type ClientPulse = { activeClients: number; newClients: number; returningClients: number; lapsedClients: number; dueSoonClients: number; overdueClients: number };
 type AvailabilityRule = { memberId: string; memberName: string; startTime: string; endTime: string; rrule: string };
@@ -26,8 +28,8 @@ type ScheduledStaffCapacity = { memberId: string; scheduledMinutes: number };
 const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 }).format(cents / 100);
 const localDateKey = (date: Date, timezone: string) => { const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date); const value = (type: string) => parts.find((part) => part.type === type)?.value ?? ""; return `${value("year")}-${value("month")}-${value("day")}`; };
 
-export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
-  const { range } = await searchParams;
+export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ range?: string } & TableDateParams> }) {
+  const { range, sort, from, to } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -36,6 +38,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const terminology = await getTenantTerminology(tenant);
   const clientLabel = titleTerminology(terminology.client);
   const db = tenantDb(tenant);
+  const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
   const days = range === "7" || range === "90" ? Number(range) : 30;
   const endsAt = new Date();
   const localToday = localDateKey(endsAt, tenant.timezone);
@@ -47,8 +50,33 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     db.unsafe<StaffPerformance[]>("SELECT tm.id, tm.name, count(b.id)::int AS \"bookingCount\", count(b.id) FILTER (WHERE b.status='completed')::int AS \"deliveredCount\", coalesce(sum(b.booked_price_cents) FILTER (WHERE b.status <> 'cancelled'),0)::int AS \"bookedValueCents\" FROM team_members tm LEFT JOIN bookings b ON b.team_member_id=tm.id AND b.tenant_id=tm.tenant_id AND b.starts_at >= $2 AND b.starts_at < $3 WHERE tm.tenant_id=$1 GROUP BY tm.id ORDER BY \"bookedValueCents\" DESC,tm.name", [tenant.id, startsAt, endsAt]),
     db.unsafe<BookingHealth[]>("SELECT count(*)::int AS \"totalCount\", count(*) FILTER (WHERE status='cancelled')::int AS \"cancelledCount\", count(*) FILTER (WHERE status='no_show')::int AS \"noShowCount\", round(avg(extract(epoch FROM starts_at-created_at)/3600) FILTER (WHERE starts_at >= created_at))::int AS \"averageLeadHours\" FROM bookings WHERE tenant_id=$1 AND starts_at >= $2 AND starts_at < $3", [tenant.id, startsAt, endsAt]),
     db.unsafe<LeadTimeBucket[]>("SELECT bucket,count(*)::int AS count FROM (SELECT CASE WHEN starts_at-created_at < interval '24 hours' THEN 'Same day' WHEN starts_at-created_at < interval '7 days' THEN '1–6 days' WHEN starts_at-created_at < interval '30 days' THEN '7–29 days' ELSE '30+ days' END AS bucket,CASE WHEN starts_at-created_at < interval '24 hours' THEN 1 WHEN starts_at-created_at < interval '7 days' THEN 2 WHEN starts_at-created_at < interval '30 days' THEN 3 ELSE 4 END AS sort_key FROM bookings WHERE tenant_id=$1 AND starts_at >= $2 AND starts_at < $3 AND starts_at >= created_at) lead_times GROUP BY bucket,sort_key ORDER BY sort_key", [tenant.id, startsAt, endsAt]),
-    db.unsafe<PaymentSummary[]>("SELECT coalesce(sum(amount_cents) FILTER (WHERE kind='payment'),0)::int AS \"paymentCents\", coalesce(sum(amount_cents) FILTER (WHERE kind='refund'),0)::int AS \"refundCents\" FROM payment_records WHERE tenant_id=$1 AND recorded_at >= $2 AND recorded_at < $3", [tenant.id, startsAt, endsAt]),
-    db.unsafe<PaymentActivity[]>("SELECT pr.id,pr.kind,pr.amount_cents AS \"amountCents\",pr.method,pr.recorded_at AS \"recordedAt\",c.name AS \"customerName\",s.title AS \"serviceTitle\" FROM payment_records pr JOIN bookings b ON b.id=pr.booking_id AND b.tenant_id=pr.tenant_id JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id WHERE pr.tenant_id=$1 AND pr.recorded_at >= $2 AND pr.recorded_at < $3 ORDER BY pr.recorded_at DESC LIMIT 12", [tenant.id, startsAt, endsAt]),
+    db<PaymentSummary[]>`
+      WITH entries AS (
+        SELECT pr.kind, pr.amount_cents, EXISTS (
+          SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
+            AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = pr.id::text
+        ) AS adjustment
+        FROM payment_records pr WHERE pr.tenant_id = ${tenant.id} AND pr.recorded_at >= ${startsAt} AND pr.recorded_at < ${endsAt}
+      )
+      SELECT coalesce(sum(amount_cents) FILTER (WHERE kind = 'payment' AND NOT adjustment),0)::int AS "paymentCents",
+        coalesce(sum(amount_cents) FILTER (WHERE kind = 'refund' AND NOT adjustment),0)::int AS "refundCents",
+        coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END)
+          FILTER (WHERE adjustment),0)::int AS "adjustmentCents"
+      FROM entries
+    `,
+    db<PaymentActivity[]>`
+      SELECT pr.id, pr.kind, pr.amount_cents AS "amountCents", pr.method, pr.recorded_at AS "recordedAt",
+        c.name AS "customerName", s.title AS "serviceTitle", EXISTS (
+          SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
+            AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = pr.id::text
+        ) AS adjustment
+      FROM payment_records pr JOIN bookings b ON b.id = pr.booking_id AND b.tenant_id = pr.tenant_id
+        JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
+        JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id
+      WHERE pr.tenant_id = ${tenant.id} AND pr.recorded_at >= ${startsAt} AND pr.recorded_at < ${endsAt}
+      ${dateRangeWhere(db, "pr.recorded_at", dates)}
+      ORDER BY ${tableDateOrder(db, "pr.recorded_at", "pr.id", dates)} LIMIT 12
+    `,
     db.unsafe<LocationPerformance[]>("WITH booking_totals AS (SELECT location_id,count(*)::int AS bookings,coalesce(sum(booked_price_cents) FILTER (WHERE status <> 'cancelled'),0)::int AS booked_value FROM bookings WHERE tenant_id=$1 AND starts_at >= $2 AND starts_at < $3 GROUP BY location_id), payment_totals AS (SELECT b.location_id,coalesce(sum(CASE WHEN pr.kind='payment' THEN pr.amount_cents ELSE -pr.amount_cents END),0)::int AS paid_value FROM payment_records pr JOIN bookings b ON b.id=pr.booking_id AND b.tenant_id=pr.tenant_id WHERE pr.tenant_id=$1 AND pr.recorded_at >= $2 AND pr.recorded_at < $3 GROUP BY b.location_id) SELECT l.id,l.name,coalesce(bt.bookings,0)::int AS \"bookingCount\",coalesce(bt.booked_value,0)::int AS \"bookedValueCents\",coalesce(pt.paid_value,0)::int AS \"paidRevenueCents\" FROM locations l LEFT JOIN booking_totals bt ON bt.location_id=l.id LEFT JOIN payment_totals pt ON pt.location_id=l.id WHERE l.tenant_id=$1 ORDER BY \"bookedValueCents\" DESC,l.name", [tenant.id, startsAt, endsAt]),
     db.unsafe<ClientPulse[]>("WITH range_clients AS (SELECT DISTINCT customer_id FROM bookings WHERE tenant_id=$1 AND status <> 'cancelled' AND starts_at >= $2 AND starts_at < $3), first_visits AS (SELECT customer_id,min(starts_at) AS first_at FROM bookings WHERE tenant_id=$1 AND status <> 'cancelled' GROUP BY customer_id), lapsed AS (SELECT DISTINCT customer_id FROM bookings WHERE tenant_id=$1 AND status <> 'cancelled' AND starts_at >= $4 AND starts_at < $5 EXCEPT SELECT DISTINCT customer_id FROM bookings WHERE tenant_id=$1 AND status <> 'cancelled' AND starts_at >= $5), latest_cadenced AS (SELECT DISTINCT ON (b.customer_id) b.customer_id,(timezone($6,b.starts_at)::date + s.recommended_rebook_days) AS due_date FROM bookings b JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id WHERE b.tenant_id=$1 AND b.status <> 'cancelled' AND s.recommended_rebook_days IS NOT NULL ORDER BY b.customer_id,b.starts_at DESC) SELECT (SELECT count(*) FROM range_clients)::int AS \"activeClients\", (SELECT count(*) FROM range_clients r JOIN first_visits f USING(customer_id) WHERE f.first_at >= $2)::int AS \"newClients\", (SELECT count(*) FROM range_clients r JOIN first_visits f USING(customer_id) WHERE f.first_at < $2)::int AS \"returningClients\", (SELECT count(*) FROM lapsed)::int AS \"lapsedClients\", (SELECT count(*) FROM latest_cadenced WHERE due_date >= $7::date AND due_date < ($7::date + interval '30 days'))::int AS \"dueSoonClients\", (SELECT count(*) FROM latest_cadenced WHERE due_date < $7::date)::int AS \"overdueClients\"", [tenant.id, startsAt, endsAt, new Date(endsAt.getTime() - 180 * 86_400_000), new Date(endsAt.getTime() - 90 * 86_400_000), tenant.timezone, localToday]),
     db.unsafe<AvailabilityRule[]>("SELECT tm.id AS \"memberId\",tm.name AS \"memberName\",ar.start_time AS \"startTime\",ar.end_time AS \"endTime\",ar.rrule FROM availability_rules ar JOIN team_members tm ON tm.id=ar.team_member_id AND tm.tenant_id=ar.tenant_id WHERE ar.tenant_id=$1 AND tm.is_active=TRUE", [tenant.id]),
@@ -62,11 +90,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const bookingHealth = health[0] ?? { totalCount: 0, cancelledCount: 0, noShowCount: 0, averageLeadHours: null };
   const lostCount = bookingHealth.cancelledCount + bookingHealth.noShowCount;
   const lostRate = bookingHealth.totalCount ? Math.round(lostCount / bookingHealth.totalCount * 100) : 0;
-  const paymentSummary = payments[0] ?? { paymentCents: 0, refundCents: 0 };
-  const netRevenueCents = paymentSummary.paymentCents - paymentSummary.refundCents;
+  const paymentSummary = payments[0] ?? { paymentCents: 0, refundCents: 0, adjustmentCents: 0 };
+  const netRevenueCents = paymentSummary.paymentCents - paymentSummary.refundCents + paymentSummary.adjustmentCents;
   const clientPulse = clientPulseRows[0] ?? { activeClients: 0, newClients: 0, returningClients: 0, lapsedClients: 0, dueSoonClients: 0, overdueClients: 0 };
   const availableMinutes = availabilityRules.reduce((total, rule) => {
-    const days = (rule.rrule.match(/BYDAY=([^;]+)/)?.[1]?.split(",").length ?? 0);
+    const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
+  const days = (rule.rrule.match(/BYDAY=([^;]+)/)?.[1]?.split(",").length ?? 0);
     const [startHour, startMinute] = rule.startTime.split(":").map(Number); const [endHour, endMinute] = rule.endTime.split(":").map(Number);
     return total + Math.max(0, (endHour * 60 + endMinute) - (startHour * 60 + startMinute)) * days;
   }, 0);
@@ -74,7 +103,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const capacityRate = availableMinutes ? Math.round(scheduledMinutes / availableMinutes * 100) : null;
   const hours = (minutes: number) => `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   const capacityByStaff = availabilityRules.reduce<Map<string, { name: string; availableMinutes: number }>>((values, rule) => {
-    const days = (rule.rrule.match(/BYDAY=([^;]+)/)?.[1]?.split(",").length ?? 0); const [startHour, startMinute] = rule.startTime.split(":").map(Number); const [endHour, endMinute] = rule.endTime.split(":").map(Number);
+    const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
+  const days = (rule.rrule.match(/BYDAY=([^;]+)/)?.[1]?.split(",").length ?? 0); const [startHour, startMinute] = rule.startTime.split(":").map(Number); const [endHour, endMinute] = rule.endTime.split(":").map(Number);
     const existing = values.get(rule.memberId) ?? { name: rule.memberName, availableMinutes: 0 };
     existing.availableMinutes += Math.max(0, (endHour * 60 + endMinute) - (startHour * 60 + startMinute)) * days; values.set(rule.memberId, existing); return values;
   }, new Map());
@@ -86,8 +116,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="reports" />
     <header><div><p>REPORTS · DATABASE-BACKED</p><h1>{tenant.name}</h1><span>{formatDate.format(startsAt)}–{formatDate.format(endsAt)} · {tenant.timezone}</span></div><form action={logout}><button>Sign out</button></form></header>
     <section className="reports-intro"><div><p>REPORTS · DATABASE-BACKED</p><h1>{tenant.name}</h1><span>{formatDate.format(startsAt)}–{formatDate.format(endsAt)} · {tenant.timezone}</span></div><nav className="reports-range" aria-label="Report date range">{[7, 30, 90].map((value) => <Link key={value} href={reportsPath + "?range=" + value} aria-current={days === value ? "page" : undefined}>Last {value} days</Link>)}{permissions.isManager ? <Link href={tenantPath(tenantSlug, "/app/targets")}>Monthly targets</Link> : null}</nav></section>
-    <section className="waybook-data-metrics reports-metrics"><article><span>Paid revenue</span><strong>{money(netRevenueCents)}</strong><small>{money(paymentSummary.paymentCents)} collected · {money(paymentSummary.refundCents)} refunded</small></article><article><span>Scheduled value</span><strong>{money(scheduled)}</strong><small>Confirmed and arrived · not paid revenue</small></article><article><span>Delivered value</span><strong>{money(delivered)}</strong><small>Completed services · not paid revenue</small></article><article><span>Lost value</span><strong>{money(lost)}</strong><small>Cancelled and no-show</small></article></section>
-    <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>PAYMENT ACTIVITY</p><h2>Recent recorded entries</h2><span>Append-only payment and refund records in the selected period.</span></div></div><div className="waybook-table-wrap"><table><thead><tr><th>Recorded</th><th>{clientLabel}</th><th>Service</th><th>Type</th><th>Method</th><th>Amount</th></tr></thead><tbody>{paymentActivity.map((item) => <tr key={item.id}><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.recordedAt)}</td><td>{item.customerName}</td><td>{item.serviceTitle}</td><td>{item.kind}</td><td>{item.method.replace("_", " ")}</td><td>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</td></tr>)}{paymentActivity.length === 0 ? <tr><td colSpan={6}>No payment activity in this period.</td></tr> : null}</tbody></table></div></section>
+    <section className="waybook-data-metrics reports-metrics"><article><span>Paid revenue</span><strong>{money(netRevenueCents)}</strong><small>{money(paymentSummary.paymentCents)} collected · {money(paymentSummary.refundCents)} refunded{paymentSummary.adjustmentCents ? ` · ${money(paymentSummary.adjustmentCents)} adjustments` : ""}</small></article><article><span>Scheduled value</span><strong>{money(scheduled)}</strong><small>Confirmed and arrived · not paid revenue</small></article><article><span>Delivered value</span><strong>{money(delivered)}</strong><small>Completed services · not paid revenue</small></article><article><span>Lost value</span><strong>{money(lost)}</strong><small>Cancelled and no-show</small></article></section>
+    <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>PAYMENT ACTIVITY</p><h2>Recent recorded entries</h2><span>Payments, refunds, and adjustments in the selected period.</span></div></div><form method="get" className="waybook-list-filter dated-list-filters">{range ? <input type="hidden" name="range" value={range} /> : null}<TableDateFields dates={dates} label="Recorded date range" /><button type="submit">Apply</button></form><div className="waybook-table-wrap"><table><thead><tr><th>Recorded</th><th>{clientLabel}</th><th>Service</th><th>Type</th><th>Method</th><th>Amount</th></tr></thead><tbody>{paymentActivity.map((item) => <tr key={item.id}><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.recordedAt)}</td><td>{item.customerName}</td><td>{item.serviceTitle}</td><td>{item.adjustment ? "adjustment" : item.kind}</td><td>{item.method.replace("_", " ")}</td><td>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</td></tr>)}{paymentActivity.length === 0 ? <tr><td colSpan={6}>No payment activity in this period.</td></tr> : null}</tbody></table></div></section>
     <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>LOCATION PERFORMANCE</p><h2>Bookings and value by location</h2><span>Booked value is based on appointment date; paid revenue is based on payment-recorded date.</span></div></div><div className="waybook-table-wrap"><table><thead><tr><th>Location</th><th>Bookings</th><th>Booked value</th><th>Paid revenue</th></tr></thead><tbody>{locationPerformance.map((location) => <tr key={location.id}><td>{location.name}</td><td>{location.bookingCount}</td><td>{money(location.bookedValueCents)}</td><td>{money(location.paidRevenueCents)}</td></tr>)}{locationPerformance.length === 0 ? <tr><td colSpan={4}>No locations configured.</td></tr> : null}</tbody></table></div></section>
     <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>BOOKING HEALTH</p><h2>Cancellation and no-show behaviour</h2><span>Based on appointments scheduled in this range, not payment activity.</span></div></div><div className="waybook-data-metrics reports-health"><article><span>Lost appointments</span><strong>{lostRate}%</strong><small>{lostCount} of {bookingHealth.totalCount} cancelled or no-show</small></article><article><span>Cancelled</span><strong>{bookingHealth.cancelledCount}</strong><small>Appointments cancelled in this range</small></article><article><span>No-shows</span><strong>{bookingHealth.noShowCount}</strong><small>Appointments marked no-show</small></article><article><span>Average booking lead</span><strong>{bookingHealth.averageLeadHours === null ? "—" : bookingHealth.averageLeadHours + "h"}</strong><small>Creation to appointment start</small></article></div></section>
     <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>BOOKING LEAD TIME</p><h2>How far ahead {terminology.clients} book</h2><span>Appointments in the selected range, grouped by creation-to-start interval.</span></div></div><div className="waybook-data-metrics reports-health">{leadTimeBuckets.map((item) => <article key={item.bucket}><span>{item.bucket}</span><strong>{item.count}</strong><small>Appointments booked</small></article>)}{leadTimeBuckets.length === 0 ? <p>No valid lead-time data in this period.</p> : null}</div></section>

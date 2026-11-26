@@ -1,3 +1,4 @@
+import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -38,7 +39,7 @@ type Member = {
   email: string;
   calendarColor: string;
 };
-type Service = { id: string; title: string; durationMinutes: number };
+type Service = { id: string; title: string; durationMinutes: number; priceCents: number };
 type Location = { id: string; name: string };
 type ManualAssignment = {
   locationId: string;
@@ -384,7 +385,7 @@ export default async function CalendarsPage({
       ? await Promise.all([
           db<
             Service[]
-          >`SELECT s.id, s.title, s.duration_minutes AS "durationMinutes" FROM services s JOIN service_team_members stm ON stm.service_id = s.id AND stm.tenant_id = s.tenant_id JOIN service_locations sl ON sl.service_id = s.id AND sl.tenant_id = s.tenant_id WHERE s.tenant_id = ${tenant.id} AND stm.team_member_id = ${selected.id} AND sl.location_id = ${selectedLocation.id} AND s.is_active = TRUE ORDER BY s.title`,
+          >`SELECT s.id, s.title, s.duration_minutes AS "durationMinutes", s.price_cents AS "priceCents" FROM services s JOIN service_team_members stm ON stm.service_id = s.id AND stm.tenant_id = s.tenant_id JOIN service_locations sl ON sl.service_id = s.id AND sl.tenant_id = s.tenant_id WHERE s.tenant_id = ${tenant.id} AND stm.team_member_id = ${selected.id} AND sl.location_id = ${selectedLocation.id} AND s.is_active = TRUE ORDER BY s.title`,
           db<
             Service[]
           >`SELECT DISTINCT s.id, s.title, s.duration_minutes AS "durationMinutes" FROM services s JOIN service_team_members stm ON stm.service_id = s.id AND stm.tenant_id = s.tenant_id JOIN team_member_locations tml ON tml.tenant_id = stm.tenant_id AND tml.team_member_id = stm.team_member_id JOIN service_locations sl ON sl.service_id = s.id AND sl.tenant_id = s.tenant_id WHERE s.tenant_id = ${tenant.id} AND s.is_active = TRUE AND stm.team_member_id = ANY(${members.map((member) => member.id)}) AND tml.location_id = ${selectedLocation.id} AND sl.location_id = ${selectedLocation.id} ORDER BY s.title`,
@@ -453,13 +454,16 @@ export default async function CalendarsPage({
       ORDER BY s.title
     `
     : calendarServices;
-  const eligibleResources = selectedBooking && canManage ? await db<ResourceChoice[]>`
+  const [eligibleResources, paymentBalance] = await Promise.all([
+    selectedBooking && canManage ? db<ResourceChoice[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive"
     FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${selectedBooking.locationId}
     JOIN service_resources sr ON sr.tenant_id=r.tenant_id AND sr.resource_id=r.id AND sr.service_id=${selectedBooking.serviceId}
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
-  ` : [];
+  ` : [],
+    selectedBooking && canManage ? getAppointmentPaymentBalance(db, tenant.id, selectedBooking.id) : null,
+  ]);
   const selectedBookingMember = selectedBooking
     ? members.find((member) => member.id === selectedBooking.teamMemberId)
       ?? (await db<Member[]>`SELECT id,name,email,calendar_color AS "calendarColor" FROM team_members WHERE tenant_id=${tenant.id} AND id=${selectedBooking.teamMemberId} LIMIT 1`)[0]
@@ -682,7 +686,7 @@ export default async function CalendarsPage({
     : teamView ? teamCreateMember : canManageSelectedSchedule ? selected : undefined;
   const createServices = requestedAppointment && createMember && selectedLocation && createMember.id !== selected?.id
     ? await db<Service[]>`
-      SELECT s.id, s.title, s.duration_minutes AS "durationMinutes"
+      SELECT s.id, s.title, s.duration_minutes AS "durationMinutes", s.price_cents AS "priceCents"
       FROM services s
       JOIN service_team_members stm ON stm.service_id = s.id AND stm.tenant_id = s.tenant_id
       JOIN service_locations sl ON sl.service_id = s.id AND sl.tenant_id = s.tenant_id
@@ -1229,7 +1233,7 @@ export default async function CalendarsPage({
           ) : null}
         </>
       )}
-      <CalendarAppointmentDrawer staffLabel={titleTerminology(terms.staffPlural)}
+      <CalendarAppointmentDrawer checkoutPath={tenantPath(tenantSlug, "/app/sales")} staffLabel={titleTerminology(terms.staffPlural)}
         timezone={tenant.timezone}
         summaries={[...bookings, ...teamBookings, ...monthScopedBookings].map((item) => ({
           id: item.id, bookingNumber: item.bookingNumber, customerName: item.customerName,
@@ -1245,7 +1249,7 @@ export default async function CalendarsPage({
           canManage, canManageSchedule: canManageBookingSchedule, canChangeAttendanceNow: canChangeAttendanceNow(selectedBooking),
           canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
           resourceId: canManage ? selectedBooking.resourceId : null,
-          resources: eligibleResources, days: canManageBookingSchedule ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
+          resources: eligibleResources, paymentBalance, days: canManageBookingSchedule ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
         } : null}
       />
       {requestedAppointment && createMember && selectedLocation ? (
@@ -1256,8 +1260,7 @@ export default async function CalendarsPage({
           >
             <header>
               <div>
-                <p>NEW APPOINTMENT</p>
-                <h2>Create an appointment</h2>
+                <h2>New appointment</h2>
                 <span>
                   {createMember.name} · {selectedLocation.name} ·{" "}
                   {requestedAppointment.replace("T", " ")}
@@ -1268,26 +1271,22 @@ export default async function CalendarsPage({
               </TenantEditorClose>
             </header>
             <div className="appointment-drawer__body">
-              {selectedCustomer ? (
-                <div className="appointment-drawer__summary">
-                  <strong>{selectedCustomer.name}</strong>
-                  <span>
-                    {titleTerminology(terms.client)} details are prefilled from the selected profile.
-                  </span>
-                </div>
-              ) : null}
-              {manualService ? <ManualAppointmentForm terminology={terms}
+              <ManualAppointmentForm terminology={terms}
                 initialLocation={selectedLocation}
                 initialMember={createMember}
-                initialService={manualService}
+                initialService={manualService ?? null}
                 fixedStaff={!canManage && !permissions.canManageTeamAppointments}
                 defaultDate={requestedAppointment.slice(0, 10)}
                 defaultTime={requestedAppointment.slice(11)}
                 timezone={tenant.timezone}
+                canLookupClients={canViewClientDirectory}
+                initialClient={directCustomer}
+                waitlistEntryId={waitlistCustomer ? waitlistEntryId : undefined}
+                waitlistUnavailable={Boolean(waitlistEntryId && !waitlistCustomer)}
                 customerName={selectedCustomer?.name}
                 customerEmail={selectedCustomer?.email}
                 customerPhone={selectedCustomer?.phone}
-              /> : <p className="tenant-drawer-note">Choose a location with an active service before creating an appointment.</p>}
+              />
             </div>
           </aside>
         </TenantEditorDialog>

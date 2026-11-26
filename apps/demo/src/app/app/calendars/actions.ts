@@ -1,6 +1,9 @@
 "use server";
 
+import { activeAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
+import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
+import type { TransactionSql } from "postgres";
 import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
 import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
 import { fromZonedTime } from "date-fns-tz";
@@ -123,12 +126,15 @@ export async function getCalendarAppointment(bookingId: string) {
   if (!booking) throw new Error("Booking is unavailable.");
   const { teamMemberId, ...detail } = booking;
   const canManageSchedule = canManageAppointment(permissions, teamMemberId);
-  const resources = permissions.isManager ? await db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
+  const [resources, paymentBalance] = await Promise.all([
+    permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
     JOIN service_resources sr ON sr.tenant_id=r.tenant_id AND sr.resource_id=r.id AND sr.service_id=${booking.serviceId}
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
-  ` : [];
+  ` : [],
+    permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
+  ]);
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -151,6 +157,7 @@ export async function getCalendarAppointment(bookingId: string) {
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
     canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
     resources,
+    paymentBalance,
     days,
     slots,
     timezone: tenant.timezone,
@@ -431,18 +438,48 @@ export async function getCalendarBookingMoveTargets(input: {
   }
 }
 
-export type BookingDetailsResult = { error: string | null };
+export type BookingDetailsResult = { error: string | null; paymentRequired?: boolean };
+
+class NoShowPaymentRequired extends Error {
+  constructor() {
+    super("Record a payment before marking this no-show as completed.");
+  }
+}
+
+const attendanceStatuses = ["arrived", "completed", "no_show"];
+type ManualPayment = { amountCents: number; method: string; entryId: string; actorId: string };
+
+function parseDrawerPayment(data: FormData) {
+  const amount = String(data.get("paymentAmount") ?? "").trim().replace(",", ".");
+  if (!amount) return null;
+  const method = String(data.get("paymentMethod") ?? "");
+  const amountCents = Math.round(Number(amount) * 100);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || !manualPaymentMethods.some(item => item === method) ||
+    amountCents < 1 || amountCents > 10_000_000) throw new Error("Enter a valid payment amount and method.");
+  return { amountCents, method, entryId: crypto.randomUUID() };
+}
 
 export async function updateBookingDetails(formData: FormData): Promise<BookingDetailsResult> {
   const bookingId = String(formData.get("bookingId") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (status && !attendanceStatuses.includes(status)) return { error: "Choose an attendance status." };
+  const editDetails = formData.get("editDetails") !== "false";
+  const paymentEntered = String(formData.get("paymentAmount") ?? "").trim() !== "";
+  if (!editDetails && !status && !paymentEntered) return { error: null };
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
-  if (!name || !email.includes("@")) throw new Error("Enter the customer name and a valid email.");
-  const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+  if (editDetails && (!name || !email.includes("@"))) throw new Error("Enter the customer name and a valid email.");
+  const context = await editableBooking(bookingId, "manager");
+  const { tenant, db, booking } = context;
   const identity = await requireIdentity();
   try {
-    await db.begin(async (transaction) => {
+    const payment = parseDrawerPayment(formData);
+    await withSerializableRetry(() => db.begin(async (transaction) => {
+      if (status || payment) await persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), null,
+        payment ? { ...payment, actorId: identity.id } : undefined);
+
+      if (!editDetails) return;
       const [customer] = await transaction.unsafe<{ id: string; status: string }[]>("SELECT customer_id AS id, status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
       if (!customer) throw new Error("Booking is unavailable.");
       // The drawer intentionally permits edits for completed appointments and keeps
@@ -466,13 +503,14 @@ export async function updateBookingDetails(formData: FormData): Promise<BookingD
       }
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.edited', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.edited', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
-    });
+    }));
   } catch (error) {
+    if (error instanceof NoShowPaymentRequired) return { error: error.message, paymentRequired: true };
     if (error instanceof Error && "code" in error && error.code === "P0001"
       && error.message === "exclusive resource is already assigned for this appointment time") {
       return { error: "This resource is already assigned for this appointment time." };
     }
-    throw error;
+    return { error: error instanceof Error ? error.message : "Could not save appointment changes." };
   }
   revalidateCalendars();
   return { error: null };
@@ -551,57 +589,108 @@ export async function moveBookingOnCalendar(input: { bookingId: string; startsAt
   }
 }
 
-export async function updateBookingStatus(formData: FormData) {
+async function persistBookingStatus(
+  transaction: TransactionSql,
+  { tenant, booking }: EditableBooking,
+  status: string,
+  expectedStatus: FormDataEntryValue | null,
+  actorId: string | null,
+  noShowPayment?: ManualPayment,
+) {
+  // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
+  const [block] = await transaction.unsafe<{ state: string }[]>(
+    "SELECT state FROM booking_blocks WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+    [booking.bookingBlockId, tenant.id],
+  );
+  if (!block) throw new Error("Booking availability is unavailable.");
+
+  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
+    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+    [booking.id, tenant.id],
+  );
+  if (!current) throw new Error("Booking is unavailable.");
+  if (status !== "cancelled" && current.status !== expectedStatus) {
+    throw new Error("The appointment status has changed. Reopen the appointment and try again.");
+  }
+  // A repeated click or an in-flight duplicate cancellation is a safe no-op.
+  if (current.status === "cancelled" && status === "cancelled") return null;
+  if (["completed", "cancelled"].includes(current.status)) {
+    throw new Error("This appointment has a final status and cannot be changed.");
+  }
+  if (status !== "cancelled" && !canChangeAttendanceNow(current)) {
+    throw new Error("Attendance cannot be updated before the appointment is eligible.");
+  }
+  const allowedTransitions: Record<string, string[]> = {
+    confirmed: ["arrived", "completed", "no_show", "cancelled"],
+    arrived: ["completed", "no_show", "cancelled"],
+    no_show: ["completed"],
+  };
+  if (status && !allowedTransitions[current.status]?.includes(status)) {
+    throw new Error("That appointment status change is not allowed.");
+  }
+
+  if (noShowPayment) {
+    if (current.status !== "no_show") throw new Error("This payment can only be entered for a no-show.");
+    if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
+      throw new Error("A payment is already recorded. Edit or delete it before recording another.");
+    }
+    const [cart] = await transaction.unsafe<{ canAddFee: boolean }[]>(`
+      SELECT chargeable_cents = 0 AND NOT package_redeemed AS "canAddFee"
+      FROM appointment_checkout_amounts($1, $2)
+    `, [tenant.id, booking.id]);
+    if (cart?.canAddFee) {
+      await transaction.unsafe("UPDATE bookings SET no_show_charge_cents=$1, updated_at=now() WHERE tenant_id=$2 AND id=$3",
+        [noShowPayment.amountCents, tenant.id, booking.id]);
+    }
+    await insertManualPaymentEntry(transaction, tenant.id, booking.id, "payment", noShowPayment);
+  }
+  if (!status) return null;
+
+  if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
+    throw new NoShowPaymentRequired();
+  }
+
+  await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
+  let cancellationOutboxId: string | null = null;
+  if (status === "cancelled") {
+    await refundGiftCardOnCancellation(transaction as unknown as ReturnType<typeof tenantDb>, tenant.id, booking.id, actorId);
+    await transaction.unsafe("UPDATE booking_blocks SET state = 'cancelled' WHERE id = $1 AND tenant_id = $2", [booking.bookingBlockId, tenant.id]);
+    const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'cancellation', $3, $4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id })]);
+    cancellationOutboxId = entry.id;
+  }
+  await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, $3, $4::text::jsonb)", [tenant.id, booking.id, `booking.${status}`, JSON.stringify({ previousStatus: current.status })]);
+  await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking', $3, $4::text::jsonb)", [tenant.id, `booking.${status}`, booking.id, JSON.stringify({ previousStatus: current.status })]);
+  return cancellationOutboxId;
+}
+
+async function updateBookingStatus(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!["arrived", "completed", "no_show", "cancelled"].includes(status)) throw new Error("Choose a valid appointment status.");
-  const { tenant, db, booking } = await editableBooking(bookingId, status === "cancelled" ? "appointment" : "status");
+  const context = await editableBooking(bookingId, status === "cancelled" ? "appointment" : "status");
+  const { tenant, db, booking } = context;
   const actor = status === "cancelled" ? await requireIdentity() : null;
   if (status === "cancelled" && booking.status === "completed") throw new Error("Completed appointments cannot be cancelled.");
-  const outboxId = await withSerializableRetry(() => db.begin(async (transaction) => {
-    // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
-    const [block] = await transaction.unsafe<{ state: string }[]>(
-      "SELECT state FROM booking_blocks WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
-      [booking.bookingBlockId, tenant.id],
-    );
-    if (!block) throw new Error("Booking availability is unavailable.");
-
-    const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
-      'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
-      [booking.id, tenant.id],
-    );
-    if (!current) throw new Error("Booking is unavailable.");
-    // A repeated click or an in-flight duplicate cancellation is a safe no-op.
-    if (current.status === "cancelled" && status === "cancelled") return null;
-    if (["completed", "cancelled"].includes(current.status)) {
-      throw new Error("This appointment has a final status and cannot be changed.");
-    }
-    if (status !== "cancelled" && !canChangeAttendanceNow(current)) {
-      throw new Error("Attendance cannot be updated before the appointment is eligible.");
-    }
-    const allowedTransitions: Record<string, string[]> = {
-      confirmed: ["arrived", "completed", "no_show", "cancelled"],
-      arrived: ["completed", "no_show", "cancelled"],
-      no_show: ["completed"],
-    };
-    if (!allowedTransitions[current.status]?.includes(status)) {
-      throw new Error("That appointment status change is not allowed.");
-    }
-
-    await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
-    let cancellationOutboxId: string | null = null;
-    if (status === "cancelled") {
-      await refundGiftCardOnCancellation(transaction as unknown as ReturnType<typeof tenantDb>, tenant.id, booking.id, actor?.id ?? null);
-      await transaction.unsafe("UPDATE booking_blocks SET state = 'cancelled' WHERE id = $1 AND tenant_id = $2", [booking.bookingBlockId, tenant.id]);
-      const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'cancellation', $3, $4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id })]);
-      cancellationOutboxId = entry.id;
-    }
-    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, $3, $4::text::jsonb)", [tenant.id, booking.id, `booking.${status}`, JSON.stringify({ previousStatus: current.status })]);
-    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking', $3, $4::text::jsonb)", [tenant.id, `booking.${status}`, booking.id, JSON.stringify({ previousStatus: current.status })]);
-    return cancellationOutboxId;
-  }));
+  const outboxId = await withSerializableRetry(() => db.begin((transaction) =>
+    persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), actor?.id ?? null),
+  ));
   promptEmailDelivery(tenant, outboxId);
   revalidateCalendars();
+}
+
+export type AttendanceResult = BookingDetailsResult;
+
+export async function saveAppointmentAttendance(formData: FormData): Promise<AttendanceResult> {
+  try {
+    if (!attendanceStatuses.includes(String(formData.get("status")))) {
+      throw new Error("Choose an attendance status.");
+    }
+    await updateBookingStatus(formData);
+    return { error: null };
+  } catch (error) {
+    if (error instanceof NoShowPaymentRequired) return { error: error.message, paymentRequired: true };
+    return { error: error instanceof Error ? error.message : "Could not save appointment status." };
+  }
 }
 
 export type CancellationResult = { error: string | null };
@@ -619,15 +708,31 @@ export async function cancelAppointment(formData: FormData): Promise<Cancellatio
 export type PaymentState = { error: string | null; success: string | null };
 
 /** Appends a tenant-recorded payment or refund; corrections are never destructive. */
+async function insertManualPaymentEntry(
+  transaction: TransactionSql,
+  tenantId: string,
+  bookingId: string,
+  kind: "payment" | "refund",
+  { entryId, amountCents, method, actorId }: ManualPayment,
+) {
+  const [payment] = await transaction.unsafe<{ id: string }[]>(
+    "INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+    [entryId, tenantId, bookingId, kind, amountCents, method, actorId],
+  );
+  await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)", [tenantId, bookingId, actorId, `payment.${kind}`, { paymentId: payment.id, amountCents, method }]);
+  await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenantId, actorId, `payment.${kind}_recorded`, payment.id, { bookingId: bookingId, amountCents, method }]);
+}
+
 export async function recordPayment(formData: FormData): Promise<PaymentState> {
   const kind = String(formData.get("kind") ?? "");
   try {
     if (kind !== "payment" && kind !== "refund") throw new Error("Select a payment action.");
+    const expectedBalance = formData.get("expectedBalanceCents");
     const entryId = String(formData.get("entryId") ?? "");
     const bookingId = String(formData.get("bookingId") ?? "");
     const method = String(formData.get("method") ?? "card");
     const amount = Number(String(formData.get("amountDkk") ?? "").replace(",", "."));
-    if (!bookingId || !["card", "cash", "bank_transfer", "other"].includes(method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
+    if (!bookingId || !manualPaymentMethods.some((item) => item === method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
       throw new Error("Enter a valid positive amount and payment method.");
     }
     if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(entryId)) throw new Error("The payment entry could not be identified.");
@@ -652,19 +757,107 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
         }
         return;
       }
-      if (locked.status === "cancelled" && kind !== "refund") throw new Error("Cancelled appointments cannot receive a payment record.");
-      const [payment] = await transaction.unsafe<{ id: string }[]>(
-        "INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-        [entryId, tenant.id, booking.id, kind, amountCents, method, identity.id],
-      );
-      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)", [tenant.id, booking.id, identity.id, `payment.${kind}`, { paymentId: payment.id, amountCents, method }]);
-      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenant.id, identity.id, `payment.${kind}_recorded`, payment.id, { bookingId: booking.id, amountCents, method }]);
+      if (kind === "payment") {
+        if (locked.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
+        if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
+          throw new Error("A payment is already recorded. Edit or delete it before recording another.");
+        }
+        if (expectedBalance !== null) {
+          const [cart] = await transaction.unsafe<{ balance: string }[]>(`
+            SELECT greatest(cart.chargeable_cents - coalesce((
+              SELECT sum(CASE WHEN kind='payment' THEN amount_cents ELSE -amount_cents END)
+              FROM payment_records WHERE tenant_id=$1 AND booking_id=$2
+            ), 0), 0)::text AS balance
+            FROM appointment_checkout_amounts($1, $2) cart
+          `, [tenant.id, booking.id]);
+          if (!cart || cart.balance !== expectedBalance) {
+            throw new Error("The checkout balance changed. Go back to checkout and review the total.");
+          }
+        }
+      }
+      await insertManualPaymentEntry(transaction, tenant.id, booking.id, kind,
+        { entryId, amountCents, method, actorId: identity.id });
     });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not record this payment.", success: null };
   }
   revalidateCalendars();
-  return { error: null, success: kind === "refund" ? "Refund recorded in the immutable sales ledger." : "Payment recorded in the immutable sales ledger." };
+  return { error: null, success: kind === "refund" ? "Refund recorded." : "Payment recorded." };
+}
+
+/** Corrects a manually recorded receipt without changing original transactions. */
+export async function correctAppointmentPayment(formData: FormData): Promise<PaymentState> {
+  const op = String(formData.get("operation") ?? "");
+  const operationId = String(formData.get("operationId") ?? "");
+  const bookingId = String(formData.get("bookingId") ?? "");
+  const paymentId = String(formData.get("paymentId") ?? "");
+  const revision = String(formData.get("revision") ?? "") || null;
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const method = op === "edit" ? String(formData.get("method") ?? "") : null;
+  const amount = op === "edit" ? Number(String(formData.get("amountDkk") ?? "").replace(",", ".")) : 0;
+  const amountCents = Math.round(amount * 100);
+
+  try {
+    if (!["edit", "delete"].includes(op) || ![bookingId, paymentId, operationId].every((id) => uuid.test(id))) {
+      throw new Error("The payment could not be identified.");
+    }
+    if (op === "edit" && (!manualPaymentMethods.some((item) => item === method) || !Number.isFinite(amountCents) || amountCents <= 0 || amountCents > 10_000_000)) {
+      throw new Error("Enter a valid positive amount and payment method.");
+    }
+    const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+    const actor = await requireIdentity();
+    const event = op === "edit" ? "payment.corrected" : "payment.deleted";
+    await db.begin(async (transaction) => {
+      const [locked] = await transaction.unsafe<{ status: string }[]>(
+        "SELECT status FROM bookings WHERE tenant_id=$1 AND id=$2 FOR UPDATE", [tenant.id, booking.id],
+      );
+      if (!locked) throw new Error("Booking is unavailable.");
+      const [previous] = await transaction.unsafe<{ matches: boolean }[]>(`
+        SELECT event_type = $4 AND actor_identity_id = $5 AND metadata->>'paymentId' = $6
+          AND (metadata->>'amountCents')::int = $7 AND (metadata->>'method') IS NOT DISTINCT FROM $8 AS matches
+        FROM booking_events WHERE tenant_id=$1 AND booking_id=$2 AND id=$3
+      `, [tenant.id, booking.id, operationId, event, actor.id, paymentId, amountCents, method]);
+      if (previous?.matches) return;
+      if (previous) throw new Error("This payment correction does not match the original request.");
+
+      const payments = await activeAppointmentPayments(transaction, tenant.id, booking.id);
+      const payment = payments.find((item) => item.id === paymentId);
+      if (!payment || payment.revision !== revision) throw new Error("This payment has changed. Reopen the appointment and try again.");
+      if (payment.method === "gift_card") throw new Error("Gift-card payments use the original card’s refund workflow.");
+
+      const [balance] = await transaction.unsafe<{ available: number }[]>(`
+        SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)::int AS available
+        FROM payment_records WHERE tenant_id=$1 AND booking_id=$2 AND method <> 'gift_card'
+      `, [tenant.id, booking.id]);
+      const onlyManualPayment = payments.filter((item) => item.method !== "gift_card").length === 1;
+      const delta = op === "delete" && onlyManualPayment ? -Math.max(balance.available, 0) : amountCents - payment.amountCents;
+      if (delta < -balance.available && delta < 0) {
+        throw new Error("This change exceeds the collected balance after refunds.");
+      }
+      if (op === "edit" && locked.status === "cancelled") throw new Error("Cancelled appointments cannot have payments edited.");
+      const ledgerMethod = delta < 0 ? payment.method : method;
+      const adjustmentId = delta === 0 ? null : crypto.randomUUID();
+      if (adjustmentId) {
+        await transaction.unsafe(`
+          INSERT INTO payment_records (id,tenant_id,booking_id,kind,amount_cents,method,recorded_by_identity_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `, [adjustmentId, tenant.id, booking.id, delta < 0 ? "refund" : "payment", Math.abs(delta), ledgerMethod, actor.id]);
+      }
+      const metadata = JSON.stringify({ paymentId, adjustmentId, amountCents, method, previousAmountCents: payment.amountCents, previousMethod: payment.method });
+      await transaction.unsafe(`
+        INSERT INTO booking_events (id,tenant_id,booking_id,actor_identity_id,event_type,metadata,created_at)
+        VALUES ($1,$2,$3,$4,$5,$6::text::jsonb,clock_timestamp())
+      `, [operationId, tenant.id, booking.id, actor.id, event, metadata]);
+      await transaction.unsafe(`
+        INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata)
+        VALUES ($1,$2,$3,'payment_record',$4,($5::text::jsonb || jsonb_build_object('bookingId',$6::uuid)))
+      `, [tenant.id, actor.id, event, paymentId, metadata, booking.id]);
+    });
+    revalidateCalendars();
+    return { error: null, success: op === "delete" ? "Payment deleted." : "Payment updated." };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not update the payment.", success: null };
+  }
 }
 
 export type ManualBookingState = { error: string | null; success: string | null };
@@ -676,14 +869,24 @@ async function createManualBookingRecord(formData: FormData) {
   const serviceId = String(formData.get("serviceId") ?? "");
   const localDate = String(formData.get("appointmentDate") ?? "");
   const localTime = String(formData.get("appointmentTime") ?? "");
+  const waitlistEntryId = String(formData.get("waitlistEntryId") ?? "");
+  const customerId = String(formData.get("customerId") ?? "");
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
-  if (!locationId || !teamMemberId || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{2}:\d{2}$/.test(localTime) || !name || !email.includes("@")) {
+  if (!locationId || !teamMemberId || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{2}:\d{2}$/.test(localTime) || (!waitlistEntryId && !customerId && (!name || !email.includes("@")))) {
     throw new Error("Choose a location, staff member, service, local appointment time, and valid client details.");
   }
   const { tenant, permissions } = await calendarPermissionContext();
   assertAppointmentPermission(permissions, teamMemberId);
+  if (customerId && (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(customerId)
+    || !(permissions.isManager || permissions.canViewClients || permissions.canManageClients))) {
+    throw new Error("You cannot select that client.");
+  }
+  if (waitlistEntryId && (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(waitlistEntryId)
+    || !(permissions.isManager || permissions.canManageWaitlist))) {
+    throw new Error("You cannot book that waitlist entry.");
+  }
   const db = tenantDb(tenant);
   const [service] = await db<{ id: string; durationMinutes: number; priceCents: number }[]>`
     SELECT s.id, s.duration_minutes AS "durationMinutes", s.price_cents AS "priceCents"
@@ -706,12 +909,22 @@ async function createManualBookingRecord(formData: FormData) {
   const identity = await requireIdentity();
   try {
     await withSerializableRetry(async () => db.begin(async (transaction) => {
-      const [customer] = await transaction.unsafe<{ id: string }[]>(`
+      const [waitlistCustomer] = waitlistEntryId ? await transaction.unsafe<{ id: string }[]>(`
+        UPDATE waitlist_entries SET status='booked', updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 AND service_id=$3 AND location_id=$4
+          AND status IN ('waiting','offered')
+        RETURNING customer_id AS id
+      `, [tenant.id, waitlistEntryId, service.id, locationId]) : [];
+      if (waitlistEntryId && !waitlistCustomer) throw new Error("This waitlist entry is unavailable or its service or location has changed.");
+      const [customer] = waitlistCustomer ? [waitlistCustomer] : customerId
+        ? await transaction.unsafe<{ id: string }[]>("SELECT id FROM customers WHERE tenant_id=$1 AND id=$2::uuid FOR KEY SHARE", [tenant.id, customerId])
+        : await transaction.unsafe<{ id: string }[]>(`
         INSERT INTO customers (tenant_id, name, email, phone)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (tenant_id, email) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone, updated_at = now()
         RETURNING id
       `, [tenant.id, name, email, phone]);
+      if (!customer) throw new Error("That client is unavailable. Select another client.");
       const [block] = await transaction.unsafe<{ id: string }[]>(`
         INSERT INTO booking_blocks (tenant_id, team_member_id, resource_id, location_id, starts_at, ends_at, state)
         VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')
@@ -722,6 +935,10 @@ async function createManualBookingRecord(formData: FormData) {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'confirmed', 'tenant')
         RETURNING id
       `, [tenant.id, block.id, service.id, locationId, teamMemberId, null, customer.id, startsAt, endsAt, service.priceCents]);
+      if (waitlistEntryId) await transaction.unsafe(
+        "INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'waitlist.booked', 'waitlist_entry', $3, $4::jsonb)",
+        [tenant.id, identity.id, waitlistEntryId, JSON.stringify({ status: "booked", bookingId: booking.id })],
+      );
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, 'booking.created_by_tenant', $4::jsonb)", [tenant.id, booking.id, identity.id, JSON.stringify({ source: "tenant" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking.created_by_tenant', 'booking', $3, $4::jsonb)", [tenant.id, identity.id, booking.id, JSON.stringify({ source: "tenant" })]);
     }));
@@ -730,6 +947,7 @@ async function createManualBookingRecord(formData: FormData) {
     throw error;
   }
   revalidateCalendars();
+  if (waitlistEntryId) revalidatePath("/app/waitlist");
 }
 
 /** Expected validation and availability failures stay inside the calendar form rather than becoming a page error. */

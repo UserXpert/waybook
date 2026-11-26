@@ -228,7 +228,7 @@ test("Apps menu groups, search, keyboard and navigation work", async ({ page }) 
   await apps.click();
   const dialog = page.getByRole("dialog", { name: "Apps & settings" });
   await expect(dialog).toBeVisible();
-  for (const group of ["Operations", "Commerce", "Setup", "Insights"]) await expect(dialog.getByRole("heading", { name: group, exact: true })).toBeVisible();
+  for (const group of ["Operations", "Commerce", "Setup", "Activity & insights"]) await expect(dialog.getByRole("heading", { name: group, exact: true })).toBeVisible();
   const columns = await dialog.locator(".tenant-app-menu__groups").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
   const width = page.viewportSize()!.width;
   expect(columns).toBe(width <= 540 ? 1 : width <= 900 ? 2 : 4);
@@ -354,7 +354,7 @@ for (const workspaceCase of [
               FROM (SELECT (now() AT TIME ZONE ${settings.timezone})::date + ${dayOffset}::int AS local_day) date_value) slot
       `;
       const [block] = await tenant`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES (${workspace.id},${staff.id},${location.id},${slot.startsAt},${slot.endsAt},'confirmed') RETURNING id`;
-      const [booking] = await tenant<{ id: string }[]>`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,idempotency_key,booked_price_cents) VALUES (${workspace.id},${block.id},${service.id},${staff.id},${location.id},${customer.id},${slot.startsAt},${slot.endsAt},'confirmed','tenant',${`status-only-${suffix}-${dayOffset}`},0) RETURNING id`;
+      const [booking] = await tenant<{ id: string }[]>`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,idempotency_key,booked_price_cents) VALUES (${workspace.id},${block.id},${service.id},${staff.id},${location.id},${customer.id},${slot.startsAt},${slot.endsAt},'confirmed','tenant',${`status-only-${suffix}-${dayOffset}`},5000) RETURNING id`;
       return { id: booking.id, day: slot.day };
     }
     const past = await createBooking(-1);
@@ -385,6 +385,15 @@ for (const workspaceCase of [
     await expect(page.getByRole('button', { name: /cancel appointment/i })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Arrived', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Completed', exact: true }).click();
+    const save = page.getByRole('button', { name: 'Save changes', exact: true });
+    await expect(save).toBeEnabled();
+    expect((await tenant<{ status: string }[]>`SELECT status FROM bookings WHERE id=${past.id}`)[0]?.status).toBe('no_show');
+    await save.click();
+    const appointment = page.getByRole('complementary', { name: 'Appointment with Status-only customer' });
+    await expect(appointment.getByRole('alert')).toContainText('Ask a manager to record a payment before completing this no-show.');
+    await tenant`INSERT INTO payment_records (tenant_id, booking_id, kind, method, amount_cents)
+      VALUES (${workspace.id}, ${past.id}, 'payment', 'cash', 5000)`;
+    await save.click();
     await expect.poll(async () => (await tenant<{ status: string }[]>`SELECT status FROM bookings WHERE id=${past.id}`)[0]?.status).toBe('completed');
     await expect(page.getByText('This appointment’s status is final and cannot be changed.')).toBeVisible();
     const [audit] = await tenant`SELECT metadata FROM tenant_audit_events WHERE tenant_id=${workspace.id} AND target_id=${past.id} AND action='booking.completed'`;

@@ -42,6 +42,27 @@ inserted, changed, or removed once their sale is closed or voided. Payments
 are accepted once only while a sale is a draft; refunds can be appended only
 after it is closed, and are capped at the amount collected.
 
+## Appointment checkout total
+
+Migration `0063_appointment_checkout_totals.sql` defines a shared total for the
+Sales register, Bookings, the appointment drawer, and the payment guard. The
+total includes the booked service, add-on lines at their recorded price and
+quantity, and any no-show fee. Package coverage removes the booked service
+from that amount. Appointment receipts still use `payment_records`.
+
+The booking row serializes product edits with payment writes. Cart lines are
+protected after the first payment record, including after payment corrections.
+A stale checkout rejects a save if the amount due changed since review.
+Appointment payment corrections and reported service prices retain their
+existing meanings.
+
+Before hosted rollout, review existing appointment add-ons with historical
+payment entries or catalogue currencies that differ from the sale currency.
+Compare the proposed balances to actual receipts and resolve discrepancies
+before enabling the payment step. The migration leaves existing payments and
+booked service prices intact. Follow the hosted migration gate in the
+[local release workflow](11_local_release_workflow.md).
+
 ## Explicit non-scope
 
 This foundation does not claim a live card processor, card storage, invoices,

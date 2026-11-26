@@ -30,8 +30,16 @@ export function TenantNavTools({ searchHref, searchLabel, notificationsHref, not
     router.push(`${searchHref}?q=${encodeURIComponent(value)}`);
     setOpen(false);
   };
-  return <div className={`tenant-nav-tools${open ? " is-searching" : ""}`}>
-    {searchHref && (open ? (
+  const bell = <span className="tenant-nav-tools__bell" aria-hidden="true">
+    <Bell />
+    {notificationsHref && notificationsPending ? <span className="tenant-nav-tools__notification-dot" /> : null}
+  </span>;
+  return <div className="tenant-nav-tools">
+    {searchHref && (
+      <button ref={triggerRef} type="button" aria-label={searchLabel} aria-expanded={open}
+        onClick={() => { if (open) closeSearch(); else setOpen(true); }}><Search aria-hidden="true" /></button>
+    )}
+    {searchHref && open && (
       <form className="tenant-nav-tools__search" role="search" onSubmit={submit} onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         event.preventDefault();
@@ -41,9 +49,7 @@ export function TenantNavTools({ searchHref, searchLabel, notificationsHref, not
         <input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchLabel} aria-label={searchLabel} />
         <button type="button" aria-label="Close search" onClick={closeSearch}><X aria-hidden="true" /></button>
       </form>
-    ) : (
-      <button ref={triggerRef} type="button" aria-label={searchLabel} onClick={() => setOpen(true)}><Search aria-hidden="true" /></button>
-    ))}
-    {notificationsHref ? <Link href={notificationsHref} aria-label={notificationsPending ? "Notifications: appointments need review" : "Notifications"} className="tenant-nav-tools__notifications"><Bell aria-hidden="true" />{notificationsPending ? <span className="tenant-nav-tools__notification-dot" aria-hidden="true" /> : null}</Link> : <button type="button" aria-label="Notifications unavailable" disabled><Bell aria-hidden="true" /></button>}
+    )}
+    {notificationsHref ? <Link href={notificationsHref} aria-label={notificationsPending ? "Notifications: appointments need review" : "Notifications"} className="tenant-nav-tools__notifications">{bell}</Link> : <button type="button" aria-label="Notifications unavailable" disabled>{bell}</button>}
   </div>;
 }

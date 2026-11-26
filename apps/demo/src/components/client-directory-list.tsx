@@ -22,7 +22,7 @@ type ClientPage = { items: Client[]; nextCursor: string | null };
 type Props = {
   initialClients: Client[];
   initialNextCursor: string | null;
-  query: string;
+  filters: string;
   path: string;
   timeZone: string;
   clientLabel: string;
@@ -33,14 +33,17 @@ type Props = {
 
 const money = (cents: number) => new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK", maximumFractionDigits: 0 }).format(cents / 100);
 
-async function loadClients(query: string, cursor: string, signal: AbortSignal): Promise<ClientPage> {
-  const params = new URLSearchParams({ q: query, cursor, limit: "50" });
+async function loadClients(filters: string, cursor: string, signal: AbortSignal): Promise<ClientPage> {
+  const params = new URLSearchParams(filters);
+  params.set("directory", "1");
+  params.set("cursor", cursor);
+  params.set("limit", "50");
   const response = await fetch(`${tenantApiPrefix()}/api/app/clients?${params}`, { signal });
   if (!response.ok) throw new Error("Could not load clients.");
   return response.json();
 }
 
-export function ClientDirectoryList({ initialClients, initialNextCursor, query, path, timeZone, clientLabel, clientsLabel, recordOpen, searchInputId }: Props) {
+export function ClientDirectoryList({ initialClients, initialNextCursor, filters, path, timeZone, clientLabel, clientsLabel, recordOpen, searchInputId }: Props) {
   const [clients, setClients] = useState(initialClients);
   const [nextCursor, setNextCursor] = useState(initialNextCursor);
   const [loading, setLoading] = useState(false);
@@ -89,7 +92,7 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
       let cursor = initialNextCursor;
       let pages = 0;
       while (cursor && pages < loadedPages.current) {
-        const data = await loadClients(query, cursor, controller.signal);
+        const data = await loadClients(filters, cursor, controller.signal);
         for (const client of data.items) refreshed.set(client.id, client);
         cursor = data.nextCursor;
         pages++;
@@ -107,7 +110,7 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
       setLoading(false);
     });
     return () => controller.abort();
-  }, [initialClients, initialNextCursor, query]);
+  }, [initialClients, initialNextCursor, filters]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -120,7 +123,7 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
       const controller = new AbortController();
       requestRef.current = controller;
       setLoading(true);
-      void loadClients(query, nextCursor, controller.signal)
+      void loadClients(filters, nextCursor, controller.signal)
         .then((data) => {
           if (controller.signal.aborted) return;
           loadedPages.current++;
@@ -139,9 +142,13 @@ export function ClientDirectoryList({ initialClients, initialNextCursor, query, 
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [nextCursor, query]);
+  }, [nextCursor, filters]);
 
-  const clientHref = (id: string) => `${path}?${new URLSearchParams({ ...(query ? { q: query } : {}), customer: id })}`;
+  const clientHref = (id: string) => {
+    const params = new URLSearchParams(filters);
+    params.set("customer", id);
+    return `${path}?${params}`;
+  };
 
   return <div className="waybook-table-wrap" ref={directoryRef}>
     <table>

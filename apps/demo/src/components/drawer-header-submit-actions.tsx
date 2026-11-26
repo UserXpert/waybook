@@ -12,7 +12,7 @@ const primarySubmit = /^(save|create|issue|set)\b/i;
 export function DrawerHeaderSubmitActions() {
   useEffect(() => {
     let nextId = 0;
-    const promote = () => document.querySelectorAll<HTMLElement>(".tenant-drawer").forEach((drawer) => {
+    const promote = () => document.querySelectorAll<HTMLElement>(".tenant-drawer:not([data-drawer-inline-actions])").forEach((drawer) => {
       const header = drawer.querySelector<HTMLElement>(":scope > header");
       if (!header) return;
       const forms = drawer.querySelectorAll<HTMLFormElement>("form.tenant-drawer-form:not([data-drawer-submit-in-header])");

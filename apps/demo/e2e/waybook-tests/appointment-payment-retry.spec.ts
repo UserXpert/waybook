@@ -95,22 +95,22 @@ for (const workspace of workspaces) {
       expect(await auditCount()).toBe(1);
       await expect(payment).toHaveValue("");
 
-      await amount.fill("50.25");
-      await expect(submit).toBeDisabled();
-      await payment.selectOption("payment");
+      await expect(payment.locator('option[value="payment"]')).toHaveCount(0);
+      await payment.selectOption("refund");
+      await amount.fill("20.25");
       drop = "before";
       await submit.click();
       await expect(form.getByRole("alert")).toContainText("Could not confirm");
       expect(await ledger()).toEqual([original]);
       await retry.click();
-      await expect(form.getByRole("status")).toContainText("Payment recorded");
+      await expect(form.getByRole("status")).toContainText("Refund recorded");
       const payments = await ledger();
       expect(payments).toHaveLength(2);
-      expect(payments[1]).toMatchObject({ kind: "payment", amount_cents: 5025, method: "cash" });
+      expect(payments[1]).toMatchObject({ kind: "refund", amount_cents: 2025, method: "cash" });
       expect(payments[1].id).not.toBe(original.id);
 
       await payment.selectOption("refund");
-      await amount.fill("100.50");
+      await amount.fill("20");
       replyStatuses = [];
       drop = "after";
       await submit.click();
@@ -118,7 +118,7 @@ for (const workspace of workspaces) {
       expect(replyStatuses).toEqual([200, 200]);
       const withRefund = await ledger();
       expect(withRefund).toHaveLength(3);
-      expect(withRefund[2]).toMatchObject({ kind: "refund", amount_cents: 10050, method: "cash" });
+      expect(withRefund[2]).toMatchObject({ kind: "refund", amount_cents: 2000, method: "cash" });
       await retry.click();
       await expect(form.getByRole("status")).toContainText("Refund recorded");
       expect(await ledger()).toEqual(withRefund);

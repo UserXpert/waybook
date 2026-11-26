@@ -48,6 +48,15 @@ for (const workspace of workspaces) {
         await page.getByRole("button", { name: "Sign in", exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/${workspace.route}/app`));
         await page.goto(`${path}?${query}`);
+        const sort = page.getByRole("combobox", { name: "Sort by", exact: true });
+        const paymentActivity = page.getByRole("combobox", { name: "Payment activity", exact: true });
+        await expect(sort).toHaveValue("appointment-today");
+        await expect(page.getByRole("columnheader", { name: "Appointment date" })).toHaveAttribute("aria-sort", "other");
+        await expect(page.locator("tbody tr").first()).toContainText(olderName);
+        await sort.selectOption("appointment-newest");
+        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        await expect(sort).toHaveValue("appointment-newest");
+        await expect(page.getByRole("columnheader", { name: "Appointment date" })).toHaveAttribute("aria-sort", "descending");
         const summary = page.locator(".waybook-data-metrics article").filter({ hasText: "Open balance" });
         const expected = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" }).format(151 * 100.25);
         await expect(summary.locator("strong")).toHaveText(expected);
@@ -71,6 +80,36 @@ for (const workspace of workspaces) {
         await page.getByRole("button", { name: "Apply", exact: true }).click();
         await expect(olderRow).toBeVisible();
         await expect(page.getByRole("link", { name: "Next page" })).toHaveCount(0);
+        await page.getByLabel("Status").selectOption("all");
+        await sort.selectOption("appointment-oldest");
+        await paymentActivity.selectOption("without");
+        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        await expect(page.getByRole("columnheader", { name: "Appointment date" })).toHaveAttribute("aria-sort", "ascending");
+        await expect(page.locator("tbody tr").first()).toContainText(olderName);
+        await pagination.getByRole("link", { name: "Next page" }).click();
+        await expect(pagination).toContainText("Showing 151–152 of 152");
+        await expect(sort).toHaveValue("appointment-oldest");
+        await expect(paymentActivity).toHaveValue("without");
+        await pagination.getByRole("link", { name: "Previous page" }).click();
+        await olderRow.getByRole("link", { name: /Appointment/ }).click();
+        await expect(details).toBeVisible();
+        await details.getByRole("link", { name: "Close sale details" }).click();
+        await expect(sort).toHaveValue("appointment-oldest");
+        await expect(paymentActivity).toHaveValue("without");
+        await expect(page.locator("tbody tr").first()).toContainText(olderName);
+
+        await page.getByLabel("Appointment date range from").fill("2041-01-01");
+        await page.getByLabel("Appointment date range to").fill("2041-01-01");
+        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        await expect(page.locator("tbody tr")).toHaveCount(6);
+        await expect(olderRow).toBeVisible();
+        await olderRow.getByRole("link", { name: /Appointment/ }).click();
+        await details.getByRole("link", { name: "Close sale details" }).click();
+        await expect(page.getByLabel("Appointment date range to")).toHaveValue("2041-01-01");
+
+        await paymentActivity.selectOption("with");
+        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        await expect(page.getByText("No appointment sales match these filters.")).toBeVisible();
         await page.goto(`${path}?sale=${fixture.saleId}`);
         await expect(details).toBeVisible();
       } finally {

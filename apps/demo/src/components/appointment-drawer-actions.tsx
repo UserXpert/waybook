@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import type { BookingDetailsResult } from "@/app/app/calendars/actions";
+import type { AttendanceResult, BookingDetailsResult } from "@/app/app/calendars/actions";
 import { useRouter } from "next/navigation";
 import { showSuccessToast } from "@/lib/waybook/toast";
-import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
+import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
+import { AppointmentPaymentForm, PaymentMethodOptions } from "@/components/appointment-payment-form";
 import { RescheduleSlotPicker } from "@/components/reschedule-slot-picker";
 import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
+import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import styles from "./appointment-drawer-actions.module.css";
 
 type ServerAction = (formData: FormData) => void | Promise<void>;
@@ -16,33 +18,108 @@ type Props = {
   bookingId: string; customerName: string; customerEmail: string; customerPhone: string | null; status: string;
   timezone: string; days: string[]; slots: Slot[];
   canChangeAttendanceNow: boolean;
-  saveDetails: (formData: FormData) => Promise<BookingDetailsResult>; reschedule: ServerAction; updateStatus: ServerAction;
+  onStatusSaved?: (bookingId: string) => Promise<void>;
+  paymentBalance: AppointmentPaymentBalance | null;
+  onPaymentRecorded?: (bookingId: string) => Promise<void>;
+  saveDetails: (formData: FormData) => Promise<BookingDetailsResult>; reschedule: ServerAction;
   resourceId: string | null; resources: { id: string; name: string; isMutuallyExclusive: boolean }[];
 };
 
-type StatusActionProps = Pick<Props, "bookingId" | "status" | "updateStatus" | "canChangeAttendanceNow">;
+type StatusActionProps = Pick<Props, "bookingId" | "status" | "canChangeAttendanceNow" | "onStatusSaved"> & {
+  updateStatus: (formData: FormData) => Promise<AttendanceResult>;
+};
 type RescheduleProps = Pick<Props, "bookingId" | "status" | "timezone" | "days" | "slots" | "reschedule">;
 
-export function AppointmentStatusActions({ bookingId, status, updateStatus, canChangeAttendanceNow }: StatusActionProps) {
-  const statusOptions = status === "confirmed"
-    ? [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const
-    : status === "arrived"
-      ? [["completed", "Completed"], ["no_show", "No show"]] as const
-      : status === "no_show"
-        ? [["completed", "Completed"]] as const
-        : [];
+function attendanceOptions(status: string) {
+  if (status === "confirmed") return [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const;
+  if (status === "arrived") return [["completed", "Completed"], ["no_show", "No show"]] as const;
+  if (status === "no_show") return [["completed", "Completed"]] as const;
+  return [];
+}
 
-  if (!statusOptions.length || !canChangeAttendanceNow) {
+function AppointmentStatusPicker({ status, canChangeAttendanceNow, value, onChange, pending, notice }: {
+  status: string; canChangeAttendanceNow: boolean; value: string; onChange: (value: string) => void; pending: boolean; notice: string;
+}) {
+  const options = attendanceOptions(status);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (notice) noticeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [notice]);
+  if (!options.length || !canChangeAttendanceNow) {
     const label = status === "no_show" ? "No show" : status[0]?.toUpperCase() + status.slice(1);
     const explanation = status === "cancelled"
       ? "This appointment has been cancelled. Its customer and audit history remain available, but it can no longer be edited, rescheduled, or paid."
-      : statusOptions.length
+      : options.length
         ? status === "no_show" ? "Completion can be recorded after the appointment ends." : "Attendance can be updated once the appointment starts."
         : "This appointment’s status is final and cannot be changed.";
     return <section className="appointment-drawer__history"><h3>Appointment status</h3><p className="appointment-drawer__status-readonly">{label}</p><p className="appointment-drawer__readonly">{explanation}</p></section>;
   }
 
-  return <section><h3>Appointment status</h3><p className="appointment-status-current">Current: {status.replace("_", " ")}</p><div className="appointment-drawer__status-actions">{statusOptions.map(([value, label]) => <form action={updateStatus} key={value}><input type="hidden" name="bookingId" value={bookingId} /><input type="hidden" name="status" value={value} /><button type="submit">{label}</button></form>)}</div></section>;
+  return <section className="appointment-attendance">
+    <h3>Appointment status</h3>
+    <p className="appointment-status-current">Current: {status.replace("_", " ")}</p>
+    <div className="appointment-drawer__status-actions" role="group" aria-label="Choose status">
+      {options.map(([option, label]) => <button key={option} type="button"
+        className={value === option ? "is-selected" : undefined} aria-pressed={value === option}
+        disabled={pending} onClick={() => onChange(value === option ? "" : option)}>{label}</button>)}
+    </div>
+    {notice ? <p ref={noticeRef} className={`${styles.saveNotice} ${styles.error}`} role="alert">{notice}</p> : null}
+  </section>;
+}
+
+function AppointmentSaveButton({ formId, formRef, disabled, pending, skipValidation = false }: {
+  formId: string; formRef: RefObject<HTMLFormElement | null>; disabled: boolean; pending: boolean; skipValidation?: boolean;
+}) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setTarget(formRef.current?.closest(".appointment-drawer")?.querySelector<HTMLElement>("[data-appointment-save-action]") ?? null);
+  }, [formRef]);
+  const button = <button type="submit" form={formId} formNoValidate={skipValidation} disabled={disabled || pending}>
+    {pending ? "Saving…" : "Save changes"}
+  </button>;
+  return target ? createPortal(button, target) : button;
+}
+
+export function AppointmentStatusActions({ bookingId, status, updateStatus, canChangeAttendanceNow, onStatusSaved }: StatusActionProps) {
+  const router = useRouter();
+  const formId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [selection, setSelection] = useState({ from: "", to: "" });
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState("");
+  const selectedStatus = selection.from === status ? selection.to : "";
+
+  async function saveAttendance(data: FormData) {
+    if (!selectedStatus || pending) return;
+    setPending(true);
+    setNotice("");
+    try {
+      const result = await updateStatus(data);
+      if (result.error) {
+        setNotice(result.paymentRequired ? "Ask a manager to record a payment before completing this no-show." : result.error);
+        return;
+      }
+      setSelection({ from: "", to: "" });
+      showSuccessToast("Changes saved");
+      if (onStatusSaved) await onStatusSaved(bookingId).catch(() => router.refresh());
+      else router.refresh();
+    } catch {
+      setNotice("Could not save appointment status. Please try again.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <>
+    <AppointmentStatusPicker status={status} canChangeAttendanceNow={canChangeAttendanceNow} value={selectedStatus}
+      pending={pending} notice={notice} onChange={(to) => { setSelection({ from: status, to }); setNotice(""); }} />
+    {canChangeAttendanceNow && attendanceOptions(status).length > 0 ? <form id={formId} ref={formRef} action={saveAttendance}>
+      <input type="hidden" name="bookingId" value={bookingId} />
+      <input type="hidden" name="expectedStatus" value={status} />
+      <input type="hidden" name="status" value={selectedStatus} />
+      <AppointmentSaveButton formId={formId} formRef={formRef} disabled={!selectedStatus} pending={pending} />
+    </form> : null}
+  </>;
 }
 
 export function AppointmentRescheduleActions({ bookingId, status, timezone, days, slots, reschedule }: RescheduleProps) {
@@ -77,54 +154,90 @@ export function AppointmentRescheduleActions({ bookingId, status, timezone, days
   </section>;
 }
 
-export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, canChangeAttendanceNow, saveDetails, reschedule, updateStatus, resourceId, resources }: Props) {
+export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, canChangeAttendanceNow, saveDetails, reschedule, resourceId, resources, paymentBalance, onPaymentRecorded, onStatusSaved }: Props) {
   const router = useRouter();
   const detailsFormId = useId();
   const detailsFormRef = useRef<HTMLFormElement>(null);
-  const [saveTarget, setSaveTarget] = useState<HTMLElement | null>(null);
-
-  // Keep the Save control React-owned while the drawer updates or shows a save error.
-  useEffect(() => {
-    const target = detailsFormRef.current?.closest(".appointment-drawer")
-      ?.querySelector<HTMLElement>("[data-appointment-save-action]");
-    setSaveTarget(target ?? null);
-  }, [bookingId]);
   const [details, setDetails] = useState({ name: customerName, email: customerEmail, phone: customerPhone ?? "" });
   const [savedDetails, setSavedDetails] = useState({ name: customerName, email: customerEmail, phone: customerPhone ?? "", resource: resourceId ?? "" });
   const [resource, setResource] = useState(resourceId ?? "");
   const [savingDetails, setSavingDetails] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [statusNotice, setStatusNotice] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [selection, setSelection] = useState({ from: "", to: "" });
+  const selectedStatus = selection.from === status ? selection.to : "";
+  const inlinePayment = status === "no_show" && paymentBalance && (!paymentBalance.packageRedeemed || paymentBalance.outstandingCents > 0) && paymentBalance.payments.length === 0;
+  const paymentEntered = Boolean(inlinePayment && paymentAmount.trim());
+  const detailsChanged = details.name !== savedDetails.name || details.email !== savedDetails.email || details.phone !== savedDetails.phone || resource !== savedDetails.resource;
+
+  async function refreshDrawer(refresh?: Props["onStatusSaved"]) {
+    if (refresh) await refresh(bookingId).catch(() => router.refresh());
+    else router.refresh();
+  }
 
   async function saveEdits(formData: FormData) {
+    if ((!detailsChanged && !selectedStatus && !paymentEntered) || savingDetails) return;
     setSavingDetails(true);
     setSaveError("");
+    setStatusNotice("");
     try {
       const result = await saveDetails(formData);
       if (result.error) {
-        setSaveError(result.error);
+        if (result.paymentRequired) {
+          setStatusNotice(result.error);
+          await refreshDrawer(onStatusSaved);
+        } else if (selectedStatus || paymentEntered) setStatusNotice(result.error);
+        else setSaveError(result.error);
         return;
       }
+      setSelection({ from: "", to: "" });
+      setPaymentAmount("");
       setSavedDetails({ ...details, resource });
       showSuccessToast("Changes saved");
-      router.refresh();
+      await refreshDrawer(onStatusSaved);
     } catch {
       setSaveError("Could not save changes. Please try again.");
     } finally {
       setSavingDetails(false);
     }
   }
-  const detailsChanged = details.name !== savedDetails.name || details.email !== savedDetails.email || details.phone !== savedDetails.phone || resource !== savedDetails.resource;
-  const attendance = <AppointmentStatusActions bookingId={bookingId} status={status} updateStatus={updateStatus} canChangeAttendanceNow={canChangeAttendanceNow} />;
+
+  const attendance = <AppointmentStatusPicker status={status} canChangeAttendanceNow={canChangeAttendanceNow} value={selectedStatus}
+    pending={savingDetails} notice={statusNotice} onChange={(to) => { setSelection({ from: status, to }); setStatusNotice(""); }} />;
   if (status === "cancelled") return attendance;
-  const saveButton = <button type="submit" form={detailsFormId} disabled={!detailsChanged || savingDetails}>
-    {savingDetails ? "Saving…" : "Save changes"}
-  </button>;
+
+  const noShow = status === "no_show";
+  const canRecordPayment = Boolean(paymentBalance && (paymentBalance.refundableCents > 0 || (paymentBalance.payments.length === 0 && paymentBalance.outstandingCents > 0)));
+  const paymentRecorded = async () => {
+    setStatusNotice("");
+    await refreshDrawer(onPaymentRecorded);
+  };
+  const payment = paymentBalance && (noShow || canRecordPayment || paymentBalance.payments.length > 0) ? <section>
+    <h3>{noShow ? "Payment details" : "Sales ledger"}</h3>
+    {paymentBalance.payments.length > 0 ? <RecordedAppointmentPayments bookingId={bookingId} payments={paymentBalance.payments} onRecorded={paymentRecorded} /> : null}
+    {inlinePayment ? <div className="tenant-drawer-form appointment-drawer__inline-payment">
+      <div className="tenant-drawer-form__grid">
+        <label>{paymentBalance.outstandingCents > 0 ? "Amount (DKK)" : "No-show fee (DKK)"}
+          <input form={detailsFormId} name="paymentAmount" type="number" min="0.01" step="0.01"
+            placeholder={paymentBalance.outstandingCents > 0 ? (paymentBalance.outstandingCents / 100).toFixed(2) : "0.00"}
+            value={paymentAmount} onChange={(event) => { setPaymentAmount(event.target.value); setStatusNotice(""); }} />
+        </label>
+        <label>Method<select form={detailsFormId} name="paymentMethod" defaultValue="card"><PaymentMethodOptions /></select></label>
+      </div>
+    </div> : canRecordPayment ? <AppointmentPaymentForm bookingId={bookingId} balance={paymentBalance} onRecorded={paymentRecorded} /> : null}
+    {!inlinePayment && !canRecordPayment && paymentBalance.payments.length === 0 ? <p className="appointment-drawer__readonly">No payment is due for this appointment.</p> : null}
+  </section> : null;
   return <>
     {attendance}
+    {status === "no_show" ? payment : null}
     <section>
       <h3>Edit</h3>
       <form id={detailsFormId} ref={detailsFormRef} action={saveEdits} className="tenant-drawer-form" data-drawer-submit-in-header>
         <input type="hidden" name="bookingId" value={bookingId} />
+        <input type="hidden" name="expectedStatus" value={status} />
+        <input type="hidden" name="status" value={selectedStatus} />
+        <input type="hidden" name="editDetails" value={String(detailsChanged)} />
         <label>Customer name
           <input name="customerName" value={details.name} onChange={(event) => { setDetails({ ...details, name: event.target.value }); setSaveError(""); }} required />
         </label>
@@ -141,10 +254,11 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
           </select>
         </label>
         {saveError ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{saveError}</p> : null}
-        {saveTarget ? createPortal(saveButton, saveTarget) : saveButton}
+        <AppointmentSaveButton formId={detailsFormId} formRef={detailsFormRef} disabled={!detailsChanged && !selectedStatus && !paymentEntered}
+          pending={savingDetails} skipValidation={!detailsChanged && !paymentEntered} />
       </form>
     </section>
     <AppointmentRescheduleActions bookingId={bookingId} status={status} timezone={timezone} days={days} slots={slots} reschedule={reschedule} />
-    <section><h3>Sales ledger</h3><p className="appointment-status-current">Record payment received or a refund. Entries are immutable and feed paid-revenue reporting.</p><AppointmentPaymentForm bookingId={bookingId} outstandingCents={0} /></section>
+    {status !== "no_show" ? payment : null}
   </>;
 }

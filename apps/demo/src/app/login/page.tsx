@@ -1,63 +1,124 @@
+import { headers } from "next/headers";
+import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-page-media";
+import { tenantDb } from "@/lib/waybook/database";
 import { googleSignInAvailable } from "@/lib/waybook/google-auth";
+import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
+import { loginPathForTenant } from "@/lib/waybook/tenant-routes";
+import { ClientLogo } from "./client-logo";
 import { startGoogleSignIn } from "./google-actions";
 import { login } from "./actions";
+import { PasswordField } from "./password-field";
+import { FeatureMessages } from "./feature-messages";
+import { LoginIntakeForm } from "./login-intake-form";
+
+async function getClientBranding(requestHeaders: Headers) {
+  const tenant = await tenantForPublicRequest(requestHeaders).catch(() => null);
+  if (!tenant) return null;
+
+  try {
+    const [settings] = await tenantDb(tenant)<{ name: string; bookingPage: { logoUrl?: unknown } | string | null }[]>`
+      SELECT name, booking_page AS "bookingPage"
+      FROM tenant_settings WHERE tenant_id = ${tenant.id} LIMIT 1
+    `;
+    const src = publicBookingImageUrl(parseBookingPage(settings?.bookingPage).logoUrl);
+    return { src, name: settings?.name || tenant.name };
+  } catch {
+    return { src: undefined, name: tenant.name };
+  }
+}
 
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; reset?: string; google?: string; access?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string; google?: string; access?: string; signup?: string }>;
 }) {
-  const { error, reset, google, access } = await searchParams;
-  const googleAvailable = await googleSignInAvailable();
+  const requestHeaders = await headers();
+  const [{ error, reset, google, access, signup }, clientBranding, googleAvailable] = await Promise.all([
+    searchParams, getClientBranding(requestHeaders), googleSignInAvailable(),
+  ]);
+  const loginPath = loginPathForTenant(requestHeaders.get("x-waybook-tenant-route"));
+  const requestingStaffAccess = Boolean(clientBranding && access === "request");
+  const showIntake = requestingStaffAccess || (!clientBranding && signup === "1");
 
   return (
     <main className="waybook-login-page">
       <section className="waybook-login-shell">
-        <aside className="waybook-login-showcase" aria-label="Waybook product preview">
-          <div className="waybook-login-backgrounds" aria-hidden="true">
-            <span className="is-background-one" />
-            <span className="is-background-two" />
-            <span className="is-background-four" />
-          </div>
-          <img className="waybook-login-logo" src="/brand/waybook-logo.svg" alt="Waybook" />
-          <div className="waybook-login-orbit" aria-hidden="true" />
-          <div className="waybook-login-widget">
-            <div className="waybook-login-widget__header"><span>Today at Nordic Studio</span><b>Live schedule</b></div>
-            <div className="waybook-login-widget__metric"><strong>12</strong><span>appointments in motion</span><em>+3 confirmed</em></div>
-            <div className="waybook-login-widget__booking"><i>AC</i><span><b>Avery Chen</b><small>10:00 · Private session</small></span><em>Confirmed</em></div>
-            <div className="waybook-login-widget__booking"><i>SA</i><span><b>Sofie Andersen</b><small>10:30 · Studio session</small></span><em>Ready</em></div>
-            <div className="waybook-login-widget__progress"><span /></div>
-          </div>
-          <div className="waybook-login-showcase__footer"><p>Clear days. Calm teams.</p><span>Manage bookings, staff and studio resources in one place.</span></div>
-        </aside>
+        <img className="waybook-login-brand" src="/brand/waybook-logo.svg" alt="Waybook" />
 
         <section className="waybook-login-panel" aria-labelledby="login-title">
+          {clientBranding?.src ? <ClientLogo src={clientBranding.src} name={clientBranding.name} /> : null}
           <div className="waybook-login-panel__inner">
-            <img className="waybook-login-mobile-logo" src="/brand/waybook-logo.svg" alt="Waybook" />
-            <p className="waybook-login-eyebrow">WELCOME BACK</p>
-            <h1 id="login-title">Sign in to Waybook</h1>
-            <p className="waybook-login-intro">Your studio day is ready when you are.</p>
-            {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
-            {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
-            {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
-            {access === "inactive" ? <p className="waybook-login-error" role="alert">Your staff access is inactive. Ask your workspace owner to restore it.</p> : null}
-            {access === "role-pending" ? <p className="waybook-login-error" role="alert">Your workspace role change is pending. Ask your workspace owner to check your access.</p> : null}
-            {access === "unavailable" ? <p className="waybook-login-error" role="alert">Your staff profile is unavailable. Ask your workspace owner to check your access.</p> : null}
-            <form action={login} className="waybook-login">
-              <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>
-              <label><span className="waybook-login-label-row">Password<a href="/login?reset=1">Forgot password?</a></span><input name="password" type="password" autoComplete="current-password" placeholder="Enter your password" required /></label>
-              {error ? <span className="waybook-login-error" role="alert">Invalid email or password.</span> : null}
-              <button type="submit">Sign in</button>
-            </form>
-            {googleAvailable ? <>
-              <div className="waybook-login-divider"><span>or continue with</span></div>
-              <form action={startGoogleSignIn} className="waybook-login-providers">
-                <button type="submit">Continue with Google</button>
+            {showIntake ? <LoginIntakeForm staff={requestingStaffAccess} loginPath={loginPath} /> : <>
+              <h1 id="login-title">{clientBranding ? "Welcome back" : "Sign in to Waybook"}</h1>
+              <p className="waybook-login-intro">Use your work account to access your workspace.</p>
+              {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
+              {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
+              {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
+              {access === "inactive" ? <p className="waybook-login-error" role="alert">Your staff access is inactive. Ask your workspace owner to restore it.</p> : null}
+              {access === "role-pending" ? <p className="waybook-login-error" role="alert">Your workspace role change is pending. Ask your workspace owner to check your access.</p> : null}
+              {access === "unavailable" ? <p className="waybook-login-error" role="alert">Your staff profile is unavailable. Ask your workspace owner to check your access.</p> : null}
+              <form action={login} className="waybook-login">
+                <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>
+                <PasswordField />
+                <div className="waybook-login-options">
+                  <label><input name="rememberMe" type="checkbox" />Remember me</label>
+                  <a href={`${loginPath}?reset=1`}>Forgot password?</a>
+                </div>
+                {error ? <span className="waybook-login-error" role="alert">Invalid email or password.</span> : null}
+                <button type="submit">Sign in</button>
               </form>
-            </> : null}
+              {googleAvailable ? (
+                <form action={startGoogleSignIn} className="waybook-login-providers">
+                  <button type="submit">
+                    <img src="/brand/google-g.png" width="18" height="18" alt="" />
+                    Continue with Google
+                  </button>
+                </form>
+              ) : null}
+            </>}
           </div>
+          {!showIntake && (clientBranding ? (
+            <p className="waybook-login-signup">
+              Need staff access? <a href={`${loginPath}?access=request`}>Request access</a>
+            </p>
+          ) : (
+            <p className="waybook-login-signup">
+              New business? <a href="/login?signup=1">Sign up for early access</a>
+            </p>
+          ))}
         </section>
+
+        <aside className="waybook-login-art" aria-label="Waybook product preview">
+          <div className="waybook-login-schedule">
+            <div className="waybook-login-schedule__header">
+              <strong>Today at Nordic Studio</strong>
+              <span>Schedule preview</span>
+            </div>
+            <div className="waybook-login-schedule__total">
+              <strong>12</strong>
+              <span>appointments in motion</span>
+              <b>+3 confirmed</b>
+            </div>
+            <ul className="waybook-login-schedule__bookings">
+              <li>
+                <span className="waybook-login-schedule__initials" aria-hidden="true">AC</span>
+                <span><strong>Avery Chen</strong><small>10:00 · Private session</small></span>
+                <b>Confirmed</b>
+              </li>
+              <li>
+                <span className="waybook-login-schedule__initials" aria-hidden="true">SA</span>
+                <span><strong>Sofie Andersen</strong><small>10:30 · Studio session</small></span>
+                <b>Ready</b>
+              </li>
+            </ul>
+            <div className="waybook-login-schedule__bar" aria-hidden="true" />
+          </div>
+          <FeatureMessages />
+        </aside>
       </section>
+      <footer className="waybook-login-copyright">
+        <small>© {new Date().getUTCFullYear()} Waybook</small>
+      </footer>
     </main>
   );
 }

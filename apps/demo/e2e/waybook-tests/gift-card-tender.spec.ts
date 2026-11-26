@@ -39,11 +39,12 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/nordic\/app/, { timeout: 30_000 });
     await page.goto(`/nordic/app/sales?sale=${fixture.sale.id}`);
+    const giftAmount = page.getByRole("form", { name: "Gift card", exact: true }).getByLabel("Amount (DKK)");
     await page.getByLabel("Gift-card number").fill("INVALID12345");
-    await page.getByLabel("Amount (DKK)").fill("100");
+    await giftAmount.fill("100");
     await page.getByRole("button", { name: "Use gift card" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "The gift card could not be used" })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByLabel("Amount (DKK)")).toHaveValue("100");
+    await expect(giftAmount).toHaveValue("100");
     console.log("Invalid card produced a safe error");
     await page.getByLabel("Gift-card number").fill(code);
     if (testInfo.project.name === "desktop") {

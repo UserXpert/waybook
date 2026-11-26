@@ -21,6 +21,7 @@ export type SearchPickerProps<T extends { id: string }> = {
   onPick: (item: T) => void;
   onClear?: () => void;
   hintId?: string;
+  createOption?: { label: string; onPick: (query: string) => void };
 };
 
 /** A bounded, keyboard-friendly async picker. It never renders a tenant-wide
@@ -34,49 +35,50 @@ export function SearchPicker<T extends { id: string }>({
   onPick,
   onClear,
   hintId,
+  createOption,
 }: SearchPickerProps<T>) {
   const listId = useId();
   const [query, setQuery] = useState(selectedLabel);
-  const [results, setResults] = useState<T[]>([]);
+  const [result, setResult] = useState<{ url: string; items: T[] | null } | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [hasTyped, setHasTyped] = useState(false);
   const blurTimer = useRef<number | undefined>(undefined);
   const normalizedQuery = query.trim();
   const isSearching = isFocused && hasTyped && normalizedQuery.length >= 2;
+  const activeUrl = isSearching ? searchUrl(normalizedQuery) : null;
+  const matchingResult = result?.url === activeUrl ? result : null;
+  const results = matchingResult?.items ?? [];
+  const canCreate = matchingResult?.items != null && createOption;
 
   useEffect(() => () => window.clearTimeout(blurTimer.current), []);
 
   useEffect(() => {
     setQuery(selectedLabel);
-    setResults([]);
+    setResult(null);
     setHasTyped(false);
   }, [selectedLabel]);
 
   useEffect(() => {
-    if (!isSearching) {
-      setResults([]);
-      return;
-    }
+    if (!activeUrl) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(searchUrl(normalizedQuery), { signal: controller.signal });
-        if (!response.ok) return;
-        const data = await response.json() as SearchResult<T>;
-        setResults(data.items);
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) setResults([]);
+        const response = await fetch(activeUrl, { signal: controller.signal });
+        const data = response.ok ? await response.json() as SearchResult<T> : null;
+        if (!controller.signal.aborted) setResult({ url: activeUrl, items: data?.items ?? null });
+      } catch {
+        if (!controller.signal.aborted) setResult({ url: activeUrl, items: null });
       }
     }, 180);
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [isSearching, normalizedQuery, searchUrl]);
+  }, [activeUrl]);
 
   const choose = (item: T) => {
     setIsFocused(false);
-    setResults([]);
+    setResult(null);
     onPick(item);
   };
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -84,11 +86,12 @@ export function SearchPicker<T extends { id: string }>({
       event.preventDefault();
       setHasTyped(false);
       setQuery(selectedLabel);
-      setResults([]);
+      setResult(null);
     }
-    if (event.key === "Enter" && results[0]) {
+    if (event.key === "Enter" && isSearching) {
       event.preventDefault();
-      choose(results[0]);
+      if (results[0]) choose(results[0]);
+      else if (canCreate) canCreate.onPick(normalizedQuery);
     }
   };
 
@@ -122,11 +125,14 @@ export function SearchPicker<T extends { id: string }>({
       {onClear ? <button type="button" className="calendar-search-picker__clear waybook-icon-button" aria-label={`Clear ${label}`} onClick={onClear}><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 4 8 8M12 4l-8 8" /></svg></button> : null}
       {isSearching ? (
         <div className="calendar-search-picker__results" id={`${listId}-results`} role="listbox" aria-label={`${label} results`}>
-          {results.length ? results.map((item) => (
+          {!matchingResult ? <p role="status">Searching…</p> : matchingResult.items === null ? <p role="status">Search unavailable. Change the search to try again.</p> : results.length ? results.map((item) => (
             <button key={item.id} type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(item)}>
               {resultsLabel(item)}
             </button>
           )) : <p>No matches found.</p>}
+          {canCreate ? <button type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => canCreate.onPick(normalizedQuery)}>
+            {canCreate.label} “{normalizedQuery}”
+          </button> : null}
         </div>
       ) : null}
     </div>

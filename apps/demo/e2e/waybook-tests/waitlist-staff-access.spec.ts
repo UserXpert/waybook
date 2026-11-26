@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { fromZonedTime } from "date-fns-tz";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
@@ -87,10 +88,16 @@ for (const workspace of workspaces) {
         await expect(preferredTime).toBeChecked();
         await expect(form.locator('input[name="preferredStartTime"]')).toHaveValue("09:00");
         await expect(form.locator('input[name="preferredEndTime"]')).toHaveValue("17:00");
-        await preferredTime.press("Space");
-        await expect(preferredTime).not.toBeChecked();
+        const fromSlider = form.getByRole("slider", { name: "Preferred appointment window starts" });
+        const toSlider = form.getByRole("slider", { name: "Preferred appointment window ends" });
+        await fromSlider.press("ArrowRight");
+        await fromSlider.press("ArrowRight");
+        await toSlider.press("Home");
+        await toSlider.press("ArrowRight");
+        await expect(form.locator('input[name="preferredStartTime"]')).toHaveValue("10:00");
+        await expect(form.locator('input[name="preferredEndTime"]')).toHaveValue("11:00");
         await form.getByRole("button", { name: "Add to waitlist", exact: true }).click();
-        await expect(form.getByRole("status")).toHaveText(/added to the waiting list/);
+        await expect(form.getByRole("status").filter({ hasText: /added to the waiting list/ })).toBeVisible();
 
         const [entry] = await db`
           SELECT id,status,preferred_team_member_id AS "memberId",preferred_local_date::text AS day,notes
@@ -102,7 +109,10 @@ for (const workspace of workspaces) {
         await expect(row).toBeVisible();
         await expect(row).not.toContainText("null");
         await expect(row.getByRole("link", { name: "Find a slot" })).toHaveCount(0);
+        await expect(row.getByRole("link", { name: "Check openings" })).toHaveCount(0);
+        await expect(row.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
         await row.locator('select[name="status"]').selectOption("offered");
+        await expect(row.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
         await row.getByRole("button", { name: "Save", exact: true }).click();
         await expect(row).toHaveCount(0);
         await page.goto(`${path}?status=offered`);
@@ -111,24 +121,32 @@ for (const workspace of workspaces) {
 
         await db`UPDATE staff_permissions SET can_manage_own_appointments=true WHERE tenant_id=${tenantId} AND team_member_id=${member.id}`;
         await page.reload();
-        await row.getByRole("link", { name: "Find a slot", exact: true }).click();
-        await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("waitlist") === entry.id);
-        await page.locator(`a.is-bookable[data-calendar-team-member-id="${member.id}"][data-calendar-starts-at="${day}T10:00"]`).click();
+        await row.getByRole("link", { name: "Check openings", exact: true }).click();
+        await expect(row.getByRole("link", { name: /^Book opening/ })).toHaveCount(2);
+        const opening = row.getByRole("link", { name: /^Book opening .* at 10:00$/ });
+        await expect(opening).toBeVisible();
+        await expect(row.getByRole("link", { name: /^Book opening .* at 11:00$/ })).toHaveCount(0);
+        await db`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
+          VALUES (${tenantId},${member.id},${location.id},${fromZonedTime(`${day}T10:00`, timezone)},${fromZonedTime(`${day}T10:30`, timezone)},'confirmed')`;
+        await opening.click();
+        await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("waitlist") === entry.id
+          && url.searchParams.get("create") === `${day}T10:00`);
         const appointment = page.getByRole("complementary", { name: "New appointment" });
         await expect(appointment.getByLabel(/^(Client|Patient) name$/)).toHaveValue(clientName);
         await expect(appointment.getByLabel("Email", { exact: true })).toHaveValue(clientEmail);
-        await expect(appointment.getByLabel("Phone", { exact: true })).toHaveValue("");
-        await appointment.getByRole("button", { name: "10:00", exact: true }).click();
+        await expect(appointment.getByRole("textbox", { name: "Phone", exact: true })).toHaveValue("");
+        await expect(appointment.getByRole("status").filter({ hasText: "That opening is no longer available." })).toBeVisible();
+        await expect(appointment.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
+        await expect(appointment.getByRole("button", { name: "10:30", exact: true })).toHaveAttribute("aria-pressed", "false");
+        await appointment.getByRole("button", { name: "10:30", exact: true }).click();
         await appointment.getByRole("button", { name: "Confirm appointment" }).click();
         await expect(appointment.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
         const appointments = await db`
-          SELECT status FROM bookings WHERE tenant_id=${tenantId} AND customer_id=${client.id}
+          SELECT status, starts_at FROM bookings WHERE tenant_id=${tenantId} AND customer_id=${client.id}
             AND service_id=${service.id} AND location_id=${location.id}
         `;
-        expect(appointments).toEqual([{ status: "confirmed" }]);
+        expect(appointments).toEqual([{ status: "confirmed", starts_at: fromZonedTime(`${day}T10:30`, timezone) }]);
         await page.goto(`${path}?status=offered`);
-        await row.locator('select[name="status"]').selectOption("booked");
-        await row.getByRole("button", { name: "Save", exact: true }).click();
         await expect(row).toHaveCount(0);
         await page.goto(`${path}?status=booked`);
         await expect(row).toContainText("Booked");

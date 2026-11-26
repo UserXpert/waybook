@@ -5,9 +5,15 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { requireIdentity } from "./auth";
 import { closeOverdueConfirmedBookings } from "./overdue-bookings";
+import { loginPathForTenant } from "./tenant-routes";
 import { findTenantByHostname, findTenantByRouteSlug, findTenantMembershipByRouteSlug, tenantDb, type TenantRecord } from "./database";
 
 export type TenantMembership = { tenantId: string; role: string };
+
+async function withWorkspaceName(tenant: TenantRecord): Promise<TenantRecord> {
+  const [settings] = await tenantDb(tenant)<{ name: string }[]>`SELECT name FROM tenant_settings WHERE tenant_id = ${tenant.id}`;
+  return settings?.name ? { ...tenant, name: settings.name } : tenant;
+}
 
 async function assertActiveStaffMembership(tenant: TenantRecord, identityId: string, membership: TenantMembership, isApiRequest: boolean) {
   const [staff] = await tenantDb(tenant)<{ isActive: boolean; staffRoleId: string | null }[]>`
@@ -34,22 +40,22 @@ async function assertActiveStaffMembership(tenant: TenantRecord, identityId: str
  * for server actions, rather than guessing from a single membership.
  */
 async function resolveTenantWorkspace(requestHeaders?: Headers): Promise<{ tenant: TenantRecord; membership: TenantMembership; isControlView: boolean }> {
-  const identity = await requireIdentity();
   const routeSlug = (requestHeaders ?? await headers()).get("x-waybook-tenant-route");
+  const identity = await requireIdentity(requestHeaders ? "/login" : loginPathForTenant(routeSlug));
   // A lost rewrite header must never select a different workspace.
   if (!routeSlug) notFound();
   if (routeSlug) {
     if (identity.isPlatformAdmin) {
       const tenant = await findTenantByRouteSlug(routeSlug);
       if (!tenant) notFound();
-      return { tenant, membership: { tenantId: tenant.id, role: "read-only" }, isControlView: true };
+      return { tenant: await withWorkspaceName(tenant), membership: { tenantId: tenant.id, role: "read-only" }, isControlView: true };
     }
     const workspace = await findTenantMembershipByRouteSlug(routeSlug, identity.id);
     if (!workspace) notFound();
     const { tenant, membership } = workspace;
     await assertActiveStaffMembership(tenant, identity.id, membership, Boolean(requestHeaders));
-    await closeOverdueConfirmedBookings(tenant);
-    return { tenant, membership, isControlView: false };
+    const [namedTenant] = await Promise.all([withWorkspaceName(tenant), closeOverdueConfirmedBookings(tenant)]);
+    return { tenant: namedTenant, membership, isControlView: false };
   }
   notFound();
 }
