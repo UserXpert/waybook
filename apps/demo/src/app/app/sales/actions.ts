@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { activeAppointmentPayments } from "@/lib/waybook/appointment-payment-records";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireFeature } from "@/lib/waybook/features";
@@ -109,6 +110,9 @@ export async function redeemGiftCardForAppointmentSale(_previous: GiftCardTender
       "SELECT cs.id,cs.booking_id AS \"bookingId\",cs.customer_id AS \"customerId\",cs.status,b.status AS \"bookingStatus\",cs.currency FROM commerce_sales cs JOIN bookings b ON b.id=cs.booking_id AND b.tenant_id=cs.tenant_id WHERE cs.id=$1 AND cs.tenant_id=$2 FOR UPDATE OF cs,b", [saleId, tenant.id],
     );
     if (!sale || sale.status !== "open" || sale.currency !== "DKK" || !["confirmed", "arrived"].includes(sale.bookingStatus)) throw new Error("Gift cards can only be used for an active DKK appointment with an open sale.");
+    if ((await activeAppointmentPayments(transaction, tenant.id, sale.bookingId)).length) {
+      throw new Error("A payment is already recorded for this appointment.");
+    }
     const [card] = await transaction.unsafe<{ id: string; ownerId: string | null; currency: string }[]>(
       "SELECT id,issued_to_customer_id AS \"ownerId\",currency FROM commerce_gift_cards WHERE tenant_id=$1 AND code_hash IN ($2,$3) AND status='active' AND (expires_at IS NULL OR expires_at>now()) FOR UPDATE", [tenant.id, ...hashes],
     );

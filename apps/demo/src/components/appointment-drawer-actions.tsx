@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { BookingDetailsResult } from "@/app/app/calendars/actions";
 import { useRouter } from "next/navigation";
 import { showSuccessToast } from "@/lib/waybook/toast";
+import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
 import { RescheduleSlotPicker } from "@/components/reschedule-slot-picker";
 import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
@@ -148,6 +149,11 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
       </form>
     </section>
     <AppointmentRescheduleActions bookingId={bookingId} status={status} timezone={timezone} days={days} slots={slots} reschedule={reschedule} />
-    {paymentBalance && (paymentBalance.outstandingCents > 0 || paymentBalance.refundableCents > 0) ? <section><h3>Sales ledger</h3><AppointmentPaymentForm bookingId={bookingId} balance={paymentBalance} onRecorded={onPaymentRecorded} /></section> : null}
+    {paymentBalance && (paymentBalance.payments.length > 0 || paymentBalance.outstandingCents > 0 || paymentBalance.refundableCents > 0) ? <section>
+      <h3>Sales ledger</h3>
+      {paymentBalance.payments.length > 0 ? <RecordedAppointmentPayments bookingId={bookingId} payments={paymentBalance.payments} onRecorded={onPaymentRecorded} /> : null}
+      {paymentBalance.refundableCents > 0 || (paymentBalance.payments.length === 0 && paymentBalance.outstandingCents > 0)
+        ? <AppointmentPaymentForm bookingId={bookingId} balance={paymentBalance} onRecorded={onPaymentRecorded} /> : null}
+    </section> : null}
   </>;
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { activeAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
 import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
@@ -632,7 +633,7 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
     const bookingId = String(formData.get("bookingId") ?? "");
     const method = String(formData.get("method") ?? "card");
     const amount = Number(String(formData.get("amountDkk") ?? "").replace(",", "."));
-    if (!bookingId || !["card", "cash", "bank_transfer", "other"].includes(method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
+    if (!bookingId || !manualPaymentMethods.some((item) => item === method) || !Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) > 10_000_000) {
       throw new Error("Enter a valid positive amount and payment method.");
     }
     if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(entryId)) throw new Error("The payment entry could not be identified.");
@@ -657,7 +658,12 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
         }
         return;
       }
-      if (locked.status === "cancelled" && kind !== "refund") throw new Error("Cancelled appointments cannot receive a payment record.");
+      if (kind === "payment") {
+        if (locked.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
+        if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
+          throw new Error("A payment is already recorded. Edit or delete it before recording another.");
+        }
+      }
       const [payment] = await transaction.unsafe<{ id: string }[]>(
         "INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
         [entryId, tenant.id, booking.id, kind, amountCents, method, identity.id],
@@ -670,6 +676,81 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
   }
   revalidateCalendars();
   return { error: null, success: kind === "refund" ? "Refund recorded." : "Payment recorded." };
+}
+
+/** Corrects a manually recorded receipt without changing original transactions. */
+export async function correctAppointmentPayment(formData: FormData): Promise<PaymentState> {
+  const op = String(formData.get("operation") ?? "");
+  const operationId = String(formData.get("operationId") ?? "");
+  const bookingId = String(formData.get("bookingId") ?? "");
+  const paymentId = String(formData.get("paymentId") ?? "");
+  const revision = String(formData.get("revision") ?? "") || null;
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const method = op === "edit" ? String(formData.get("method") ?? "") : null;
+  const amount = op === "edit" ? Number(String(formData.get("amountDkk") ?? "").replace(",", ".")) : 0;
+  const amountCents = Math.round(amount * 100);
+
+  try {
+    if (!["edit", "delete"].includes(op) || ![bookingId, paymentId, operationId].every((id) => uuid.test(id))) {
+      throw new Error("The payment could not be identified.");
+    }
+    if (op === "edit" && (!manualPaymentMethods.some((item) => item === method) || !Number.isFinite(amountCents) || amountCents <= 0 || amountCents > 10_000_000)) {
+      throw new Error("Enter a valid positive amount and payment method.");
+    }
+    const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+    const actor = await requireIdentity();
+    const event = op === "edit" ? "payment.corrected" : "payment.deleted";
+    await db.begin(async (transaction) => {
+      const [locked] = await transaction.unsafe<{ status: string }[]>(
+        "SELECT status FROM bookings WHERE tenant_id=$1 AND id=$2 FOR UPDATE", [tenant.id, booking.id],
+      );
+      if (!locked) throw new Error("Booking is unavailable.");
+      const [previous] = await transaction.unsafe<{ matches: boolean }[]>(`
+        SELECT event_type = $4 AND actor_identity_id = $5 AND metadata->>'paymentId' = $6
+          AND (metadata->>'amountCents')::int = $7 AND (metadata->>'method') IS NOT DISTINCT FROM $8 AS matches
+        FROM booking_events WHERE tenant_id=$1 AND booking_id=$2 AND id=$3
+      `, [tenant.id, booking.id, operationId, event, actor.id, paymentId, amountCents, method]);
+      if (previous?.matches) return;
+      if (previous) throw new Error("This payment correction does not match the original request.");
+
+      const payments = await activeAppointmentPayments(transaction, tenant.id, booking.id);
+      const payment = payments.find((item) => item.id === paymentId);
+      if (!payment || payment.revision !== revision) throw new Error("This payment has changed. Reopen the appointment and try again.");
+      if (payment.method === "gift_card") throw new Error("Gift-card payments use the original card’s refund workflow.");
+
+      const [balance] = await transaction.unsafe<{ available: number }[]>(`
+        SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)::int AS available
+        FROM payment_records WHERE tenant_id=$1 AND booking_id=$2 AND method <> 'gift_card'
+      `, [tenant.id, booking.id]);
+      const onlyManualPayment = payments.filter((item) => item.method !== "gift_card").length === 1;
+      const delta = op === "delete" && onlyManualPayment ? -Math.max(balance.available, 0) : amountCents - payment.amountCents;
+      if (delta < -balance.available && delta < 0) {
+        throw new Error("This change exceeds the collected balance after refunds.");
+      }
+      if (op === "edit" && locked.status === "cancelled") throw new Error("Cancelled appointments cannot have payments edited.");
+      const ledgerMethod = delta < 0 ? payment.method : method;
+      const adjustmentId = delta === 0 ? null : crypto.randomUUID();
+      if (adjustmentId) {
+        await transaction.unsafe(`
+          INSERT INTO payment_records (id,tenant_id,booking_id,kind,amount_cents,method,recorded_by_identity_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `, [adjustmentId, tenant.id, booking.id, delta < 0 ? "refund" : "payment", Math.abs(delta), ledgerMethod, actor.id]);
+      }
+      const metadata = JSON.stringify({ paymentId, adjustmentId, amountCents, method, previousAmountCents: payment.amountCents, previousMethod: payment.method });
+      await transaction.unsafe(`
+        INSERT INTO booking_events (id,tenant_id,booking_id,actor_identity_id,event_type,metadata,created_at)
+        VALUES ($1,$2,$3,$4,$5,$6::text::jsonb,clock_timestamp())
+      `, [operationId, tenant.id, booking.id, actor.id, event, metadata]);
+      await transaction.unsafe(`
+        INSERT INTO tenant_audit_events (tenant_id,actor_identity_id,action,target_type,target_id,metadata)
+        VALUES ($1,$2,$3,'payment_record',$4,($5::text::jsonb || jsonb_build_object('bookingId',$6::uuid)))
+      `, [tenant.id, actor.id, event, paymentId, metadata, booking.id]);
+    });
+    revalidateCalendars();
+    return { error: null, success: op === "delete" ? "Payment deleted." : "Payment updated." };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not update the payment.", success: null };
+  }
 }
 
 export type ManualBookingState = { error: string | null; success: string | null };

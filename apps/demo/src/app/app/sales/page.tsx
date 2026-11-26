@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
+import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
 import { BookingListRow } from "@/components/booking-list-controls";
 import { SaleAppointmentDetailsForm } from "@/components/sale-appointment-details-form";
@@ -42,7 +44,7 @@ type SaleRow = {
 type Location = { id: string; name: string };
 type Product = { id: string; title: string; priceCents: number; currency: string };
 type SaleLine = { id: string; title: string; unitPriceCents: number; quantity: number; discountCents: number };
-type PaymentItem = { id: string; kind: "payment" | "refund"; amountCents: number; method: string; recordedAt: Date };
+type PaymentItem = { id: string; kind: "payment" | "refund"; amountCents: number; method: string; recordedAt: Date; adjustment: boolean };
 type EligiblePackage = { id: string; title: string; remainingUnits: number; expiresAt: Date | null };
 type BookingActivity = { id: string; eventType: string; actorIdentityId: string | null; createdAt: Date };
 type ActivityActor = { id: string; displayName: string };
@@ -68,6 +70,8 @@ function activityLabel(eventType: string, clientLabel: string) {
     "payment.refund": "Refund recorded",
     "payment.gift_card": "Gift card redeemed",
     "payment.gift_card_refund": "Gift card refunded",
+    "payment.corrected": "Payment updated",
+    "payment.deleted": "Payment deleted",
   };
   return labels[eventType] ?? eventType.replaceAll(/[._]/g, " ");
 }
@@ -158,12 +162,16 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const selectedLocation = locations.find((item) => item.id === location);
   const sales = results.filter((row) => row.id !== null);
   const { outstandingCents, collectedCents, refundDueCents, matchingCount, page } = results[0];
-  const paymentItems = selectedSale ? await db<PaymentItem[]>`
-    SELECT id, kind, amount_cents AS "amountCents", method, recorded_at AS "recordedAt"
-    FROM payment_records
-    WHERE tenant_id = ${tenant.id} AND booking_id = ${selectedSale.bookingId}
-    ORDER BY recorded_at DESC, id DESC
-  ` : [];
+  const [paymentBalance, paymentItems] = selectedSale ? await Promise.all([
+    getAppointmentPaymentBalance(db, tenant.id, selectedSale.bookingId),
+    db<PaymentItem[]>`
+      SELECT p.id, p.kind, p.amount_cents AS "amountCents", p.method, p.recorded_at AS "recordedAt",
+        EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+          AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text) AS adjustment
+      FROM payment_records p WHERE p.tenant_id = ${tenant.id} AND p.booking_id = ${selectedSale.bookingId}
+      ORDER BY p.recorded_at DESC, p.id DESC
+    `,
+  ]) : [null, []] as const;
   const saleLines = selectedSale ? await db<SaleLine[]>`
     SELECT id,title_snapshot AS title,unit_price_cents AS "unitPriceCents",quantity,discount_cents AS "discountCents"
     FROM commerce_sale_lines WHERE tenant_id=${tenant.id} AND sale_id=${selectedSale.id} AND line_kind='product' ORDER BY created_at
@@ -257,7 +265,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const activeAppointment = ["confirmed", "arrived"].includes(selectedSale.status);
       const canAddProducts = activeAppointment && products.length > 0;
       const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
-      const refundableCents = paymentItems.reduce((sum, item) => item.method === "gift_card" ? sum : sum + (item.kind === "payment" ? item.amountCents : -item.amountCents), 0);
+      const recorded = paymentBalance?.payments ?? [];
       const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
       return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
         <aside className="tenant-drawer appointment-drawer sale-detail appointment-sale-drawer" data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
@@ -274,8 +282,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <dt>{balance < 0 ? "Credit due" : "Service balance"}</dt><dd>{money(Math.abs(balance))}</dd>
               </div> : null}
             </dl></section>
-            {outstandingCents > 0 || refundableCents > 0 ? <section><h3>Payment details</h3>
-              <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={{ outstandingCents, refundableCents }} secondary />
+            {paymentBalance && (recorded.length > 0 || outstandingCents > 0) ? <section><h3>Payment details</h3>
+              {recorded.length > 0
+                ? <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={selectedSale.status !== "cancelled"} />
+                : <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} secondary />}
             </section> : null}
             {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
               <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
@@ -295,10 +305,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <button className="waybook-action waybook-action--secondary" type="submit">Redeem package visit</button>
               </form> : <p className="sale-detail__note">No eligible package can be redeemed.</p>}
             </section> : null}
-            {selectedSale.giftCardRedeemed || (activeAppointment && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
+            {selectedSale.giftCardRedeemed || (activeAppointment && recorded.length === 0 && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
               {selectedSale.giftCardRedeemed ? <p className="sale-detail__note">A gift card has been used for this appointment.</p> : <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />}
             </section> : null}
-            <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
+            <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
             {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
           </div>
         </aside>

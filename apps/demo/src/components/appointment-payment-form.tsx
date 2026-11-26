@@ -17,12 +17,13 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, seconda
   const [retryRequired, setRetryRequired] = useState(false);
   const submitting = useRef(false);
   const interrupted = useRef<FormData | null>(null);
-  const { outstandingCents, refundableCents } = balance;
+  const { outstandingCents, refundableCents, payments } = balance;
+  const canAddPayment = payments.length === 0 && outstandingCents > 0;
   const [kind, setKind] = useState("");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
-  const amount = draftAmount ?? (kind !== "refund" && outstandingCents > 0 ? (outstandingCents / 100).toFixed(2) : "");
+  const amount = draftAmount ?? (kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "");
   const editingDisabled = pending || retryRequired;
-  const canRecord = (kind === "payment" && outstandingCents > 0 || kind === "refund" && refundableCents > 0) && Number(amount) > 0;
+  const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Number(amount) > 0;
 
   function changeKind(nextKind: string) {
     if (nextKind === "refund" || kind === "refund") setDraftAmount(null);
@@ -63,7 +64,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, seconda
     <div className="tenant-drawer-form__grid">
       <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
         <option value="" disabled>Select payment action</option>
-        <option value="payment" disabled={outstandingCents <= 0}>Payment received</option>
+        {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
         <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>
       </select></label>
       <label>Method<select name="method" defaultValue="card" disabled={editingDisabled}><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>

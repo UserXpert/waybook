@@ -1,9 +1,11 @@
+import { activeAppointmentPayments, type RecordedAppointmentPayment } from "./appointment-payment-records";
 import type { tenantDb } from "./database";
 
-export type AppointmentPaymentBalance = { outstandingCents: number; refundableCents: number };
+export type AppointmentPaymentBalance = { outstandingCents: number; refundableCents: number; payments: RecordedAppointmentPayment[] };
 
 export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantDb>, tenantId: string, bookingId: string) {
-  const [balance] = await db<AppointmentPaymentBalance[]>`
+  const [[balance], payments] = await Promise.all([
+    db<Omit<AppointmentPaymentBalance, "payments">[]>`
     SELECT CASE WHEN b.status = 'cancelled' OR EXISTS (
         SELECT 1 FROM commerce_entitlement_entries ce
         WHERE ce.tenant_id = b.tenant_id AND ce.booking_id = b.id AND ce.kind = 'redeem' AND ce.package_id IS NOT NULL
@@ -17,6 +19,6 @@ export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantD
       FROM payment_records WHERE tenant_id = b.tenant_id AND booking_id = b.id
     ) payment
     WHERE b.tenant_id = ${tenantId} AND b.id = ${bookingId}
-  `;
-  return balance ?? null;
+  `, activeAppointmentPayments(db, tenantId, bookingId)]);
+  return balance ? { ...balance, payments } : null;
 }

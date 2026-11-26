@@ -49,7 +49,8 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await submit.click();
     await expect(form.getByRole("status")).toContainText("Payment recorded");
     await expect(submit).toBeDisabled();
-    await expect(amount).toHaveValue("100.00");
+    await expect(amount).toHaveValue("");
+    await expect(payment.locator('option[value="payment"]')).toHaveCount(0);
     await payment.selectOption("refund");
     await form.getByLabel("Method").selectOption("cash");
     await amount.fill("40.25");
@@ -92,7 +93,8 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(submit).toBeDisabled();
     expect(new URL(page.url()).searchParams.get("booking")).toBe(booking.id);
     expect(new URL(page.url()).searchParams.get("day")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    await expect(amount).toHaveValue("140.25");
+    await expect(drawer.getByRole("button", { name: "Edit payment" })).toBeVisible();
+    await expect(payment.locator('option[value="payment"]')).toHaveCount(0);
 
     await page.goto(`/nordic/app/sales?q=${encodeURIComponent(customerName)}`);
     await page.getByRole("cell", { name: customerName, exact: true }).click();
@@ -104,12 +106,45 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     expect((await db`SELECT phone FROM customers WHERE email=${customerEmail}`)[0].phone).toBe("+45 31 22 33 44");
 
     const salePayment = saleDrawer.locator(".appointment-payment-form");
-    await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("140.25");
-    await salePayment.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment", { timeout: 5000 });
-    await salePayment.getByRole("button", { name: "Record entry" }).click();
-    await expect(salePayment.getByRole("status")).toHaveText("Payment recorded.");
-    await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("");
-    await expect(saleDrawer.getByText("Payment · card", { exact: true })).toBeVisible();
+    await expect(salePayment).toHaveCount(0);
+    await saleDrawer.getByRole("button", { name: "Edit payment", exact: true }).click();
+    await expect(saleDrawer.getByLabel("Amount (DKK)")).toHaveValue("150.50");
+    await saleDrawer.getByLabel("Amount (DKK)").fill("160.50");
+    await saleDrawer.getByLabel("Method").selectOption("bank_transfer");
+    await saleDrawer.getByRole("button", { name: "Save payment" }).click();
+    await expect(saleDrawer.locator(".recorded-appointment-payments")).toContainText("160,50");
+    await expect(saleDrawer.locator(".recorded-appointment-payments")).toContainText("Bank transfer");
+    await expect(saleDrawer.getByText("Payment adjustment · bank transfer", { exact: true })).toBeVisible();
+
+    await saleDrawer.getByRole("button", { name: "Delete payment", exact: true }).click();
+    await saleDrawer.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(salePayment).toHaveCount(0);
+    await saleDrawer.getByRole("button", { name: "Delete payment", exact: true }).click();
+    await saleDrawer.getByRole("button", { name: "Confirm deletion" }).click();
+    await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("250.50");
+
+    const staleTab = await page.context().newPage();
+    try {
+      await staleTab.goto(page.url());
+      const stalePayment = staleTab.getByRole("dialog", { name: "Appointment checkout" }).locator(".appointment-payment-form");
+      await stalePayment.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment");
+      await salePayment.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment");
+      await salePayment.getByRole("button", { name: "Record entry" }).click();
+      await expect(salePayment).toHaveCount(0);
+      await expect(saleDrawer.locator(".recorded-appointment-payments")).toContainText("250,50");
+      await stalePayment.getByRole("button", { name: "Record entry" }).click();
+      await expect(stalePayment.getByRole("alert")).toContainText("A payment is already recorded.");
+    } finally {
+      await staleTab.close();
+    }
+    const entries = await db`SELECT kind, amount_cents, method FROM payment_records WHERE booking_id=${booking.id} ORDER BY recorded_at, id`;
+    expect(entries).toEqual([
+      { kind: "payment", amount_cents: 15_050, method: "cash" },
+      { kind: "refund", amount_cents: 4_025, method: "cash" },
+      { kind: "payment", amount_cents: 1_000, method: "bank_transfer" },
+      { kind: "refund", amount_cents: 12_025, method: "bank_transfer" },
+      { kind: "payment", amount_cents: 25_050, method: "card" },
+    ]);
     await page.keyboard.press("Escape");
     await expect(saleDrawer).toHaveCount(0);
     await page.goto("/nordic/app/sales");

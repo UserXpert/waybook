@@ -4296,3 +4296,16 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .appointment-sale-drawer .tenant-drawer-form > .waybook-action--secondary:hover:not(:disabled) {
   background: var(--waybook-accent-soft);
 }
+
+.recorded-appointment-payments { display: grid; gap: .75rem; }
+.recorded-appointment-payments__item {
+  display: grid;
+  gap: .65rem;
+  border: 1px solid var(--ice-edge, var(--wb-dark-border, #dedede));
+  border-radius: .65rem;
+  padding: .8rem;
+}
+.recorded-appointment-payments__item > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem .7rem; }
+.recorded-appointment-payments__item span { font-size: .8rem; color: var(--ice-muted, var(--wb-dark-muted, #606065)); }
+.recorded-appointment-payments__actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+.recorded-appointment-payments + .appointment-payment-form { margin-top: .85rem; }
