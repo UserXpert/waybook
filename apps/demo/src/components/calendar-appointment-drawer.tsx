@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, updateBookingStatus, cancelAppointment } from "@/app/app/calendars/actions";
+import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
@@ -36,10 +36,13 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     }).catch(() => { if (request.current === serial) setError("Could not load this appointment. Please try again."); });
   }, []);
 
-  const refreshPayment = async (bookingId: string) => {
+  const refreshAppointment = async (bookingId: string) => {
     const serial = request.current;
     const updated = await getCalendarAppointment(bookingId);
-    if (serial === request.current) setDetail((current) => current?.id === bookingId ? updated : current);
+    if (serial === request.current) {
+      setSelected(updated);
+      setDetail(updated);
+    }
   };
 
   const close = useCallback(() => {
@@ -76,7 +79,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   const date = selected.startsAt ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" }).format(new Date(selected.startsAt)) : "";
   const clock = (value: string) => value ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "";
   return <TenantEditorDialog title={`Appointment with ${selected.customerName}`} onDismiss={close} cycleFocus>
-    <aside className="tenant-drawer appointment-drawer manual-appointment-drawer" aria-label={`Appointment with ${selected.customerName}`}>
+    <aside className="tenant-drawer appointment-drawer manual-appointment-drawer calendar-appointment-drawer" aria-label={`Appointment with ${selected.customerName}`}>
       <header><div><p>APPOINTMENT</p><h2>{selected.customerName}</h2></div><div className="appointment-drawer__header-actions tenant-drawer-header-actions"><span data-appointment-save-action style={{ display: "contents" }} /><button type="button" className="tenant-drawer-close" aria-label="Close appointment" onClick={(event) => {
         event.currentTarget.closest("dialog")?.close();
         close();
@@ -90,9 +93,9 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
           {capabilities.canEdit ? (
-            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance} onPaymentRecorded={refreshPayment} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={updateBookingStatus} resourceId={detail.resourceId} resources={detail.resources} />
+            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance} onPaymentRecorded={refreshAppointment} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} noShowCompletionEligible={detail.noShowCompletionEligible} onStatusSaved={refreshAppointment} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} updateStatus={saveAppointmentAttendance} resourceId={detail.resourceId} resources={detail.resources} />
           ) : <>
-            {capabilities.canUpdateStatus || (capabilities.canCancel && detail.status === "cancelled") ? <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} updateStatus={updateBookingStatus} /> : null}
+            {capabilities.canUpdateStatus || (capabilities.canCancel && detail.status === "cancelled") ? <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} noShowCompletionEligible={detail.noShowCompletionEligible} onStatusSaved={refreshAppointment} updateStatus={saveAppointmentAttendance} /> : null}
             {capabilities.canReschedule ? <AppointmentRescheduleActions key={detail.id} bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} reschedule={rescheduleBooking} /> : null}
             {!capabilities.canUpdateStatus && !capabilities.canReschedule ? <p className="tenant-drawer-note">You have view-only access to this appointment.</p> : null}
           </>}

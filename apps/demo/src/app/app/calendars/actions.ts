@@ -1,7 +1,7 @@
 "use server";
 
 import { activeAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
-import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
+import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
 import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
 import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
@@ -125,7 +125,7 @@ export async function getCalendarAppointment(bookingId: string) {
   if (!booking) throw new Error("Booking is unavailable.");
   const { teamMemberId, ...detail } = booking;
   const canManageSchedule = canManageAppointment(permissions, teamMemberId);
-  const [resources, paymentBalance] = await Promise.all([
+  const [resources, paymentBalance, noShowCompletionEligible] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -133,6 +133,7 @@ export async function getCalendarAppointment(bookingId: string) {
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [],
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
+    booking.status !== "no_show" || ((permissions.isManager || permissions.canUpdateAppointmentStatus) && canCompleteNoShow(db, tenant.id, bookingId)),
   ]);
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
@@ -154,6 +155,7 @@ export async function getCalendarAppointment(bookingId: string) {
     canManage: permissions.isManager,
     canManageSchedule,
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
+    noShowCompletionEligible,
     canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
     resources,
     paymentBalance,
@@ -557,7 +559,7 @@ export async function moveBookingOnCalendar(input: { bookingId: string; startsAt
   }
 }
 
-export async function updateBookingStatus(formData: FormData) {
+async function updateBookingStatus(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!["arrived", "completed", "no_show", "cancelled"].includes(status)) throw new Error("Choose a valid appointment status.");
@@ -577,6 +579,10 @@ export async function updateBookingStatus(formData: FormData) {
       [booking.id, tenant.id],
     );
     if (!current) throw new Error("Booking is unavailable.");
+    const expectedStatus = formData.get("expectedStatus");
+    if (status !== "cancelled" && current.status !== expectedStatus) {
+      throw new Error("The appointment status has changed. Reopen the appointment and try again.");
+    }
     // A repeated click or an in-flight duplicate cancellation is a safe no-op.
     if (current.status === "cancelled" && status === "cancelled") return null;
     if (["completed", "cancelled"].includes(current.status)) {
@@ -594,6 +600,10 @@ export async function updateBookingStatus(formData: FormData) {
       throw new Error("That appointment status change is not allowed.");
     }
 
+    if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
+      throw new Error("Record a payment before marking this no-show as completed.");
+    }
+
     await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
     let cancellationOutboxId: string | null = null;
     if (status === "cancelled") {
@@ -608,6 +618,20 @@ export async function updateBookingStatus(formData: FormData) {
   }));
   promptEmailDelivery(tenant, outboxId);
   revalidateCalendars();
+}
+
+export type AttendanceResult = { error: string | null };
+
+export async function saveAppointmentAttendance(formData: FormData): Promise<AttendanceResult> {
+  try {
+    if (!["arrived", "completed", "no_show"].includes(String(formData.get("status")))) {
+      throw new Error("Choose an attendance status.");
+    }
+    await updateBookingStatus(formData);
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Could not save appointment status." };
+  }
 }
 
 export type CancellationResult = { error: string | null };

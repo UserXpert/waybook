@@ -67,7 +67,7 @@
   .waybook-primary-link,
   .waybook-action:not(.waybook-action--secondary, .waybook-action--danger),
   .waybook-list-filter button[type="submit"], .waybook-list-filter > button:not([type]),
-  .tenant-drawer-header-actions > button,
+  .tenant-drawer-header-actions > button:not(.tenant-drawer-close),
   .tenant-drawer-form > button:not(.staff-multi-toggle, .waybook-action--secondary, .waybook-action--danger),
   .tenant-inline-form > button, .retail-checkout-form button[type="submit"],
   .waybook-customer-form > button[type="submit"],

@@ -4309,3 +4309,27 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .recorded-appointment-payments__item span { font-size: .8rem; color: var(--ice-muted, var(--wb-dark-muted, #606065)); }
 .recorded-appointment-payments__actions { display: flex; flex-wrap: wrap; gap: .45rem; }
 .recorded-appointment-payments + .appointment-payment-form { margin-top: .85rem; }
+
+.appointment-attendance { display: grid; gap: .65rem; margin-top: .6rem; }
+.appointment-attendance > .waybook-action { justify-self: start; }
+.tenant-dashboard-page .appointment-drawer .appointment-attendance .appointment-drawer__status-actions button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close {
+  flex: 0 0 2.35rem;
+  min-height: 2.35rem;
+  padding: 0;
+  border: 1px solid var(--ice-edge, var(--wb-dark-border, #d4d4d7));
+  border-radius: 50%;
+  background: transparent !important;
+  color: var(--ice-ink, var(--wb-dark-text, #35353a));
+}
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close:hover {
+  background: var(--ice-field, var(--wb-dark-raised, #f3f3f4)) !important;
+}
+:root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close:focus-visible {
+  outline: 2px solid var(--ice-focus, var(--waybook-accent));
+  outline-offset: 2px;
+}
