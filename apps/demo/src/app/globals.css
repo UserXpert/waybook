@@ -494,18 +494,6 @@ body {
 .waybook-login-error { background: #fff0f0; color: #8e2636; }
 .waybook-login-notice { background: #f3f0fb; color: #413365; }
 
-.staff-access-requests__summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: .5rem 1rem;
-  margin: 0 auto 1rem;
-  padding: .65rem 1rem;
-}
-
-.staff-access-requests__summary h2 { margin: 0; }
-
 .staff-access-requests ul {
   display: grid;
   margin: 0;
@@ -3639,6 +3627,25 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .waybook-feedback--warning { border-color:#dfc791; background:#fff8e8; color:#624714; }
 .tenant-dashboard-page .waybook-feedback--error { background:#fcebea; color:#963e36; }
 .tenant-dashboard-page .waybook-feedback--success { background:#e8f5ed; color:#27604f; }
+.tenant-dashboard-page .staff-access-requests__notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  padding: .5rem .75rem;
+  border-color: color-mix(in srgb, var(--waybook-accent) 25%, var(--wb-dark-surface, #fff));
+  background: color-mix(in srgb, var(--waybook-accent) 9%, var(--wb-dark-surface, #fff));
+}
+.staff-access-requests__notice p {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.staff-access-requests__notice svg { flex: none; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--warning { border-color:#66512e; background:#302719; color:#f1dca6; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--error { background:#4a1f1e; color:#ffc1bb; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--success { background:#123b2b; color:#a8ebc8; }

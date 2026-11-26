@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Bell } from "lucide-react";
 import { reviewStaffAccess } from "@/app/app/team/actions";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import type { OutstandingStaffAccessRequest } from "@/lib/waybook/staff-access-requests";
@@ -31,13 +32,18 @@ export function StaffAccessRequestPanel({ requests }: { requests: OutstandingSta
 
   return (
     <>
-      <section className="waybook-data-card staff-access-requests__summary" aria-label="Staff access requests">
-        <h2>Staff access requests ({requests.length})</h2>
-        <button ref={opener} className="waybook-action waybook-action--secondary" type="button" aria-haspopup="dialog" onClick={() => {
-          setOpen(true);
-          router.refresh();
-        }}>See requests</button>
-      </section>
+      {requests.length > 0 ? (
+        <section className="waybook-feedback staff-access-requests__notice" aria-label="Staff access requests">
+          <p role="status">
+            <Bell aria-hidden="true" size={18} />
+            <span>Staff access requests ({requests.length})</span>
+          </p>
+          <button ref={opener} className="waybook-action waybook-action--secondary" type="button" aria-haspopup="dialog" onClick={() => {
+            setOpen(true);
+            router.refresh();
+          }}>See requests</button>
+        </section>
+      ) : null}
       {open ? (
         <TenantEditorDialog title="Staff access requests" onDismiss={close} cycleFocus>
           <aside className="tenant-drawer staff-access-requests">
