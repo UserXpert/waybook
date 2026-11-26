@@ -45,10 +45,10 @@ export default async function Login({
                 </button>
               </form>
             ) : null}
-            <p className="waybook-login-signup">
-              New business? <a href="https://waybook-website.vercel.app/en#venteliste">Sign up for early access</a>
-            </p>
           </div>
+          <p className="waybook-login-signup">
+            New business? <a href="https://waybook-website.vercel.app/en#venteliste">Sign up for early access</a>
+          </p>
         </section>
 
         <aside className="waybook-login-art" aria-label="Waybook product preview">
