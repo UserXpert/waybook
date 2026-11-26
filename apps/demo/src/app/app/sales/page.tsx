@@ -29,6 +29,7 @@ type SaleRow = {
   startsAt: Date;
   status: string;
   bookedPriceCents: number;
+  noShowChargeCents: number;
   paidCents: number;
   paymentCount: number;
   lastPaymentAt: Date | null;
@@ -89,7 +90,7 @@ function activityLabel(eventType: string, clientLabel: string) {
 function settlement(row: SaleRow) {
   if (row.status === "cancelled") return { label: "Cancelled", detail: "No checkout", tone: "is-cancelled" };
   if (row.packageRedeemed) return { label: "Package", detail: "Service visit redeemed", tone: "is-paid" };
-  const balance = row.bookedPriceCents - row.paidCents;
+  const balance = row.bookedPriceCents + row.noShowChargeCents - row.paidCents;
   if (balance === 0) return { label: "Paid", detail: `${money(row.paidCents)} collected`, tone: "is-paid" };
   if (balance > 0) return { label: "Open", detail: `${money(balance)} due`, tone: "is-open" };
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
@@ -125,7 +126,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     "payment-oldest": db`"lastPaymentAt" ASC NULLS LAST, "startsAt" ASC, "bookingId" ASC`,
   }[selectedSort];
   const saleRows = db`
-      SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents",
+      SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
         c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
@@ -154,18 +155,18 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       ), classified AS (
         SELECT *, CASE
           WHEN status = 'cancelled' THEN 'cancelled'
-          WHEN "packageRedeemed" OR "bookedPriceCents" = "paidCents" THEN 'paid'
-          WHEN "bookedPriceCents" > "paidCents" THEN 'open'
+          WHEN "packageRedeemed" OR "bookedPriceCents" + "noShowChargeCents" = "paidCents" THEN 'paid'
+          WHEN "bookedPriceCents" + "noShowChargeCents" > "paidCents" THEN 'open'
           ELSE 'refund'
         END AS settlement_status
         FROM scoped
         WHERE ${selectedActivity === "all" ? db`TRUE` : db`("lastPaymentAt" IS NOT NULL) = ${selectedActivity === "with"}`}
       ), totals AS (
         SELECT count(*) FILTER (WHERE ${statusFilter})::int AS "matchingCount",
-          coalesce(sum(greatest(0, "bookedPriceCents" - "paidCents"))
+          coalesce(sum(greatest(0, "bookedPriceCents" + "noShowChargeCents" - "paidCents"))
             FILTER (WHERE status <> 'cancelled' AND NOT "packageRedeemed"), 0) AS "outstandingCents",
           coalesce(sum("paidCents"), 0) AS "collectedCents",
-          coalesce(sum(greatest(0, "paidCents" - "bookedPriceCents"))
+          coalesce(sum(greatest(0, "paidCents" - "bookedPriceCents" - "noShowChargeCents"))
             FILTER (WHERE status <> 'cancelled' AND NOT "packageRedeemed"), 0) AS "refundDueCents"
         FROM classified
       ), pagination AS (
@@ -294,7 +295,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <td><Link className="waybook-row-link" href={href}>Appointment · {row.serviceTitle}</Link><small>{row.locationName ?? "No location"}</small></td>
             <td><b className={`sales-status ${state.tone}`}>{state.label}</b><small>{state.detail}</small></td>
             <td>{dateTime.format(row.startsAt)}</td><td>{row.customerName}</td><td>{row.serviceTitle}</td>
-            <td>{money(row.bookedPriceCents)}</td>
+            <td>{money(row.bookedPriceCents + row.noShowChargeCents)}</td>
             <td>{row.paymentCount ? money(row.paidCents) : "No entries"}{row.lastPaymentAt ? <small>Last entry {dateTime.format(row.lastPaymentAt)}</small> : null}</td>
           </BookingListRow>;
         })}{sales.length === 0 ? <tr><td colSpan={7}>No appointment sales match these filters.</td></tr> : null}</tbody>
@@ -307,7 +308,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     </section>
     {selectedSale ? (() => {
       const state = settlement(selectedSale);
-      const balance = selectedSale.packageRedeemed ? 0 : selectedSale.bookedPriceCents - selectedSale.paidCents;
+      const balance = selectedSale.packageRedeemed ? 0 : selectedSale.bookedPriceCents + selectedSale.noShowChargeCents - selectedSale.paidCents;
       const productTotalCents = saleLines.reduce((sum, line) => sum + line.unitPriceCents * line.quantity - line.discountCents, 0);
       const activeAppointment = ["confirmed", "arrived"].includes(selectedSale.status);
       const canAddProducts = activeAppointment && products.length > 0;
@@ -322,6 +323,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <section className="sale-detail__summary"><div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong><small>{selectedSale.locationName ?? "No location"}</small></div><div><span>Service</span><strong>{selectedSale.serviceTitle}</strong><small>{selectedSale.teamMemberName ?? `No assigned ${terminology.staffMember}`}</small></div></section>
             <section><h3>Totals</h3><dl className="sale-detail__totals">
               <div><dt>Booked service</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>
+              {selectedSale.noShowChargeCents > 0 ? <div><dt>No-show fee</dt><dd>{money(selectedSale.noShowChargeCents)}</dd></div> : null}
               {saleLines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{money(line.unitPriceCents * line.quantity - line.discountCents)}</dd></div>)}
               {saleLines.length > 0 ? <div><dt>Products pending checkout</dt><dd>{money(productTotalCents)}</dd></div> : null}
               <div><dt>Net payments</dt><dd>{money(selectedSale.paidCents)}</dd></div>

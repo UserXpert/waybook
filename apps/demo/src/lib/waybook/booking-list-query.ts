@@ -1,7 +1,7 @@
 import type { tenantDb } from "./database";
 import { dateRangeWhere, tableDateOrder, type TableDateFilters } from "./table-date-filters";
 
-export type BookingRow = { id: string; bookingNumber: string; serviceId: string; resourceId: string | null; customerPhone: string | null; saleId: string | null; startsAt: Date; endsAt: Date; status: string; source: string; bookedPriceCents: number; paidCents: number; customerName: string; customerEmail: string; serviceTitle: string; teamMemberId: string | null; teamMemberName: string | null; locationId: string | null; locationName: string | null; resourceName: string | null };
+export type BookingRow = { id: string; bookingNumber: string; serviceId: string; resourceId: string | null; customerPhone: string | null; saleId: string | null; startsAt: Date; endsAt: Date; status: string; source: string; bookedPriceCents: number; noShowChargeCents: number; paidCents: number; customerName: string; customerEmail: string; serviceTitle: string; teamMemberId: string | null; teamMemberName: string | null; locationId: string | null; locationName: string | null; resourceName: string | null };
 
 type BookingListFilters = { isManager: boolean; teamMemberId: string | null; locationId?: string; status?: string; search: string; dates: TableDateFilters; bookingId?: string };
 
@@ -19,7 +19,7 @@ export function bookingListQuery(db: ReturnType<typeof tenantDb>, tenantId: stri
         ${filters.bookingId ? db`AND b.id = ${filters.bookingId}` : dateRangeWhere(db, "b.starts_at", filters.dates)}
       ORDER BY ${order} LIMIT 100
     )
-    SELECT b.id, b.booking_number AS "bookingNumber", b.service_id AS "serviceId", bra.resource_id AS "resourceId", c.phone AS "customerPhone", cs.id AS "saleId", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, b.source, b.booked_price_cents AS "bookedPriceCents", coalesce(sum(CASE WHEN pr.kind='payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
+    SELECT b.id, b.booking_number AS "bookingNumber", b.service_id AS "serviceId", bra.resource_id AS "resourceId", c.phone AS "customerPhone", cs.id AS "saleId", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, b.source, b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents", coalesce(sum(CASE WHEN pr.kind='payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
       c.name AS "customerName", c.email AS "customerEmail", s.title AS "serviceTitle", tm.id AS "teamMemberId", tm.name AS "teamMemberName", b.location_id AS "locationId", l.name AS "locationName", r.name AS "resourceName"
     FROM page JOIN bookings b ON b.id=page.id AND b.tenant_id=${tenantId}
       JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id

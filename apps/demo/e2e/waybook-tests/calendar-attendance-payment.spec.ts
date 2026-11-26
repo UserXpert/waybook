@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("calendar attendance saves explicitly and requires a recorded payment to complete a no-show", async ({ page }, testInfo) => {
+for (const bookedCents of [25050, 0]) test(`calendar saves payment and completion together for a ${bookedCents ? "paid service" : "zero-price no-show"}`, async ({ page }, testInfo) => {
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const marker = randomUUID().slice(0, 8);
   const name = `Calendar attendance ${marker}`;
@@ -22,7 +22,7 @@ test("calendar attendance saves explicitly and requires a recorded payment to co
         RETURNING id,starts_at,ends_at`;
       const [result] = await tx<{ id: string }[]>`INSERT INTO bookings
         (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents)
-        VALUES (${settings.tenant_id},${block.id},${service.id},${member.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'arrived',25050)
+        VALUES (${settings.tenant_id},${block.id},${service.id},${member.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'arrived',${bookedCents})
         RETURNING id`;
       return { ...result, customerId: customer.id, startsAt: new Date(block.starts_at), location: location.id, employee: member.id };
     });
@@ -65,52 +65,63 @@ test("calendar attendance saves explicitly and requires a recorded payment to co
     await save.click();
     await expect.poll(readStatus).toBe("no_show");
     await expect(complete).toBeEnabled();
-    const paymentNotice = "Record a payment before marking this no-show as completed.";
-    await expect(drawer.getByText(paymentNotice)).toHaveCount(0);
+    const amount = drawer.getByLabel(bookedCents ? "Amount (DKK)" : "No-show fee (DKK)", { exact: true });
+    await expect(drawer.getByRole("heading", { name: "Payment details" })).toBeVisible();
+    await expect(amount).toBeVisible();
     await expect(save).toBeDisabled();
     await complete.click();
     const phone = "+45 55 42 11 01";
     await drawer.getByLabel("Phone", { exact: true }).fill(phone);
     const savedPhone = async () => (await db`SELECT phone FROM customers WHERE id=${booking.customerId}`)[0].phone;
-    await save.click();
-    await expect(drawer.getByRole("alert")).toContainText(paymentNotice);
-    expect(await readStatus()).toBe("no_show");
-    expect(await savedPhone()).toBeNull();
-    await expect(drawer.getByLabel("Phone", { exact: true })).toHaveValue(phone);
 
-    const form = drawer.locator(".appointment-payment-form");
-    await expect(drawer.getByRole("heading", { name: "Payment details" })).toBeVisible();
-    await expect(form.getByLabel("Amount (DKK)")).toHaveValue("250.50");
-    await expect(form.getByRole("combobox", { name: "Payment", exact: true })).toHaveValue("payment");
-    const recordPayment = async () => {
-      await form.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment");
-      await form.getByRole("button", { name: "Record entry" }).click();
-      await expect(drawer.getByRole("button", { name: "Delete payment", exact: true })).toBeVisible();
-    };
-    await recordPayment();
+    if (bookedCents) {
+      await save.click();
+      await expect(drawer.getByRole("alert")).toContainText("Record a payment before marking this no-show as completed.");
+      expect(await readStatus()).toBe("no_show");
+      expect(await savedPhone()).toBeNull();
+      await expect(drawer.getByLabel("Phone", { exact: true })).toHaveValue(phone);
+      await amount.fill("300");
+      await save.click();
+      await expect(drawer.getByRole("alert")).toContainText("appointment payment cannot exceed booked service value");
+      expect(await readStatus()).toBe("no_show");
+      expect(await db`SELECT id FROM payment_records WHERE booking_id=${booking.id}`).toHaveLength(0);
+    }
 
+    const paymentCents = bookedCents || 12550;
+    await amount.fill((paymentCents / 100).toFixed(2));
+    await drawer.getByRole("combobox", { name: "Method", exact: true }).selectOption("cash");
+    await expect(drawer.getByRole("button", { name: "Record entry", exact: true })).toHaveCount(0);
     const staleTab = await page.context().newPage();
     try {
       await staleTab.goto(url);
       const staleDrawer = staleTab.getByRole("dialog", { name: `Appointment with ${name}` });
       await staleDrawer.getByRole("button", { name: "Completed", exact: true }).click();
-      await drawer.getByRole("button", { name: "Delete payment", exact: true }).click();
-      await drawer.getByRole("button", { name: "Confirm deletion" }).click();
-      await expect(form.getByRole("button", { name: "Record entry" })).toBeVisible();
-      await staleDrawer.getByRole("button", { name: "Save changes" }).click();
-      await expect(staleDrawer.getByRole("alert")).toContainText("Record a payment before marking this no-show as completed.");
+      await staleDrawer.getByLabel(bookedCents ? "Amount (DKK)" : "No-show fee (DKK)", { exact: true }).fill("100");
+
+      await expect(complete).toHaveAttribute("aria-pressed", "true");
       expect(await readStatus()).toBe("no_show");
+      expect(await db`SELECT id FROM payment_records WHERE booking_id=${booking.id}`).toHaveLength(0);
+      await save.click();
+      await expect.poll(readStatus).toBe("completed");
+      expect(await savedPhone()).toBe(phone);
+      await expect(drawer.getByText("This appointment’s status is final and cannot be changed.")).toBeVisible();
+
+      await staleDrawer.getByRole("button", { name: "Save changes", exact: true }).click();
+      await expect(staleDrawer.getByRole("alert")).toContainText("The appointment status has changed.");
+      expect(await db`SELECT kind, amount_cents, method FROM payment_records WHERE booking_id=${booking.id}`).toEqual([
+        { kind: "payment", amount_cents: paymentCents, method: "cash" },
+      ]);
+      expect((await db`SELECT booked_price_cents, no_show_charge_cents FROM bookings WHERE id=${booking.id}`)[0]).toEqual({
+        booked_price_cents: bookedCents, no_show_charge_cents: bookedCents ? 0 : paymentCents,
+      });
+      if (!bookedCents) {
+        const [sale] = await db`SELECT id FROM commerce_sales WHERE booking_id=${booking.id}`;
+        await staleTab.goto(`/nordic/app/sales?sale=${sale.id}`);
+        await expect(staleTab.getByRole("dialog", { name: "Appointment checkout" }).getByText("No-show fee", { exact: true })).toBeVisible();
+      }
     } finally {
       await staleTab.close();
     }
-
-    await recordPayment();
-    await expect(complete).toHaveAttribute("aria-pressed", "true");
-    expect(await readStatus()).toBe("no_show");
-    await save.click();
-    await expect.poll(readStatus).toBe("completed");
-    expect(await savedPhone()).toBe(phone);
-    await expect(drawer.getByText("This appointment’s status is final and cannot be changed.")).toBeVisible();
     await close.click();
     await expect(drawer).toHaveCount(0);
   } finally {

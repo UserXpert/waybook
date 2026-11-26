@@ -1,17 +1,19 @@
 import { activeAppointmentPayments, type RecordedAppointmentPayment } from "./appointment-payment-records";
 import type { tenantDb } from "./database";
 
-export type AppointmentPaymentBalance = { outstandingCents: number; refundableCents: number; payments: RecordedAppointmentPayment[] };
+export type AppointmentPaymentBalance = { outstandingCents: number; refundableCents: number; packageRedeemed: boolean; payments: RecordedAppointmentPayment[] };
 
 export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantDb>, tenantId: string, bookingId: string) {
   const [[balance], payments] = await Promise.all([
     db<Omit<AppointmentPaymentBalance, "payments">[]>`
-    SELECT CASE WHEN b.status = 'cancelled' OR EXISTS (
+    SELECT CASE WHEN b.status = 'cancelled' OR package.redeemed THEN 0
+        ELSE greatest(b.booked_price_cents + b.no_show_charge_cents - payment.net, 0) END::int AS "outstandingCents",
+      greatest(payment.regular_net, 0)::int AS "refundableCents", package.redeemed AS "packageRedeemed"
+    FROM bookings b
+    CROSS JOIN LATERAL (SELECT EXISTS (
         SELECT 1 FROM commerce_entitlement_entries ce
         WHERE ce.tenant_id = b.tenant_id AND ce.booking_id = b.id AND ce.kind = 'redeem' AND ce.package_id IS NOT NULL
-      ) THEN 0 ELSE greatest(b.booked_price_cents - payment.net, 0) END::int AS "outstandingCents",
-      greatest(payment.regular_net, 0)::int AS "refundableCents"
-    FROM bookings b
+      ) AS redeemed) package
     CROSS JOIN LATERAL (
       SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0) AS net,
         coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END)
@@ -27,7 +29,7 @@ export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantD
 export async function canCompleteNoShow(db: Pick<ReturnType<typeof tenantDb>, "unsafe">, tenantId: string, bookingId: string) {
   const [booking] = await db.unsafe<{ eligible: boolean }[]>(`
     SELECT (
-      b.booked_price_cents = 0 OR EXISTS (
+      b.booked_price_cents + b.no_show_charge_cents = 0 OR EXISTS (
         SELECT 1 FROM commerce_entitlement_entries ce
         WHERE ce.tenant_id = b.tenant_id AND ce.booking_id = b.id AND ce.kind = 'redeem' AND ce.package_id IS NOT NULL
       ) OR coalesce((

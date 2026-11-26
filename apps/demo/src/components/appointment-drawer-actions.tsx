@@ -6,7 +6,7 @@ import type { AttendanceResult, BookingDetailsResult } from "@/app/app/calendars
 import { useRouter } from "next/navigation";
 import { showSuccessToast } from "@/lib/waybook/toast";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
-import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
+import { AppointmentPaymentForm, PaymentMethodOptions } from "@/components/appointment-payment-form";
 import { RescheduleSlotPicker } from "@/components/reschedule-slot-picker";
 import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
@@ -164,8 +164,11 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
   const [savingDetails, setSavingDetails] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [statusNotice, setStatusNotice] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
   const [selection, setSelection] = useState({ from: "", to: "" });
   const selectedStatus = selection.from === status ? selection.to : "";
+  const inlinePayment = status === "no_show" && paymentBalance && !paymentBalance.packageRedeemed && paymentBalance.payments.length === 0;
+  const paymentEntered = Boolean(inlinePayment && paymentAmount.trim());
   const detailsChanged = details.name !== savedDetails.name || details.email !== savedDetails.email || details.phone !== savedDetails.phone || resource !== savedDetails.resource;
 
   async function refreshDrawer(refresh?: Props["onStatusSaved"]) {
@@ -174,7 +177,7 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
   }
 
   async function saveEdits(formData: FormData) {
-    if ((!detailsChanged && !selectedStatus) || savingDetails) return;
+    if ((!detailsChanged && !selectedStatus && !paymentEntered) || savingDetails) return;
     setSavingDetails(true);
     setSaveError("");
     setStatusNotice("");
@@ -184,11 +187,12 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
         if (result.paymentRequired) {
           setStatusNotice(result.error);
           await refreshDrawer(onStatusSaved);
-        } else if (selectedStatus) setStatusNotice(result.error);
+        } else if (selectedStatus || paymentEntered) setStatusNotice(result.error);
         else setSaveError(result.error);
         return;
       }
       setSelection({ from: "", to: "" });
+      setPaymentAmount("");
       setSavedDetails({ ...details, resource });
       showSuccessToast("Changes saved");
       await refreshDrawer(onStatusSaved);
@@ -212,9 +216,17 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
   const payment = paymentBalance && (noShow || canRecordPayment || paymentBalance.payments.length > 0) ? <section>
     <h3>{noShow ? "Payment details" : "Sales ledger"}</h3>
     {paymentBalance.payments.length > 0 ? <RecordedAppointmentPayments bookingId={bookingId} payments={paymentBalance.payments} onRecorded={paymentRecorded} /> : null}
-    {canRecordPayment ? <AppointmentPaymentForm bookingId={bookingId} balance={paymentBalance}
-      onRecorded={paymentRecorded} defaultToPayment={noShow} /> : null}
-    {!canRecordPayment && paymentBalance.payments.length === 0 ? <p className="appointment-drawer__readonly">No payment is due for this appointment.</p> : null}
+    {inlinePayment ? <div className="tenant-drawer-form appointment-drawer__inline-payment">
+      <div className="tenant-drawer-form__grid">
+        <label>{paymentBalance.outstandingCents > 0 ? "Amount (DKK)" : "No-show fee (DKK)"}
+          <input form={detailsFormId} name="paymentAmount" type="number" min="0.01" step="0.01"
+            placeholder={paymentBalance.outstandingCents > 0 ? (paymentBalance.outstandingCents / 100).toFixed(2) : "0.00"}
+            value={paymentAmount} onChange={(event) => { setPaymentAmount(event.target.value); setStatusNotice(""); }} />
+        </label>
+        <label>Method<select form={detailsFormId} name="paymentMethod" defaultValue="card"><PaymentMethodOptions /></select></label>
+      </div>
+    </div> : canRecordPayment ? <AppointmentPaymentForm bookingId={bookingId} balance={paymentBalance} onRecorded={paymentRecorded} /> : null}
+    {!inlinePayment && !canRecordPayment && paymentBalance.payments.length === 0 ? <p className="appointment-drawer__readonly">No payment is due for this appointment.</p> : null}
   </section> : null;
   return <>
     {attendance}
@@ -242,8 +254,8 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
           </select>
         </label>
         {saveError ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{saveError}</p> : null}
-        <AppointmentSaveButton formId={detailsFormId} formRef={detailsFormRef} disabled={!detailsChanged && !selectedStatus}
-          pending={savingDetails} skipValidation={!detailsChanged} />
+        <AppointmentSaveButton formId={detailsFormId} formRef={detailsFormRef} disabled={!detailsChanged && !selectedStatus && !paymentEntered}
+          pending={savingDetails} skipValidation={!detailsChanged && !paymentEntered} />
       </form>
     </section>
     <AppointmentRescheduleActions bookingId={bookingId} status={status} timezone={timezone} days={days} slots={slots} reschedule={reschedule} />

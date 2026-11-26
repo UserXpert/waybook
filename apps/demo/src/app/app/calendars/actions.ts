@@ -447,13 +447,25 @@ class NoShowPaymentRequired extends Error {
 }
 
 const attendanceStatuses = ["arrived", "completed", "no_show"];
+type ManualPayment = { amountCents: number; method: string; entryId: string; actorId: string };
+
+function parseDrawerPayment(data: FormData) {
+  const amount = String(data.get("paymentAmount") ?? "").trim().replace(",", ".");
+  if (!amount) return null;
+  const method = String(data.get("paymentMethod") ?? "");
+  const amountCents = Math.round(Number(amount) * 100);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || !manualPaymentMethods.some(item => item === method) ||
+    amountCents < 1 || amountCents > 10_000_000) throw new Error("Enter a valid payment amount and method.");
+  return { amountCents, method, entryId: crypto.randomUUID() };
+}
 
 export async function updateBookingDetails(formData: FormData): Promise<BookingDetailsResult> {
   const bookingId = String(formData.get("bookingId") ?? "");
   const status = String(formData.get("status") ?? "");
   if (status && !attendanceStatuses.includes(status)) return { error: "Choose an attendance status." };
   const editDetails = formData.get("editDetails") !== "false";
-  if (!editDetails && !status) return { error: null };
+  const paymentEntered = String(formData.get("paymentAmount") ?? "").trim() !== "";
+  if (!editDetails && !status && !paymentEntered) return { error: null };
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
@@ -462,8 +474,11 @@ export async function updateBookingDetails(formData: FormData): Promise<BookingD
   const { tenant, db, booking } = context;
   const identity = await requireIdentity();
   try {
+    const payment = parseDrawerPayment(formData);
     await withSerializableRetry(() => db.begin(async (transaction) => {
-      if (status) await persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), null);
+      if (status || payment) await persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), null,
+        payment ? { ...payment, actorId: identity.id } : undefined);
+
       if (!editDetails) return;
       const [customer] = await transaction.unsafe<{ id: string; status: string }[]>("SELECT customer_id AS id, status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
       if (!customer) throw new Error("Booking is unavailable.");
@@ -580,6 +595,7 @@ async function persistBookingStatus(
   status: string,
   expectedStatus: FormDataEntryValue | null,
   actorId: string | null,
+  noShowPayment?: ManualPayment,
 ) {
   // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
   const [block] = await transaction.unsafe<{ state: string }[]>(
@@ -588,8 +604,8 @@ async function persistBookingStatus(
   );
   if (!block) throw new Error("Booking availability is unavailable.");
 
-  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
-    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date; bookedPriceCents: number; noShowChargeCents: number }[]>(
+    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt", booked_price_cents AS "bookedPriceCents", no_show_charge_cents AS "noShowChargeCents" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
     [booking.id, tenant.id],
   );
   if (!current) throw new Error("Booking is unavailable.");
@@ -609,9 +625,22 @@ async function persistBookingStatus(
     arrived: ["completed", "no_show", "cancelled"],
     no_show: ["completed"],
   };
-  if (!allowedTransitions[current.status]?.includes(status)) {
+  if (status && !allowedTransitions[current.status]?.includes(status)) {
     throw new Error("That appointment status change is not allowed.");
   }
+
+  if (noShowPayment) {
+    if (current.status !== "no_show") throw new Error("This payment can only be entered for a no-show.");
+    if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
+      throw new Error("A payment is already recorded. Edit or delete it before recording another.");
+    }
+    if (current.bookedPriceCents === 0 && current.noShowChargeCents === 0) {
+      await transaction.unsafe("UPDATE bookings SET no_show_charge_cents=$1, updated_at=now() WHERE tenant_id=$2 AND id=$3",
+        [noShowPayment.amountCents, tenant.id, booking.id]);
+    }
+    await insertManualPaymentEntry(transaction, tenant.id, booking.id, "payment", noShowPayment);
+  }
+  if (!status) return null;
 
   if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
     throw new NoShowPaymentRequired();
@@ -675,6 +704,21 @@ export async function cancelAppointment(formData: FormData): Promise<Cancellatio
 export type PaymentState = { error: string | null; success: string | null };
 
 /** Appends a tenant-recorded payment or refund; corrections are never destructive. */
+async function insertManualPaymentEntry(
+  transaction: TransactionSql,
+  tenantId: string,
+  bookingId: string,
+  kind: "payment" | "refund",
+  { entryId, amountCents, method, actorId }: ManualPayment,
+) {
+  const [payment] = await transaction.unsafe<{ id: string }[]>(
+    "INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+    [entryId, tenantId, bookingId, kind, amountCents, method, actorId],
+  );
+  await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)", [tenantId, bookingId, actorId, `payment.${kind}`, { paymentId: payment.id, amountCents, method }]);
+  await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenantId, actorId, `payment.${kind}_recorded`, payment.id, { bookingId: bookingId, amountCents, method }]);
+}
+
 export async function recordPayment(formData: FormData): Promise<PaymentState> {
   const kind = String(formData.get("kind") ?? "");
   try {
@@ -714,12 +758,8 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
           throw new Error("A payment is already recorded. Edit or delete it before recording another.");
         }
       }
-      const [payment] = await transaction.unsafe<{ id: string }[]>(
-        "INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
-        [entryId, tenant.id, booking.id, kind, amountCents, method, identity.id],
-      );
-      await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)", [tenant.id, booking.id, identity.id, `payment.${kind}`, { paymentId: payment.id, amountCents, method }]);
-      await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenant.id, identity.id, `payment.${kind}_recorded`, payment.id, { bookingId: booking.id, amountCents, method }]);
+      await insertManualPaymentEntry(transaction, tenant.id, booking.id, kind,
+        { entryId, amountCents, method, actorId: identity.id });
     });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not record this payment.", success: null };

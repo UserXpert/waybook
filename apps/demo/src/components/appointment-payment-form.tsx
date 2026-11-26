@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { recordPayment, type PaymentState } from "@/app/app/calendars/actions";
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, secondary = false, defaultToPayment = false }: {
+export function PaymentMethodOptions() {
+  return <><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></>;
+}
+
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, secondary = false }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
   secondary?: boolean;
-  defaultToPayment?: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<PaymentState>({ error: null, success: null });
@@ -20,7 +23,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, seconda
   const interrupted = useRef<FormData | null>(null);
   const { outstandingCents, refundableCents, payments } = balance;
   const canAddPayment = payments.length === 0 && outstandingCents > 0;
-  const [kind, setKind] = useState(defaultToPayment && canAddPayment ? "payment" : "");
+  const [kind, setKind] = useState("");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const amount = draftAmount ?? (kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "");
   const editingDisabled = pending || retryRequired;
@@ -68,7 +71,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, seconda
         {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
         <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>
       </select></label>
-      <label>Method<select name="method" defaultValue="card" disabled={editingDisabled}><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
+      <label>Method<select name="method" defaultValue="card" disabled={editingDisabled}><PaymentMethodOptions /></select></label>
       <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
     </div>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
