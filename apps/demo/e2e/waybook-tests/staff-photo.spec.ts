@@ -341,7 +341,7 @@ for (const workspaceCase of [
     const [staff] = await tenant`INSERT INTO team_members (tenant_id,identity_id,role,name,email) VALUES (${workspace.id},${identity.id},'staff','Status-only staff',${staffEmail}) RETURNING id`;
     await tenant`INSERT INTO staff_permissions (tenant_id,team_member_id,can_update_appointment_status) VALUES (${workspace.id},${staff.id},TRUE)`;
     const [settings] = await tenant<{ timezone: string }[]>`SELECT timezone FROM tenant_settings WHERE tenant_id=${workspace.id}`;
-    const [location] = await tenant<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id=${workspace.id} AND is_active=TRUE ORDER BY slug LIMIT 1`;
+    const [location] = await tenant<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id=${workspace.id} AND is_active=TRUE AND slug='primary'`;
     const [service] = await tenant<{ id: string; durationMinutes: number }[]>`SELECT s.id,s.duration_minutes AS "durationMinutes" FROM services s JOIN service_locations sl ON sl.tenant_id=s.tenant_id AND sl.service_id=s.id AND sl.location_id=${location.id} WHERE s.tenant_id=${workspace.id} AND s.is_active=TRUE LIMIT 1`;
     await tenant`INSERT INTO team_member_locations (tenant_id,team_member_id,location_id) VALUES (${workspace.id},${staff.id},${location.id}) ON CONFLICT DO NOTHING`;
     await tenant`INSERT INTO service_team_members (tenant_id,service_id,team_member_id) VALUES (${workspace.id},${service.id},${staff.id}) ON CONFLICT DO NOTHING`;

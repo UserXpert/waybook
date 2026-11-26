@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
+import { FinishAppointmentCheckout } from "@/components/appointment-attendance-journey";
+import type { AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { TableDateFields } from "@/components/table-date-fields";
 import { dateFilterParams, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { BookingListRow } from "@/components/booking-list-controls";
@@ -29,6 +31,7 @@ type SaleRow = {
   currency: string;
   startsAt: Date;
   status: string;
+  attendanceStage: AppointmentAttendanceStage | null;
   bookedPriceCents: number;
   noShowChargeCents: number;
   paidCents: number;
@@ -79,6 +82,9 @@ function activityLabel(eventType: string, clientLabel: string) {
     "booking.cancelled": "Appointment cancelled",
     "booking.completed": "Appointment completed",
     "booking.arrived": `${clientLabel} checked in`,
+    "booking.waiting_room": "Checked in to waiting room",
+    "booking.in_service": "Service started",
+    "booking.checking_out": "Checkout opened",
     "booking.no_show": "Marked as no-show",
     "payment.payment": "Payment recorded",
     "payment.refund": "Refund recorded",
@@ -132,7 +138,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     "payment-oldest": db`"lastPaymentAt" ASC NULLS LAST, "startsAt" ASC, "bookingId" ASC`,
   }[selectedSort];
   const saleRows = db`
-      SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
+      SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.attendance_stage AS "attendanceStage", b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
         c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
@@ -353,6 +359,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             </section> : null}
             {!paymentStep ? <>
               {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={`${reviewHref}&step=payment`}>Go to payments</Link> : null}
+              {selectedSale.attendanceStage === "checking_out" && balance === 0 ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
               {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
                 <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
               </section> : null}
