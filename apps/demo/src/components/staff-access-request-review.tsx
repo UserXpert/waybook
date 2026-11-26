@@ -29,7 +29,7 @@ export function StaffAccessRequestPanel({ requests }: { requests: OutstandingSta
     <>
       <section className="waybook-data-card staff-access-requests__summary" aria-label="Staff access requests">
         <h2>Staff access requests ({requests.length})</h2>
-        <button ref={opener} className="waybook-row-link" type="button" aria-haspopup="dialog" onClick={() => {
+        <button ref={opener} className="waybook-action waybook-action--secondary" type="button" aria-haspopup="dialog" onClick={() => {
           setOpen(true);
           router.refresh();
         }}>See requests</button>
@@ -87,8 +87,8 @@ function StaffAccessRequestReview({ request }: { request: OutstandingStaffAccess
           <>
             <p>Delete this request{invited ? " and revoke its invitation" : ""}?</p>
             <div className="staff-access-requests__actions">
-              <button ref={confirmButton} type="submit" name="intent" value="delete" disabled={pending} className="waybook-primary-link">Confirm delete</button>
-              <button type="button" className="waybook-row-link" disabled={pending} onClick={() => {
+              <button ref={confirmButton} type="submit" name="intent" value="delete" disabled={pending} className="waybook-action waybook-action--danger">Confirm delete</button>
+              <button type="button" className="waybook-action waybook-action--secondary" disabled={pending} onClick={() => {
                 setConfirmDelete(false);
                 requestAnimationFrame(() => deleteButton.current?.focus());
               }}>Cancel</button>
@@ -96,14 +96,14 @@ function StaffAccessRequestReview({ request }: { request: OutstandingStaffAccess
           </>
         ) : (
           <div className="staff-access-requests__actions">
-            <button type="submit" name="intent" value={invited ? "resend" : "grant"} disabled={pending} className="waybook-primary-link">
+            <button type="submit" name="intent" value={invited ? "resend" : "grant"} disabled={pending} className={invited ? "waybook-action waybook-action--secondary" : "waybook-action"}>
               {pending ? "Emailing invitation…" : invited ? "Resend invitation" : "Grant access"}
             </button>
-            <button ref={deleteButton} type="button" className="waybook-row-link" disabled={pending} onClick={() => setConfirmDelete(true)}>Delete request</button>
+            <button ref={deleteButton} type="button" className="waybook-action waybook-action--secondary" disabled={pending} onClick={() => setConfirmDelete(true)}>Delete request</button>
           </div>
         )}
-        {!pending && state.error ? <p role="alert">{state.error}</p> : null}
-        {!pending && state.sent ? <p role="status">Invitation emailed to {request.email}.</p> : null}
+        {!pending && state.error ? <p className="waybook-feedback waybook-feedback--error" role="alert">{state.error}</p> : null}
+        {!pending && state.sent ? <p className="waybook-feedback waybook-feedback--success" role="status">Invitation emailed to {request.email}.</p> : null}
       </form>
     </li>
   );

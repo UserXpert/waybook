@@ -506,14 +506,6 @@ body {
 
 .staff-access-requests__summary h2 { margin: 0; }
 
-.staff-access-requests__summary button.waybook-row-link,
-.staff-access-requests button.waybook-row-link {
-  background: transparent;
-  border: 0;
-  font-family: inherit;
-  cursor: pointer;
-}
-
 .staff-access-requests ul {
   display: grid;
   margin: 0;
@@ -524,7 +516,7 @@ body {
 .staff-access-requests li {
   display: grid;
   gap: .75rem;
-  border-bottom: 1px solid var(--waybook-border, #dce5df);
+  border-bottom: 1px solid var(--wb-dark-border-subtle, #e7e7ea);
   padding: 1rem 0;
 }
 
@@ -532,6 +524,7 @@ body {
   display: block;
   overflow-wrap: anywhere;
   font-size: .85rem;
+  color: var(--wb-dark-muted, #65656d);
 }
 
 .staff-access-requests li small { margin-top: .3rem; font-weight: 500; }
@@ -829,7 +822,8 @@ body {
 
 /* Shared drawer action baseline. Keep submit controls as usable controls rather
    than relying on browser-default button metrics in newly added drawers. */
-.tenant-dashboard-page .tenant-drawer-form > button:not(.staff-multi-toggle) {
+.tenant-dashboard-page .tenant-drawer-form > button:not(.staff-multi-toggle),
+.tenant-dashboard-page .waybook-action {
   min-height: 2.5rem;
   border: 1px solid var(--waybook-accent);
   border-radius: .45rem;
@@ -842,6 +836,28 @@ body {
   line-height: 1;
   cursor: pointer;
 }
+
+.tenant-dashboard-page .waybook-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.tenant-dashboard-page .waybook-action:hover { background: var(--waybook-accent-ink); }
+.tenant-dashboard-page .waybook-action:focus-visible {
+  outline: 2px solid var(--waybook-accent);
+  outline-offset: 2px;
+}
+.tenant-dashboard-page .waybook-action:disabled { opacity: .55; cursor: default; }
+.tenant-dashboard-page .waybook-action--secondary {
+  border-color: var(--wb-dark-border, #d4d4d4);
+  background: var(--wb-dark-surface, #fff);
+  color: var(--wb-dark-text, #171717);
+}
+.tenant-dashboard-page .waybook-action--secondary:hover { background: var(--wb-dark-raised, #f4f4f5); }
+.tenant-dashboard-page .waybook-action--danger { border-color: #963e36; background: #963e36; }
+.tenant-dashboard-page .waybook-action--danger:hover { border-color: #79312b; background: #79312b; }
 
 .tenant-dashboard-page .tenant-inline-form { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.2fr) 6rem auto; align-items: end; gap: .65rem; }
 .tenant-dashboard-page .tenant-inline-form label { display: grid; gap: .35rem; color: #525252; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
@@ -3597,9 +3613,27 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .email-workspace__sidebar a:hover,.tenant-dashboard-page .email-workspace__sidebar a[aria-current="page"] { background:#e9e9ec; color:#171717; }
 .tenant-dashboard-page .email-workspace__sidebar a[aria-current="page"] { font-weight:600; }
 .tenant-dashboard-page .email-workspace__main { min-width:0; padding:1.5rem 1.75rem; }
-.tenant-dashboard-page .email-delivery-warning { display:flex; flex-wrap:wrap; gap:.4rem .8rem; margin-bottom:1.25rem; border:1px solid #dfc791; border-radius:.55rem; padding:.75rem .9rem; background:#fff8e8; color:#624714; font-size:.8rem; line-height:1.45; }
-.tenant-dashboard-page .email-delivery-warning a { color:inherit; font-weight:600; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .email-delivery-warning { border-color:#66512e; background:#302719; color:#f1dca6; }
+.tenant-dashboard-page .waybook-feedback {
+  border: 1px solid transparent;
+  border-radius: .55rem;
+  padding: .75rem .9rem;
+  font-size: .8rem;
+  line-height: 1.45;
+}
+.tenant-dashboard-page .waybook-feedback--warning { border-color:#dfc791; background:#fff8e8; color:#624714; }
+.tenant-dashboard-page .waybook-feedback--error { background:#fcebea; color:#963e36; }
+.tenant-dashboard-page .waybook-feedback--success { background:#e8f5ed; color:#27604f; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--warning { border-color:#66512e; background:#302719; color:#f1dca6; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--error { background:#4a1f1e; color:#ffc1bb; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-feedback--success { background:#123b2b; color:#a8ebc8; }
+.tenant-dashboard-page .email-delivery-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem .8rem;
+  margin-bottom: 1.25rem;
+}
 .tenant-dashboard-page .email-workspace__heading h1 { margin:0; color:#171717; font-size:1.5rem; letter-spacing:-.03em; }
 .tenant-dashboard-page .email-workspace__heading p { margin:.4rem 0 0; color:#707078; font-size:.82rem; }
 .tenant-dashboard-page .email-workspace .emails-search { margin:1.4rem 0 1rem; }
