@@ -108,6 +108,22 @@ merchant-approved. Do not create a multi-provider checkout or collect
 provider API keys before the Stripe lifecycle above has passed end-to-end
 tests.
 
+The sandbox onboarding slice gives workspace owners a **Payments** tab in a
+test deployment. After Control migration 0007, configure
+`WAYBOOK_STRIPE_SANDBOX_SECRET_KEY` with a Stripe sandbox platform key and
+`WAYBOOK_STRIPE_SANDBOX_ORIGIN` with the test application's origin. Apply the
+migration before enabling the settings. For local testing, use an isolated
+Control database and tenant databases.
+
+The owner can create a Danish merchant through Stripe-hosted Accounts v2
+onboarding, resume an expired link, and see the card capability reported by
+Stripe. Waybook stores the sandbox account ID and a retry key in Control.
+An interrupted creation reuses the key inside Stripe’s replay window.
+An unresolved attempt beyond that window requires reconciliation. Account
+verification is checked on return and refreshed from Stripe. Existing-account
+connection, payment attempts, settlement events and refunds are tracked in
+issue [#30](https://github.com/UserXpert/waybook/issues/30).
+
 ## Planned: two distinct Waybook money products (2026-11-08)
 
 These flows must never share a balance, provider credential, or ledger:
