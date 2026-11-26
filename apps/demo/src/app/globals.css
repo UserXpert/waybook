@@ -4358,7 +4358,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .recorded-appointment-payments + .appointment-payment-form { margin-top: .85rem; }
 
 .appointment-attendance { display: grid; gap: .65rem; margin-top: .6rem; }
-.appointment-attendance > .waybook-action { justify-self: start; }
 .tenant-dashboard-page .appointment-drawer .appointment-attendance .appointment-drawer__status-actions button:disabled {
   opacity: .5;
   cursor: default;

@@ -123,7 +123,7 @@ for (const tenant of [
     await review.getByRole("link", { name: "Review booking" }).click();
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("booking") === fixture.booking.id);
     await page.getByRole("button", { name: "Completed", exact: true }).click();
-    await page.getByRole("button", { name: "Save status", exact: true }).click();
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByText("This appointment’s status is final and cannot be changed.")).toBeVisible();
     await page.goto(`${app}/notifications`);
     await expect(review).toHaveCount(0);

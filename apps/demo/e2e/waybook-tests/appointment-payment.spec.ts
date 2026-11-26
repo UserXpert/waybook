@@ -67,7 +67,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
       { kind: "refund", amount_cents: 4_025, method: "cash" },
     ]);
 
-    await page.goto("/nordic/app/reports?range=7");
+    await page.goto("/nordic/app/reports?range=7&sort=newest");
     const paymentRows = page.getByRole("row").filter({ hasText: customerName });
     const money = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
     const rowFor = (kind: string) => paymentRows.filter({ has: page.getByRole("cell", { name: kind, exact: true }) });

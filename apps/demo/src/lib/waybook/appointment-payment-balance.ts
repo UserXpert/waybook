@@ -23,7 +23,7 @@ export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantD
   return balance ? { ...balance, payments } : null;
 }
 
-/** Return only eligibility for attendance-only staff, who cannot view payments. */
+/** Check completion inside the status transaction without exposing the payment ledger. */
 export async function canCompleteNoShow(db: Pick<ReturnType<typeof tenantDb>, "unsafe">, tenantId: string, bookingId: string) {
   const [booking] = await db.unsafe<{ eligible: boolean }[]>(`
     SELECT (

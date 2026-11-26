@@ -17,16 +17,8 @@
   color: #a52c23;
 }
 
-@media (prefers-color-scheme: dark) {
-  .saveNotice {
-    border-color: #2c7555;
-    background: #123b2b;
-    color: #a8ebc8;
-  }
-
-  .error {
-    border-color: #98433e;
-    background: #4a1f1e;
-    color: #ffc1bb;
-  }
+:global(:root[data-waybook-theme="dark"]) .saveNotice.error {
+  border-color: #98433e;
+  background: #4a1f1e;
+  color: #ffc1bb;
 }

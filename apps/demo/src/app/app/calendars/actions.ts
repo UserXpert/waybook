@@ -3,6 +3,7 @@
 import { activeAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
+import type { TransactionSql } from "postgres";
 import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
 import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
 import { fromZonedTime } from "date-fns-tz";
@@ -125,7 +126,7 @@ export async function getCalendarAppointment(bookingId: string) {
   if (!booking) throw new Error("Booking is unavailable.");
   const { teamMemberId, ...detail } = booking;
   const canManageSchedule = canManageAppointment(permissions, teamMemberId);
-  const [resources, paymentBalance, noShowCompletionEligible] = await Promise.all([
+  const [resources, paymentBalance] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -133,7 +134,6 @@ export async function getCalendarAppointment(bookingId: string) {
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [],
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
-    booking.status !== "no_show" || ((permissions.isManager || permissions.canUpdateAppointmentStatus) && canCompleteNoShow(db, tenant.id, bookingId)),
   ]);
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
@@ -155,7 +155,6 @@ export async function getCalendarAppointment(bookingId: string) {
     canManage: permissions.isManager,
     canManageSchedule,
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
-    noShowCompletionEligible,
     canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
     resources,
     paymentBalance,
@@ -439,18 +438,33 @@ export async function getCalendarBookingMoveTargets(input: {
   }
 }
 
-export type BookingDetailsResult = { error: string | null };
+export type BookingDetailsResult = { error: string | null; paymentRequired?: boolean };
+
+class NoShowPaymentRequired extends Error {
+  constructor() {
+    super("Record a payment before marking this no-show as completed.");
+  }
+}
+
+const attendanceStatuses = ["arrived", "completed", "no_show"];
 
 export async function updateBookingDetails(formData: FormData): Promise<BookingDetailsResult> {
   const bookingId = String(formData.get("bookingId") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (status && !attendanceStatuses.includes(status)) return { error: "Choose an attendance status." };
+  const editDetails = formData.get("editDetails") !== "false";
+  if (!editDetails && !status) return { error: null };
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
-  if (!name || !email.includes("@")) throw new Error("Enter the customer name and a valid email.");
-  const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+  if (editDetails && (!name || !email.includes("@"))) throw new Error("Enter the customer name and a valid email.");
+  const context = await editableBooking(bookingId, "manager");
+  const { tenant, db, booking } = context;
   const identity = await requireIdentity();
   try {
-    await db.begin(async (transaction) => {
+    await withSerializableRetry(() => db.begin(async (transaction) => {
+      if (status) await persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), null);
+      if (!editDetails) return;
       const [customer] = await transaction.unsafe<{ id: string; status: string }[]>("SELECT customer_id AS id, status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
       if (!customer) throw new Error("Booking is unavailable.");
       // The drawer intentionally permits edits for completed appointments and keeps
@@ -474,13 +488,14 @@ export async function updateBookingDetails(formData: FormData): Promise<BookingD
       }
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.edited', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.edited', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ fields: ["name", "email", "phone"] })]);
-    });
+    }));
   } catch (error) {
+    if (error instanceof NoShowPaymentRequired) return { error: error.message, paymentRequired: true };
     if (error instanceof Error && "code" in error && error.code === "P0001"
       && error.message === "exclusive resource is already assigned for this appointment time") {
       return { error: "This resource is already assigned for this appointment time." };
     }
-    throw error;
+    return { error: error instanceof Error ? error.message : "Could not save appointment changes." };
   }
   revalidateCalendars();
   return { error: null };
@@ -559,77 +574,88 @@ export async function moveBookingOnCalendar(input: { bookingId: string; startsAt
   }
 }
 
+async function persistBookingStatus(
+  transaction: TransactionSql,
+  { tenant, booking }: EditableBooking,
+  status: string,
+  expectedStatus: FormDataEntryValue | null,
+  actorId: string | null,
+) {
+  // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
+  const [block] = await transaction.unsafe<{ state: string }[]>(
+    "SELECT state FROM booking_blocks WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+    [booking.bookingBlockId, tenant.id],
+  );
+  if (!block) throw new Error("Booking availability is unavailable.");
+
+  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
+    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+    [booking.id, tenant.id],
+  );
+  if (!current) throw new Error("Booking is unavailable.");
+  if (status !== "cancelled" && current.status !== expectedStatus) {
+    throw new Error("The appointment status has changed. Reopen the appointment and try again.");
+  }
+  // A repeated click or an in-flight duplicate cancellation is a safe no-op.
+  if (current.status === "cancelled" && status === "cancelled") return null;
+  if (["completed", "cancelled"].includes(current.status)) {
+    throw new Error("This appointment has a final status and cannot be changed.");
+  }
+  if (status !== "cancelled" && !canChangeAttendanceNow(current)) {
+    throw new Error("Attendance cannot be updated before the appointment is eligible.");
+  }
+  const allowedTransitions: Record<string, string[]> = {
+    confirmed: ["arrived", "completed", "no_show", "cancelled"],
+    arrived: ["completed", "no_show", "cancelled"],
+    no_show: ["completed"],
+  };
+  if (!allowedTransitions[current.status]?.includes(status)) {
+    throw new Error("That appointment status change is not allowed.");
+  }
+
+  if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
+    throw new NoShowPaymentRequired();
+  }
+
+  await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
+  let cancellationOutboxId: string | null = null;
+  if (status === "cancelled") {
+    await refundGiftCardOnCancellation(transaction as unknown as ReturnType<typeof tenantDb>, tenant.id, booking.id, actorId);
+    await transaction.unsafe("UPDATE booking_blocks SET state = 'cancelled' WHERE id = $1 AND tenant_id = $2", [booking.bookingBlockId, tenant.id]);
+    const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'cancellation', $3, $4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id })]);
+    cancellationOutboxId = entry.id;
+  }
+  await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, $3, $4::text::jsonb)", [tenant.id, booking.id, `booking.${status}`, JSON.stringify({ previousStatus: current.status })]);
+  await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking', $3, $4::text::jsonb)", [tenant.id, `booking.${status}`, booking.id, JSON.stringify({ previousStatus: current.status })]);
+  return cancellationOutboxId;
+}
+
 async function updateBookingStatus(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!["arrived", "completed", "no_show", "cancelled"].includes(status)) throw new Error("Choose a valid appointment status.");
-  const { tenant, db, booking } = await editableBooking(bookingId, status === "cancelled" ? "appointment" : "status");
+  const context = await editableBooking(bookingId, status === "cancelled" ? "appointment" : "status");
+  const { tenant, db, booking } = context;
   const actor = status === "cancelled" ? await requireIdentity() : null;
   if (status === "cancelled" && booking.status === "completed") throw new Error("Completed appointments cannot be cancelled.");
-  const outboxId = await withSerializableRetry(() => db.begin(async (transaction) => {
-    // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
-    const [block] = await transaction.unsafe<{ state: string }[]>(
-      "SELECT state FROM booking_blocks WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
-      [booking.bookingBlockId, tenant.id],
-    );
-    if (!block) throw new Error("Booking availability is unavailable.");
-
-    const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
-      'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
-      [booking.id, tenant.id],
-    );
-    if (!current) throw new Error("Booking is unavailable.");
-    const expectedStatus = formData.get("expectedStatus");
-    if (status !== "cancelled" && current.status !== expectedStatus) {
-      throw new Error("The appointment status has changed. Reopen the appointment and try again.");
-    }
-    // A repeated click or an in-flight duplicate cancellation is a safe no-op.
-    if (current.status === "cancelled" && status === "cancelled") return null;
-    if (["completed", "cancelled"].includes(current.status)) {
-      throw new Error("This appointment has a final status and cannot be changed.");
-    }
-    if (status !== "cancelled" && !canChangeAttendanceNow(current)) {
-      throw new Error("Attendance cannot be updated before the appointment is eligible.");
-    }
-    const allowedTransitions: Record<string, string[]> = {
-      confirmed: ["arrived", "completed", "no_show", "cancelled"],
-      arrived: ["completed", "no_show", "cancelled"],
-      no_show: ["completed"],
-    };
-    if (!allowedTransitions[current.status]?.includes(status)) {
-      throw new Error("That appointment status change is not allowed.");
-    }
-
-    if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
-      throw new Error("Record a payment before marking this no-show as completed.");
-    }
-
-    await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
-    let cancellationOutboxId: string | null = null;
-    if (status === "cancelled") {
-      await refundGiftCardOnCancellation(transaction as unknown as ReturnType<typeof tenantDb>, tenant.id, booking.id, actor?.id ?? null);
-      await transaction.unsafe("UPDATE booking_blocks SET state = 'cancelled' WHERE id = $1 AND tenant_id = $2", [booking.bookingBlockId, tenant.id]);
-      const [entry] = await transaction.unsafe<{ id: string }[]>("INSERT INTO email_outbox (tenant_id, booking_id, message_type, recipient, payload) VALUES ($1, $2, 'cancellation', $3, $4::text::jsonb) RETURNING id", [tenant.id, booking.id, booking.customerEmail, JSON.stringify({ bookingId: booking.id })]);
-      cancellationOutboxId = entry.id;
-    }
-    await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, $3, $4::text::jsonb)", [tenant.id, booking.id, `booking.${status}`, JSON.stringify({ previousStatus: current.status })]);
-    await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking', $3, $4::text::jsonb)", [tenant.id, `booking.${status}`, booking.id, JSON.stringify({ previousStatus: current.status })]);
-    return cancellationOutboxId;
-  }));
+  const outboxId = await withSerializableRetry(() => db.begin((transaction) =>
+    persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), actor?.id ?? null),
+  ));
   promptEmailDelivery(tenant, outboxId);
   revalidateCalendars();
 }
 
-export type AttendanceResult = { error: string | null };
+export type AttendanceResult = BookingDetailsResult;
 
 export async function saveAppointmentAttendance(formData: FormData): Promise<AttendanceResult> {
   try {
-    if (!["arrived", "completed", "no_show"].includes(String(formData.get("status")))) {
+    if (!attendanceStatuses.includes(String(formData.get("status")))) {
       throw new Error("Choose an attendance status.");
     }
     await updateBookingStatus(formData);
     return { error: null };
   } catch (error) {
+    if (error instanceof NoShowPaymentRequired) return { error: error.message, paymentRequired: true };
     return { error: error instanceof Error ? error.message : "Could not save appointment status." };
   }
 }

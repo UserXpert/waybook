@@ -24,7 +24,7 @@ test("calendar attendance saves explicitly and requires a recorded payment to co
         (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents)
         VALUES (${settings.tenant_id},${block.id},${service.id},${member.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'arrived',25050)
         RETURNING id`;
-      return { ...result, startsAt: new Date(block.starts_at), location: location.id, employee: member.id };
+      return { ...result, customerId: customer.id, startsAt: new Date(block.starts_at), location: location.id, employee: member.id };
     });
 
     await page.emulateMedia({ colorScheme: testInfo.project.name === "mobile" ? "dark" : "light" });
@@ -57,23 +57,35 @@ test("calendar attendance saves explicitly and requires a recorded payment to co
 
     const noShow = drawer.getByRole("button", { name: "No show", exact: true });
     const complete = drawer.getByRole("button", { name: "Completed", exact: true });
-    const save = drawer.getByRole("button", { name: "Save status" });
+    const save = drawer.getByRole("button", { name: "Save changes", exact: true });
     await expect(save).toBeDisabled();
     await noShow.click();
     await expect(noShow).toHaveAttribute("aria-pressed", "true");
     expect(await readStatus()).toBe("arrived");
     await save.click();
     await expect.poll(readStatus).toBe("no_show");
-    await expect(complete).toBeDisabled();
-    await expect(drawer.getByText("Record a payment before marking this no-show as completed.")).toBeVisible();
+    await expect(complete).toBeEnabled();
+    const paymentNotice = "Record a payment before marking this no-show as completed.";
+    await expect(drawer.getByText(paymentNotice)).toHaveCount(0);
     await expect(save).toBeDisabled();
+    await complete.click();
+    const phone = "+45 55 42 11 01";
+    await drawer.getByLabel("Phone", { exact: true }).fill(phone);
+    const savedPhone = async () => (await db`SELECT phone FROM customers WHERE id=${booking.customerId}`)[0].phone;
+    await save.click();
+    await expect(drawer.getByRole("alert")).toContainText(paymentNotice);
+    expect(await readStatus()).toBe("no_show");
+    expect(await savedPhone()).toBeNull();
+    await expect(drawer.getByLabel("Phone", { exact: true })).toHaveValue(phone);
 
     const form = drawer.locator(".appointment-payment-form");
+    await expect(drawer.getByRole("heading", { name: "Payment details" })).toBeVisible();
     await expect(form.getByLabel("Amount (DKK)")).toHaveValue("250.50");
+    await expect(form.getByRole("combobox", { name: "Payment", exact: true })).toHaveValue("payment");
     const recordPayment = async () => {
       await form.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment");
       await form.getByRole("button", { name: "Record entry" }).click();
-      await expect(complete).toBeEnabled();
+      await expect(drawer.getByRole("button", { name: "Delete payment", exact: true })).toBeVisible();
     };
     await recordPayment();
 
@@ -84,8 +96,8 @@ test("calendar attendance saves explicitly and requires a recorded payment to co
       await staleDrawer.getByRole("button", { name: "Completed", exact: true }).click();
       await drawer.getByRole("button", { name: "Delete payment", exact: true }).click();
       await drawer.getByRole("button", { name: "Confirm deletion" }).click();
-      await expect(complete).toBeDisabled();
-      await staleDrawer.getByRole("button", { name: "Save status" }).click();
+      await expect(form.getByRole("button", { name: "Record entry" })).toBeVisible();
+      await staleDrawer.getByRole("button", { name: "Save changes" }).click();
       await expect(staleDrawer.getByRole("alert")).toContainText("Record a payment before marking this no-show as completed.");
       expect(await readStatus()).toBe("no_show");
     } finally {
@@ -93,11 +105,11 @@ test("calendar attendance saves explicitly and requires a recorded payment to co
     }
 
     await recordPayment();
-    await complete.click();
     await expect(complete).toHaveAttribute("aria-pressed", "true");
     expect(await readStatus()).toBe("no_show");
     await save.click();
     await expect.poll(readStatus).toBe("completed");
+    expect(await savedPhone()).toBe(phone);
     await expect(drawer.getByText("This appointment’s status is final and cannot be changed.")).toBeVisible();
     await close.click();
     await expect(drawer).toHaveCount(0);

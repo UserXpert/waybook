@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { recordPayment, type PaymentState } from "@/app/app/calendars/actions";
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, secondary = false }: {
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, secondary = false, defaultToPayment = false }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
   secondary?: boolean;
+  defaultToPayment?: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<PaymentState>({ error: null, success: null });
@@ -19,7 +20,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, seconda
   const interrupted = useRef<FormData | null>(null);
   const { outstandingCents, refundableCents, payments } = balance;
   const canAddPayment = payments.length === 0 && outstandingCents > 0;
-  const [kind, setKind] = useState("");
+  const [kind, setKind] = useState(defaultToPayment && canAddPayment ? "payment" : "");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const amount = draftAmount ?? (kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "");
   const editingDisabled = pending || retryRequired;
