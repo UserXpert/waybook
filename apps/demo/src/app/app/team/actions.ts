@@ -16,7 +16,7 @@ import { deleteStaffAccessRequest, inviteFromStaffAccessRequest } from "@/lib/wa
 import { staffInvitationEmailConfig } from "@/lib/waybook/staff-invitation-email";
 import { requireFeature } from "@/lib/waybook/features";
 import { isStaffCalendarColor } from "@/lib/waybook/staff-calendar-colors";
-import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
+import { staffLifecycleCapabilities } from "@/lib/waybook/staff-lifecycle";
 import { staffRoleIdPattern } from "@/lib/waybook/staff-role-fields";
 import { enforceReadOnlyPermissions } from "@/lib/waybook/read-only-permissions";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
@@ -39,7 +39,7 @@ async function ownerStaffTenant() {
 
 async function validStaffMember(tenant: TenantRecord, memberId: string) {
   const db = tenantDb(tenant);
-  const [member] = await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`;
+  const [member] = await db<{ id: string }[]>`SELECT id FROM team_members tm WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND to_jsonb(tm)->>'deleted_at' IS NULL`;
   if (!member) throw new Error("Staff member is unavailable.");
   return db;
 }
@@ -244,9 +244,9 @@ export async function saveTeamMember(_: StaffDetailsState, formData: FormData): 
   let member: { id: string } | undefined;
   try {
     [member] = assignmentsOnly
-      ? await db<{ id: string }[]>`SELECT id FROM team_members WHERE id = ${memberId} AND tenant_id = ${tenant.id}`
+      ? await db<{ id: string }[]>`SELECT id FROM team_members tm WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND to_jsonb(tm)->>'deleted_at' IS NULL`
       : memberId
-      ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, staff_role_id = ${staffRoleId}, is_active = ${isActive}, phone = ${phone}, job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END, specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END, work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END, staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END, calendar_color = COALESCE(${calendarColor}, calendar_color), updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND role <> 'owner' AND (${membership.role} = 'owner' OR (role <> 'manager' AND staff_role_id IS NOT DISTINCT FROM ${staffRoleId}::uuid)) RETURNING id`
+      ? await db<{ id: string }[]>`UPDATE team_members SET name = ${name}, email = ${email}, role = ${role}, staff_role_id = ${staffRoleId}, is_active = ${isActive}, phone = ${phone}, job_title = CASE WHEN ${formData.has("jobTitle")} THEN ${jobTitle} ELSE job_title END, specialty = CASE WHEN ${formData.has("specialty")} THEN ${specialty} ELSE specialty END, work_location = CASE WHEN ${formData.has("workLocation")} THEN ${workLocation} ELSE work_location END, staff_code = CASE WHEN ${formData.has("staffCode")} THEN ${staffCode} ELSE staff_code END, calendar_color = COALESCE(${calendarColor}, calendar_color), updated_at = now() WHERE id = ${memberId} AND tenant_id = ${tenant.id} AND to_jsonb(team_members)->>'deleted_at' IS NULL AND role <> 'owner' AND (${membership.role} = 'owner' OR (role <> 'manager' AND staff_role_id IS NOT DISTINCT FROM ${staffRoleId}::uuid)) RETURNING id`
       : await db<{ id: string }[]>`INSERT INTO team_members (tenant_id, role, staff_role_id, name, email, is_active, phone, job_title, specialty, work_location, staff_code, calendar_color) VALUES (${tenant.id}, ${role}, ${staffRoleId}, ${name}, ${email}, ${isActive}, ${phone}, ${jobTitle}, ${specialty}, ${workLocation}, ${staffCode}, ${calendarColor}) ON CONFLICT (tenant_id, email) DO NOTHING RETURNING id`;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "23505") {
@@ -391,6 +391,32 @@ export async function resetStaffPassword(formData: FormData) {
   revalidateStaff();
 }
 
+export async function deleteStaffProfile(formData: FormData): Promise<{ error?: string }> {
+  const tenant = await ownerStaffTenant();
+  const actor = await requireIdentity();
+  const memberId = String(formData.get("memberId") ?? "");
+  if (!staffRoleIdPattern.test(memberId)) return { error: "Staff member is unavailable." };
+  if (!(await staffLifecycleCapabilities(tenant)).deletion) return { error: "Staff deletion is unavailable in this workspace." };
+
+  const [deleted] = await tenantDb(tenant)`
+    WITH deleted_profile AS (
+      UPDATE team_members
+      SET deleted_at = now(), archived_at = COALESCE(archived_at, now()), updated_at = now()
+      WHERE tenant_id = ${tenant.id} AND id = ${memberId}
+        AND deleted_at IS NULL AND NOT is_active AND role <> 'owner'
+        AND identity_id IS DISTINCT FROM ${actor.id}::uuid
+      RETURNING id
+    )
+    INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
+    SELECT ${tenant.id}, ${actor.id}, 'staff.delete', 'team_member', id, '{"isActive":false}'::jsonb
+    FROM deleted_profile
+    RETURNING target_id
+  `;
+  if (!deleted) return { error: "Only an inactive or archived staff profile can be deleted." };
+  revalidateStaff();
+  return {};
+}
+
 export async function setStaffLifecycle(formData: FormData) {
   const { tenant, membership } = await requireTenantWorkspace();
   await requireFeature(tenant.id, "team");
@@ -408,16 +434,18 @@ export async function setStaffLifecycle(formData: FormData) {
   if (membership.role !== "owner" && member.role === "manager") {
     throw new Error("Only an owner can change a manager's access.");
   }
-  const lifecycleAvailable = await staffLifecycleAvailable(tenant);
+  const { archive: lifecycleAvailable } = await staffLifecycleCapabilities(tenant);
   if (["archive", "restore"].includes(action) && !lifecycleAvailable) throw new Error("Archive is available after the staff lifecycle migration is applied.");
   const isActive = ["reactivate", "restore"].includes(action);
-  if (lifecycleAvailable) {
-    const archivedAt = action === "archive" ? new Date().toISOString() : action === "restore" ? null : undefined;
-    if (archivedAt !== undefined) await db`UPDATE team_members SET is_active = ${isActive}, archived_at = ${archivedAt}, updated_at = now() WHERE id = ${member.id} AND tenant_id = ${tenant.id}`;
-    else await db`UPDATE team_members SET is_active = ${isActive}, updated_at = now() WHERE id = ${member.id} AND tenant_id = ${tenant.id}`;
-  } else {
-    await db`UPDATE team_members SET is_active = ${isActive}, updated_at = now() WHERE id = ${member.id} AND tenant_id = ${tenant.id}`;
-  }
+  const [updated] = lifecycleAvailable
+    ? await db`
+        UPDATE team_members tm SET is_active = ${isActive}, updated_at = now(),
+          archived_at = CASE ${action} WHEN 'archive' THEN now() WHEN 'restore' THEN NULL ELSE archived_at END
+        WHERE id = ${member.id} AND tenant_id = ${tenant.id} AND to_jsonb(tm)->>'deleted_at' IS NULL
+        RETURNING id
+      `
+    : await db`UPDATE team_members SET is_active = ${isActive}, updated_at = now() WHERE id = ${member.id} AND tenant_id = ${tenant.id} RETURNING id`;
+  if (!updated) throw new Error("Staff member is unavailable.");
   await db`INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES (${tenant.id}, ${actor.id}, ${`staff.${action}`}, 'team_member', ${member.id}, ${JSON.stringify({ isActive })}::jsonb)`;
   await controlDb`INSERT INTO platform_audit_events (actor_identity_id, tenant_id, action, target_type, target_id) VALUES (${actor.id}, ${tenant.id}, ${`staff.${action}`}, 'team_member', ${member.id})`;
   revalidateStaff();

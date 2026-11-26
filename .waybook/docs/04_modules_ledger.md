@@ -408,6 +408,9 @@ appointments unless their saved permission explicitly grants team visibility.
 Migration `0018_staff_lifecycle.sql` adds reversible archival. Until that
 migration is deliberately applied to a tenant database, Archive is hidden so
 the interface never claims an action succeeded when its schema is absent.
+Migration `0060_staff_profile_deletion.sql` lets owners delete inactive or
+archived non-owner profiles from the staff directory. Waybook keeps the
+disabled profile record for booking history and audits the deletion.
 
 ## Bookings and Calendars
 

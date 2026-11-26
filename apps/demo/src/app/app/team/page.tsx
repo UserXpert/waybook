@@ -22,7 +22,7 @@ import { requirePageFeature } from "@/lib/waybook/features";
 import { staffCalendarColors } from "@/lib/waybook/staff-calendar-colors";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { canManageTimeOff, staffPermissionContext, staffWorkspacePermissionsAvailable } from "@/lib/waybook/staff-permissions";
-import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
+import { staffLifecycleCapabilities } from "@/lib/waybook/staff-lifecycle";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { addStaffTimeOff, deleteStaffTimeOff, saveStaffPermissions, saveStaffPhoto, saveOwnerProfileDetails, saveTeamMember, updateStaffTimeOff } from "./actions";
 
@@ -54,7 +54,8 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
     && requestedTab === "time-off" && !createNew;
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   const db = tenantDb(tenant);
-  const archiveAvailable = await staffLifecycleAvailable(tenant);
+  const { archive: archiveAvailable, deletion: deletionAvailable } = await staffLifecycleCapabilities(tenant);
+  const visibleStaff = deletionAvailable ? " AND tm.deleted_at IS NULL" : "";
   const [photoColumn] = await db<{ available: boolean }[]>`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'team_members' AND column_name = 'photo_data_url') AS available`;
   const photosAvailable = photoColumn?.available ?? false;
   const search = (q ?? "").trim().slice(0, 100);
@@ -68,7 +69,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   ].join(", ");
   const photoSelect = photosAvailable ? 'tm.photo_data_url' : 'NULL::text';
   const staffColumns = `SELECT tm.id,tm.name,tm.email,tm.role,tm.staff_role_id AS \"staffRoleId\",sr.name AS \"staffRoleName\",tm.is_active AS \"isActive\",tm.identity_id AS \"identityId\",${archiveSelect},tm.phone,tm.job_title AS \"jobTitle\",tm.specialty,tm.work_location AS \"workLocation\",tm.staff_code AS \"staffCode\",tm.calendar_color AS \"calendarColor\",${photoSelect} AS \"photoDataUrl\" FROM team_members tm LEFT JOIN staff_roles sr ON sr.tenant_id = tm.tenant_id AND sr.id = tm.staff_role_id`;
-  const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1 AND ($2::uuid IS NULL OR tm.id=$2::uuid)
+  const staffDirectorySql = staffColumns + ` WHERE tm.tenant_id=$1${visibleStaff} AND ($2::uuid IS NULL OR tm.id=$2::uuid)
     AND ($3='' OR tm.name ILIKE $4 OR ($7::boolean AND tm.email ILIKE $4))
     AND COALESCE((${directoryKey("tm")}) > (
       SELECT ${directoryKey("boundary")} FROM team_members boundary WHERE boundary.tenant_id=$1 AND boundary.id=$5::uuid
@@ -82,7 +83,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const members = memberRows.slice(0, 50);
   const selectedFromDirectory = members.find((member) => member.id === employee);
   const selectedOutsideDirectory = !selectedFromDirectory && employee && staffIdPattern.test(employee) && (canManage || canSelectTeamTimeOff)
-    ? (await db.unsafe<StaffRow[]>(staffColumns + " WHERE tm.tenant_id=$1 AND tm.id=$2::uuid AND (NOT $3::boolean OR tm.is_active)", [tenant.id, employee, canSelectTeamTimeOff])).at(0)
+    ? (await db.unsafe<StaffRow[]>(staffColumns + ` WHERE tm.tenant_id=$1${visibleStaff} AND tm.id=$2::uuid AND (NOT $3::boolean OR tm.is_active)`, [tenant.id, employee, canSelectTeamTimeOff])).at(0)
     : undefined;
   const preferredDefault = canSelectTeamTimeOff && employee ? members.find((member) => member.id === signedInPermissions.teamMemberId) : members.at(0);
   const selected = selectedFromDirectory ?? selectedOutsideDirectory ?? preferredDefault;
@@ -169,7 +170,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           <header key={selected.id} className="staff-workspace__profile-header">
             {photosAvailable && canEditStaffPhoto(membership.role, signedInPermissions.teamMemberId, selected.id) ? <StaffPhotoUpload memberId={selected.id} name={selected.name} photoDataUrl={selected.photoDataUrl} action={saveStaffPhoto} /> : <span className="staff-workspace__avatar is-large" aria-hidden="true">{selected.photoDataUrl && !timeOffOnly ? <img src={selected.photoDataUrl} alt="" /> : selected.name.slice(0, 1)}</span>}
             <div className="staff-workspace__profile-title"><p>{timeOffOnly ? "STAFF TIME OFF" : `${terms.staff.toUpperCase()} PROFILE`}</p><h2>{selected.name}</h2>{!timeOffOnly ? <span>{selected.jobTitle ?? titleTerminology(terms.staffMember)} · {selected.isActive ? "Active and bookable" : "Inactive"}</span> : null}</div>
-            {canManage ? <StaffAccessMenu memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} canInviteWithGoogle={canInviteWithGoogle} canManagePassword={!selected.identityId || passwordAccess?.available === true} /> : null}
+            {canManage ? <StaffAccessMenu memberId={selected.id} name={selected.name} isActive={selected.isActive} hasLogin={Boolean(selected.identityId)} canManage={canManage} isOwner={membership.role === "owner"} isArchived={Boolean(selected.archivedAt)} archiveAvailable={archiveAvailable} canDelete={deletionAvailable && membership.role === "owner" && selected.role !== "owner" && !selected.isActive && selected.identityId !== (await currentIdentity())?.id} canInviteWithGoogle={canInviteWithGoogle} canManagePassword={!selected.identityId || passwordAccess?.available === true} /> : null}
           </header>
           <nav className="staff-workspace__tabs" aria-label={`${titleTerminology(terms.staff)} profile sections`}>
             {timeOffOnly && signedInPermissions.teamMemberId ? <Link href={staffPath(signedInPermissions.teamMemberId, "details")}>Your profile</Link> : null}
