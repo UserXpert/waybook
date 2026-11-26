@@ -28,8 +28,10 @@ body {
 .waybook-login-page {
   min-height: 100svh;
   display: grid;
-  place-items: center;
-  padding: clamp(1.25rem, 4vw, 4rem);
+  align-content: center;
+  justify-items: center;
+  row-gap: .8rem;
+  padding: clamp(1.25rem, 3vw, 3rem);
   background: #d8ebfc url("/brand/login-blue-background.jpg") center / cover no-repeat;
   color: #1e202b;
   font-family: var(--waybook-ui-font);
@@ -184,8 +186,27 @@ body {
 }
 
 .waybook-login-feature-messages { display: grid; }
-.waybook-login-feature-messages > div { grid-area: 1 / 1; }
-.waybook-login-feature-messages > [aria-hidden="true"] { visibility: hidden; }
+.waybook-login-feature-messages > div {
+  grid-area: 1 / 1;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 320ms ease-out 140ms, transform 320ms ease-out 140ms;
+}
+
+.waybook-login-feature-messages > [aria-hidden="true"] {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(.35rem);
+  transition: opacity 140ms ease-in, transform 140ms ease-in, visibility 0s 140ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waybook-login-feature-messages > div,
+  .waybook-login-feature-messages > [aria-hidden="true"] {
+    transform: none;
+    transition: none;
+  }
+}
 
 .waybook-login-showcase-copy p {
   margin: 0 0 .65rem;
@@ -221,23 +242,32 @@ body {
 .waybook-login-panel {
   grid-area: 1 / 2;
   display: grid;
-  grid-template-rows: minmax(1.5rem, 1fr) auto minmax(1.5rem, 1fr);
   place-items: center;
-  padding: clamp(2rem, 5vw, 5rem) clamp(2rem, 5vw, 5rem) 1.5rem;
+  padding: clamp(2rem, 5vw, 5rem);
   border-radius: 0 var(--login-inner-radius) var(--login-inner-radius) 0;
   corner-shape: superellipse(1.35);
   background: #fff;
 }
 
 .waybook-login-panel__inner {
-  grid-row: 2;
   width: min(100%, 27rem);
 }
 
-.waybook-login-copyright {
-  grid-row: 3;
-  align-self: end;
+.waybook-login-signup {
+  margin: 1.6rem 0 0;
   color: #555966;
+  font-size: .85rem;
+  text-align: center;
+}
+
+.waybook-login-signup a {
+  color: #4f3a80;
+  font-weight: 500;
+  text-underline-offset: .2em;
+}
+
+.waybook-login-copyright {
+  color: #31445d;
   font-size: .75rem;
   text-align: center;
 }
@@ -417,7 +447,7 @@ body {
 .waybook-login-notice { background: #f3f0fb; color: #413365; }
 
 @media (max-width: 760px) {
-  .waybook-login-page { display: block; padding: .65rem; }
+  .waybook-login-page { align-content: start; padding: .65rem; }
 
   .waybook-login-shell {
     grid-template-columns: minmax(0, 1fr);
@@ -429,13 +459,9 @@ body {
   .waybook-login-brand { top: 1.5rem; left: 1.25rem; }
   .waybook-login-panel {
     grid-area: 1 / 1;
-    grid-template-rows: auto auto;
-    row-gap: 1.5rem;
     border-radius: var(--login-inner-radius);
-    padding: 6rem 1.25rem 1.5rem;
+    padding: 6rem 1.25rem 2rem;
   }
-  .waybook-login-panel__inner { grid-row: 1; }
-  .waybook-login-copyright { grid-row: 2; }
   .waybook-login-panel h1, .waybook-login-intro { text-align: left; }
   .waybook-login-art { grid-area: 2 / 1; padding: 1.65rem .9rem; border-radius: 0 0 var(--login-inner-radius) var(--login-inner-radius); }
 }

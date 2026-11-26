@@ -6,15 +6,15 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 const messages = [
   {
     lines: ["Clear days.", "Calmer teams."],
-    description: "Manage bookings, staff and studio resources in one place.",
+    description: "See what’s booked, who’s working, and which rooms are in use.",
   },
   {
-    lines: ["Staff schedules.", "In one place."],
-    description: "Plan shifts and see who is available across your locations.",
+    lines: ["Take bookings.", "After hours."],
+    description: "Let clients book real openings on your website, even after you close.",
   },
   {
-    lines: ["Online booking.", "On your site."],
-    description: "Let clients book from your website using your live availability.",
+    lines: ["From booking", "to checkout."],
+    description: "Record payments against appointments and see what’s been paid in one place.",
   },
 ];
 
