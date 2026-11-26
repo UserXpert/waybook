@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
+import { StripeAppointmentPayment } from "@/components/stripe-appointment-payment";
 import { FinishAppointmentCheckout } from "@/components/appointment-attendance-journey";
 import type { AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { TableDateFields } from "@/components/table-date-fields";
@@ -17,6 +18,7 @@ import { requirePageFeature } from "@/lib/waybook/features";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { appointmentStripeAccount, appointmentStripeConfig, appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -240,6 +242,11 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     GROUP BY cp.id HAVING coalesce(sum(CASE WHEN ce.direction='credit' THEN ce.units ELSE -ce.units END),0) > 0
     ORDER BY cp.created_at
   ` : [];
+  const [stripeState, stripeAccount] = selectedSale && appointmentStripeConfig() ? await Promise.all([
+    appointmentStripeState({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }),
+    appointmentStripeAccount(tenant.id),
+  ]) : [null, null];
+  const stripePending = stripeState === "pending";
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
   const saleListParams = dateFilterParams(new URLSearchParams(), dates);
@@ -326,14 +333,16 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const state = settlement(selectedSale);
       const balance = selectedSale.chargeableCents - selectedSale.paidCents;
       const activeAppointment = ["confirmed", "arrived"].includes(selectedSale.status);
-      const canChangeProducts = activeAppointment && paymentItems.length === 0;
+      const canChangeProducts = activeAppointment && paymentItems.length === 0 && !stripePending;
       const availableProducts = products.filter((product) => product.currency === selectedSale.currency);
       const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
       const recorded = paymentBalance?.payments ?? [];
       const canRecordPayment = paymentBalance && recorded.length === 0 && outstandingCents > 0;
       const paymentStep = step === "payment" && Boolean(canRecordPayment);
       const reviewHref = saleHref(selectedSale);
-      const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
+      const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0 && !stripePending;
+      const canStartStripe = Boolean(stripeAccount) && selectedSale.attendanceStage === "checking_out" &&
+        selectedSale.currency === "DKK" && paymentItems.length === 0;
       return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
         <aside className="tenant-drawer appointment-drawer sale-detail appointment-sale-drawer" data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
           <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose></header>
@@ -353,7 +362,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               </div> : null}
             </dl></section>
             {paymentStep && paymentBalance ? <section><h3>Payments</h3>
-              <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout />
+              {stripePending || canStartStripe ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
+                amountCents={outstandingCents} pendingPayment={stripePending} /> : null}
+              {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout /> : null}
             </section> : null}
             {!paymentStep && recorded.length > 0 ? <section><h3>Payment details</h3>
               <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={selectedSale.status !== "cancelled"} />
@@ -385,7 +396,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                   <button className="waybook-action waybook-action--secondary" type="submit">Redeem package visit</button>
                 </form> : <p className="sale-detail__note">No eligible package can be redeemed.</p>}
               </section> : null}
-              {selectedSale.giftCardRedeemed || (activeAppointment && recorded.length === 0 && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
+              {selectedSale.giftCardRedeemed || (!stripePending && activeAppointment && recorded.length === 0 && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
                 {selectedSale.giftCardRedeemed ? <p className="sale-detail__note">A gift card has been used for this appointment.</p> : <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />}
               </section> : null}
               <Link className="waybook-action waybook-action--secondary sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>

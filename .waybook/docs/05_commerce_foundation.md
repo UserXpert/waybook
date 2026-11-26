@@ -120,8 +120,24 @@ onboarding, resume an expired link, and see the card capability reported by
 Stripe. Waybook stores the sandbox account ID and a retry key in Control.
 An interrupted creation reuses the key inside Stripe’s replay window.
 An unresolved attempt beyond that window requires reconciliation. Account
-verification is checked on return and refreshed from Stripe. Existing-account
-connection, payment attempts, settlement events and refunds are tracked in
+verification is checked on return and refreshed from Stripe.
+
+Tenant migration 0067 adds sandbox-only Stripe card checkout for a DKK
+appointment in **Checking out** with a balance and no payment entries.
+In **Sales → Go to payments**, choose **Pay by card in Stripe sandbox**.
+Complete the test payment on Stripe, then choose **Check payment status**
+in Waybook and **Finish checkout** once the receipt appears. Staff can resume
+an open session or ask Stripe to cancel it and then choose another method.
+An open attempt reserves the amount and prevents another payment or cart
+change. Stripe's session must match the original account, reference, currency
+and amount before Waybook writes the receipt. The receipt retains its Stripe
+source and follows provider reconciliation.
+
+If Stripe creates a session but the response is interrupted, retrying can
+recover the original session with the same key. An unresolved attempt whose
+session was never saved stays reserved past the replay deadline and needs
+provider reconciliation. Hosted sandbox verification, signed webhooks,
+provider refunds and existing-account connection remain part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)
