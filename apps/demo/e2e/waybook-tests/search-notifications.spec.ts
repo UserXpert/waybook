@@ -48,20 +48,26 @@ for (const tenant of [
     await expect(page).toHaveURL((url) => url.pathname === app);
 
     const search = page.getByRole("button", { name: /^Search bookings or / });
+    const apps = page.getByRole("button", { name: "Apps", exact: true });
+    const header = page.locator('header[aria-label="Tenant dashboard navigation"]');
+    const closedAppsBox = await apps.boundingBox();
+    const closedHeaderBox = await header.boundingBox();
     await search.click();
     const query = page.getByRole("textbox", { name: /^Search bookings or / });
     await expect(query).toBeFocused();
     await expect(query).toHaveCSS("outline-style", "none");
-    await expect(page.getByRole("search")).not.toHaveCSS("box-shadow", "none");
+    await expect(page.getByRole("search")).toHaveCSS("box-shadow", "none");
     const closeSearch = page.getByRole("button", { name: "Close search", exact: true });
     const closeColor = await closeSearch.evaluate((element) => getComputedStyle(element).color);
     await closeSearch.hover();
     await expect(closeSearch).toHaveCSS("border-radius", "50%");
     await expect(closeSearch).toHaveCSS("color", closeColor);
     const [appsBox, searchBox] = await Promise.all([
-      page.getByRole("button", { name: "Apps", exact: true }).boundingBox(),
+      apps.boundingBox(),
       page.getByRole("search").boundingBox(),
     ]);
+    expect(appsBox).toEqual(closedAppsBox);
+    expect(await header.boundingBox()).toEqual(closedHeaderBox);
     expect(appsBox!.x + appsBox!.width <= searchBox!.x || appsBox!.y + appsBox!.height <= searchBox!.y).toBe(true);
     await query.press("Escape");
     await expect(search).toBeFocused();

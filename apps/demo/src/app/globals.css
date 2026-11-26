@@ -1044,7 +1044,6 @@ body {
 .tenant-nav-tools__search { display: flex; width: min(19rem, 32vw); align-items: center; gap: .3rem; border: 1px solid #3d3d42; border-radius: .55rem; padding-left: .6rem; background: #1b1b1d; color: #bdbdc4; }
 .tenant-nav-tools__search input { width: 100%; min-width: 0; height: 2.25rem; border: 0; outline: 0; background: transparent; color: #f4f4f5; font: inherit; font-size: .76rem; }
 .tenant-nav-tools__search input::placeholder { color: #929299; }
-@media (max-width: 760px) { .tenant-nav-account-actions { grid-column: 3; grid-row: 1; }.tenant-dashboard-page .tenant-nav-tools__search { position: absolute; top: calc(100% + .45rem); right: .75rem; width: min(19rem, calc(100vw - 1.5rem)); background: #151517; box-shadow: 0 .8rem 2rem rgba(0,0,0,.3); } }
 
 /* Account menu: the person and their role lead; preferences are compact. */
 .tenant-user-menu__popover header { position: relative; }
@@ -4289,13 +4288,13 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .8rem 1rem;
 }
-.workspace-business-form label:not(.workspace-business-form__remove) {
+.workspace-business-form label {
   display: grid;
   min-width: 0;
   gap: .3rem;
   font-size: .82rem;
 }
-.workspace-business-form input:not([type="checkbox"]) {
+.workspace-business-form input:not([type="hidden"]) {
   width: 100%;
   min-width: 0;
   padding: .55rem .65rem;
@@ -4315,8 +4314,17 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   border-radius: .55rem;
 }
 .workspace-business-form legend { padding-inline: .3rem; font-size: .82rem; }
-.workspace-business-form__logo { max-width: 11rem; max-height: 4rem; object-fit: contain; }
-.workspace-business-form__remove { display: flex; align-items: center; gap: .4rem; font-size: .8rem; }
+.workspace-business-form__logo-preview {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  padding: .75rem;
+  border-radius: .55rem;
+  background: #767676;
+}
+.workspace-business-form__logo { display: block; max-width: min(11rem, 100%); max-height: 4rem; object-fit: contain; }
+.tenant-dashboard-page .workspace-business-form__remove { top: -.25rem; inset-inline-end: -.25rem; cursor: pointer; }
+.workspace-business-form__logo-removal { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; font-size: .8rem; }
 .workspace-business-form > button { justify-self: start; }
 .workspace-settings__panel > .workspace-settings__links { margin-top: .8rem; }
 @media (max-width: 600px) {

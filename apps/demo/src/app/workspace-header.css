@@ -42,6 +42,11 @@
 }
 
 :root[data-waybook-theme][data-waybook-header] .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search {
+  position: absolute;
+  top: calc(100% + .45rem);
+  inset-inline-end: clamp(1.25rem, 5vw, 4rem);
+  width: min(19rem, calc(100% - 2.5rem));
+  z-index: 1;
   background: color-mix(in srgb, var(--workspace-header-surface) 92%, var(--workspace-header-ink));
   border-color: var(--workspace-header-edge);
   border-radius: .7rem;
@@ -51,7 +56,6 @@
 
 :root[data-waybook-theme][data-waybook-header] .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search:focus-within {
   border-color: color-mix(in srgb, var(--workspace-header-ink) 25%, var(--workspace-header-edge));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--workspace-header-ink) 10%, transparent);
 }
 
 :root[data-waybook-theme][data-waybook-header] .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search input {
@@ -110,26 +114,4 @@
 
 :root[data-waybook-header] .tenant-nav-tools__search input::placeholder {
   color: color-mix(in srgb, var(--workspace-header-ink) 75%, transparent);
-}
-
-@media (min-width: 1200px) {
-  .tenant-dashboard-page .tenant-dashboard-nav:has(.tenant-nav-tools.is-searching) {
-    grid-template-columns: minmax(0, 1fr) auto auto max-content;
-  }
-  .tenant-dashboard-page .tenant-dashboard-nav:has(.tenant-nav-tools.is-searching) .tenant-nav-account-actions {
-    grid-column: 4;
-  }
-}
-
-@media (max-width: 1199px) {
-  .tenant-dashboard-page .tenant-dashboard-nav:has(.tenant-nav-tools.is-searching) {
-    padding-bottom: 3.35rem;
-  }
-  .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search {
-    position: absolute;
-    top: auto;
-    right: clamp(.75rem, 5vw, 4rem);
-    bottom: .55rem;
-    width: min(19rem, calc(100% - 1.5rem));
-  }
 }
