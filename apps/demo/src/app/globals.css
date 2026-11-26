@@ -4390,31 +4390,58 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four {
+  --overview-ink: #181a1e;
+  --overview-muted-ink: #565c64;
   --overview-accent-ink: color-mix(in srgb, var(--waybook-accent-ink) 72%, #182534);
-  --overview-muted-ink: color-mix(in srgb, var(--overview-accent-ink) 68%, #53616f);
+  --overview-secondary-accent: color-mix(in srgb, var(--overview-accent-ink) 60%, var(--overview-muted-ink));
   --overview-edge: color-mix(in srgb, var(--waybook-accent) 23%, transparent);
-  --overview-divider: color-mix(in srgb, var(--overview-accent-ink) 10%, transparent);
+  --overview-divider: color-mix(in srgb, var(--overview-ink) 10%, transparent);
   --overview-surface: #fff;
-  --overview-sheen: rgb(255 255 255 / 72%);
+  --overview-sheen: rgb(255 255 255 / 42%);
+  --overview-icon-surface: var(--overview-surface);
   --overview-tint-strong: color-mix(in srgb, var(--waybook-accent) 20%, transparent);
 }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .dashboard-four {
+  --overview-ink: #f0f2f5;
+  --overview-muted-ink: #b9bec6;
   --overview-accent-ink: color-mix(in srgb, var(--waybook-accent) 32%, #f0f2fb);
-  --overview-muted-ink: color-mix(in srgb, var(--overview-accent-ink) 78%, #a9b4c4);
   --overview-edge: color-mix(in srgb, var(--waybook-accent) 32%, #30333a);
-  --overview-divider: var(--overview-edge);
-  --overview-surface: color-mix(in srgb, var(--waybook-accent) 11%, transparent);
-  --overview-sheen: var(--overview-surface);
+  --overview-divider: color-mix(in srgb, var(--overview-ink) 15%, transparent);
+  --overview-surface: rgb(255 255 255 / 5%);
+  --overview-sheen: rgb(255 255 255 / 3%);
+  --overview-icon-surface: #30343b;
 }
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
-  .dashboard-four__header h1, .dashboard-widget__title h2, .dashboard-widget__title p,
-  .dashboard-widget__title > a, .outcome-grid dt, .outcome-grid dd, .revenue-list dt, .revenue-list dd,
-  .target-widget h3, .target-widget__ring strong, .target-widget > div:last-child > b,
-  .target-subtargets b, .workload-list__stats b
+  .dashboard-four__header h1, .dashboard-widget__title h2, .target-widget h3, .workload-list__stats b
+) { color: var(--overview-ink); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .outcome-grid dd, .revenue-list dd, .target-widget__ring strong, .dashboard-widget__icon
 ) { color: var(--overview-accent-ink); }
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
-  .dashboard-four__header span, .target-widget__ring span, .target-widget__ring small, .target-subtargets small
+  .dashboard-widget__title > a, .target-widget > div:last-child > b, .target-subtargets b
+) { color: var(--overview-secondary-accent); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
+  .dashboard-four__header span, .dashboard-widget__title p, .outcome-grid dt, .revenue-list dt,
+  .target-widget__ring span, .target-widget__ring small, .target-subtargets small
 ) { color: var(--overview-muted-ink); }
+.dashboard-widget__heading {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  min-width: 0;
+}
+.dashboard-widget__heading p { text-transform: uppercase; }
+.dashboard-widget__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--overview-divider);
+  border-radius: .6rem;
+  background: var(--overview-icon-surface);
+}
+.dashboard-widget__icon svg { width: 1.1rem; height: 1.1rem; }
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .dashboard-widget {
   background-image: linear-gradient(155deg, var(--overview-sheen), transparent 72%);
 }
@@ -4428,17 +4455,18 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   color: var(--overview-accent-ink);
 }
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .upcoming-list .appointment-status--confirmed {
+  color: var(--overview-muted-ink);
   font-size: 0.6rem;
   font-weight: 500;
 }
-:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .upcoming-list time span { color: inherit; }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .upcoming-list time span { color: var(--overview-muted-ink); }
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .upcoming-list .appointment-status--arrived {
   background: var(--overview-tint-strong);
   color: var(--overview-accent-ink);
   box-shadow: inset 0 0 0 1px var(--overview-edge);
 }
 .tenant-dashboard-page .dashboard-four .outcome-grid > div { background: var(--overview-surface); }
-:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i { background: var(--overview-tint-strong); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i { background: var(--overview-divider); }
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i.is-booked { background: var(--waybook-accent); }
 .tenant-dashboard-page .target-widget__ring { background: var(--overview-surface); }
 .target-widget__ring > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
