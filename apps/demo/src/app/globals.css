@@ -4405,6 +4405,40 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .recorded-appointment-payments + .appointment-payment-form { margin-top: .85rem; }
 
 .appointment-attendance { display: grid; gap: .65rem; margin-top: .6rem; }
+.provider-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem 1rem;
+}
+
+.provider-alert-list {
+  display: grid;
+  gap: .65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.provider-alert-list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: .6rem 1.25rem;
+  padding: .8rem;
+  border: 1px solid var(--wb-dark-border, #dedee3);
+  border-radius: .55rem;
+  overflow-wrap: anywhere;
+}
+.provider-alert-list small,
+.provider-alert-list time {
+  display: block;
+  color: var(--wb-dark-muted, #606169);
+  font-size: .78rem;
+}
+@media (max-width: 680px) {
+  .provider-alert-list > li { grid-template-columns: minmax(0, 1fr); }
+}
+
 .tenant-dashboard-page .appointment-drawer .appointment-attendance .appointment-drawer__status-actions button:disabled {
   opacity: .5;
   cursor: default;

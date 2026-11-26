@@ -13,11 +13,14 @@ import { staffAvailableSlots } from "@/lib/waybook/booking";
 import { appointmentHasSettlement, calendarBookingVisibility, getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { getAppointmentReservations, linkedAppointmentOpenings } from "@/lib/waybook/linked-appointment-schedule";
 import { tenantDb } from "@/lib/waybook/database";
+import { arrivalAlertsEnabled, unnotifiedArrivalProviders } from "@/lib/waybook/provider-arrival-alerts";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 import {
+  activeAppointmentStage,
+  type AppointmentAttendanceStage,
   assertMovableAppointmentStatus,
   canChangeAttendanceNow,
   isMovableAppointmentStatus,
@@ -115,9 +118,9 @@ export async function getCalendarAppointment(bookingId: string) {
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) return null;
   const db = tenantDb(tenant);
-  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; attendanceStage: AppointmentAttendanceStage | null; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
     SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
-      bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,
+      bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,b.attendance_stage AS "attendanceStage",
       c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId",
       b.updated_at::text AS revision, b.booked_price_cents AS "priceCents", ${appointmentHasSettlement(db)} AS "hasSettlement"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
@@ -148,6 +151,10 @@ export async function getCalendarAppointment(bookingId: string) {
     .map(({ id, provider, title, startsAt, endsAt }) => ({ id, provider, title, startsAt, endsAt }));
   const canManageSchedule = canManageAppointment(permissions, ...providers) &&
     (canViewTeam || providers.length === 1 || providers.every((id) => id === permissions.teamMemberId));
+  const canUpdateStatus = canUpdateAppointmentAttendance(permissions, providers);
+  const canNotifyProviders = booking.status === "arrived" && booking.attendanceStage === "waiting_room" &&
+    canUpdateStatus && await arrivalAlertsEnabled(db, tenant.id) &&
+    (await db`${unnotifiedArrivalProviders(db, tenant.id, booking.id, providers)} LIMIT 1`).length > 0;
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -170,7 +177,8 @@ export async function getCalendarAppointment(bookingId: string) {
     canManage: permissions.isManager,
     canManageSchedule,
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
-    canUpdateStatus: canUpdateAppointmentAttendance(permissions, providers),
+    canUpdateStatus,
+    canNotifyProviders,
     resources,
     paymentBalance,
     days,
@@ -688,8 +696,8 @@ async function persistBookingStatus(
   );
   if (!block) throw new Error("Booking availability is unavailable.");
 
-  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date }[]>(
-    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+  const [current] = await transaction.unsafe<{ status: string; startsAt: Date; endsAt: Date; stage: AppointmentAttendanceStage | null }[]>(
+    'SELECT status, starts_at AS "startsAt", ends_at AS "endsAt", attendance_stage AS stage FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
     [booking.id, tenant.id],
   );
   if (!current) throw new Error("Booking is unavailable.");
@@ -733,6 +741,15 @@ async function persistBookingStatus(
   if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
     throw new NoShowPaymentRequired();
   }
+  if (current.stage === "checking_out" && status === "completed") {
+    const [settlement] = await transaction.unsafe<{ paid: boolean }[]>(`
+      SELECT cart.chargeable_cents = coalesce((
+        SELECT sum(CASE WHEN kind = 'payment' THEN amount_cents ELSE -amount_cents END)
+        FROM payment_records WHERE tenant_id = $1 AND booking_id = $2
+      ), 0) AS paid FROM appointment_checkout_amounts($1, $2) cart
+    `, [tenant.id, booking.id]);
+    if (!settlement?.paid) throw new Error("Settle the checkout balance before completing the appointment.");
+  }
 
   await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);
   let cancellationOutboxId: string | null = null;
@@ -763,6 +780,119 @@ async function updateBookingStatus(formData: FormData) {
 }
 
 export type AttendanceResult = BookingDetailsResult;
+
+export async function notifyWaitingRoomProviders(bookingId: string) {
+  try {
+    const { tenant, db, booking, permissions } = await editableBooking(bookingId, "status");
+    const actor = await requireIdentity();
+    const count = await withSerializableRetry(() => db.begin(async (transaction) => {
+      const connection = transaction as unknown as typeof db;
+      await connection`SELECT id FROM booking_blocks WHERE tenant_id = ${tenant.id} AND id = ${booking.bookingBlockId} FOR UPDATE`;
+      const [current] = await connection`
+        SELECT b.id FROM bookings b
+        WHERE b.tenant_id = ${tenant.id} AND b.id = ${booking.id}
+          AND b.status = 'arrived' AND b.attendance_stage = 'waiting_room'
+          AND ${calendarBookingVisibility(connection, permissions.isManager || permissions.canViewTeamCalendar, permissions.teamMemberId)}
+        FOR UPDATE
+      `;
+      if (!current) throw new Error("This appointment is no longer in the waiting room.");
+      const reservations = await getAppointmentReservations(connection, tenant.id, booking.id);
+      const providers = reservations.map((item) => item.teamMemberId);
+      if (!canUpdateAppointmentAttendance(permissions, providers)) {
+        throw new Error("You do not have permission to notify providers for this appointment.");
+      }
+      const [settings] = await connection`
+        SELECT tenant_id FROM tenant_settings
+        WHERE tenant_id = ${tenant.id} AND provider_arrival_alerts_enabled FOR SHARE
+      `;
+      if (!settings) throw new Error("Waiting room alerts are turned off.");
+      const alerts = await connection`
+        WITH recipients AS (${unnotifiedArrivalProviders(connection, tenant.id, booking.id, providers)})
+        INSERT INTO provider_arrival_alerts (tenant_id, booking_id, team_member_id)
+        SELECT ${tenant.id}, ${booking.id}, id FROM recipients ON CONFLICT DO NOTHING
+        RETURNING team_member_id
+      `;
+      if (alerts.length) {
+        const event = "booking.waiting_room_providers_notified";
+        const metadata = JSON.stringify({ providerCount: alerts.length });
+        await connection`INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
+          VALUES (${tenant.id}, ${booking.id}, ${actor.id}, ${event}, ${metadata}::text::jsonb)`;
+      }
+      return alerts.length;
+    }));
+    revalidatePath("/app/notifications");
+    return { count, error: null };
+  } catch (error) {
+    return { count: 0, error: error instanceof Error && !("severity" in error) ? error.message : "Could not notify providers. Please try again." };
+  }
+}
+
+export async function setAppointmentAttendanceStage(bookingId: string, stage: AppointmentAttendanceStage): Promise<AttendanceResult> {
+  try {
+    if (!["waiting_room", "in_service", "checking_out"].includes(stage)) throw new Error("Choose a valid next step.");
+    const { tenant, db, booking, permissions } = await editableBooking(bookingId, stage === "checking_out" ? "manager" : "status");
+    const actor = await requireIdentity();
+    await withSerializableRetry(() => db.begin(async (transaction) => {
+      const connection = transaction as unknown as typeof db;
+      await connection`SELECT id FROM booking_blocks WHERE tenant_id = ${tenant.id} AND id = ${booking.bookingBlockId} FOR UPDATE`;
+      const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
+      const [current] = await connection<{ status: string; startsAt: Date; endsAt: Date; attendanceStage: AppointmentAttendanceStage | null }[]>`
+        SELECT b.status, b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.attendance_stage AS "attendanceStage"
+        FROM bookings b WHERE b.tenant_id = ${tenant.id} AND b.id = ${booking.id}
+          AND ${calendarBookingVisibility(connection, canViewTeam, permissions.teamMemberId ?? null)}
+        FOR UPDATE
+      `;
+      if (!current) throw new Error("Appointment is unavailable.");
+      if (!permissions.isManager) {
+        const providers = await getAppointmentReservations(connection, tenant.id, booking.id);
+        if (!canUpdateAppointmentAttendance(permissions, providers.map((item) => item.teamMemberId))) {
+          throw new Error("You do not have permission to change attendance for this appointment.");
+        }
+      }
+      const previousStage = activeAppointmentStage(current.status, current.attendanceStage);
+      if (previousStage === stage) return;
+      const isCheckIn = current.status === "confirmed" && stage !== "checking_out";
+      const isStartService = previousStage === "waiting_room" && stage === "in_service";
+      const isCheckout = previousStage === "in_service" && stage === "checking_out";
+      if (!isCheckIn && !isStartService && !isCheckout) throw new Error("This appointment has changed. Reopen it before continuing.");
+      if (!canChangeAttendanceNow(current)) throw new Error("Attendance can be updated once the appointment starts.");
+      await connection`UPDATE bookings SET status = 'arrived', attendance_stage = ${stage}, updated_at = now()
+        WHERE tenant_id = ${tenant.id} AND id = ${booking.id}`;
+      const event = `booking.${stage}`;
+      const metadata = JSON.stringify({ previousStatus: current.status, previousStage });
+      await connection`INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
+        VALUES (${tenant.id}, ${booking.id}, ${actor.id}, ${event}, ${metadata}::text::jsonb)`;
+      await connection`INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
+        VALUES (${tenant.id}, ${actor.id}, ${event}, 'booking', ${booking.id}, ${metadata}::text::jsonb)`;
+    }));
+    revalidateCalendars();
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not update the appointment. Please try again." };
+  }
+}
+
+export async function finishAppointmentCheckout(bookingId: string): Promise<AttendanceResult> {
+  try {
+    const context = await editableBooking(bookingId, "manager");
+    const { tenant, db, booking } = context;
+    const actor = await requireIdentity();
+    await withSerializableRetry(() => db.begin(async (transaction) => {
+      await transaction.unsafe("SELECT id FROM booking_blocks WHERE tenant_id = $1 AND id = $2 FOR UPDATE", [tenant.id, booking.bookingBlockId]);
+      const [current] = await transaction.unsafe<{ status: string; stage: string | null }[]>(
+        "SELECT status, attendance_stage AS stage FROM bookings WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+        [tenant.id, booking.id],
+      );
+      if (current?.status === "completed") return;
+      if (current?.status !== "arrived" || current.stage !== "checking_out") throw new Error("Open checkout from the appointment before finishing it.");
+      await persistBookingStatus(transaction, context, "completed", "arrived", actor.id);
+    }));
+    revalidateCalendars();
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not finish checkout. Please try again." };
+  }
+}
 
 export async function saveAppointmentAttendance(formData: FormData): Promise<AttendanceResult> {
   try {

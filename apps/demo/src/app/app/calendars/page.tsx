@@ -28,7 +28,7 @@ import {
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { isFeatureEnabled, requirePageFeature } from "@/lib/waybook/features";
 import { canManageAppointment, staffPermissionContext } from "@/lib/waybook/staff-permissions";
-import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
+import { appointmentStageLabels, isMovableAppointmentStatus, type AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { getCalendarAppointment } from "./actions";
 
 type Member = {
@@ -62,6 +62,7 @@ type Booking = {
   startsAt: Date;
   endsAt: Date;
   status: string;
+  attendanceStage: AppointmentAttendanceStage | null;
   customerName: string;
   customerEmail: string;
   customerPhone: string | null;
@@ -383,7 +384,7 @@ export default async function CalendarsPage({
     SELECT b.id, b.booking_number AS "bookingNumber", reservation.block_id AS "bookingBlockId",
       reservation.service_id AS "serviceId", reservation.member_id AS "teamMemberId", b.location_id AS "locationId",
       bra.resource_id AS "resourceId", r.name AS "resourceName", reservation.starts_at AS "startsAt",
-      reservation.ends_at AS "endsAt", b.status, c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone",
+      reservation.ends_at AS "endsAt", b.status, b.attendance_stage AS "attendanceStage", c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone",
       s.title AS "serviceTitle", tm.name AS "teamMemberName", tm.calendar_color AS "teamMemberColor",
       EXISTS (SELECT 1 FROM booking_service_segments seg WHERE seg.tenant_id = b.tenant_id AND seg.booking_id = b.id) AS "hasLinkedServices"
     FROM bookings b
@@ -965,7 +966,7 @@ export default async function CalendarsPage({
                           <strong>{booking.customerName}</strong>
                           <span className="waybook-calendar-entry__meta">
                             <span className="waybook-calendar-entry__time">{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)}</span>
-                            <em>{booking.status === "completed" ? "Done" : booking.status.replace("_", " ")}</em>
+                            <em>{booking.attendanceStage ? appointmentStageLabels[booking.attendanceStage] : booking.status === "completed" ? "Done" : booking.status.replace("_", " ")}</em>
                           </span>
                           <CalendarBookingService service={booking.serviceTitle} resource={showResources ? booking.resourceName : null} />
                         </Link>
@@ -1194,7 +1195,7 @@ export default async function CalendarsPage({
                           <strong>{booking.customerName}</strong>
                           <span className="waybook-calendar-entry__meta">
                             <span className="waybook-calendar-entry__time">{clock.format(booking.startsAt)}–{clock.format(booking.endsAt)}</span>
-                            <em>{booking.status === "completed" ? "Done" : booking.status.replace("_", " ")}</em>
+                            <em>{booking.attendanceStage ? appointmentStageLabels[booking.attendanceStage] : booking.status === "completed" ? "Done" : booking.status.replace("_", " ")}</em>
                           </span>
                           <CalendarBookingService service={booking.serviceTitle} resource={showResources ? booking.resourceName : null} />
                         </Link>
@@ -1220,7 +1221,7 @@ export default async function CalendarsPage({
         summaries={[...bookings, ...teamBookings, ...monthScopedBookings].map((item) => ({
           id: item.id, bookingNumber: item.bookingNumber, customerName: item.customerName,
           serviceTitle: item.serviceTitle, teamMemberName: "teamMemberName" in item && typeof item.teamMemberName === "string" ? item.teamMemberName : members.find((member) => member.id === item.teamMemberId)?.name ?? "",
-          startsAt: item.startsAt.toISOString(), endsAt: item.endsAt.toISOString(), status: item.status,
+          startsAt: item.startsAt.toISOString(), endsAt: item.endsAt.toISOString(), status: item.status, attendanceStage: item.attendanceStage,
         }))}
         initialDetail={initialDetail}
       />

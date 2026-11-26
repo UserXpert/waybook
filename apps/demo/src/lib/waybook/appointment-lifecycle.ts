@@ -17,3 +17,14 @@ export function canChangeAttendanceNow(
   const eligibleAt = booking.status === "no_show" ? booking.endsAt : booking.startsAt;
   return eligibleAt.getTime() <= now;
 }
+export type AppointmentAttendanceStage = "waiting_room" | "in_service" | "checking_out";
+
+export const appointmentStageLabels: Record<AppointmentAttendanceStage, string> = {
+  waiting_room: "Waiting room",
+  in_service: "In service",
+  checking_out: "Checking out",
+};
+
+export function activeAppointmentStage(status: string, stage: AppointmentAttendanceStage | null) {
+  return status === "arrived" ? stage ?? "in_service" : null;
+}

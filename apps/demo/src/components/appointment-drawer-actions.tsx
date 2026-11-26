@@ -18,6 +18,8 @@ type Props = {
   timezone: string; days: string[]; slots: Slot[];
   currentStartsAt?: string; linkedServices?: boolean;
   canChangeAttendanceNow: boolean;
+  separateCheckIn?: boolean;
+  attendanceLabel?: string;
   onStatusSaved?: (bookingId: string) => Promise<void>;
   paymentBalance: AppointmentPaymentBalance | null;
   onPaymentRecorded?: (bookingId: string) => Promise<void>;
@@ -26,22 +28,24 @@ type Props = {
   resourceId: string | null; resources: { id: string; name: string; isMutuallyExclusive: boolean }[];
 };
 
-type StatusActionProps = Pick<Props, "bookingId" | "status" | "canChangeAttendanceNow" | "onStatusSaved"> & {
+type StatusActionProps = Pick<Props, "bookingId" | "status" | "canChangeAttendanceNow" | "onStatusSaved" | "separateCheckIn" | "attendanceLabel"> & {
   updateStatus: (formData: FormData) => Promise<AttendanceResult>;
 };
 type RescheduleProps = Pick<Props, "bookingId" | "status" | "timezone" | "days" | "slots" | "reschedule" | "currentStartsAt" | "linkedServices">;
 
-function attendanceOptions(status: string) {
-  if (status === "confirmed") return [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const;
+function attendanceOptions(status: string, separateCheckIn?: boolean) {
+  if (status === "confirmed" && !separateCheckIn) return [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const;
+  if (status === "confirmed") return [["completed", "Completed"], ["no_show", "No show"]] as const;
   if (status === "arrived") return [["completed", "Completed"], ["no_show", "No show"]] as const;
   if (status === "no_show") return [["completed", "Completed"]] as const;
   return [];
 }
 
-function AppointmentStatusPicker({ status, canChangeAttendanceNow, value, onChange, pending, notice }: {
+function AppointmentStatusPicker({ status, canChangeAttendanceNow, value, onChange, pending, notice, separateCheckIn, attendanceLabel }: {
   status: string; canChangeAttendanceNow: boolean; value: string; onChange: (value: string) => void; pending: boolean; notice: string;
+  separateCheckIn?: boolean; attendanceLabel?: string;
 }) {
-  const options = attendanceOptions(status);
+  const options = attendanceOptions(status, separateCheckIn);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (notice) noticeRef.current?.scrollIntoView({ block: "nearest" });
@@ -58,7 +62,7 @@ function AppointmentStatusPicker({ status, canChangeAttendanceNow, value, onChan
 
   return <section className="appointment-attendance">
     <h3>Appointment status</h3>
-    <p className="appointment-status-current">Current: {status.replace("_", " ")}</p>
+    <p className="appointment-status-current">Current: {attendanceLabel ?? status.replace("_", " ")}</p>
     <div className="appointment-drawer__status-actions" role="group" aria-label="Choose status">
       {options.map(([option, label]) => <button key={option} type="button"
         className={value === option ? "is-selected" : undefined} aria-pressed={value === option}
@@ -81,7 +85,7 @@ function AppointmentSaveButton({ formId, formRef, disabled, pending, skipValidat
   return target ? createPortal(button, target) : button;
 }
 
-export function AppointmentStatusActions({ bookingId, status, updateStatus, canChangeAttendanceNow, onStatusSaved }: StatusActionProps) {
+export function AppointmentStatusActions({ bookingId, status, updateStatus, canChangeAttendanceNow, onStatusSaved, separateCheckIn, attendanceLabel }: StatusActionProps) {
   const router = useRouter();
   const formId = useId();
   const formRef = useRef<HTMLFormElement>(null);
@@ -112,9 +116,9 @@ export function AppointmentStatusActions({ bookingId, status, updateStatus, canC
   }
 
   return <>
-    <AppointmentStatusPicker status={status} canChangeAttendanceNow={canChangeAttendanceNow} value={selectedStatus}
+    <AppointmentStatusPicker status={status} canChangeAttendanceNow={canChangeAttendanceNow} value={selectedStatus} separateCheckIn={separateCheckIn} attendanceLabel={attendanceLabel}
       pending={pending} notice={notice} onChange={(to) => { setSelection({ from: status, to }); setNotice(""); }} />
-    {canChangeAttendanceNow && attendanceOptions(status).length > 0 ? <form id={formId} ref={formRef} action={saveAttendance}>
+    {canChangeAttendanceNow && attendanceOptions(status, separateCheckIn).length > 0 ? <form id={formId} ref={formRef} action={saveAttendance}>
       <input type="hidden" name="bookingId" value={bookingId} />
       <input type="hidden" name="expectedStatus" value={status} />
       <input type="hidden" name="status" value={selectedStatus} />
@@ -158,7 +162,7 @@ export function AppointmentRescheduleActions({ bookingId, status, timezone, days
   </section>;
 }
 
-export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, currentStartsAt, linkedServices, canChangeAttendanceNow, saveDetails, reschedule, resourceId, resources, paymentBalance, onPaymentRecorded, onStatusSaved }: Props) {
+export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, currentStartsAt, linkedServices, canChangeAttendanceNow, saveDetails, reschedule, resourceId, resources, paymentBalance, onPaymentRecorded, onStatusSaved, separateCheckIn, attendanceLabel }: Props) {
   const router = useRouter();
   const detailsFormId = useId();
   const detailsFormRef = useRef<HTMLFormElement>(null);
@@ -207,7 +211,7 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
     }
   }
 
-  const attendance = <AppointmentStatusPicker status={status} canChangeAttendanceNow={canChangeAttendanceNow} value={selectedStatus}
+  const attendance = <AppointmentStatusPicker status={status} canChangeAttendanceNow={canChangeAttendanceNow} value={selectedStatus} separateCheckIn={separateCheckIn} attendanceLabel={attendanceLabel}
     pending={savingDetails} notice={statusNotice} onChange={(to) => { setSelection({ from: status, to }); setStatusNotice(""); }} />;
   if (status === "cancelled") return attendance;
 

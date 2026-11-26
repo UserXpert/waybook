@@ -96,7 +96,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(drawer.getByRole("button", { name: "Edit payment" })).toBeVisible();
     await expect(payment.locator('option[value="payment"]')).toHaveCount(0);
 
-    await drawer.getByRole("link", { name: "Checkout", exact: true }).click();
+    await drawer.getByRole("button", { name: "Checkout", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Appointment checkout" })).toContainText(customerName);
 
     await page.goto(`/nordic/app/sales?q=${encodeURIComponent(customerName)}`);
