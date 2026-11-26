@@ -26,6 +26,7 @@ test("owners can resume their sandbox onboarding without creating a second accou
     await expect(payments).toBeVisible();
     await payments.click();
     await expect(page.getByRole("heading", { name: "Stripe sandbox" })).toBeVisible();
+    await expect(page.getByText(/Sign in with your Stripe login/)).toBeVisible();
     const start = page.getByRole("button", { name: "Set up Stripe sandbox" });
     await expect(start).toBeInViewport({ ratio: 1 });
     await start.press("Enter");
@@ -39,14 +40,19 @@ test("owners can resume their sandbox onboarding without creating a second accou
     const [first] = await connections();
     expect(first.creation_key).toBe(interrupted.creation_key);
     expect(first.account_id).toBe(`acct_${interrupted.creation_key.replaceAll("-", "")}`);
+    await page.goto(path + "&stripe=returned");
+    await expect(page.getByRole("status").filter({ hasText: "Stripe setup is incomplete" })).toBeVisible();
+    await page.getByRole("button", { name: "Check Stripe status", exact: true }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("stripe") === "checked");
+    await expect(page.getByRole("status").filter({ hasText: "Stripe setup is incomplete" })).toBeVisible();
 
     await page.goto(path + "&stripe=resume");
     await expect(page.getByText("Continue setup to open a fresh Stripe link.")).toBeVisible();
     await resume.click();
     await expect(page).toHaveURL(/^https:\/\/accounts\.stripe\.com\/r\/acct_/);
     expect(await connections()).toEqual([first]);
-    await page.goto(path);
-    await expect(page.getByText("Stripe has verified your sandbox account for card payments.")).toBeVisible();
+    await page.goto(path + "&stripe=returned");
+    await expect(page.getByRole("status").filter({ hasText: "Stripe has verified your sandbox account for card payments." })).toBeVisible();
 
     const otherContext = await browser.newContext({ baseURL, viewport });
     try {

@@ -118,6 +118,11 @@ Control database and tenant databases.
 The owner can create a Danish merchant through Stripe-hosted Accounts v2
 onboarding, resume an expired link, and see the card capability reported by
 Stripe. Waybook stores the sandbox account ID and a retry key in Control.
+Owners who already use Stripe can sign in on Stripe and reuse their business
+details when eligible for [Legal Entity Sharing](https://support.stripe.com/questions/legal-entity-sharing).
+Stripe controls which business details can be reused and which connected
+account receives Waybook payments. The owner can check verification again
+from the **Payments** tab.
 An interrupted creation reuses the key inside Stripe’s replay window.
 An unresolved attempt beyond that window requires reconciliation. Account
 verification is checked on return and refreshed from Stripe.
@@ -125,8 +130,9 @@ verification is checked on return and refreshed from Stripe.
 Tenant migration 0067 adds sandbox-only Stripe card checkout for a DKK
 appointment in **Checking out** with a balance and no payment entries.
 In **Sales → Go to payments**, choose **Pay by card in Stripe sandbox**.
-Complete the test payment on Stripe, then choose **Check payment status**
-in Waybook and **Finish checkout** once the receipt appears. Staff can resume
+Complete the test payment on Stripe. Waybook checks the saved session
+automatically on return. Use **Check payment status** if Stripe is still
+processing and **Finish checkout** once the receipt appears. Staff can resume
 an open session or ask Stripe to cancel it and then choose another method.
 An open attempt reserves the amount and prevents another payment or cart
 change. Stripe's session must match the original account, reference, currency
@@ -182,7 +188,8 @@ It verifies the original pending attempt and records the payment before
 applying the refund. Duplicate checkout and refund notifications preserve one
 payment receipt and one refund entry.
 
-Hosted sandbox verification and existing-account connection remain part of
+Hosted sandbox verification, including the reuse option for an eligible
+existing Stripe business, remains part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)

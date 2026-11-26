@@ -59,6 +59,16 @@ test("checkout retries send the same amount and idempotency key on the connected
   });
 });
 
+test("only a successful checkout return asks Waybook to check payment automatically", async () => {
+  const stripe = stripeCheckoutSandbox(config, async (input, init) => {
+    const body = new URLSearchParams(await new Request(input, init).text());
+    assert.equal(body.get("success_url"), config.origin + attempt.returnPath + "&stripe=return");
+    assert.equal(body.get("cancel_url"), config.origin + attempt.returnPath);
+    return Response.json(open);
+  });
+  await stripe.create({ ...attempt, returnPath: attempt.returnPath + "&stripe=return" });
+});
+
 test("retrieval distinguishes paid, expired and processing sessions", async () => {
   const cases = [
     [{ status: "complete", payment_status: "paid", payment_intent: "pi_fixture" },

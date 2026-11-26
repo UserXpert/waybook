@@ -88,6 +88,7 @@ export function stripeConnectSandbox(config: StripeSandboxConfig, request: typeo
       if (settings.origin !== config.origin || !accountIdPattern.test(accountId)) throw new Error("Invalid Stripe onboarding context.");
       const refresh = new URL(settings);
       refresh.searchParams.set("stripe", "resume");
+      settings.searchParams.set("stripe", "returned");
       const link = await call<{ account?: unknown; url?: unknown; livemode?: unknown }>("/v2/core/account_links", {
         account: accountId,
         use_case: {

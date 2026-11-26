@@ -139,7 +139,8 @@ globalThis.fetch = async (input, init) => {
     const account = accounts.get(body.account);
     const onboarding = body.use_case?.account_onboarding;
     if (!account || body.use_case?.type !== "account_onboarding" || onboarding.configurations.join() !== "merchant" ||
-        !onboarding.return_url.startsWith(origin + "/") || onboarding.refresh_url !== onboarding.return_url + "&stripe=resume") {
+        !onboarding.return_url.startsWith(origin + "/") || !onboarding.return_url.endsWith("&stripe=returned") ||
+        onboarding.refresh_url !== onboarding.return_url.replace("&stripe=returned", "&stripe=resume")) {
       return error(400);
     }
     account.links += 1;

@@ -65,7 +65,7 @@ test("onboarding links stay scoped to the selected account and Stripe's origin",
       account: accountId,
       use_case: { type: "account_onboarding", account_onboarding: {
         configurations: ["merchant"],
-        return_url: config.origin + settings,
+        return_url: config.origin + settings + "&stripe=returned",
         refresh_url: config.origin + settings + "&stripe=resume",
       } },
     });

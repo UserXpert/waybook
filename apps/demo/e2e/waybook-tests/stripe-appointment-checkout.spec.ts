@@ -183,23 +183,20 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
         }
         continue;
       }
+      if (index === 0) {
+        await page.goto(paymentPath + "&stripe=return");
+        await expect(sale.getByRole("alert")).toContainText("Stripe’s session has not been saved.");
+        expect(await attempts(id)).toEqual([{ id: reserved.id, state: "pending", session_id: null }]);
+      }
       await sale.getByRole("button", { name: "Continue in Stripe" }).click();
       await expect(page).toHaveURL(`https://checkout.stripe.com/c/pay/${sessionId}`);
       expect(await attempts(id)).toEqual([{ id: reserved.id, state: "pending", session_id: sessionId }]);
       await page.goto(paymentPath);
 
       if (index === 0) {
-        const other = await page.context().newPage();
-        try {
-          await other.goto(paymentPath);
-          const otherCheck = other.getByRole("button", { name: "Check payment status" });
-          await expect(otherCheck).toBeVisible();
-          await Promise.all([sale.getByRole("button", { name: "Check payment status" }).click(), otherCheck.click()]);
-          await expect(other.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
-        } finally {
-          await other.close();
-        }
+        await page.goto(paymentPath + "&stripe=return");
         await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
+        await expect(page).toHaveURL((url) => url.searchParams.get("booking") === id && !url.searchParams.has("stripe"));
         await expect(sale.getByRole("button", { name: "Edit payment" })).toHaveCount(0);
         const receipt = [{ id: reserved.id, amount_cents: 6501, method: "card" }];
         expect(await receipts(id)).toEqual(receipt);

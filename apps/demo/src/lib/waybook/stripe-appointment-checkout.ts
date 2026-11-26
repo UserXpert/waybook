@@ -59,7 +59,7 @@ async function reserveAttempt(
   { db, tenantId, bookingId }: CheckoutContext,
   config: StripeSandboxConfig,
   accountId: string | null,
-  input: { action: "open" | "check" | "cancel"; expectedCents: number; actorId: string; returnPath: string },
+  input: { action: "open" | "check" | "cancel" | "return"; expectedCents: number; actorId: string; returnPath: string },
 ) {
   return db.begin(async (sql) => {
     const booking = await lockAppointment(sql, tenantId, bookingId);
@@ -144,6 +144,9 @@ export async function runAppointmentStripeCheckout(
   const stripe = stripeCheckoutSandbox(config);
   let sessionId = attempt.sessionId;
   if (!sessionId) {
+    if (input.action === "return") {
+      throw new Error("Stripe’s session has not been saved. Check payment status before taking another payment.");
+    }
     if (Date.now() >= attempt.expiresAtSeconds * 1000) {
       throw new Error("The session was not saved. Check this attempt in Stripe before accepting another payment.");
     }

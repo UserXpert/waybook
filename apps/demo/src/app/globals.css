@@ -3926,6 +3926,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .workspace-settings__nav a[aria-current] { font-weight: 600; }
 .workspace-settings__content { display: grid; gap: 1rem; min-width: 0; }
 .workspace-settings__panel { padding: 1.5rem; border: 1px solid #e5e5e8; border-radius: .9rem; background: #fff; }
+.workspace-settings__payment-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
 .workspace-settings__panel h2 { margin: 0; font-size: 1.15rem; font-weight: 500; }
 .workspace-settings__panel > p { margin: .35rem 0 1.25rem; }
 .workspace-settings .tenant-appearance { max-width: 31rem; gap: .7rem; border: 0; padding: 0; }

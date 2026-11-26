@@ -974,14 +974,14 @@ export async function updateStripeAppointmentPayment(_state: PaymentState, formD
     const action = formData.get("action");
     const bookingId = String(formData.get("bookingId") ?? "");
     const expectedCents = Number(formData.get("expectedCents"));
-    if (action !== "open" && action !== "check" && action !== "cancel") throw new Error("Choose a payment action.");
+    if (action !== "open" && action !== "check" && action !== "cancel" && action !== "return") throw new Error("Choose a payment action.");
     if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) throw new Error("Appointment is unavailable.");
     const { tenant, db } = await editableBooking(bookingId, "manager");
     await requireFeature(tenant.id, "booking-essentials");
     const [identity, slug] = await Promise.all([requireIdentity(), currentTenantRouteSlug(tenant.slug)]);
     const reviewPath = tenantPath(slug, `/app/sales?booking=${bookingId}`);
     const outcome = await runAppointmentStripeCheckout({ db, tenantId: tenant.id, bookingId }, config, {
-      action, expectedCents, actorId: identity.id, returnPath: `${reviewPath}&step=payment`,
+      action, expectedCents, actorId: identity.id, returnPath: `${reviewPath}&step=payment&stripe=return`,
     });
     if (outcome.state === "open" && action === "open") destination = outcome.url;
     if (outcome.state === "paid") destination = reviewPath;

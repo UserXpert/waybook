@@ -128,6 +128,9 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
           !attempt.returnPath.startsWith("/") || returnUrl.hash) {
         throw new Error("Invalid Stripe checkout return address.");
       }
+      // Existing attempts retain the exact callback URLs sent with their original retry key.
+      const cancelUrl = new URL(returnUrl);
+      if (cancelUrl.searchParams.get("stripe") === "return") cancelUrl.searchParams.delete("stripe");
       return call(attempt, "create", undefined, new URLSearchParams({
         mode: "payment",
         "payment_method_types[0]": "card",
@@ -135,7 +138,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
         client_reference_id: attempt.id,
         expires_at: String(attempt.expiresAtSeconds),
         success_url: returnUrl.href,
-        cancel_url: returnUrl.href,
+        cancel_url: cancelUrl.href,
         "line_items[0][price_data][currency]": "dkk",
         "line_items[0][price_data][unit_amount]": String(attempt.amountCents),
         "line_items[0][price_data][product_data][name]": "Appointment checkout",

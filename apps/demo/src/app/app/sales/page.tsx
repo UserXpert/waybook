@@ -116,8 +116,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; page?: string; sort?: string; activity?: string } & TableDateParams> }) {
-  const { location: rawLocation, q, status, sale, booking, step, page: rawPage, sort, activity: paymentActivity, from, to } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; page?: string; sort?: string; activity?: string; stripe?: string } & TableDateParams> }) {
+  const { location: rawLocation, q, status, sale, booking, step, page: rawPage, sort, activity: paymentActivity, from, to, stripe } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -382,7 +382,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             </dl></section>
             {paymentStep && paymentBalance ? <section><h3>Payments</h3>
               {stripePending || canStartStripe ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
-                amountCents={outstandingCents} pendingPayment={stripePending} /> : null}
+                amountCents={outstandingCents} pendingPayment={stripePending} verifyOnReturn={stripe === "return"} /> : null}
               {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout /> : null}
             </section> : null}
             {!paymentStep && recorded.length > 0 ? <section><h3>Payment details</h3>

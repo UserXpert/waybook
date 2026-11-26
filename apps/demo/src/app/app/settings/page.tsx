@@ -18,7 +18,7 @@ import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { terminologyLabels, titleTerminology } from "@/lib/waybook/terminology-labels";
 import { StaffRolesPanel } from "./roles/panel";
-import { startStripeSandboxOnboarding } from "./payment-actions";
+import { checkStripeSandboxStatus, startStripeSandboxOnboarding } from "./payment-actions";
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; stripe?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -79,7 +79,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
             {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
             {params.stripe === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
-            <p>{{
+            <p role={params.stripe === "returned" || params.stripe === "checked" ? "status" : undefined}>{{
               unconnected: "Set up a Danish sandbox merchant to test card payments.",
               pending: "Stripe setup is incomplete or awaiting verification.",
               ready: "Stripe has verified your sandbox account for card payments.",
@@ -88,9 +88,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               unresolved: "An earlier setup attempt needs to be reconciled before you can continue.",
               unavailable: "Stripe status is temporarily unavailable. Try refreshing the status.",
             }[merchantStatus]}</p>
-            {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
-              <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : "Continue Stripe setup"} />
-            </form> : <Link href={paymentsHref} className="waybook-action waybook-action--secondary">Refresh status</Link>}
+            {merchantStatus === "unconnected" || merchantStatus === "pending" ? <p>
+              Already use Stripe? Sign in with your Stripe login and select your existing business if Stripe offers it.
+            </p> : null}
+            <div className="workspace-settings__payment-actions">
+              {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
+                <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : "Continue Stripe setup"} />
+              </form> : null}
+              {merchantStatus !== "unconnected" ? <form action={checkStripeSandboxStatus}>
+                <StripeOnboardingButton label="Check Stripe status" checkStatus />
+              </form> : null}
+            </div>
           </section> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
             {canEditBusiness ? <section className="workspace-settings__panel" id="business-settings">
               <h2>Business details</h2>
