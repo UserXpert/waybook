@@ -73,10 +73,10 @@ test("Workspace background stays selected when appearance colours change", async
   await expect(backgrounds.getByRole("button")).toHaveCount(9);
   await expect(backgrounds).toHaveText("");
   await backgrounds.getByRole("button", { name: "Background 2" }).click();
-  await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.avif/);
+  await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.webp/);
   await tints.getByRole("button", { name: "Violet" }).click();
   await expect(html).toHaveAttribute("data-waybook-background", "photo-1");
-  await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.avif/);
+  await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.webp/);
   await page.getByRole("group", { name: "Colour mode" }).getByRole("button", { name: "Dark" }).click();
   await page.reload();
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
@@ -92,7 +92,9 @@ test("Workspace background stays selected when appearance colours change", async
   await expect(dashboard).toHaveCSS("background-color", "rgb(17, 22, 28)");
   const headerStyles = page.getByRole("group", { name: "Header", exact: true });
   const header = page.locator('header[aria-label="Tenant dashboard navigation"]');
-  await expect(html).toHaveAttribute("data-waybook-header", "dark");
+  await expect(headerStyles.getByRole("button")).toHaveCount(2);
+  await expect(html).toHaveAttribute("data-waybook-header", "light");
+  await headerStyles.getByRole("button", { name: "Dark", exact: true }).click();
   await headerStyles.getByRole("button", { name: "Light", exact: true }).click();
   await expect(html).toHaveAttribute("data-waybook-header", "light");
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");

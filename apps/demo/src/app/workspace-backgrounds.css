@@ -29,13 +29,13 @@
 .tenant-appearance__pattern[data-pattern="ripple"] { --workspace-photo: url("/brand/login-blue-background.jpg"); }
 
 :root[data-waybook-background="photo-1"],
-.tenant-appearance__pattern[data-pattern="photo-1"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-1.avif"); }
+.tenant-appearance__pattern[data-pattern="photo-1"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-1.webp"); }
 
 :root[data-waybook-background="photo-2"],
-.tenant-appearance__pattern[data-pattern="photo-2"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-2.avif"); }
+.tenant-appearance__pattern[data-pattern="photo-2"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-2.webp"); }
 
 :root[data-waybook-background="photo-3"],
-.tenant-appearance__pattern[data-pattern="photo-3"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-3.avif"); }
+.tenant-appearance__pattern[data-pattern="photo-3"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-3.webp"); }
 
 :root[data-waybook-background="photo-4"],
 .tenant-appearance__pattern[data-pattern="photo-4"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-4.jpeg"); }
@@ -54,7 +54,10 @@
 
 .tenant-appearance__backgrounds {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(4.4rem, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(3.6rem, 1fr);
+  overflow-x: auto;
+  padding: .2rem;
   gap: .55rem;
 }
 
@@ -69,7 +72,14 @@
   display: block;
   inline-size: 100%;
   aspect-ratio: 1.55;
+  filter: grayscale(1);
   border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
   border-radius: .35rem;
   background: var(--workspace-canvas) var(--workspace-photo) center / cover no-repeat;
 }
+
+.tenant-appearance .tenant-appearance__header { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.workspace-settings .tenant-appearance { max-width: none; }
+.workspace-settings .tenant-appearance :is(.tenant-appearance__themes, .tenant-appearance__tints) { max-width: 31rem; }
+.workspace-settings .tenant-appearance__backgrounds { max-width: 47rem; }

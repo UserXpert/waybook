@@ -14,7 +14,7 @@ test("owner terminology follows the workspace into staff and public booking flow
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/copenhagen\/app/);
 
-    await page.goto("/copenhagen/app/settings#terminology");
+    await page.goto("/copenhagen/app/settings?tab=business#terminology");
     const terminology = page.locator("#terminology");
     await terminology.getByLabel("People who book").selectOption("patient");
     await terminology.getByLabel("People providing services").selectOption("practitioner");

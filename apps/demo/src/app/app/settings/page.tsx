@@ -2,9 +2,13 @@ import Link from "next/link";
 import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, UsersRound, Wrench } from "lucide-react";
 import { notFound } from "next/navigation";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
+import { TenantBusinessProfileForm } from "@/components/tenant-business-profile-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { TenantTerminologyForm } from "@/components/tenant-terminology-form";
 import { isFeatureEnabled } from "@/lib/waybook/features";
+import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-page-media";
+import { parseBusinessProfile } from "@/lib/waybook/business-profile";
+import { tenantDb } from "@/lib/waybook/database";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
@@ -24,9 +28,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const labels = terminologyLabels(terminology.preferences.clientTerm, terminology.preferences.staffTerm);
   const canManageRoles = teamEnabled && membership.role === "owner";
   const showingRoles = params.tab === "roles";
+  const showingBusiness = params.tab === "business";
   if (showingRoles && !canManageRoles) notFound();
   const settingsHref = tenantPath(slug, "/app/settings");
   const rolesHref = `${settingsHref}?tab=roles`;
+  const businessHref = `${settingsHref}?tab=business`;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -38,26 +44,45 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     ...(resourcesEnabled && (permissions.isManager || permissions.canManageResources) ? [{ title: "Resources", description: "Rooms, equipment and availability", href: "/app/resources", Icon: Wrench }] : []),
     ...(emailsEnabled && permissions.isManager ? [{ title: "Email", description: "Sender connection, templates and reminders", href: "/app/emails?view=connection", Icon: Mail }] : []),
   ];
+  const canEditBusiness = membership.role === "owner";
+  const canViewBusiness = canEditBusiness || links.length > 0;
+  if (showingBusiness && !canViewBusiness) notFound();
+  const [business] = showingBusiness && canEditBusiness ? await tenantDb(tenant)<{
+    name: string; profile: unknown; bookingPage: { logoUrl?: unknown } | string; available: boolean;
+  }[]>`
+    SELECT name, to_jsonb(ts)->'business_profile' AS profile, booking_page AS "bookingPage",
+      to_jsonb(ts) ? 'business_profile' AS available
+    FROM tenant_settings ts WHERE tenant_id = ${tenant.id}
+  ` : [];
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={slug} tenantName={tenant.name} active="settings" />
     <div className="workspace-settings">
       <header className="workspace-settings__heading"><p>WORKSPACE</p><h1>Settings</h1><span>Manage your preferences and business setup.</span></header>
       <div className="workspace-settings__layout">
         <nav className="workspace-settings__nav" aria-label="Settings sections">
-          <Link href={`${settingsHref}#appearance`}>Appearance</Link>
-          {links.length ? <Link href={`${settingsHref}#business-settings`}>Business setup</Link> : null}
+          <Link href={settingsHref} aria-current={!showingRoles && !showingBusiness ? "page" : undefined}>Appearance</Link>
+          {canViewBusiness ? <Link href={businessHref} aria-current={showingBusiness ? "page" : undefined}>Business setup</Link> : null}
           {canManageRoles ? <Link href={rolesHref} aria-current={showingRoles ? "page" : undefined}>Roles &amp; permissions</Link> : null}
         </nav>
         <div className="workspace-settings__content">
-          {showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : <>
-          <section className="workspace-settings__panel" id="appearance"><h2>Appearance</h2><p>Choose how Waybook looks on this browser.</p><TenantAppearanceControls /></section>
-          {links.length ? <section className="workspace-settings__panel" id="business-settings"><h2>Business setup</h2><p>Find the settings for your booking experience and operations.</p><div className="workspace-settings__links">{links.map(({ title, description, href, Icon }) => <Link key={title} href={tenantPath(slug, href)}><i><Icon aria-hidden="true" /></i><span><strong>{title}</strong><small>{description}</small></span><ArrowUpRight aria-hidden="true" /></Link>)}</div></section> : null}
-          {membership.role === "owner" ? <section className="workspace-settings__panel" id="terminology">
-            <h2>Terminology</h2>
-            <p>Choose the terms used in your workspace and online booking.</p>
-            {terminology.available ? <TenantTerminologyForm preferences={terminology.preferences} /> : <p>Update the workspace database to change terminology.</p>}
-          </section> : null}
-          </>}
+          {showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
+            {canEditBusiness ? <section className="workspace-settings__panel" id="business-settings">
+              <h2>Business details</h2>
+              <p>Manage your branding, registration and contact details.</p>
+              {business?.available ? <TenantBusinessProfileForm key={tenant.id} name={business.name}
+                profile={parseBusinessProfile(business.profile)}
+                logo={publicBookingImageUrl(parseBookingPage(business.bookingPage).logoUrl)} />
+                : <p>Update the workspace database to edit business details.</p>}
+            </section> : null}
+            {membership.role === "owner" ? <section className="workspace-settings__panel" id="terminology">
+              <h2>Terminology</h2>
+              <p>Choose the terms used in your workspace and online booking.</p>
+              {terminology.available ? <TenantTerminologyForm preferences={terminology.preferences} /> : <p>Update the workspace database to change terminology.</p>}
+            </section> : null}
+            {links.length ? <section className="workspace-settings__panel"><h2>Operations settings</h2>
+              <div className="workspace-settings__links">{links.map(({ title, description, href, Icon }) => <Link key={title} href={tenantPath(slug, href)}><i><Icon aria-hidden="true" /></i><span><strong>{title}</strong><small>{description}</small></span><ArrowUpRight aria-hidden="true" /></Link>)}</div>
+            </section> : null}
+          </> : <section className="workspace-settings__panel" id="appearance"><h2>Appearance</h2><p>Choose how Waybook looks on this browser.</p><TenantAppearanceControls /></section>}
         </div>
       </div>
     </div>

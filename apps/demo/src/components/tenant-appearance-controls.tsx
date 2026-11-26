@@ -19,7 +19,7 @@ const tintLabels: Record<TintChoice, string> = {
   blue: "Ice Blue", neutral: "Neutral", violet: "Violet", rose: "Rose",
   teal: "Teal", coral: "Coral", amber: "Amber",
 };
-const headerLabels: Record<DashboardHeader, string> = { auto: "Match workspace", light: "Light", dark: "Dark" };
+const headerLabels: Record<DashboardHeader, string> = { light: "Light", dark: "Dark" };
 type Appearance = { theme: ThemeChoice; tint: TintChoice; background: DashboardBackground; header: DashboardHeader };
 
 function applyAppearance({ theme, tint, background, header }: Appearance) {
@@ -27,7 +27,7 @@ function applyAppearance({ theme, tint, background, header }: Appearance) {
   document.documentElement.dataset.waybookTheme = resolved;
   document.documentElement.dataset.waybookTint = tint;
   document.documentElement.dataset.waybookBackground = background;
-  document.documentElement.dataset.waybookHeader = header === "auto" ? resolved : header;
+  document.documentElement.dataset.waybookHeader = header;
 }
 
 export function applyStoredTenantAppearance() {
@@ -65,7 +65,7 @@ export function TenantAppearanceControls() {
     <h3>Colour mode</h3>
     <div className="tenant-appearance__themes" role="group" aria-label="Colour mode">{themeChoices.map(({ id, label, Icon }) => <button key={id} type="button" aria-pressed={theme === id} onClick={() => choose("theme", id)}><Icon aria-hidden="true" />{label}</button>)}</div>
     <h3>Header</h3>
-    <div className="tenant-appearance__themes" role="group" aria-label="Header">
+    <div className="tenant-appearance__themes tenant-appearance__header" role="group" aria-label="Header">
       {dashboardHeaders.map((id) => (
         <button key={id} type="button" aria-pressed={header === id} onClick={() => choose("header", id)}>{headerLabels[id]}</button>
       ))}

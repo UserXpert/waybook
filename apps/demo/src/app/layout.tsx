@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { dashboardBackgrounds, dashboardHeaders, dashboardTints, defaultDashboardBackground, defaultDashboardTint } from "@/lib/waybook/appearance";
+import {
+  dashboardBackgrounds, dashboardHeaders, dashboardTints, defaultDashboardBackground, defaultDashboardHeader, defaultDashboardTint,
+} from "@/lib/waybook/appearance";
 import "./globals.css";
 import "./ice-blue.css";
 import "./workspace-backgrounds.css";
@@ -22,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-waybook-theme="light" data-waybook-header="light" data-waybook-tint={defaultDashboardTint} data-waybook-background={defaultDashboardBackground} suppressHydrationWarning>
+    <html lang="en" data-waybook-theme="light" data-waybook-header={defaultDashboardHeader} data-waybook-tint={defaultDashboardTint} data-waybook-background={defaultDashboardBackground} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: `
           (function () {
@@ -35,7 +37,7 @@ export default function RootLayout({
               appearance.waybookTheme = theme === "dark" || theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
               appearance.waybookTint = ${JSON.stringify(dashboardTints)}.includes(tint) ? tint : ${JSON.stringify(defaultDashboardTint)};
               appearance.waybookBackground = ${JSON.stringify(dashboardBackgrounds)}.includes(background) ? background : ${JSON.stringify(defaultDashboardBackground)};
-              appearance.waybookHeader = ${JSON.stringify(dashboardHeaders)}.includes(header) && header !== "auto" ? header : appearance.waybookTheme;
+              appearance.waybookHeader = ${JSON.stringify(dashboardHeaders)}.includes(header) ? header : ${JSON.stringify(defaultDashboardHeader)};
             } catch (error) {}
           })();
         ` }} />

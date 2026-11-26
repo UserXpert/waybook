@@ -10,6 +10,11 @@ import { findTenantByHostname, findTenantByRouteSlug, findTenantMembershipByRout
 
 export type TenantMembership = { tenantId: string; role: string };
 
+async function withWorkspaceName(tenant: TenantRecord): Promise<TenantRecord> {
+  const [settings] = await tenantDb(tenant)<{ name: string }[]>`SELECT name FROM tenant_settings WHERE tenant_id = ${tenant.id}`;
+  return settings?.name ? { ...tenant, name: settings.name } : tenant;
+}
+
 async function assertActiveStaffMembership(tenant: TenantRecord, identityId: string, membership: TenantMembership, isApiRequest: boolean) {
   const [staff] = await tenantDb(tenant)<{ isActive: boolean; staffRoleId: string | null }[]>`
     SELECT is_active AS "isActive", to_jsonb(tm)->>'staff_role_id' AS "staffRoleId" FROM team_members tm
@@ -43,14 +48,14 @@ async function resolveTenantWorkspace(requestHeaders?: Headers): Promise<{ tenan
     if (identity.isPlatformAdmin) {
       const tenant = await findTenantByRouteSlug(routeSlug);
       if (!tenant) notFound();
-      return { tenant, membership: { tenantId: tenant.id, role: "read-only" }, isControlView: true };
+      return { tenant: await withWorkspaceName(tenant), membership: { tenantId: tenant.id, role: "read-only" }, isControlView: true };
     }
     const workspace = await findTenantMembershipByRouteSlug(routeSlug, identity.id);
     if (!workspace) notFound();
     const { tenant, membership } = workspace;
     await assertActiveStaffMembership(tenant, identity.id, membership, Boolean(requestHeaders));
-    await closeOverdueConfirmedBookings(tenant);
-    return { tenant, membership, isControlView: false };
+    const [namedTenant] = await Promise.all([withWorkspaceName(tenant), closeOverdueConfirmedBookings(tenant)]);
+    return { tenant: namedTenant, membership, isControlView: false };
   }
   notFound();
 }

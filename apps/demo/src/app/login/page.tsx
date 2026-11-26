@@ -16,12 +16,12 @@ async function getClientBranding(requestHeaders: Headers) {
   if (!tenant) return null;
 
   try {
-    const [settings] = await tenantDb(tenant)<{ bookingPage: { logoUrl?: unknown } | string | null }[]>`
-      SELECT booking_page AS "bookingPage"
+    const [settings] = await tenantDb(tenant)<{ name: string; bookingPage: { logoUrl?: unknown } | string | null }[]>`
+      SELECT name, booking_page AS "bookingPage"
       FROM tenant_settings WHERE tenant_id = ${tenant.id} LIMIT 1
     `;
     const src = publicBookingImageUrl(parseBookingPage(settings?.bookingPage).logoUrl);
-    return { src, name: tenant.name };
+    return { src, name: settings?.name || tenant.name };
   } catch {
     return { src: undefined, name: tenant.name };
   }

@@ -6,6 +6,6 @@ export const dashboardBackgrounds = ["ripple", "photo-1", "photo-2", "photo-3", 
 export type DashboardBackground = (typeof dashboardBackgrounds)[number];
 export const defaultDashboardBackground: DashboardBackground = "ripple";
 
-export const dashboardHeaders = ["auto", "light", "dark"] as const;
+export const dashboardHeaders = ["light", "dark"] as const;
 export type DashboardHeader = (typeof dashboardHeaders)[number];
-export const defaultDashboardHeader: DashboardHeader = "auto";
+export const defaultDashboardHeader: DashboardHeader = "light";

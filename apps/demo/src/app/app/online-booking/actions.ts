@@ -49,7 +49,7 @@ export async function saveOnlineBookingSettings(formData: FormData) {
   const bookingLogoFile = formData.get("bookingLogo");
   const logoFile = embedLogoFile instanceof File && embedLogoFile.size > 0 ? embedLogoFile : bookingLogoFile;
   if (logoFile instanceof File) logoUpload.set("photo", logoFile);
-  const logoUrl = await cataloguePhotoFromForm(logoUpload, typeof currentPage.logoUrl === "string" ? currentPage.logoUrl : null);
+  const logoUrl = await cataloguePhotoFromForm(logoUpload, null);
   const services = await db<{ id: string }[]>`SELECT id FROM services WHERE tenant_id=${tenant.id} AND id = ANY(${visibleServiceIds})`;
   if (services.length !== visibleServiceIds.length) throw new Error("One or more selected services are unavailable.");
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,7 +59,15 @@ export async function saveOnlineBookingSettings(formData: FormData) {
   if (!hasRequiredOnlineLocation(managedLocations.length, onlineLocationIds.length)) throw new Error("Keep at least one active location enabled for online booking.");
   const bookingPage = { intro, contact, bookingTheme, policyText: policyText || undefined, brandColor: brandColor || undefined, logoUrl: logoUrl || undefined, policyVersion: policyVersion || undefined, policyUrl: policyUrl || undefined, embedOrigins, embedButtonLabel: embedButtonLabel || undefined, embedButtonPosition, embedPanelImageUrl: embedPanelImageUrl || undefined, embedPanelOverlayColor: embedPanelOverlayColor || undefined, embedPanelTitle: embedPanelTitle || undefined, embedPanelCopy: embedPanelCopy || undefined, serviceStepTitle: serviceStepTitle || undefined, timeStepTitle: timeStepTitle || undefined, detailsStepTitle: detailsStepTitle || undefined, showPrices: formData.get("showPrices") === "on", visibleServiceIds };
   await db.begin(async transaction => {
-    await transaction.unsafe("UPDATE tenant_settings SET booking_page=$1::jsonb, updated_at=now() WHERE tenant_id=$2", [JSON.stringify(bookingPage), tenant.id]);
+    await transaction.unsafe(`
+      UPDATE tenant_settings SET booking_page = $1::text::jsonb || CASE
+        WHEN $3::boolean THEN '{}'::jsonb
+        ELSE jsonb_strip_nulls(jsonb_build_object('logoUrl', CASE jsonb_typeof(booking_page)
+          WHEN 'string' THEN (booking_page #>> '{}')::jsonb -> 'logoUrl'
+          WHEN 'object' THEN booking_page -> 'logoUrl'
+        END))
+      END, updated_at = now() WHERE tenant_id = $2
+    `, [JSON.stringify(bookingPage), tenant.id, Boolean(logoUrl)]);
     await transaction.unsafe("UPDATE locations SET is_online_bookable=(id = ANY($1::uuid[])), updated_at=now() WHERE tenant_id=$2 AND is_active=TRUE AND id = ANY($3::uuid[]) AND is_online_bookable IS DISTINCT FROM (id = ANY($1::uuid[]))", [onlineLocationIds, tenant.id, managedLocationIds]);
     await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'online_booking.settings_saved', 'tenant_settings', $2, $3::jsonb)", [tenant.id, tenant.id, JSON.stringify({ showPrices: bookingPage.showPrices, visibleServiceCount: visibleServiceIds.length, onlineLocationCount: onlineLocationIds.length })]);
   });
