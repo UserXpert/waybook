@@ -16,6 +16,7 @@ const originalFetch = globalThis.fetch;
 const accounts = new Map();
 const sessions = new Map();
 const refunds = new Map();
+const refundReads = new Map();
 const error = (status) => Response.json({ error: "stripe fixture error" }, { status });
 
 globalThis.fetch = async (input, init) => {
@@ -43,9 +44,13 @@ globalThis.fetch = async (input, init) => {
       if (pending && amount !== 1202) return error(503);
       return Response.json(refund);
     }
-    const refund = refunds.get(url.pathname.split("/").at(-1));
+    const refundId = url.pathname.split("/").at(-1);
+    const refund = refunds.get(refundId);
     if (!refund || request.method !== "GET") return error(404);
-    refund.status = refund.amount === 1202 ? "failed" : "succeeded";
+    const reads = (refundReads.get(refundId) ?? 0) + 1;
+    refundReads.set(refundId, reads);
+    refund.status = refund.amount === 1202 || (refund.amount === 1303 && reads >= 3) ? "failed" : "succeeded";
+    if (refund.amount === 1303 && reads >= 4) refund.failure_balance_transaction = `txn_${refundId.slice(3)}`;
     return Response.json(refund);
   }
   if (url.pathname.startsWith("/v1/checkout/sessions")) {

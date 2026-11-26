@@ -126,7 +126,29 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
                 expect(await receipts(id)).toEqual([receipt]);
               } else {
                 await expect(refundAmount).toHaveValue("52.00");
-                expect(await receipts(id)).toEqual([receipt, { id: pending.id, amount_cents: 1303, method: "card" }]);
+                const refunded = { id: pending.id, amount_cents: 1303, method: "card" };
+                expect(await receipts(id)).toEqual([receipt, refunded]);
+                const failure = { ...refund, type: "refund.failed" };
+                const deliverFailure = () => deliverStripe(sender.request, endpoint, failure);
+                expect(await deliverFailure()).toBe(503);
+                expect(await receipts(id)).toEqual([receipt, refunded]);
+                expect(await Promise.all([deliverFailure(), deliverFailure()])).toEqual([204, 204]);
+                const [returned] = await db`
+                  SELECT state, return_payment_id, failure_balance_transaction_id
+                  FROM stripe_sandbox_refund_attempts WHERE id = ${pending.id}
+                `;
+                expect(returned).toEqual({ state: "failed", return_payment_id: expect.any(String),
+                  failure_balance_transaction_id: `txn_${refundId.slice(3)}` });
+                expect(await receipts(id)).toEqual([receipt, refunded,
+                  { id: returned.return_payment_id, amount_cents: 1303, method: "card" }]);
+                expect(await db`SELECT kind FROM payment_records WHERE id = ${returned.return_payment_id}`).toEqual([{ kind: "payment" }]);
+                await page.reload();
+                await expect(sale.getByText("Stripe sandbox card", { exact: true })).toHaveCount(1);
+                await expect(sale.getByText("Refund returned · card", { exact: true })).toBeVisible();
+                await expect(sale.getByRole("alert")).toContainText("Stripe returned the last refund");
+                await expect(refundAmount).toHaveValue("65.03");
+                await page.goto("/nordic/app/reports?range=7&sort=newest");
+                await expect(page.getByRole("row").filter({ hasText: name }).getByText("refund returned", { exact: true })).toBeVisible();
               }
             }
           } else {

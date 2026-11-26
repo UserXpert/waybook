@@ -57,7 +57,7 @@ type SaleRow = {
 type Location = { id: string; name: string };
 type Product = { id: string; title: string; priceCents: number; currency: string };
 type SaleLine = { id: string; title: string; unitPriceCents: number; quantity: number; discountCents: number };
-type PaymentItem = { id: string; kind: "payment" | "refund"; amountCents: number; method: string; recordedAt: Date; adjustment: boolean };
+type PaymentItem = { id: string; kind: "payment" | "refund"; amountCents: number; method: string; recordedAt: Date; adjustment: boolean; refundReturned: boolean };
 type EligiblePackage = { id: string; title: string; remainingUnits: number; expiresAt: Date | null };
 type BookingActivity = { id: string; eventType: string; actorIdentityId: string | null; createdAt: Date };
 type ActivityActor = { id: string; displayName: string };
@@ -94,6 +94,7 @@ function activityLabel(eventType: string, clientLabel: string) {
     "booking.no_show": "Marked as no-show",
     "payment.payment": "Payment recorded",
     "payment.refund": "Refund recorded",
+    "payment.refund_returned": "Stripe returned a refund",
     "payment.gift_card": "Gift card redeemed",
     "payment.gift_card_refund": "Gift card refunded",
     "payment.corrected": "Payment updated",
@@ -148,9 +149,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const saleRows = db`
       SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.attendance_stage AS "attendanceStage", b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
-        coalesce(sum(pr.amount_cents) FILTER (WHERE pr.kind = 'refund' AND EXISTS (
+        coalesce(sum(CASE pr.kind WHEN 'refund' THEN pr.amount_cents ELSE -pr.amount_cents END) FILTER (WHERE EXISTS (
           SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
-            AND e.event_type = 'payment.refund' AND e.metadata->>'paymentId' = pr.id::text
+            AND e.event_type IN ('payment.refund', 'payment.refund_returned') AND e.metadata->>'paymentId' = pr.id::text
             AND e.metadata->>'source' = 'stripe_sandbox'
         )), 0)::int AS "stripeRefundedCents",
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
@@ -220,7 +221,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     db<PaymentItem[]>`
       SELECT p.id, p.kind, p.amount_cents AS "amountCents", p.method, p.recorded_at AS "recordedAt",
         EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
-          AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text) AS adjustment
+          AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text) AS adjustment,
+        EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+          AND e.event_type = 'payment.refund_returned' AND e.metadata->>'paymentId' = p.id::text) AS "refundReturned"
       FROM payment_records p WHERE p.tenant_id = ${tenant.id} AND p.booking_id = ${selectedSale.bookingId}
       ORDER BY p.recorded_at DESC, p.id DESC
     `,
@@ -416,7 +419,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {selectedSale.giftCardRedeemed ? <p className="sale-detail__note">A gift card has been used for this appointment.</p> : <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />}
               </section> : null}
               <Link className="waybook-action waybook-action--secondary sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>
-              <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
+              <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
               {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
             </> : null}
           </div>

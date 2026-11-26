@@ -28,7 +28,10 @@ export function activeAppointmentPayments(db: Pick<ReturnType<typeof tenantDb>, 
       AND NOT EXISTS (
         SELECT 1 FROM booking_events e
         WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
-          AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text
+          AND (
+            (e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text)
+            OR (e.event_type = 'payment.refund_returned' AND e.metadata->>'paymentId' = p.id::text)
+          )
       )
       AND (p.method <> 'gift_card' OR NOT EXISTS (
         SELECT 1 FROM payment_records r

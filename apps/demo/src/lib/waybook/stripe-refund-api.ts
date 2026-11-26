@@ -10,7 +10,11 @@ export type SandboxRefundAttempt = {
   amountCents: number;
 };
 
-export type SandboxRefund = { id: string; state: "pending" | "succeeded" | "failed" | "canceled" };
+export type SandboxRefund = {
+  id: string;
+  state: "pending" | "succeeded" | "failed" | "canceled";
+  failureBalanceTransactionId?: string;
+};
 
 export function stripeRefundSandbox(config: StripeSandboxConfig, request: typeof fetch = fetch) {
   async function call(attempt: SandboxRefundAttempt, refundId?: string): Promise<SandboxRefund> {
@@ -51,8 +55,14 @@ export function stripeRefundSandbox(config: StripeSandboxConfig, request: typeof
       case "requires_action":
       case "pending": return { id: refund.id, state: "pending" };
       case "succeeded":
-      case "failed":
       case "canceled": return { id: refund.id, state: refund.status };
+      case "failed": {
+        const transaction = refund.failure_balance_transaction;
+        if (typeof transaction === "string" && /^txn_[A-Za-z0-9]+$/.test(transaction)) {
+          return { id: refund.id, state: "failed", failureBalanceTransactionId: transaction };
+        }
+        return { id: refund.id, state: "failed" };
+      }
       default: throw new Error("Stripe returned an unexpected refund status.");
     }
   }

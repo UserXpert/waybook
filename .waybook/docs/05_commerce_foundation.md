@@ -163,8 +163,14 @@ pending Waybook refund while the drawer is closed or recover the Stripe refund
 ID after an interrupted response. After a failed refund, the drawer displays
 the failure and the refundable balance is available again.
 
-Hosted sandbox verification, refunds started in Stripe's Dashboard, any
-reversal after a previously confirmed refund, and existing-account connection remain part of
+Tenant migration 0069 adds refund returns. If Stripe reports a previously
+recorded refund as failed, Waybook waits for the linked Stripe balance
+transaction that confirms the return. It preserves the original refund and
+adds a separate return entry for the same amount. Sales restores the
+refundable balance and Reports shows the return separately from collections.
+
+Hosted sandbox verification, refunds started in Stripe's Dashboard,
+and existing-account connection remain part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)

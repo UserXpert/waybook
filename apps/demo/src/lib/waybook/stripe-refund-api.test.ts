@@ -51,3 +51,10 @@ test("Stripe refund rejects a mismatched payment, amount, identifier, currency o
   const live = stripeRefundSandbox({ ...config, secretKey: "sk_live_fixture" }, async () => assert.fail("Live request sent"));
   await assert.rejects(() => live.create(attempt), /Invalid Stripe sandbox refund/);
 });
+
+test("a failed refund carries the verified balance transaction if Stripe returned the funds", async () => {
+  const stripe = stripeRefundSandbox(config, async () =>
+    Response.json({ ...payload, status: "failed", failure_balance_transaction: "txn_returnfixture" }));
+  assert.deepEqual(await stripe.retrieve(attempt, payload.id),
+    { id: payload.id, state: "failed", failureBalanceTransactionId: "txn_returnfixture" });
+});
