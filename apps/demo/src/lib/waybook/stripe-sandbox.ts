@@ -1,9 +1,17 @@
 import "server-only";
 
-import { controlDb } from "./database";
+import { controlDb, findTenantById } from "./database";
 import { stripeConnectSandbox, type StripeSandboxConfig } from "./stripe-connect-api";
 
 type Connection = { accountId: string | null; creationKey: string; retryable: boolean };
+
+export async function stripeSandboxTenantForAccount(accountId: string) {
+  const [connection] = await controlDb<{ tenantId: string }[]>`
+    SELECT tenant_id AS "tenantId" FROM waybook_stripe_sandbox_connections WHERE account_id = ${accountId}
+  `;
+  const tenant = connection ? await findTenantById(connection.tenantId) : null;
+  return tenant?.lifecycleStatus === "active" ? tenant : null;
+}
 
 async function sandboxConnection(tenantId: string) {
   const [connection] = await controlDb<Connection[]>`

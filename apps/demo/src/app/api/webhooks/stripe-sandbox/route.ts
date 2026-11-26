@@ -1,5 +1,6 @@
 import { appointmentStripeConfig, settleStripeCheckoutNotification } from "@/lib/waybook/stripe-appointment-checkout";
-import { readStripeCheckoutNotification, type StripeCheckoutNotification } from "@/lib/waybook/stripe-checkout-webhook";
+import { settleStripeRefundNotification } from "@/lib/waybook/stripe-appointment-refunds";
+import { readStripeSandboxNotification, type StripeSandboxNotification } from "@/lib/waybook/stripe-sandbox-webhook";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
   if (!signature || signature.length > 4096 || !request.body) return new Response(null, { status: 400 });
 
-  let notification: StripeCheckoutNotification | null;
+  let notification: StripeSandboxNotification | null;
   try {
     const reader = request.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -30,17 +31,18 @@ export async function POST(request: Request) {
     } finally {
       reader.releaseLock();
     }
-    notification = readStripeCheckoutNotification(Buffer.concat(chunks, length), signature, secret);
+    notification = readStripeSandboxNotification(Buffer.concat(chunks, length), signature, secret);
   } catch {
     return new Response(null, { status: 400 });
   }
 
   if (notification) {
     try {
-      await settleStripeCheckoutNotification(config, notification);
+      if (notification.kind === "checkout") await settleStripeCheckoutNotification(config, notification);
+      else await settleStripeRefundNotification(config, notification);
     } catch {
       // Stripe retries failed deliveries. Avoid logging the signed body or credentials.
-      console.error("Stripe sandbox checkout webhook could not be reconciled.");
+      console.error("Stripe sandbox webhook could not be reconciled.", { kind: notification.kind });
       return new Response(null, { status: 503 });
     }
   }

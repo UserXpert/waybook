@@ -34,17 +34,18 @@ globalThis.fetch = async (input, init) => {
           ![...sessions.values()].some(({ checkout }) => checkout.payment_intent === intent) || amount <= 0) return error(400);
       const id = `re_${key.replaceAll("-", "")}`;
       if (refunds.has(id)) return Response.json(refunds.get(id));
+      const pending = [1101, 1202, 1303].includes(amount);
       const refund = {
         id, object: "refund", payment_intent: intent, amount, currency: "dkk",
-        metadata: { waybook_refund_attempt: key }, status: amount === 1101 ? "pending" : "succeeded",
+        metadata: { waybook_refund_attempt: key }, status: pending ? "pending" : "succeeded",
       };
       refunds.set(id, refund);
-      if (amount === 1101) return error(503);
+      if (pending && amount !== 1202) return error(503);
       return Response.json(refund);
     }
     const refund = refunds.get(url.pathname.split("/").at(-1));
     if (!refund || request.method !== "GET") return error(404);
-    refund.status = "succeeded";
+    refund.status = refund.amount === 1202 ? "failed" : "succeeded";
     return Response.json(refund);
   }
   if (url.pathname.startsWith("/v1/checkout/sessions")) {

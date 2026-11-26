@@ -1,9 +1,10 @@
 import "server-only";
 
-import { controlDb, findTenantById, tenantDb } from "./database";
+import { controlDb, tenantDb } from "./database";
 import { stripeConnectSandbox, stripeSandboxConfig, type StripeSandboxConfig } from "./stripe-connect-api";
 import { stripeCheckoutSandbox, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
-import type { StripeCheckoutNotification } from "./stripe-checkout-webhook";
+import type { StripeCheckoutNotification } from "./stripe-sandbox-webhook";
+import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
 
 type TenantDatabase = ReturnType<typeof tenantDb>;
 type CheckoutContext = { db: TenantDatabase; tenantId: string; bookingId: string };
@@ -156,12 +157,8 @@ export async function runAppointmentStripeCheckout(
 
 export async function settleStripeCheckoutNotification(config: StripeSandboxConfig, notification: StripeCheckoutNotification) {
   const { accountId, attemptId, sessionId } = notification;
-  const [connection] = await controlDb<{ tenantId: string }[]>`
-    SELECT tenant_id AS "tenantId" FROM waybook_stripe_sandbox_connections WHERE account_id = ${accountId}
-  `;
-  if (!connection) return;
-  const tenant = await findTenantById(connection.tenantId);
-  if (!tenant || tenant.lifecycleStatus !== "active") return;
+  const tenant = await stripeSandboxTenantForAccount(accountId);
+  if (!tenant) return;
   const db = tenantDb(tenant);
   const [attempt] = await db.unsafe<Attempt[]>(`
     ${selectAttempt} WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND state = 'pending'

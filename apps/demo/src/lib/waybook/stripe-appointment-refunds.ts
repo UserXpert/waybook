@@ -1,8 +1,10 @@
 import "server-only";
 
-import type { tenantDb } from "./database";
+import { tenantDb } from "./database";
 import { appointmentStripeAccount } from "./stripe-appointment-checkout";
 import type { StripeSandboxConfig } from "./stripe-connect-api";
+import type { StripeRefundNotification } from "./stripe-sandbox-webhook";
+import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
 import { stripeRefundSandbox, type SandboxRefund, type SandboxRefundAttempt } from "./stripe-refund-api";
 
 type Database = ReturnType<typeof tenantDb>;
@@ -15,6 +17,8 @@ type StoredRefund = SandboxRefundAttempt & {
   retryable: boolean;
 };
 type PaidCheckout = { id: string; accountId: string; paymentIntentId: string };
+const refundColumns = `r.id, r.amount_cents AS "amountCents", r.created_by_identity_id AS "actorId",
+  r.refund_id AS "refundId", r.state, r.created_at > now() - interval '20 hours' AS retryable`;
 
 async function lockBooking(sql: Query, { tenantId, bookingId }: Context) {
   const [booking] = await sql.unsafe<{ status: string }[]>("SELECT status FROM bookings WHERE tenant_id = $1 AND id = $2 FOR UPDATE", [tenantId, bookingId]);
@@ -41,10 +45,9 @@ async function remainingRefund(sql: Query, { tenantId, bookingId }: Context) {
 
 async function refundAttempt(sql: Query, payment: PaidCheckout, id: string | null) {
   const [attempt] = await sql.unsafe<Omit<StoredRefund, "accountId" | "paymentIntentId">[]>(`
-    SELECT id, amount_cents AS "amountCents", created_by_identity_id AS "actorId", refund_id AS "refundId",
-           state, created_at > now() - interval '20 hours' AS retryable
-    FROM stripe_sandbox_refund_attempts
-    WHERE payment_attempt_id = $1 AND ($2::uuid = id OR ($2::uuid IS NULL AND state = 'pending'))
+    SELECT ${refundColumns}
+    FROM stripe_sandbox_refund_attempts r
+    WHERE r.payment_attempt_id = $1 AND ($2::uuid = r.id OR ($2::uuid IS NULL AND r.state = 'pending'))
   `, [payment.id, id]);
   return attempt ? { ...attempt, accountId: payment.accountId, paymentIntentId: payment.paymentIntentId } : null;
 }
@@ -52,11 +55,17 @@ async function refundAttempt(sql: Query, payment: PaidCheckout, id: string | nul
 export async function stripeAppointmentRefundDetails(context: Context) {
   const paid = await paidCheckout(context.db, context);
   if (!paid) return null;
-  const [remainingCents, pending] = await Promise.all([
+  const [remainingCents, [latest]] = await Promise.all([
     remainingRefund(context.db, context),
-    refundAttempt(context.db, paid, null),
+    context.db.unsafe<{ state: SandboxRefund["state"]; amountCents: number }[]>(`
+      SELECT state, amount_cents AS "amountCents" FROM stripe_sandbox_refund_attempts
+      WHERE payment_attempt_id = $1 ORDER BY (state = 'pending') DESC, created_at DESC, id DESC LIMIT 1
+    `, [paid.id]),
   ]);
-  return { remainingCents, pendingCents: pending?.amountCents ?? null };
+  const pendingCents = latest?.state === "pending" ? latest.amountCents : null;
+  const failure = latest?.state === "failed" ? "Stripe declined the last refund." :
+    latest?.state === "canceled" ? "Stripe cancelled the last refund." : null;
+  return { remainingCents, pendingCents, failure };
 }
 
 type RefundInput = { action: "start" | "check"; id: string; amountCents: number; expectedCents: number; actorId: string };
@@ -132,4 +141,20 @@ export async function runStripeAppointmentRefund(context: Context, config: Strip
   }
   const refund = attempt.refundId ? await stripe.retrieve(attempt, attempt.refundId) : await stripe.create(attempt);
   return reconcileRefund(context, attempt, refund);
+}
+
+export async function settleStripeRefundNotification(config: StripeSandboxConfig, notification: StripeRefundNotification) {
+  const { accountId, attemptId, refundId } = notification;
+  const tenant = await stripeSandboxTenantForAccount(accountId);
+  if (!tenant) return;
+  const db = tenantDb(tenant);
+  const [attempt] = await db.unsafe<(StoredRefund & { bookingId: string })[]>(`
+    SELECT ${refundColumns}, p.booking_id AS "bookingId", p.account_id AS "accountId",
+           p.payment_intent_id AS "paymentIntentId"
+    FROM stripe_sandbox_refund_attempts r JOIN stripe_sandbox_checkout_attempts p ON p.id = r.payment_attempt_id
+    WHERE p.tenant_id = $1 AND p.account_id = $2 AND p.state = 'settled' AND r.id = $3 AND r.state = 'pending'
+  `, [tenant.id, accountId, attemptId]);
+  if (!attempt || (attempt.refundId && attempt.refundId !== refundId)) return;
+  const refund = await stripeRefundSandbox(config).retrieve(attempt, refundId);
+  await reconcileRefund({ db, tenantId: tenant.id, bookingId: attempt.bookingId }, attempt, refund);
 }

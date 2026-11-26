@@ -3,11 +3,12 @@
 import { useActionState } from "react";
 import { updateStripeAppointmentRefund } from "@/app/app/calendars/actions";
 
-export function StripeAppointmentRefund({ bookingId, requestId, remainingCents, pendingCents }: {
+export function StripeAppointmentRefund({ bookingId, requestId, remainingCents, pendingCents, failure }: {
   bookingId: string;
   requestId: string;
   remainingCents: number;
   pendingCents: number | null;
+  failure: string | null;
 }) {
   const [result, submit, submitting] = useActionState(updateStripeAppointmentRefund, { error: null, success: null });
   const formatter = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
@@ -15,7 +16,7 @@ export function StripeAppointmentRefund({ bookingId, requestId, remainingCents, 
     <input type="hidden" name="bookingId" value={bookingId} />
     <input type="hidden" name="requestId" value={requestId} />
     <input type="hidden" name="expectedCents" value={remainingCents} />
-    {result.error ? <p className="manual-appointment__message is-error" role="alert">{result.error}</p> : null}
+    {result.error || failure ? <p className="manual-appointment__message is-error" role="alert">{result.error || failure}</p> : null}
     {result.success ? <p className="sale-detail__note" role="status">{result.success}</p> : null}
     {pendingCents !== null ? <>
       <p className="sale-detail__note">Pending refund {formatter.format(pendingCents / 100)}</p>

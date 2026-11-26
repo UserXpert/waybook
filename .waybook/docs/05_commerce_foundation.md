@@ -157,8 +157,14 @@ original payment. Pending requests reserve the refundable balance and reuse
 the same Stripe request when retried. Sales shows returned amounts separately
 from open balances.
 
-Hosted sandbox verification, automatic refund notifications, refunds started
-in Stripe's Dashboard, and existing-account connection remain part of
+Subscribe the same connected-account webhook to `refund.created`,
+`refund.updated`, and `refund.failed`. A verified notification can resolve a
+pending Waybook refund while the drawer is closed or recover the Stripe refund
+ID after an interrupted response. After a failed refund, the drawer displays
+the failure and the refundable balance is available again.
+
+Hosted sandbox verification, refunds started in Stripe's Dashboard, any
+reversal after a previously confirmed refund, and existing-account connection remain part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)

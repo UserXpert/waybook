@@ -1,6 +1,15 @@
 import { createHmac, randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import postgres from "postgres";
+
+async function deliverStripe(sender: APIRequestContext, endpoint: string, event: object, valid = true) {
+  const data = JSON.stringify(event);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const digest = createHmac("sha256", "whsec_waybookE2EFixture").update(`${timestamp}.${data}`).digest("hex");
+  return (await sender.post(endpoint, { data, headers: {
+    "content-type": "application/json", "stripe-signature": `t=${timestamp},v1=${valid ? digest : "0".repeat(64)}`,
+  } })).status();
+}
 
 test("Stripe checkout reserves one balance, reconciles once, and releases a cancelled attempt", async ({ page }) => {
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
@@ -70,18 +79,9 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
             type: index === 2 ? "checkout.session.completed" : "checkout.session.expired",
             data: { object: { object: "checkout.session", id: sessionId, livemode: false, client_reference_id: reserved.id } },
           };
-          async function deliver({ account = event.account, valid = true } = {}) {
-            const data = JSON.stringify({ ...event, account });
-            const timestamp = Math.floor(Date.now() / 1000);
-            const digest = createHmac("sha256", "whsec_waybookE2EFixture").update(`${timestamp}.${data}`).digest("hex");
-            const signature = valid ? digest : "0".repeat(64);
-            return (await sender.request.post(endpoint, { data, headers: {
-              "content-type": "application/json",
-              "stripe-signature": `t=${timestamp},v1=${signature}`,
-            } })).status();
-          }
-          expect(await deliver({ valid: false })).toBe(400);
-          expect(await deliver({ account: "acct_unrelated" })).toBe(204);
+          const deliver = () => deliverStripe(sender.request, endpoint, event);
+          expect(await deliverStripe(sender.request, endpoint, event, false)).toBe(400);
+          expect(await deliverStripe(sender.request, endpoint, { ...event, account: "acct_unrelated" })).toBe(204);
           expect(await attempts(id)).toEqual([{ id: reserved.id, state: "pending", session_id: null }]);
           expect(await receipts(id)).toEqual([]);
           if (index === 2) {
@@ -93,7 +93,42 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
           await page.reload();
           if (index === 2) {
             await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
-            expect(await receipts(id)).toEqual([{ id: reserved.id, amount_cents: 6503, method: "card" }]);
+            const receipt = { id: reserved.id, amount_cents: 6503, method: "card" };
+            expect(await receipts(id)).toEqual([receipt]);
+            await sale.getByRole("button", { name: "Finish checkout" }).click();
+            const refundAmount = sale.getByLabel("Refund amount (DKK)");
+            const refundButton = sale.getByRole("button", { name: "Refund in Stripe sandbox" });
+            for (const [amount, status] of [["12.02", "failed"], ["13.03", "succeeded"]]) {
+              await refundAmount.fill(amount);
+              await refundButton.click();
+              await expect(sale.getByRole("button", { name: "Check refund status" })).toBeVisible();
+              const [pending] = await db`SELECT id, refund_id FROM stripe_sandbox_refund_attempts
+                WHERE payment_attempt_id = ${reserved.id} AND state = 'pending'`;
+              const refundId = `re_${pending.id.replaceAll("-", "")}`;
+              expect(pending.refund_id).toBe(status === "failed" ? refundId : null);
+              const refund = {
+                object: "event", id: "evt_waybookrefund", livemode: false, account: "acct_checkoutFixture",
+                type: status === "failed" ? "refund.failed" : "refund.updated",
+                data: { object: { object: "refund", id: refundId, metadata: { waybook_refund_attempt: pending.id } } },
+              };
+              await page.goto("/nordic/app/sales");
+              expect(await deliverStripe(sender.request, endpoint, refund, false)).toBe(400);
+              expect(await deliverStripe(sender.request, endpoint, { ...refund, account: "acct_unrelated" })).toBe(204);
+              expect(await receipts(id)).toEqual([receipt]);
+              const sendRefund = () => deliverStripe(sender.request, endpoint, refund);
+              expect(await Promise.all([sendRefund(), sendRefund()])).toEqual([204, 204]);
+              expect(await db`SELECT state, refund_id FROM stripe_sandbox_refund_attempts WHERE id = ${pending.id}`)
+                .toEqual([{ state: status, refund_id: refundId }]);
+              await page.goto(paymentPath);
+              if (status === "failed") {
+                await expect(sale.getByRole("alert")).toContainText("Stripe declined the last refund.");
+                await expect(refundAmount).toHaveValue("65.03");
+                expect(await receipts(id)).toEqual([receipt]);
+              } else {
+                await expect(refundAmount).toHaveValue("52.00");
+                expect(await receipts(id)).toEqual([receipt, { id: pending.id, amount_cents: 1303, method: "card" }]);
+              }
+            }
           } else {
             await expect(sale.getByRole("button", { name: "Record payment" })).toBeVisible();
             expect(await receipts(id)).toEqual([]);
