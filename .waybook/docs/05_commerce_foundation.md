@@ -147,8 +147,18 @@ uses the same ledger transaction and remains available.
 
 An unresolved attempt without a saved session or a confirmed notification
 stays reserved past the replay deadline and needs provider reconciliation.
-Hosted sandbox verification, provider refunds and existing-account
-connection remain part of
+
+Tenant migration 0068 adds full and partial Stripe sandbox refunds. After
+finishing checkout, open the sale, enter an amount under **Payment details**,
+and choose **Refund in Stripe sandbox**. If the result is pending, use
+**Check refund status**. The amount returns to the original test card.
+Waybook records a refund only when Stripe confirms the same amount and
+original payment. Pending requests reserve the refundable balance and reuse
+the same Stripe request when retried. Sales shows returned amounts separately
+from open balances.
+
+Hosted sandbox verification, automatic refund notifications, refunds started
+in Stripe's Dashboard, and existing-account connection remain part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)

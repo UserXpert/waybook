@@ -18,6 +18,7 @@ import { arrivalAlertsEnabled, unnotifiedArrivalProviders } from "@/lib/waybook/
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { appointmentStripeConfig, runAppointmentStripeCheckout } from "@/lib/waybook/stripe-appointment-checkout";
+import { runStripeAppointmentRefund } from "@/lib/waybook/stripe-appointment-refunds";
 import { requireFeature } from "@/lib/waybook/features";
 import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
@@ -923,6 +924,39 @@ export async function cancelAppointment(formData: FormData): Promise<Cancellatio
 }
 
 export type PaymentState = { error: string | null; success: string | null };
+
+export async function updateStripeAppointmentRefund(_state: PaymentState, formData: FormData): Promise<PaymentState> {
+  try {
+    const config = appointmentStripeConfig();
+    const action = formData.get("action");
+    const bookingId = String(formData.get("bookingId") ?? "");
+    const id = String(formData.get("requestId") ?? "");
+    const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+    if (!config || (action !== "start" && action !== "check") || !uuid.test(bookingId) || !uuid.test(id)) {
+      throw new Error("Stripe sandbox refund is unavailable.");
+    }
+    const amount = String(formData.get("amountDkk") ?? "").replace(",", ".");
+    if (action === "start" && !/^\d{1,6}(?:\.\d{1,2})?$/.test(amount)) throw new Error("Enter a valid refund amount.");
+    const { tenant, db } = await editableBooking(bookingId, "manager");
+    await requireFeature(tenant.id, "booking-essentials");
+    const actor = await requireIdentity();
+    const result = await runStripeAppointmentRefund({ db, tenantId: tenant.id, bookingId }, config, {
+      action, id, amountCents: Math.round(Number(amount) * 100),
+      expectedCents: Number(formData.get("expectedCents")), actorId: actor.id,
+    });
+    const message = {
+      succeeded: "Stripe sandbox refund recorded.",
+      pending: "Stripe is processing the refund. Check its status again shortly.",
+      failed: "Stripe declined the refund. Review the payment before trying again.",
+      canceled: "Stripe cancelled the refund.",
+    };
+    revalidateCalendars();
+    return { error: result === "failed" ? message.failed : null, success: !result ? "There is no pending Stripe refund." : result === "failed" ? null : message[result] };
+  } catch (error) {
+    revalidateCalendars();
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not verify the Stripe refund. Check its status before trying again.", success: null };
+  }
+}
 
 export async function updateStripeAppointmentPayment(_state: PaymentState, formData: FormData): Promise<PaymentState> {
   let destination: string | null = null;

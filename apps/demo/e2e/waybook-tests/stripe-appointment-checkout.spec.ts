@@ -41,7 +41,8 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/nordic\/app/);
     const sale = page.getByRole("dialog", { name: "Appointment checkout" });
-    const receipts = (id: string) => db`SELECT id, amount_cents, method FROM payment_records WHERE booking_id = ${id}`;
+    const receipts = (id: string) => db`SELECT id, amount_cents, method FROM payment_records WHERE booking_id = ${id}
+      ORDER BY recorded_at, id`;
     const attempts = (id: string) => db`SELECT id, state, session_id FROM stripe_sandbox_checkout_attempts WHERE booking_id = ${id}`;
 
     for (const [index, id] of appointments.entries()) {
@@ -130,6 +131,30 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
           VALUES (${tenantId}, ${id}, 'refund', 100, 'cash', ${actor.id})`).rejects.toThrow("must be reconciled through Stripe");
         await sale.getByRole("button", { name: "Finish checkout" }).click();
         await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id = ${id}`)[0].status).toBe("completed");
+        const refundAmount = sale.getByLabel("Refund amount (DKK)");
+        const submitRefund = sale.getByRole("button", { name: "Refund in Stripe sandbox" });
+        const checkRefund = sale.getByRole("button", { name: "Check refund status" });
+        await expect(refundAmount).toHaveValue("65.01");
+        await refundAmount.fill("11.01");
+        await submitRefund.click();
+        await expect(sale.getByRole("alert")).toContainText("Stripe sandbox refund could not be confirmed.");
+        const refundAttempts = () => db`SELECT id, state FROM stripe_sandbox_refund_attempts
+          WHERE payment_attempt_id = ${reserved.id} ORDER BY created_at, id`;
+        const [pending] = await refundAttempts();
+        expect(pending.state).toBe("pending");
+        await expect(submitRefund).toHaveCount(0);
+        await checkRefund.click();
+        await expect(sale.getByRole("status").filter({ hasText: "Stripe is processing" })).toBeVisible();
+        expect(await receipts(id)).toEqual(receipt);
+        await checkRefund.click();
+        await expect(refundAmount).toHaveValue("54.00");
+        expect(await refundAttempts()).toEqual([{ id: pending.id, state: "succeeded" }]);
+        expect(await receipts(id)).toEqual([...receipt, { id: pending.id, amount_cents: 1101, method: "card" }]);
+        await submitRefund.click();
+        await expect(refundAmount).toHaveCount(0);
+        expect(await receipts(id)).toEqual([...receipt, { id: pending.id, amount_cents: 1101, method: "card" },
+          { id: expect.any(String), amount_cents: 5400, method: "card" }]);
+        await expect(sale.getByRole("button", { name: "Record payment" })).toHaveCount(0);
       } else {
         await sale.getByRole("button", { name: "Cancel card payment" }).click();
         await expect(sale.getByRole("button", { name: "Record payment" })).toBeVisible();

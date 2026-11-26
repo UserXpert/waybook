@@ -4,6 +4,7 @@ import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
 import { StripeAppointmentPayment } from "@/components/stripe-appointment-payment";
+import { StripeAppointmentRefund } from "@/components/stripe-appointment-refund";
 import { FinishAppointmentCheckout } from "@/components/appointment-attendance-journey";
 import type { AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { TableDateFields } from "@/components/table-date-fields";
@@ -19,6 +20,7 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { appointmentStripeAccount, appointmentStripeConfig, appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
+import { stripeAppointmentRefundDetails } from "@/lib/waybook/stripe-appointment-refunds";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -37,6 +39,7 @@ type SaleRow = {
   bookedPriceCents: number;
   noShowChargeCents: number;
   paidCents: number;
+  stripeRefundedCents: number;
   chargeableCents: number;
   paymentCount: number;
   lastPaymentAt: Date | null;
@@ -61,7 +64,7 @@ type ActivityActor = { id: string; displayName: string };
 type SaleSummary = { outstandingCents: string; collectedCents: string; refundDueCents: string; matchingCount: number; page: number };
 
 const salesPageSize = 150;
-const saleStatuses = ["all", "open", "paid", "refund", "cancelled"];
+const saleStatuses = ["all", "open", "paid", "refund", "refunded", "cancelled"];
 const defaultSaleSort = "appointment-today";
 const saleSortOptions = [
   { value: defaultSaleSort, label: "Appointment date · today first" },
@@ -103,6 +106,8 @@ function activityLabel(eventType: string, clientLabel: string) {
 
 function settlement(row: SaleRow) {
   if (row.status === "cancelled") return { label: "Cancelled", detail: "No checkout", tone: "is-cancelled" };
+  if (row.stripeRefundedCents > 0) return { label: row.paidCents > 0 ? "Partially refunded" : "Refunded",
+    detail: `${money(row.stripeRefundedCents)} returned`, tone: "is-refund" };
   const balance = row.chargeableCents - row.paidCents;
   if (row.packageRedeemed && row.chargeableCents === 0) return { label: "Package", detail: "Service visit redeemed", tone: "is-paid" };
   if (balance === 0) return { label: "Paid", detail: `${money(row.paidCents)} collected`, tone: "is-paid" };
@@ -143,6 +148,11 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const saleRows = db`
       SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.attendance_stage AS "attendanceStage", b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
+        coalesce(sum(pr.amount_cents) FILTER (WHERE pr.kind = 'refund' AND EXISTS (
+          SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
+            AND e.event_type = 'payment.refund' AND e.metadata->>'paymentId' = pr.id::text
+            AND e.metadata->>'source' = 'stripe_sandbox'
+        )), 0)::int AS "stripeRefundedCents",
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
         c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
         b.team_member_id AS "teamMemberId", tm.name AS "teamMemberName", b.location_id AS "locationId", l.name AS "locationName"
@@ -171,6 +181,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       ), classified AS (
         SELECT *, CASE
           WHEN status = 'cancelled' THEN 'cancelled'
+          WHEN "stripeRefundedCents" > 0 THEN 'refunded'
           WHEN "chargeableCents" = "paidCents" THEN 'paid'
           WHEN "chargeableCents" > "paidCents" THEN 'open'
           ELSE 'refund'
@@ -180,7 +191,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       ), totals AS (
         SELECT count(*) FILTER (WHERE ${statusFilter})::int AS "matchingCount",
           coalesce(sum(greatest(0, "chargeableCents" - "paidCents"))
-            FILTER (WHERE status <> 'cancelled'), 0) AS "outstandingCents",
+            FILTER (WHERE status <> 'cancelled' AND "stripeRefundedCents" = 0), 0) AS "outstandingCents",
           coalesce(sum("paidCents"), 0) AS "collectedCents",
           coalesce(sum(greatest(0, "paidCents" - "chargeableCents"))
             FILTER (WHERE status <> 'cancelled'), 0) AS "refundDueCents"
@@ -242,10 +253,13 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     GROUP BY cp.id HAVING coalesce(sum(CASE WHEN ce.direction='credit' THEN ce.units ELSE -ce.units END),0) > 0
     ORDER BY cp.created_at
   ` : [];
-  const [stripeState, stripeAccount] = selectedSale && appointmentStripeConfig() ? await Promise.all([
+  const [stripeState, stripeAccount, stripeRefund] = selectedSale && appointmentStripeConfig() ? await Promise.all([
     appointmentStripeState({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }),
     appointmentStripeAccount(tenant.id),
-  ]) : [null, null];
+    ["completed", "cancelled"].includes(selectedSale.status) && paymentBalance?.payments.some((payment) => payment.stripeSandbox)
+      ? stripeAppointmentRefundDetails({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId })
+      : null,
+  ]) : [null, null, null];
   const stripePending = stripeState === "pending";
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
@@ -295,7 +309,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         </select></label>
         <label>Status<select name="status" defaultValue={selectedStatus}>
           <option value="all">All sales</option><option value="open">Open balance</option>
-          <option value="paid">Paid</option><option value="refund">Credit due</option><option value="cancelled">Cancelled</option>
+          <option value="paid">Paid</option><option value="refund">Credit due</option><option value="refunded">Refunded</option><option value="cancelled">Cancelled</option>
         </select></label>
         <label>Payment activity<select name="activity" defaultValue={selectedActivity}>
           <option value="all">Any payment activity</option>
@@ -357,7 +371,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               {selectedSale.packageRedeemed ? <div><dt>Package coverage</dt><dd>−{money(selectedSale.bookedPriceCents)}</dd></div> : null}
               <div><dt>Checkout total</dt><dd>{money(selectedSale.chargeableCents)}</dd></div>
               <div><dt>Net payments</dt><dd>{money(selectedSale.paidCents)}</dd></div>
-              {selectedSale.status !== "cancelled" ? <div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}>
+              {selectedSale.stripeRefundedCents > 0 ? <div><dt>Refunds issued</dt><dd>{money(selectedSale.stripeRefundedCents)}</dd></div> :
+                selectedSale.status !== "cancelled" ? <div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}>
                 <dt>{balance < 0 ? "Credit due" : "Balance due"}</dt><dd>{money(Math.abs(balance))}</dd>
               </div> : null}
             </dl></section>
@@ -368,6 +383,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             </section> : null}
             {!paymentStep && recorded.length > 0 ? <section><h3>Payment details</h3>
               <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={selectedSale.status !== "cancelled"} />
+              {stripeRefund ? <StripeAppointmentRefund bookingId={selectedSale.bookingId} requestId={crypto.randomUUID()} {...stripeRefund} /> : null}
             </section> : null}
             {!paymentStep ? <>
               {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={`${reviewHref}&step=payment`}>Go to payments</Link> : null}

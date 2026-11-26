@@ -15,6 +15,7 @@ for (const name of ["CONTROL", "NORDIC_STUDIO", "COPENHAGEN_PHYSIO"]) {
 const originalFetch = globalThis.fetch;
 const accounts = new Map();
 const sessions = new Map();
+const refunds = new Map();
 const error = (status) => Response.json({ error: "stripe fixture error" }, { status });
 
 globalThis.fetch = async (input, init) => {
@@ -22,6 +23,30 @@ globalThis.fetch = async (input, init) => {
   if (url.origin !== "https://api.stripe.com") return originalFetch(input, init);
   const request = new Request(input, init);
   if (request.headers.get("Authorization") !== `Bearer ${secret}`) return error(401);
+  if (url.pathname.startsWith("/v1/refunds")) {
+    if (request.headers.get("Stripe-Account") !== "acct_checkoutFixture") return error(403);
+    if (request.method === "POST" && url.pathname === "/v1/refunds") {
+      const body = new URLSearchParams(await request.text());
+      const key = request.headers.get("Idempotency-Key");
+      const intent = body.get("payment_intent");
+      const amount = Number(body.get("amount"));
+      if (!key || body.get("metadata[waybook_refund_attempt]") !== key || !intent ||
+          ![...sessions.values()].some(({ checkout }) => checkout.payment_intent === intent) || amount <= 0) return error(400);
+      const id = `re_${key.replaceAll("-", "")}`;
+      if (refunds.has(id)) return Response.json(refunds.get(id));
+      const refund = {
+        id, object: "refund", payment_intent: intent, amount, currency: "dkk",
+        metadata: { waybook_refund_attempt: key }, status: amount === 1101 ? "pending" : "succeeded",
+      };
+      refunds.set(id, refund);
+      if (amount === 1101) return error(503);
+      return Response.json(refund);
+    }
+    const refund = refunds.get(url.pathname.split("/").at(-1));
+    if (!refund || request.method !== "GET") return error(404);
+    refund.status = "succeeded";
+    return Response.json(refund);
+  }
   if (url.pathname.startsWith("/v1/checkout/sessions")) {
     const account = request.headers.get("Stripe-Account");
     if (account !== "acct_checkoutFixture") return error(403);
