@@ -4625,6 +4625,11 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   text-decoration: none;
 }
 .waitlist-find-slot { margin-bottom: .4rem; }
+.waitlist-openings { display: grid; justify-items: start; gap: .5rem; }
+.waitlist-openings__list { margin: 0; padding: 0; list-style: none; display: grid; gap: .35rem; width: 100%; }
+.waitlist-openings__list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+.waitlist-openings__list small { margin-top: .12rem; }
+.waitlist-openings p { margin: 0; }
 .waitlist-find-slot svg { width: .9rem; height: .9rem; }
 .tenant-dashboard-page .waitlist-find-slot:is(:hover, :focus-visible),
 .tenant-dashboard-page .waitlist-form .client-picker__actions :is(button, a):is(:hover, :focus-visible) {

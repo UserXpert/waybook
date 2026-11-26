@@ -93,10 +93,15 @@ The complete linked appointment, product checkout, split cash and simulated Fron
 
 The first Waybook changes cover booking client lookup and pricing, waitlist conversion, a calendar handoff to checkout, and separate review and manual payment stages. Track implementation and verification of linked services, the Waiting room and In service states, and processor-supported tender through the appointment workflow goal. The spec describes the intended end state.
 
+## Release milestones
+
+Release major workflows to Vercel as they become ready, then continue with the next milestone. The initial candidate covers single-service staff booking, waitlist conversion, checkout review, manual payment recording, and no-show completion. Verify the candidate on desktop and mobile, review the hosted preview, and follow the [local-to-production workflow](11_local_release_workflow.md) for the pull request and database checks. Use the same release process for linked services and their shared checkout, check-in through service, and processor-backed payments as each becomes usable end to end.
+
 ## Waybook implementation notes
 
 - The calendar entry point must open a usable draft even when the initial staff member has no assigned service. Keep Location, Staff, and Service available and require a valid selection before offering times.
-- A waitlist conversion uses the request's client ID and commits Booked and the new booking in one transaction. Staff can still select a different calendar time after reviewing the request. Automatic matching and a direct opening preview remain separate from this conversion.
+- **Check openings** shows up to three bookable times for the selected waitlist request. It searches the preferred date or the next seven calendar days, respects the requested staff member and time window, and uses the existing calendar rules for staff availability and location hours. Resources remain assigned after booking under the current calendar capacity model.
+- **Book** opens the appointment drawer on the proposed time and staff member, with the request's client, location, and service. If the time was taken, the drawer asks staff to choose another time explicitly. Confirmation uses the request's client ID and commits the booking and Booked status together. Manual calendar search remains available. Proactive opening alerts and dismissing an individual suggestion remain open.
 - The appointment checkout total includes products at their recorded prices, the booked service balance after package coverage, and any no-show fee. Use the same total in Sales, Bookings, and the appointment payment drawer. Migration 0063 enforces the payment limit and prevents product edits once the appointment has payment history. Checkout rejects a payment from a stale tab if the balance changed. Linked service segments still need to share one sale.
 - Linked services require a booking representation that preserves every staff and room reservation while sharing one appointment and sale. The model must support one-transaction creation and conflict handling across segments before enabling multiple service selection.
 - Processor and device flows follow the provider contract in [Commerce foundation](05_commerce_foundation.md). Verify payment completion, callbacks, retries, and receipts in a connected test workspace before exposing a Charge action.

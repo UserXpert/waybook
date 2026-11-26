@@ -1282,6 +1282,7 @@ export default async function CalendarsPage({
                 canLookupClients={canViewClientDirectory}
                 initialClient={directCustomer}
                 waitlistEntryId={waitlistCustomer ? waitlistEntryId : undefined}
+                waitlistUnavailable={Boolean(waitlistEntryId && !waitlistCustomer)}
                 customerName={selectedCustomer?.name}
                 customerEmail={selectedCustomer?.email}
                 customerPhone={selectedCustomer?.phone}
