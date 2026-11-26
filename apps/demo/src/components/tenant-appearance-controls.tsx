@@ -75,7 +75,7 @@ export function TenantAppearanceControls() {
     <h3>Background pattern</h3>
     <div className="tenant-appearance__backgrounds" role="group" aria-label="Background pattern">
       {dashboardBackgrounds.map((id, index) => (
-        <button key={id} type="button" aria-label={id === "ripple" ? "Ripple" : `Background ${index + 1}`}
+        <button key={id} type="button" aria-label={id === "plain" ? "Plain" : id === "ripple" ? "Ripple" : `Background ${index + 1}`}
           aria-pressed={background === id} onClick={() => choose("background", id)}>
           <span className="tenant-appearance__pattern" data-pattern={id} aria-hidden="true" />
         </button>

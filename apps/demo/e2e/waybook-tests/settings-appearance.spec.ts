@@ -70,8 +70,12 @@ test("Workspace background stays selected when appearance colours change", async
   const backgrounds = page.getByRole("group", { name: "Background pattern" });
   const tints = page.getByRole("group", { name: "Accent tint" });
   await expect(backgrounds.getByRole("button", { name: "Ripple" })).toHaveAttribute("aria-pressed", "true");
-  await expect(backgrounds.getByRole("button")).toHaveCount(9);
+  await expect(backgrounds.getByRole("button")).toHaveCount(10);
   await expect(backgrounds).toHaveText("");
+  const ripplePreview = backgrounds.getByRole("button", { name: "Ripple" }).locator("[data-pattern]");
+  const plain = backgrounds.getByRole("button", { name: "Plain", exact: true });
+  await expect(ripplePreview).toHaveCSS("filter", "grayscale(1)");
+  await expect(plain.locator("[data-pattern]")).toHaveCSS("background-image", "none");
   await backgrounds.getByRole("button", { name: "Background 2" }).click();
   await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.webp/);
   await tints.getByRole("button", { name: "Violet" }).click();
@@ -82,9 +86,22 @@ test("Workspace background stays selected when appearance colours change", async
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
   await expect(html).toHaveAttribute("data-waybook-tint", "violet");
   await expect(backgrounds.getByRole("button", { name: "Background 2" })).toHaveAttribute("aria-pressed", "true");
+  await expect(ripplePreview).toHaveCSS("filter", "grayscale(1) invert(1)");
+  await expect(plain.locator("[data-pattern]")).toHaveCSS("filter", "grayscale(1)");
 
-  await backgrounds.getByRole("button", { name: "Ripple" }).click();
   await tints.getByRole("button", { name: "Neutral" }).click();
+  await plain.click();
+  await page.reload();
+  await expect(plain).toHaveAttribute("aria-pressed", "true");
+  await expect(plain).toHaveCSS("border-color", "rgb(170, 170, 176)");
+  await expect(dashboard).toHaveCSS("background-image", "none");
+  await expect(dashboard).toHaveCSS("background-color", "rgb(14, 14, 16)");
+  const modes = page.getByRole("group", { name: "Colour mode" });
+  await modes.getByRole("button", { name: "Light" }).click();
+  await expect(dashboard).toHaveCSS("background-image", "none");
+  await expect(dashboard).toHaveCSS("background-color", "rgb(242, 244, 247)");
+  await modes.getByRole("button", { name: "Dark" }).click();
+  await backgrounds.getByRole("button", { name: "Ripple" }).click();
   await expect(dashboard).toHaveCSS("background-image", /login-blue-background/);
   await expect(dashboard).toHaveCSS("background-color", "rgb(14, 14, 16)");
   await tints.getByRole("button", { name: "Ice Blue" }).click();

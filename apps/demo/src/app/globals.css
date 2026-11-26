@@ -809,6 +809,13 @@ body {
 :root[data-waybook-tint="teal"] { --waybook-accent: #0f9f9a; --waybook-accent-soft: #d9f5f2; --waybook-accent-ink: #0b7672; }
 :root[data-waybook-tint="coral"] { --waybook-accent: #e76f51; --waybook-accent-soft: #fde3dc; --waybook-accent-ink: #c8563b; }
 :root[data-waybook-tint="amber"] { --waybook-accent: #d89018; --waybook-accent-soft: #fdf0d5; --waybook-accent-ink: #ad6e0f; }
+:root[data-waybook-theme="dark"][data-waybook-tint="neutral"] {
+  --waybook-accent: #757575;
+  --waybook-accent-soft: #414145;
+  --waybook-accent-ink: #dedee2;
+  --waybook-accent-indicator: #aaaab0;
+  --waybook-accent-hover: #626268;
+}
 .tenant-dashboard-page .waybook-primary-link,.tenant-dashboard-page .tenant-drawer-form button:not(.staff-multi-toggle),.tenant-dashboard-page .appointment-drawer__status-actions button { border-color: var(--waybook-accent); background: var(--waybook-accent); }.tenant-dashboard-page .waybook-primary-link:hover,.tenant-dashboard-page .tenant-drawer-form button:hover,.tenant-dashboard-page .appointment-drawer__status-actions button:hover { background: var(--waybook-accent-ink); }.tenant-dashboard-page .tenant-dashboard-nav nav a[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--waybook-accent); }.tenant-dashboard-page .staff-workspace__tabs a[aria-current="page"] { border-color: var(--waybook-accent); color: var(--waybook-accent-ink); }.tenant-dashboard-page .staff-status-toggle input:checked + span,.tenant-dashboard-page .staff-multi-toggle input:checked + span { background: var(--waybook-accent); }
 .tenant-appearance { display: grid; gap: .55rem; border-top: 1px solid #ededed; padding: .8rem; }.tenant-appearance header { display: flex; align-items: center; gap: .42rem; color: #3f3f3f; font-size: .72rem; font-weight: 600; }.tenant-appearance header svg { width: .9rem; height: .9rem; }.tenant-appearance__themes,.tenant-appearance__tints { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }.tenant-appearance__tints { grid-template-columns: repeat(4, 1fr); }.tenant-appearance button { display: inline-flex; min-height: 2rem; align-items: center; justify-content: center; gap: .28rem; border: 1px solid #dedede; border-radius: .42rem; background: #fff; color: #555; font: inherit; font-size: .62rem; font-weight: 600; cursor: pointer; }.tenant-appearance button:hover,.tenant-appearance button:focus-visible { border-color: #a3a3a3; outline: 0; }.tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); color: var(--waybook-accent-ink); }.tenant-appearance button svg { width: .8rem; height: .8rem; }.tenant-appearance__tints i { width: .55rem; height: .55rem; border-radius: 50%; background: #404040; }.tenant-appearance__tints button[aria-label="Ice Blue"] i { background: #315c82; }.tenant-appearance__tints button:nth-child(3) i { background: #7c3aed; }.tenant-appearance__tints button:nth-child(4) i { background: #db2777; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page { background: #111; color: #f5f5f5; }.tenant-dashboard-page .tenant-dashboard-nav { background: #090909; }.tenant-dashboard-page .tenant-dashboard-nav nav a[aria-current="page"] { background: #1f1f1f; }.tenant-dashboard-page .waybook-data-card,.tenant-dashboard-page .waybook-data-metrics,.tenant-dashboard-page .staff-workspace,.tenant-dashboard-page .staff-workspace__panel,.tenant-dashboard-page .tenant-drawer,.tenant-user-menu__popover { border-color: #303030; background: #1a1a1a; box-shadow: none; }.tenant-dashboard-page .waybook-data-card h2,.tenant-dashboard-page .waybook-data-card h3,.tenant-dashboard-page .waybook-data-card td:first-child,.tenant-dashboard-page .waybook-data-card td strong,.tenant-dashboard-page .waybook-data-metrics strong,.tenant-dashboard-page .staff-workspace h1,.tenant-dashboard-page .staff-workspace h2,.tenant-dashboard-page .staff-workspace h3,.tenant-dashboard-page .staff-workspace h4,.tenant-dashboard-page .tenant-drawer > header h2,.tenant-dashboard-page .tenant-drawer__summary strong { color: #f5f5f5; }.tenant-dashboard-page .waybook-data-card p,.tenant-dashboard-page .waybook-data-card span,.tenant-dashboard-page .waybook-data-card small,.tenant-dashboard-page .waybook-data-metrics span,.tenant-dashboard-page .waybook-data-metrics small,.tenant-dashboard-page .tenant-drawer > header p,.tenant-dashboard-page .tenant-drawer > header span,.tenant-dashboard-page .tenant-drawer-note { color: #b6b6b6; }.tenant-dashboard-page .waybook-data-card th,.tenant-dashboard-page .waybook-data-card tr:hover td,.tenant-dashboard-page .staff-workspace__directory,.tenant-dashboard-page .staff-profile-facts,.tenant-dashboard-page .staff-exception-list article,.tenant-dashboard-page .staff-shift-schedule__summary,.tenant-dashboard-page .appointment-drawer__summary { border-color: #303030; background: #242424; }.tenant-dashboard-page .waybook-data-card td,.tenant-dashboard-page .waybook-data-card th,.tenant-dashboard-page .staff-workspace__tabs,.tenant-dashboard-page .tenant-drawer > header { border-color: #303030; }.tenant-dashboard-page .waybook-row-link,.tenant-dashboard-page .waybook-service-card strong { color: #f5f5f5; }.tenant-dashboard-page .waybook-service-card,.tenant-dashboard-page .waybook-list-filter input,.tenant-dashboard-page .waybook-list-filter select,.tenant-dashboard-page .tenant-drawer-form input:not([type="checkbox"]),.tenant-dashboard-page .tenant-drawer-form select,.tenant-dashboard-page .tenant-drawer-form textarea,.tenant-dashboard-page .staff-profile-form input,.tenant-dashboard-page .staff-profile-form textarea,.tenant-dashboard-page .staff-profile-form select,.tenant-dashboard-page .staff-timeoff-form input,.tenant-dashboard-page .staff-timeoff-form select,.tenant-dashboard-page .staff-hours-form input { border-color: #404040; background: #242424; color: #f5f5f5; }.tenant-dashboard-page .waybook-list-filter nav a,.tenant-dashboard-page nav.waybook-list-filter a { border-color: #404040; background: #242424; color: #ddd; }.tenant-dashboard-page .waybook-list-filter nav a[aria-current="page"],.tenant-dashboard-page nav.waybook-list-filter a[aria-current="page"] { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }.tenant-dashboard-page .tenant-drawer-scrim,.tenant-app-menu__scrim,.tenant-user-menu__scrim { background: rgba(0,0,0,.76); }.tenant-user-menu__popover header strong,.tenant-user-menu__items a,.tenant-user-menu__popover form button,.tenant-appearance header { color: #f5f5f5; }.tenant-user-menu__popover header > div > span,.tenant-user-menu__items a small { color: #b6b6b6; }.tenant-user-menu__items,.tenant-user-menu__popover form,.tenant-appearance { border-color: #303030; }.tenant-user-menu__items a:hover,.tenant-user-menu__popover form button:hover { background: #292929; }.tenant-user-menu__items a > b,.tenant-user-menu__popover form button > b { background: #303030; color: #f5f5f5; }.tenant-appearance button { border-color: #454545; background: #242424; color: #ddd; }.tenant-appearance button:hover { border-color: #777; }
@@ -847,7 +854,7 @@ body {
   text-decoration: none;
 }
 
-.tenant-dashboard-page .waybook-action:hover { background: var(--waybook-accent-ink); }
+.tenant-dashboard-page .waybook-action:hover { background: var(--waybook-accent-hover, var(--waybook-accent-ink)); }
 .tenant-dashboard-page .waybook-action:focus-visible {
   outline: 2px solid var(--waybook-accent);
   outline-offset: 2px;
@@ -1621,7 +1628,7 @@ body {
 :root[data-waybook-theme="dark"] .tenant-user-menu__items a:hover,
 :root[data-waybook-theme="dark"] .tenant-user-menu__items a:focus-visible { background: #2a2a2d; color: #fff; }
 :root[data-waybook-theme="light"] .tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); box-shadow: inset 0 0 0 1px var(--waybook-accent); color: #17171a; }
-:root[data-waybook-theme="dark"] .tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: #2a2a2e; box-shadow: inset 0 0 0 1px var(--waybook-accent); color: #fff; }
+:root[data-waybook-theme="dark"] .tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent-indicator, var(--waybook-accent)); background: #2a2a2e; box-shadow: inset 0 0 0 1px var(--waybook-accent-indicator, var(--waybook-accent)); color: #fff; }
 
 /* Circular controls are visual anchors.  Their text or icon must remain
    centred by the layout box, rather than relying on font ascenders or an
@@ -4411,6 +4418,9 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   --overview-sheen: rgb(255 255 255 / 3%);
   --overview-icon-surface: #30343b;
 }
+:root[data-waybook-theme="dark"][data-waybook-tint="neutral"] .tenant-dashboard-page .dashboard-four {
+  --overview-accent-ink: var(--waybook-accent-ink);
+}
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four :is(
   .dashboard-four__header h1, .dashboard-widget__title h2, .target-widget h3, .workload-list__stats b
 ) { color: var(--overview-ink); }
@@ -4467,8 +4477,8 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 .tenant-dashboard-page .dashboard-four .outcome-grid > div { background: var(--overview-surface); }
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i { background: var(--overview-divider); }
-:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i.is-booked { background: var(--waybook-accent); }
+:root[data-waybook-theme] .tenant-dashboard-page .dashboard-four .workload-list__slots i.is-booked { background: var(--waybook-accent-indicator, var(--waybook-accent)); }
 .tenant-dashboard-page .target-widget__ring { background: var(--overview-surface); }
 .target-widget__ring > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .target-widget__track { stroke: var(--overview-edge); }
-.target-widget__progress { stroke: var(--waybook-accent); }
+.target-widget__progress { stroke: var(--waybook-accent-indicator, var(--waybook-accent)); }

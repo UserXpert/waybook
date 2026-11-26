@@ -52,6 +52,12 @@
 :root[data-waybook-background="photo-8"],
 .tenant-appearance__pattern[data-pattern="photo-8"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-8.jpeg"); }
 
+:root[data-waybook-theme][data-waybook-background="plain"] .tenant-dashboard-page {
+  background-image: none;
+}
+
+.tenant-appearance__pattern[data-pattern="plain"] { --workspace-photo: none; }
+
 .tenant-appearance__backgrounds {
   display: grid;
   grid-auto-flow: column;
@@ -75,7 +81,11 @@
   filter: grayscale(1);
   border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
   border-radius: .35rem;
-  background: var(--workspace-canvas) var(--workspace-photo) center / cover no-repeat;
+  background: var(--workspace-canvas) var(--workspace-photo, none) center / cover no-repeat;
+}
+
+:root[data-waybook-theme="dark"] .tenant-appearance__pattern:not([data-pattern="plain"]) {
+  filter: grayscale(1) invert(1);
 }
 
 .tenant-appearance .tenant-appearance__header { grid-template-columns: repeat(2, minmax(0, 1fr)); }
