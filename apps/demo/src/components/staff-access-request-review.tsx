@@ -6,7 +6,11 @@ import { reviewStaffAccess } from "@/app/app/team/actions";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import type { OutstandingStaffAccessRequest } from "@/lib/waybook/staff-access-requests";
 
-const statusLabels = { pending: "Pending approval", invited: "Invitation sent", expired: "Invitation expired" };
+const requestStatuses = {
+  pending: { label: "Pending approval", tone: "warning" },
+  invited: { label: "Invitation sent", tone: "success" },
+  expired: { label: "Invitation expired", tone: "error" },
+};
 
 export function StaffAccessRequestPanel({ requests }: { requests: OutstandingStaffAccessRequest[] }) {
   const [open, setOpen] = useState(false);
@@ -63,6 +67,7 @@ function StaffAccessRequestReview({ request }: { request: OutstandingStaffAccess
   const deleteButton = useRef<HTMLButtonElement>(null);
   const router = useRouter();
   const invited = request.status !== "pending";
+  const status = requestStatuses[request.status];
 
   useEffect(() => {
     if (state.sent || state.deleted) router.refresh();
@@ -76,9 +81,16 @@ function StaffAccessRequestReview({ request }: { request: OutstandingStaffAccess
   return (
     <li>
       <div>
-        <strong>{request.name}</strong>
-        <span>{request.email} · {request.phone}</span>
-        <small>{statusLabels[request.status]}</small>
+        <div className="staff-access-requests__identity">
+          <strong>{request.name}</strong>
+          <span className={`waybook-status-badge waybook-status-badge--${status.tone}`}>{status.label}</span>
+        </div>
+        <dl className="staff-access-requests__contact">
+          <dt>Email</dt>
+          <dd>{request.email}</dd>
+          <dt>Phone</dt>
+          <dd>{request.phone}</dd>
+        </dl>
       </div>
       <form action={action}>
         <input name="requestId" type="hidden" value={request.id} />

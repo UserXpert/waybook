@@ -520,14 +520,30 @@ body {
   padding: 1rem 0;
 }
 
-.staff-access-requests li :is(span, small) {
-  display: block;
+.staff-access-requests__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem .6rem;
   overflow-wrap: anywhere;
+}
+
+.staff-access-requests__contact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .25rem .65rem;
+  margin: .5rem 0 0;
   font-size: .85rem;
+}
+
+.staff-access-requests__contact dt {
   color: var(--wb-dark-muted, #65656d);
 }
 
-.staff-access-requests li small { margin-top: .3rem; font-weight: 500; }
+.staff-access-requests__contact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 
 .staff-access-requests__actions {
   display: flex;
@@ -1894,7 +1910,7 @@ body {
 
 /* Sales follows the established compact operations table: settlement is a
    readable state, while the adjacent detail keeps the amount actionable. */
-.tenant-dashboard-page .sales-status {
+.tenant-dashboard-page :is(.sales-status, .waybook-status-badge) {
   display: inline-flex;
   width: fit-content;
   border-radius: 999px;
@@ -1926,9 +1942,9 @@ body {
 .tenant-dashboard-page .resource-schedule__bookings { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
 .tenant-dashboard-page .resource-schedule__bookings a { color: #222228; font-weight: 600; text-decoration: none; }
 .tenant-dashboard-page .resource-schedule__bookings a:hover { text-decoration: underline; text-underline-offset: .16em; }
-.tenant-dashboard-page .sales-status.is-paid { background: #e4f2e9; color: #246542; }
-.tenant-dashboard-page .sales-status.is-open { background: #f4f0e7; color: #775b22; }
-.tenant-dashboard-page .sales-status.is-refund { background: #f7e8e8; color: #9a3e3e; }
+.tenant-dashboard-page :is(.sales-status.is-paid, .waybook-status-badge.waybook-status-badge--success) { background: #e4f2e9; color: #246542; }
+.tenant-dashboard-page :is(.sales-status.is-open, .waybook-status-badge.waybook-status-badge--warning) { background: #f4f0e7; color: #775b22; }
+.tenant-dashboard-page :is(.sales-status.is-refund, .waybook-status-badge.waybook-status-badge--error) { background: #f7e8e8; color: #9a3e3e; }
 .tenant-dashboard-page .sales-status.is-cancelled { background: #eeeeef; color: #74747b; }
 .tenant-dashboard-page .waybook-data-card tr.is-selected td { background: #f5f5f7; }
 .sale-detail__summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; background: transparent; padding: 0; }
@@ -1943,10 +1959,10 @@ body {
 .sale-detail__totals .is-credit dd { color: #a04242; }
 .sale-detail__totals .is-settled dd { color: #287051; }
 .sale-detail__action { display: block; width: 100%; text-align: center; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status { background: #2a2a2f; color: #d4d4d9; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status.is-paid { background: #193b28; color: #bfe5ca; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status.is-open { background: #3c321f; color: #ead69e; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .sales-status.is-refund { background: #3c2325; color: #f0b9bc; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status, .waybook-status-badge) { background: #2a2a2f; color: #d4d4d9; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status.is-paid, .waybook-status-badge.waybook-status-badge--success) { background: #193b28; color: #bfe5ca; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status.is-open, .waybook-status-badge.waybook-status-badge--warning) { background: #3c321f; color: #ead69e; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.sales-status.is-refund, .waybook-status-badge.waybook-status-badge--error) { background: #3c2325; color: #f0b9bc; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waybook-data-card tr.is-selected td,:root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__summary > div { background: #242426; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__summary > div,.tenant-dashboard-page .sale-detail__totals > div { border-color: #343438; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__summary strong,:root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__totals dd,:root[data-waybook-theme="dark"] .tenant-dashboard-page .sale-detail__totals > div:last-child { color: #f5f5f6; }
