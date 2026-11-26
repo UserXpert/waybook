@@ -74,8 +74,9 @@ test("Workspace background stays selected when appearance colours change", async
   await expect(backgrounds).toHaveText("");
   const ripplePreview = backgrounds.getByRole("button", { name: "Ripple" }).locator("[data-pattern]");
   const plain = backgrounds.getByRole("button", { name: "Plain", exact: true });
-  await expect(ripplePreview).toHaveCSS("filter", "grayscale(1)");
-  await expect(plain.locator("[data-pattern]")).toHaveCSS("background-image", "none");
+  const plainPreview = plain.locator("[data-pattern]");
+  await expect.poll(() => ripplePreview.evaluate((preview) => getComputedStyle(preview, "::before").filter)).toBe("grayscale(1)");
+  await expect(plainPreview).toHaveCSS("background-image", "none");
   await backgrounds.getByRole("button", { name: "Background 2" }).click();
   await expect(dashboard).toHaveCSS("background-image", /workspace-backgrounds\/photo-1.webp/);
   await tints.getByRole("button", { name: "Violet" }).click();
@@ -86,8 +87,9 @@ test("Workspace background stays selected when appearance colours change", async
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
   await expect(html).toHaveAttribute("data-waybook-tint", "violet");
   await expect(backgrounds.getByRole("button", { name: "Background 2" })).toHaveAttribute("aria-pressed", "true");
-  await expect(ripplePreview).toHaveCSS("filter", "grayscale(1) invert(1)");
-  await expect(plain.locator("[data-pattern]")).toHaveCSS("filter", "grayscale(1)");
+  await expect(ripplePreview).toHaveCSS("filter", "none");
+  await expect.poll(() => ripplePreview.evaluate((preview) => getComputedStyle(preview, "::before").filter)).toBe("grayscale(1) invert(1)");
+  await expect.poll(() => plainPreview.evaluate((preview) => getComputedStyle(preview, "::before").content)).toBe("none");
 
   await tints.getByRole("button", { name: "Neutral" }).click();
   await plain.click();
@@ -95,7 +97,8 @@ test("Workspace background stays selected when appearance colours change", async
   await expect(plain).toHaveAttribute("aria-pressed", "true");
   await expect(plain).toHaveCSS("border-color", "rgb(170, 170, 176)");
   await expect(dashboard).toHaveCSS("background-image", "none");
-  await expect(dashboard).toHaveCSS("background-color", "rgb(14, 14, 16)");
+  await expect(dashboard).toHaveCSS("background-color", "color(srgb 0.13051 0.13051 0.137725)");
+  await expect(plainPreview).toHaveCSS("background-color", "color(srgb 0.13051 0.13051 0.137725)");
   const modes = page.getByRole("group", { name: "Colour mode" });
   await modes.getByRole("button", { name: "Light" }).click();
   await expect(dashboard).toHaveCSS("background-image", "none");

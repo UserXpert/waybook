@@ -1,6 +1,7 @@
 /* Pattern geometry is separate from the workspace tint and colour mode. */
 :root {
   --workspace-canvas: color-mix(in srgb, var(--waybook-accent) 10%, #f4f8fc);
+  --workspace-plain-canvas: var(--workspace-canvas);
   --workspace-photo-veil: color-mix(in srgb, var(--workspace-canvas) 58%, transparent);
 }
 
@@ -9,6 +10,7 @@
 
 :root[data-waybook-theme="dark"] {
   --workspace-canvas: color-mix(in srgb, var(--waybook-accent) 6%, #0e1014);
+  --workspace-plain-canvas: color-mix(in srgb, var(--workspace-canvas) 92%, white);
   --workspace-photo-veil: color-mix(in srgb, var(--workspace-canvas) 93%, transparent);
 }
 
@@ -53,10 +55,9 @@
 .tenant-appearance__pattern[data-pattern="photo-8"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-8.jpeg"); }
 
 :root[data-waybook-theme][data-waybook-background="plain"] .tenant-dashboard-page {
+  background-color: var(--workspace-plain-canvas);
   background-image: none;
 }
-
-.tenant-appearance__pattern[data-pattern="plain"] { --workspace-photo: none; }
 
 .tenant-appearance__backgrounds {
   display: grid;
@@ -76,17 +77,28 @@
 
 .tenant-appearance__pattern {
   display: block;
+  position: relative;
+  overflow: hidden;
   inline-size: 100%;
   aspect-ratio: 1.55;
-  filter: grayscale(1);
   border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
   border-radius: .35rem;
-  background: var(--workspace-canvas) var(--workspace-photo, none) center / cover no-repeat;
+  background-color: var(--workspace-canvas);
 }
 
-:root[data-waybook-theme="dark"] .tenant-appearance__pattern:not([data-pattern="plain"]) {
+.tenant-appearance__pattern:not([data-pattern="plain"])::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--workspace-photo) center / cover no-repeat;
+  filter: grayscale(1);
+}
+
+:root[data-waybook-theme="dark"] .tenant-appearance__pattern::before {
   filter: grayscale(1) invert(1);
 }
+
+.tenant-appearance__pattern[data-pattern="plain"] { background-color: var(--workspace-plain-canvas); }
 
 .tenant-appearance .tenant-appearance__header { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
