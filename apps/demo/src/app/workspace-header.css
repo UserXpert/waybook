@@ -17,6 +17,8 @@
   background: var(--workspace-header-surface);
   border-color: var(--workspace-header-edge);
   box-shadow: 0 .25rem 1rem rgb(16 23 33 / 10%);
+  /* The opaque header must let the account menu blur the page behind it. */
+  backdrop-filter: none;
 }
 
 :root[data-waybook-theme][data-waybook-header="light"] .tenant-dashboard-page .tenant-dashboard-nav__logo--light,

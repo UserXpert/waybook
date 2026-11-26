@@ -62,7 +62,7 @@ export function TenantUserMenu({ photo, photoMemberId, onSavePhoto, displayName,
         {staffHref ? <Link role="menuitem" href={staffHref} onClick={() => setOpen(false)}><b aria-hidden><UserRound /></b><span>Edit profile<small>Personal information and staff settings</small></span></Link> : null}
         {settingsHref ? <Link role="menuitem" href={settingsHref} onClick={() => setOpen(false)}><b aria-hidden><Settings /></b><span>Settings<small>Workspace services and configuration</small></span></Link> : null}
       </div>
-      <form action={onSignOut}><button type="submit" role="menuitem"><b aria-hidden><LogOut /></b> Sign out</button></form>
+      <form className="tenant-user-menu__signout" action={onSignOut}><button type="submit" role="menuitem"><b aria-hidden><LogOut /></b><span>Sign out</span></button></form>
     </section> : null}
   </div>;
 }

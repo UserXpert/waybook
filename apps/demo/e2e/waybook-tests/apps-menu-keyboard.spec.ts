@@ -58,3 +58,46 @@ for (const workspace of workspaces) {
     await expect(dialog).toHaveCount(0);
   });
 }
+
+test("Apps and account menus use glass surfaces and a compact, aligned Sign out row", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await page.goto("/nordic/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/nordic\/app$/);
+
+  await page.getByRole("button", { name: "Apps", exact: true }).click();
+  const apps = page.getByRole("dialog", { name: "Apps & settings" });
+  await expect(apps).toHaveCSS("backdrop-filter", "blur(16px)");
+  const sales = apps.getByRole("link", { name: "Sales", exact: true });
+  await sales.hover();
+  await expect(sales).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: /^Account menu for / }).click();
+  const account = page.getByRole("menu", { name: "Account menu" });
+  await expect(account).toHaveCSS("backdrop-filter", "blur(16px)");
+  const profile = account.getByRole("menuitem", { name: /^Edit profile/ });
+  const signOut = account.getByRole("menuitem", { name: "Sign out", exact: true });
+  await profile.hover();
+  await expect(profile).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await signOut.hover();
+  await expect(signOut).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  const [profileRow, signOutRow, profileIcon, signOutIcon] = await Promise.all([
+    profile.boundingBox(), signOut.boundingBox(), profile.locator("svg").boundingBox(), signOut.locator("svg").boundingBox(),
+  ]);
+  expect(signOutRow!.height).toBeLessThan(profileRow!.height);
+  expect(Math.abs(signOutIcon!.x - profileIcon!.x)).toBeLessThan(1);
+  expect(Math.abs(signOutIcon!.y + signOutIcon!.height / 2 - signOutRow!.y - signOutRow!.height / 2)).toBeLessThan(1);
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-waybook-theme", "dark");
+  await expect(account).toHaveCSS("backdrop-filter", "blur(16px)");
+  await expect(signOut).not.toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await page.mouse.move(0, 0);
+  await expect(signOut).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(signOut.locator("span")).toHaveCSS("color", "rgb(240, 242, 245)");
+  await signOut.click();
+  await expect(page).toHaveURL(/\/login$/);
+});

@@ -54,8 +54,7 @@
 }
 
 :root[data-waybook-theme][data-waybook-tint="blue"] :is(
-  .tenant-dashboard-page .tenant-drawer, .tenant-dashboard-page .client-form-modal,
-  .tenant-dashboard-page .tenant-user-menu__popover, .tenant-app-menu__dialog
+  .tenant-dashboard-page .tenant-drawer, .tenant-dashboard-page .client-form-modal
 ) {
   background-color: var(--ice-layer);
   border-color: var(--ice-edge);

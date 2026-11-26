@@ -868,8 +868,6 @@ body {
 .tenant-dashboard-page .tenant-inline-form button { min-height: 2.45rem; border: 1px solid var(--waybook-accent); border-radius: .45rem; padding: 0 .85rem; background: var(--waybook-accent); color: #fff; font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
 @media (max-width: 760px) { .tenant-dashboard-page .tenant-inline-form { grid-template-columns: 1fr; }.tenant-dashboard-page .tenant-inline-form button { width: 100%; } }
 :root[data-waybook-theme="dark"] .tenant-appearance button[aria-pressed="true"] { border-color: var(--waybook-accent); background: color-mix(in srgb, var(--waybook-accent) 24%, #242424); box-shadow: inset 0 0 0 1px var(--waybook-accent); color: #fff; }
-.tenant-user-menu__popover > form > button { min-height: 2.45rem; border: 1px solid #e7c5c1; border-radius: .55rem; background: #fffafa; color: #a12d24; font-weight: 600; }.tenant-user-menu__popover > form > button > b { background: #fde8e6; color: #b42318; }.tenant-user-menu__popover > form > button:hover,.tenant-user-menu__popover > form > button:focus-visible { border-color: #d67168; background: #fde8e6; color: #8d241d; }
-:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button { border-color: #66342f; background: #271918; color: #ffb4ab; }:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button > b { background: #48221e; color: #ffb4ab; }:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button:hover,:root[data-waybook-theme="dark"] .tenant-user-menu__popover > form > button:focus-visible { background: #38201d; }
 
 /* Dark theme: a deliberate black workspace, not light calendar fragments on a
    dark canvas. High-contrast text remains readable at normal desktop scale. */
@@ -3940,9 +3938,49 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 .tenant-dashboard-page .tenant-user-menu__popover header div { display: flex; flex-direction: column; justify-content: center; gap: .15rem; }
 .tenant-dashboard-page .tenant-user-menu__popover header div :is(strong, span) { line-height: 1.3; margin: 0; }
-.tenant-dashboard-page .tenant-user-menu__items a > b { flex: 0 0 2.65rem; width: 2.65rem; height: 2.65rem; }
-.tenant-dashboard-page .tenant-user-menu__items a > b svg { width: 1.2rem; height: 1.2rem; }
-.tenant-dashboard-page .tenant-user-menu__popover > form > button { width: auto; }
+.tenant-dashboard-page .tenant-user-menu__popover :is(.tenant-user-menu__items a, .tenant-user-menu__signout button) > b {
+  flex: 0 0 2.65rem;
+  width: 2.65rem;
+  height: 2.65rem;
+}
+.tenant-dashboard-page .tenant-user-menu__popover :is(.tenant-user-menu__items a, .tenant-user-menu__signout button) > b svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.tenant-dashboard-page .tenant-user-menu__popover > .tenant-user-menu__signout > button {
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  padding: 0 .65rem;
+  background: transparent;
+  color: var(--ice-ink, var(--wb-dark-text, #252525));
+  font-weight: 400;
+  line-height: 1.3;
+}
+.tenant-dashboard-page .tenant-user-menu__signout button > span { color: inherit; }
+:root[data-waybook-theme="dark"] .tenant-dashboard-page .tenant-user-menu__signout button:is(:hover, :focus-visible) {
+  background: var(--wb-dark-raised, #292929);
+}
+:root[data-waybook-theme] :is(.tenant-app-menu__dialog, .tenant-user-menu__popover) {
+  background-color: color-mix(in srgb, var(--ice-layer, var(--wb-dark-surface, #f8f8f9)) 90%, transparent);
+  border-color: var(--ice-edge, var(--wb-dark-border, #dedee0));
+  backdrop-filter: blur(16px);
+}
+:root[data-waybook-theme="light"] :is(
+  .tenant-app-menu__groups a,
+  .tenant-user-menu__items a,
+  .tenant-user-menu__popover .tenant-user-menu__signout button
+):is(:hover, :focus-visible) {
+  background: #fff;
+}
+:root[data-waybook-theme] :is(
+  .tenant-app-menu__groups a,
+  .tenant-user-menu__items a,
+  .tenant-user-menu__popover .tenant-user-menu__signout button
+):focus-visible {
+  outline: 2px solid var(--ice-focus, var(--waybook-accent));
+  outline-offset: -2px;
+}
 @media (max-width: 760px) { .tenant-dashboard-page .tenant-user-menu__popover { right: -.5rem; width: min(calc(100vw - 3rem), 25rem); } }
 .tenant-app-menu__loading { position: fixed; z-index: 90; top: 5rem; right: 1rem; border: 1px solid #dedee3; border-radius: .6rem; padding: .65rem .9rem; background: #fff; color: #242428; box-shadow: 0 .4rem 1.5rem #0002; font-size: .8rem; }
 :root[data-waybook-theme="dark"] .tenant-app-menu__loading { border-color: #414148; background: #242428; color: #f1f1f3; }
