@@ -195,7 +195,87 @@ async function verifyConcurrentRunners() {
   });
 }
 
+async function verifyLinkedAppointmentServices() {
+  const files = migrationFiles("tenant");
+  const linkedMigration = "0064_linked_appointment_services.sql";
+  const prefix = files.slice(0, files.indexOf(linkedMigration));
+  await withFixture("linked_services", async (url) => {
+    await applyExistingPrefix(url, "tenant", prefix);
+    const sql = localSql(url);
+    try {
+      const tenant = randomUUID();
+      await sql`INSERT INTO tenant_settings (tenant_id, name) VALUES (${tenant}, 'Studio')`;
+      const [location] = await sql`INSERT INTO locations (tenant_id, slug, name) VALUES (${tenant}, 'test', 'Studio') RETURNING id`;
+      const [member] = await sql`INSERT INTO team_members (tenant_id, name, email, role) VALUES (${tenant}, 'Provider', 'provider@example.test', 'staff') RETURNING id`;
+      const [client] = await sql`INSERT INTO customers (tenant_id, name, email) VALUES (${tenant}, 'Client', 'client@example.test') RETURNING id`;
+      const [primary, added] = await sql`
+        INSERT INTO services (tenant_id, slug, title, duration_minutes, price_cents)
+        VALUES (${tenant}, 'primary', 'Primary', 45, 7000), (${tenant}, 'added', 'Added', 30, 3000)
+        RETURNING id
+      `;
+      const reserve = async (start: string, end: string) => (await sql<{ id: string }[]>`
+        INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+        VALUES (${tenant}, ${member.id}, ${location.id}, ${start}, ${end}, 'confirmed') RETURNING id
+      `)[0]!.id;
+      const firstStart = "2030-06-01T10:00:00Z";
+      const boundary = "2030-06-01T10:45:00Z";
+      const extraEnd = "2030-06-01T11:15:00Z";
+      const firstBlock = await reserve(firstStart, boundary);
+      const [booking] = await sql`
+        INSERT INTO bookings (tenant_id, booking_block_id, service_id, location_id, team_member_id, customer_id,
+          starts_at, ends_at, booked_price_cents, status, source)
+        VALUES (${tenant}, ${firstBlock}, ${primary.id}, ${location.id}, ${member.id}, ${client.id},
+          ${firstStart}, ${boundary}, 7000, 'confirmed', 'tenant') RETURNING id
+      `;
+      const total = async () => Number((await sql`SELECT chargeable_cents FROM appointment_checkout_amounts(${tenant}, ${booking.id})`)[0]?.chargeable_cents);
+      assert.equal(await total(), 7000);
+      const history = await appliedRows(url);
+      const pending = files.slice(prefix.length);
+      assert.equal(pending[0], linkedMigration);
+      assert.deepEqual(await migrateWaybookDatabase(url, "tenant"), pending);
+      assert.deepEqual((await appliedRows(url)).slice(0, prefix.length), history);
+      assert.equal(await total(), 7000, "existing appointments must retain their price on upgrade");
+
+      const extraBlock = await reserve(boundary, extraEnd);
+      const link = (tenantId: string, blockId: string) => sql`
+        INSERT INTO booking_service_segments (tenant_id, booking_id, booking_block_id, service_id, position, booked_price_cents)
+        VALUES (${tenantId}, ${booking.id}, ${blockId}, ${added.id}, 2, 3000)
+      `;
+      await assert.rejects(link(randomUUID(), extraBlock), /same tenant/);
+      await assert.rejects(link(tenant, firstBlock), /separate confirmed reservation/);
+      await link(tenant, extraBlock);
+      assert.equal(await total(), 10000, "the existing payment ledger must see both service prices");
+      assert.equal((await sql`SELECT count(*)::int AS count FROM commerce_sales WHERE tenant_id = ${tenant} AND booking_id = ${booking.id}`)[0]?.count, 1);
+      await assert.rejects(reserve(boundary, extraEnd), { code: "23P01" });
+      await assert.rejects(sql.begin(async (transaction) => {
+        await transaction`
+          INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+          VALUES (${tenant}, ${member.id}, ${location.id}, '2030-06-01T09:30:00Z', ${firstStart}, 'confirmed')
+        `;
+        await transaction`
+          INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+          VALUES (${tenant}, ${member.id}, ${location.id}, ${boundary}, ${extraEnd}, 'confirmed')
+        `;
+      }), { code: "23P01" });
+      await reserve("2030-06-01T09:30:00Z", firstStart);
+      const recordPayment = (amount: number) => sql`
+        INSERT INTO payment_records (tenant_id, booking_id, kind, amount_cents, method)
+        VALUES (${tenant}, ${booking.id}, 'payment', ${amount}, 'cash')
+      `;
+      await assert.rejects(recordPayment(10001), /cannot exceed/);
+      await recordPayment(10000);
+      await assert.rejects(sql`DELETE FROM booking_service_segments WHERE booking_id = ${booking.id}`, /payment has been recorded/);
+      await sql`UPDATE bookings SET status = 'cancelled' WHERE id = ${booking.id}`;
+      assert.equal((await sql`SELECT state FROM booking_blocks WHERE id = ${extraBlock}`)[0]?.state, "cancelled");
+      await reserve(boundary, extraEnd);
+    } finally {
+      await sql.end();
+    }
+  });
+}
+
 await verifyFreshInstallAndNoop();
 await verifyPrefixUpgradeAndRollback();
 await verifyConcurrentRunners();
-console.log("Waybook migration new-install, history, upgrade, rollback, and concurrency verification passed.");
+await verifyLinkedAppointmentServices();
+console.log("Waybook migration new-install, history, upgrade, rollback, concurrency, and linked appointment verification passed.");
