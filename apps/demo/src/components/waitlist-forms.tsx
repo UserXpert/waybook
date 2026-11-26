@@ -2,6 +2,7 @@
 
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 
+import { useFormStatus } from "react-dom";
 import { useActionState, useEffect, useId, useState } from "react";
 import { addWaitlistEntry, saveWaitlistStatus } from "@/app/app/waitlist/actions";
 import { ClientPicker } from "@/components/client-picker";
@@ -45,14 +46,34 @@ export function WaitlistForm({ terminology, canCreateClient, canSearchPhone }: {
   useEffect(() => { let cancelled = false; const timer = window.setTimeout(() => { if (!locationId || !serviceId) { setStaff([]); return; } const params = new URLSearchParams({ purpose: "waitlist", locationId, serviceId, q: staffQuery, limit: "20" }); fetch(`${tenantApiPrefix()}/api/app/staff?${params.toString()}`).then((response) => response.ok ? response.json() : { items: [] }).then((data: { items: Staff[] }) => { if (!cancelled) setStaff(data.items); }).catch(() => { if (!cancelled) setStaff([]); }); }, 180); return () => { cancelled = true; window.clearTimeout(timer); }; }, [locationId, serviceId, staffQuery]);
   return <form action={action} className="tenant-drawer-form waitlist-form">
     <ClientPicker name="customerId" terminology={terminology} purpose="waitlist" canCreateClient={canCreateClient} canSearchPhone={canSearchPhone} required />
+    <fieldset className="waitlist-form__request"><legend>Appointment request</legend>
     <div className="tenant-drawer-form__grid"><label>Location<input value={locationQuery} onChange={(event) => setLocationQuery(event.target.value)} placeholder="Search location" aria-label="Search waitlist locations" autoComplete="off" /><select name="locationId" required value={locationId} onChange={(event) => { setLocationId(event.target.value); setServiceId(""); }}><option value="" disabled>Choose a location</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label><label>Service<input value={serviceQuery} onChange={(event) => setServiceQuery(event.target.value)} placeholder="Search service" aria-label="Search waitlist services" autoComplete="off" /><select name="serviceId" required value={serviceId} onChange={(event) => setServiceId(event.target.value)}><option value="" disabled>Choose a service</option>{services.map((service) => <option key={service.id} value={service.id}>{service.title} · {service.durationMinutes} min</option>)}</select></label></div>
     <label>Preferred {terminology.staffPlural} <input value={staffQuery} onChange={(event) => setStaffQuery(event.target.value)} placeholder={locationId && serviceId ? `Search eligible ${terminology.staffPlural}` : "Choose location and service first"} aria-label={`Search eligible waitlist ${terminology.staffPlural}`} autoComplete="off" disabled={!locationId || !serviceId} /><select name="preferredTeamMemberId" defaultValue="" disabled={!locationId || !serviceId}><option value="">No preference</option>{staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
-    <fieldset><legend>Preferred appointment window <small>Optional</small></legend><label>Date<input name="preferredLocalDate" type="date" /></label><WaitlistTimeRange /></fieldset>
+    </fieldset>
+    <fieldset className="waitlist-form__window"><legend>Preferred appointment window <small>Optional</small></legend><label className="waitlist-form__date">Date<input name="preferredLocalDate" type="date" /></label><WaitlistTimeRange /></fieldset>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}{state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
     <button type="submit" disabled={pending}>{pending ? 'Adding…' : 'Add to waitlist'}</button>
   </form>;
 }
 
+function SaveStatusButton({ changed }: { changed: boolean }) {
+  const { pending } = useFormStatus();
+  return <button className="waybook-action waybook-action--secondary" type="submit" disabled={!changed || pending}>
+    {pending ? "Saving…" : "Save"}
+  </button>;
+}
+
 export function WaitlistStatusForm({ entryId, status }: { entryId: string; status: string }) {
-  return <form action={saveWaitlistStatus} className="waitlist-status-form"><input type="hidden" name="entryId" value={entryId} /><label>Status<select name="status" defaultValue={status}><option value="waiting">Waiting</option><option value="offered">Offer sent</option><option value="booked">Booked</option><option value="cancelled">Cancelled</option></select></label><button type="submit">Save</button></form>;
+  const [selection, setSelection] = useState(status);
+
+  return <form action={saveWaitlistStatus} className="waitlist-status-form">
+    <input type="hidden" name="entryId" value={entryId} />
+    <select name="status" aria-label="Status" value={selection} onChange={(event) => setSelection(event.target.value)}>
+      <option value="waiting">Waiting</option>
+      <option value="offered">Offer sent</option>
+      <option value="booked">Booked</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+    <SaveStatusButton changed={selection !== status} />
+  </form>;
 }

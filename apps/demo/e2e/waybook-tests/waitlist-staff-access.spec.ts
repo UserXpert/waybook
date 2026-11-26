@@ -102,7 +102,9 @@ for (const workspace of workspaces) {
         await expect(row).toBeVisible();
         await expect(row).not.toContainText("null");
         await expect(row.getByRole("link", { name: "Find a slot" })).toHaveCount(0);
+        await expect(row.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
         await row.locator('select[name="status"]').selectOption("offered");
+        await expect(row.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
         await row.getByRole("button", { name: "Save", exact: true }).click();
         await expect(row).toHaveCount(0);
         await page.goto(`${path}?status=offered`);
