@@ -2,9 +2,9 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell } from "lucide-react";
 import { reviewStaffAccess } from "@/app/app/team/actions";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
+import { WaybookNotificationBanner } from "@/components/waybook-notification-banner";
 import type { OutstandingStaffAccessRequest } from "@/lib/waybook/staff-access-requests";
 
 const requestStatuses = {
@@ -33,16 +33,14 @@ export function StaffAccessRequestPanel({ requests }: { requests: OutstandingSta
   return (
     <>
       {requests.length > 0 ? (
-        <section className="waybook-feedback staff-access-requests__notice" aria-label="Staff access requests">
-          <p role="status">
-            <Bell aria-hidden="true" size={18} />
-            <span>Staff access requests ({requests.length})</span>
-          </p>
+        <WaybookNotificationBanner label="Staff access requests" action={
           <button ref={opener} className="waybook-action waybook-action--secondary" type="button" aria-haspopup="dialog" onClick={() => {
             setOpen(true);
             router.refresh();
           }}>See requests</button>
-        </section>
+        }>
+          Staff access requests ({requests.length})
+        </WaybookNotificationBanner>
       ) : null}
       {open ? (
         <TenantEditorDialog title="Staff access requests" onDismiss={close} cycleFocus>
