@@ -32,7 +32,7 @@ for (const tenant of [
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars`);
     const search = page.getByRole("button", { name: /^Search (bookings|clients|patients)/ });
     await expect(search).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Notifications unavailable" })).toBeDisabled();
+    await expect(page.getByRole("link", { name: "Notifications", exact: true })).toBeVisible();
     await page.goto(`${app}/search?q=${encodeURIComponent(clientName)}`);
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars`);
 
@@ -56,8 +56,15 @@ for (const tenant of [
     await expect(page.getByRole("heading", { name: "Appointments", exact: true })).toHaveCount(0);
 
     const response = await page.goto(`${app}/notifications`);
-    expect(response?.status()).toBe(404);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("region", { name: "Waiting room alerts" })).toContainText("No waiting room alerts.");
     await expect(page.getByRole("heading", { name: "Appointments needing review" })).toHaveCount(0);
+
+    await control`UPDATE tenant_memberships SET role='read-only'
+      WHERE tenant_id=${workspace.tenant_id} AND identity_id=${identity.id}`;
+    const restrictedResponse = await page.reload();
+    expect(restrictedResponse?.status()).toBe(404);
+    await expect(page.getByRole("region", { name: "Waiting room alerts" })).toHaveCount(0);
   } finally {
     await Promise.all([db.end(), control.end()]);
   }
