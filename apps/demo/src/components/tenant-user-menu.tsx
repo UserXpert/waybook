@@ -52,7 +52,7 @@ export function TenantUserMenu({ photo, photoMemberId, onSavePhoto, displayName,
     {open ? <section className="tenant-user-menu__popover" role="menu" aria-label="Account menu">
       <header>
         {photoMemberId ? <>
-          <button ref={uploadButton} type="button" className="tenant-user-menu__avatar-upload" disabled={pending} aria-label={pending ? "Updating profile photo" : "Upload profile photo"} onClick={() => input.current?.click()}>{avatar}<StaffPhotoCamera /></button>
+          <button ref={uploadButton} type="button" className="tenant-user-menu__avatar-upload" disabled={pending} aria-label={pending ? "Updating profile photo" : "Upload profile photo"} onClick={() => input.current?.click()}>{avatar}{photo ? null : <StaffPhotoCamera />}</button>
           <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => upload(event.target.files?.[0])} />
         </> : <span className="tenant-user-menu__avatar-upload">{avatar}</span>}
         <div><strong>{displayName}</strong><span>{email}</span></div><small>{role}</small>
