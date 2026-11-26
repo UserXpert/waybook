@@ -7,6 +7,8 @@ test("Settings appearance follows the system and retains explicit choices after 
   await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/nordic\/app/);
+  await expect(page.locator(".tenant-dashboard-page")).toHaveCSS("background-image", /login-blue-background/);
+  await expect(page.getByRole("link", { name: "New appointment", exact: true })).toHaveCSS("background-color", "rgb(49, 92, 130)");
   await page.goto("/nordic/app/settings");
 
   const html = page.locator("html");
@@ -16,6 +18,7 @@ test("Settings appearance follows the system and retains explicit choices after 
   const light = modes.getByRole("button", { name: "Light", exact: true });
   await expect(system).toHaveAttribute("aria-pressed", "true");
   await expect(html).toHaveAttribute("data-waybook-theme", "light");
+  await expect(html).toHaveAttribute("data-waybook-tint", "blue");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
   await light.focus();
@@ -28,11 +31,12 @@ test("Settings appearance follows the system and retains explicit choices after 
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
 
   const tints = page.getByRole("group", { name: "Accent tint" });
-  for (const tint of ["Neutral", "Blue", "Violet", "Rose", "Teal", "Coral", "Amber"]) {
-    const swatch = tints.getByRole("button", { name: tint, exact: true });
+  await expect(tints.getByRole("button", { name: "Ice Blue", exact: true })).toHaveAttribute("aria-pressed", "true");
+  for (const [id, label] of Object.entries({ neutral: "Neutral", blue: "Ice Blue", violet: "Violet", rose: "Rose", teal: "Teal", coral: "Coral", amber: "Amber" })) {
+    const swatch = tints.getByRole("button", { name: label, exact: true });
     await swatch.click();
     await expect(swatch).toHaveAttribute("aria-pressed", "true");
-    await expect(html).toHaveAttribute("data-waybook-tint", tint.toLowerCase());
+    await expect(html).toHaveAttribute("data-waybook-tint", id);
     const offset = await swatch.evaluate((button) => {
       const outer = button.getBoundingClientRect();
       const inner = button.querySelector("i")!.getBoundingClientRect();

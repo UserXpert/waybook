@@ -1,0 +1,177 @@
+/* The signed-in Ice Blue palette takes its glass, field tint, and blue ink from login. */
+:root[data-waybook-tint="blue"] {
+  --waybook-accent: #315c82;
+  --waybook-accent-soft: #dbeaf8;
+  --waybook-accent-ink: #294d6e;
+  --ice-primary: var(--waybook-accent);
+  --ice-action-hover: #244666;
+  --ice-on-action: #fff;
+  --ice-ink: #233c55;
+  --ice-muted: #4b6177;
+  --ice-canvas: #e6f1fc;
+  --ice-glass: rgb(248 252 255 / 82%);
+  --ice-layer: rgb(244 250 255 / 94%);
+  --ice-edge: #c9dcec;
+  --ice-field: #e9f2fb;
+  --ice-field-edge: #aabcce;
+  --ice-focus: #467ca8;
+  --ice-shadow: 0 .6rem 2rem rgb(40 78 116 / 10%);
+}
+
+:root[data-waybook-tint="blue"][data-waybook-theme="dark"] {
+  --waybook-accent: #416e96;
+  --waybook-accent-soft: #253e55;
+  --waybook-accent-ink: #d3eaff;
+  --ice-action-hover: #345b7e;
+  --ice-ink: #e6f2ff;
+  --ice-muted: #b6cadc;
+  --ice-canvas: #101e2b;
+  --ice-glass: rgb(24 42 58 / 88%);
+  --ice-layer: rgb(25 43 58 / 96%);
+  --ice-edge: #36516a;
+  --ice-field: #20384e;
+  --ice-field-edge: #587991;
+  --ice-focus: #9bcaee;
+  --ice-shadow: 0 .6rem 2rem rgb(0 0 0 / 24%);
+  --wb-dark-canvas: #101e2b;
+  --wb-dark-surface: #192c3d;
+  --wb-dark-raised: #20384e;
+  --wb-dark-border: #36516a;
+  --wb-dark-border-subtle: #2a4257;
+  --wb-dark-text: #e6f2ff;
+  --wb-dark-muted: #b6cadc;
+}
+
+:root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page {
+  background: linear-gradient(130deg, rgb(232 244 255 / 66%), rgb(238 247 255 / 88%)),
+    var(--ice-canvas) url("/brand/login-blue-background.jpg") center / cover no-repeat;
+  background-attachment: fixed;
+  color: var(--ice-ink);
+}
+
+:root[data-waybook-theme="dark"][data-waybook-tint="blue"] .tenant-dashboard-page {
+  background: radial-gradient(ellipse at 17% 0%, #223f5a 0%, transparent 58%),
+    radial-gradient(ellipse at 89% 15%, #1b344d 0%, transparent 54%), var(--ice-canvas);
+  background-attachment: fixed;
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav {
+  background: var(--ice-layer);
+  border-color: var(--ice-edge);
+  box-shadow: var(--ice-shadow);
+  backdrop-filter: blur(16px);
+}
+
+:root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav__logo--light { display: block; }
+:root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav__logo--dark { display: none; }
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav :is(
+  .tenant-dashboard-nav__workspace strong, nav a, .tenant-app-menu > button, .tenant-user-menu > button,
+  .tenant-nav-tools > button, .tenant-nav-tools > a
+) { color: var(--ice-ink); }
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav :is(
+  nav a, .tenant-app-menu > button, .tenant-user-menu > button, .tenant-nav-tools > button, .tenant-nav-tools > a
+):is(:hover, :focus-visible, [aria-current="page"], [aria-expanded="true"]) {
+  background: var(--waybook-accent-soft);
+  color: var(--waybook-accent-ink);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(
+  .waybook-data-card, .waybook-data-metrics, .dashboard-widget, .staff-workspace, .email-workspace,
+  .workspace-settings__panel, .online-booking-tab, .online-booking-tab__content, .embed-studio,
+  .embed-studio__controls section, .online-booking-policy__fields, .waybook-week-calendar
+) {
+  background-color: var(--ice-glass);
+  border-color: var(--ice-edge);
+  box-shadow: var(--ice-shadow);
+  backdrop-filter: blur(16px);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] :is(
+  .tenant-dashboard-page .tenant-drawer, .tenant-dashboard-page .client-form-modal,
+  .tenant-dashboard-page .tenant-user-menu__popover, .tenant-app-menu__dialog
+) {
+  background-color: var(--ice-layer);
+  border-color: var(--ice-edge);
+  backdrop-filter: blur(16px);
+}
+
+/* Style the workspace's action patterns without recolouring destructive actions or booking previews. */
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(
+  .waybook-primary-link,
+  .waybook-action:not(.waybook-action--secondary, .waybook-action--danger),
+  .waybook-list-filter button[type="submit"], .waybook-list-filter > button:not([type]),
+  .tenant-drawer-header-actions > button,
+  .tenant-drawer-form > button:not(.staff-multi-toggle, .waybook-action--secondary, .waybook-action--danger),
+  .tenant-inline-form > button, .retail-checkout-form button[type="submit"],
+  .waybook-customer-form > button[type="submit"],
+  .staff-profile-form > button, .staff-hours-form > button, .staff-timeoff-form > button:not(.staff-timeoff-form__remove),
+  .staff-timeoff-form__actions > button[type="submit"]:not(.staff-timeoff-form__remove),
+  .staff-permissions-form > button, .staff-access-menu__credentials button[type="submit"]:not(.waybook-action--danger),
+  .online-booking-page__actions > button, .online-booking-settings__footer > button, .online-booking-share-link > button,
+  .email-template-editor > button, .email-reminder-settings > button,
+  .email-provider-current button:not(.email-provider-current__secondary),
+  .location-closed-dates__add, .appointment-status-form > button,
+  .calendar-view-toggle a[aria-current="page"]
+):not(:disabled, [value="delete"], .tenant-booking-page *) {
+  border-color: var(--ice-button-fill, var(--ice-primary));
+  background: var(--ice-button-fill, var(--ice-primary));
+  color: var(--ice-on-action);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(button, a):is(:hover, :focus-visible) {
+  --ice-button-fill: var(--ice-action-hover);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(
+  input:not([type="hidden"], [type="color"], [type="checkbox"], [type="radio"], [type="range"], [type="submit"], [type="button"]),
+  select, textarea, .online-booking-tab .embed-studio__colour
+):not(:disabled, [aria-invalid="true"], .tenant-booking-page *, .embed-studio__colour input),
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-app-menu__search {
+  background-color: var(--ice-field);
+  border-color: var(--ice-field-edge);
+  color: var(--ice-ink);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(
+  .online-booking-tabs > nav, .online-booking-page__header
+) {
+  background: var(--ice-layer);
+  border-color: var(--ice-edge);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .online-booking-tab .embed-studio__colour input:not([type="color"]) {
+  border: 0;
+  background: transparent;
+  color: var(--ice-ink);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page input[type="file"]::file-selector-button {
+  border-color: var(--ice-field-edge);
+  background: var(--waybook-accent-soft);
+  color: var(--waybook-accent-ink);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .booking-theme-toggle input:checked {
+  background: var(--ice-primary);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-app-menu__search input {
+  color: var(--ice-ink);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(input, select, textarea, button, a):not(.tenant-booking-page *):focus-visible,
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-app-menu__search:focus-within {
+  outline: 2px solid var(--ice-focus);
+  outline-offset: 2px;
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(input[type="checkbox"], input[type="radio"], input[type="range"]):not(.tenant-booking-page *) {
+  accent-color: var(--waybook-accent);
+}
+
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(
+  .waybook-form-toggle > input:checked + span, .tenant-drawer-check > input:checked,
+  .staff-status-toggle > input:checked + span
+) { background-color: var(--waybook-accent); }
