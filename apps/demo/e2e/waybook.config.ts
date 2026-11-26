@@ -41,6 +41,7 @@ export default defineConfig({
       BETTER_AUTH_URL: "http://localhost:3336",
       WAYBOOK_STRIPE_SANDBOX_SECRET_KEY: "sk_test_waybookE2EFixture",
       WAYBOOK_STRIPE_SANDBOX_ORIGIN: "http://localhost:3336",
+      WAYBOOK_STRIPE_SANDBOX_WEBHOOK_SECRET: "whsec_waybookE2EFixture",
       NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${JSON.stringify(path.join(here, "fixtures/google-oauth.mjs"))} --import ${JSON.stringify(path.join(here, "fixtures/stripe-connect.mjs"))}`.trim(),
     },
     reuseExistingServer: false,

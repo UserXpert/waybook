@@ -53,9 +53,10 @@ globalThis.fetch = async (input, init) => {
       Object.assign(session.checkout, { status: "expired", url: null });
     } else if (request.method === "GET" && !expiration) {
       session.reads++;
-      if (session.checkout.amount_total === 6501 && session.reads >= 2 && session.checkout.status === "open") {
+      if ([6501, 6503].includes(session.checkout.amount_total) && session.reads >= 2 && session.checkout.status === "open") {
         Object.assign(session.checkout, { status: "complete", payment_status: "paid", payment_intent: `pi_${id.slice(8)}`, url: null });
       }
+      if (session.checkout.amount_total === 6504) Object.assign(session.checkout, { status: "expired", url: null });
     } else return error(400);
     return Response.json(session.checkout);
   }

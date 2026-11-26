@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
@@ -21,7 +21,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
       const [customer] = await tx`INSERT INTO customers (tenant_id, name, email)
         VALUES (${tenantId}, ${name}, ${`stripe-client-${marker}@example.test`}) RETURNING id`;
       const bookings: string[] = [];
-      for (const [hoursAgo, amount] of [[25, 6501], [27, 6502]]) {
+      for (const [hoursAgo, amount] of [[25, 6501], [27, 6502], [29, 6503], [31, 6504]]) {
         const [block] = await tx`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
           VALUES (${tenantId}, ${member.id}, ${location.id}, now() - ${hoursAgo} * interval '1 hour',
             now() - ${hoursAgo - 1} * interval '1 hour', 'confirmed') RETURNING id, starts_at, ends_at`;
@@ -57,8 +57,52 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
         VALUES (${tenantId}, ${id}, 'payment', 100, 'cash', ${actor.id})`).rejects.toThrow("Resolve the open Stripe sandbox payment");
       await expect(db`UPDATE bookings SET booked_price_cents = 100 WHERE id = ${id}`)
         .rejects.toThrow("Resolve the open Stripe sandbox payment");
-      await sale.getByRole("button", { name: "Continue in Stripe" }).click();
       const sessionId = `cs_test_${reserved.id.replaceAll("-", "")}`;
+      if (index >= 2) {
+        // Deliver signed notifications without staff authentication or a return from Stripe.
+        const sender = await page.context().browser()!.newContext();
+        try {
+          const endpoint = new URL("/api/webhooks/stripe-sandbox", page.url()).href;
+          const event = {
+            object: "event", id: "evt_waybookfixture", livemode: false,
+            account: "acct_checkoutFixture",
+            type: index === 2 ? "checkout.session.completed" : "checkout.session.expired",
+            data: { object: { object: "checkout.session", id: sessionId, livemode: false, client_reference_id: reserved.id } },
+          };
+          async function deliver({ account = event.account, valid = true } = {}) {
+            const data = JSON.stringify({ ...event, account });
+            const timestamp = Math.floor(Date.now() / 1000);
+            const digest = createHmac("sha256", "whsec_waybookE2EFixture").update(`${timestamp}.${data}`).digest("hex");
+            const signature = valid ? digest : "0".repeat(64);
+            return (await sender.request.post(endpoint, { data, headers: {
+              "content-type": "application/json",
+              "stripe-signature": `t=${timestamp},v1=${signature}`,
+            } })).status();
+          }
+          expect(await deliver({ valid: false })).toBe(400);
+          expect(await deliver({ account: "acct_unrelated" })).toBe(204);
+          expect(await attempts(id)).toEqual([{ id: reserved.id, state: "pending", session_id: null }]);
+          expect(await receipts(id)).toEqual([]);
+          if (index === 2) {
+            expect(await deliver()).toBe(503);
+            expect(await receipts(id)).toEqual([]);
+          }
+          expect(await Promise.all([deliver(), deliver()])).toEqual([204, 204]);
+          expect(await attempts(id)).toEqual([{ id: reserved.id, state: index === 2 ? "settled" : "expired", session_id: sessionId }]);
+          await page.reload();
+          if (index === 2) {
+            await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
+            expect(await receipts(id)).toEqual([{ id: reserved.id, amount_cents: 6503, method: "card" }]);
+          } else {
+            await expect(sale.getByRole("button", { name: "Record payment" })).toBeVisible();
+            expect(await receipts(id)).toEqual([]);
+          }
+        } finally {
+          await sender.close();
+        }
+        continue;
+      }
+      await sale.getByRole("button", { name: "Continue in Stripe" }).click();
       await expect(page).toHaveURL(`https://checkout.stripe.com/c/pay/${sessionId}`);
       expect(await attempts(id)).toEqual([{ id: reserved.id, state: "pending", session_id: sessionId }]);
       await page.goto(paymentPath);

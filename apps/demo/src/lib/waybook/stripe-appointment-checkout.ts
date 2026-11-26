@@ -1,18 +1,26 @@
 import "server-only";
 
-import { controlDb, type tenantDb } from "./database";
+import { controlDb, findTenantById, tenantDb } from "./database";
 import { stripeConnectSandbox, stripeSandboxConfig, type StripeSandboxConfig } from "./stripe-connect-api";
 import { stripeCheckoutSandbox, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
+import type { StripeCheckoutNotification } from "./stripe-checkout-webhook";
 
 type TenantDatabase = ReturnType<typeof tenantDb>;
 type CheckoutContext = { db: TenantDatabase; tenantId: string; bookingId: string };
 type Attempt = SandboxCheckoutAttempt & {
+  bookingId: string;
   actorId: string;
   returnOrigin: string;
   sessionId: string | null;
   state: "pending" | "settled";
 };
 type AttemptQuery = Pick<TenantDatabase, "unsafe">;
+const selectAttempt = `
+  SELECT id, booking_id AS "bookingId", account_id AS "accountId", amount_cents AS "amountCents",
+         created_by_identity_id AS "actorId", expires_at_seconds AS "expiresAtSeconds", return_path AS "returnPath",
+         return_origin AS "returnOrigin", session_id AS "sessionId", state
+  FROM stripe_sandbox_checkout_attempts
+`;
 
 export function appointmentStripeConfig() {
   return process.env.VERCEL_ENV === "production" ? null : stripeSandboxConfig(process.env);
@@ -28,10 +36,7 @@ export async function appointmentStripeAccount(tenantId: string) {
 
 async function currentAttempt(sql: AttemptQuery, tenantId: string, bookingId: string) {
   const [attempt] = await sql.unsafe<Attempt[]>(`
-    SELECT id, account_id AS "accountId", amount_cents AS "amountCents", created_by_identity_id AS "actorId",
-           expires_at_seconds AS "expiresAtSeconds", return_path AS "returnPath",
-           return_origin AS "returnOrigin", session_id AS "sessionId", state
-    FROM stripe_sandbox_checkout_attempts
+    ${selectAttempt}
     WHERE tenant_id = $1 AND booking_id = $2 AND state <> 'expired'
   `, [tenantId, bookingId]);
   return attempt ?? null;
@@ -147,4 +152,26 @@ export async function runAppointmentStripeCheckout(
   }
   const session = input.action === "cancel" ? await stripe.expire(attempt, sessionId) : await stripe.retrieve(attempt, sessionId);
   return reconcileAttempt(context, attempt, session);
+}
+
+export async function settleStripeCheckoutNotification(config: StripeSandboxConfig, notification: StripeCheckoutNotification) {
+  const { accountId, attemptId, sessionId } = notification;
+  const [connection] = await controlDb<{ tenantId: string }[]>`
+    SELECT tenant_id AS "tenantId" FROM waybook_stripe_sandbox_connections WHERE account_id = ${accountId}
+  `;
+  if (!connection) return;
+  const tenant = await findTenantById(connection.tenantId);
+  if (!tenant || tenant.lifecycleStatus !== "active") return;
+  const db = tenantDb(tenant);
+  const [attempt] = await db.unsafe<Attempt[]>(`
+    ${selectAttempt} WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND state = 'pending'
+  `, [tenant.id, accountId, attemptId]);
+  if (!attempt || (attempt.sessionId && attempt.sessionId !== sessionId)) return;
+  // Stripe's current record is authoritative even if a signed delivery arrives out of order.
+  const session = await stripeCheckoutSandbox(config).retrieve(attempt, sessionId);
+  if (session.state !== "paid" && session.state !== "expired") {
+    throw new Error("Stripe checkout has not reached its final state.");
+  }
+  // The same appointment lock protects manual checks and webhook retries.
+  await reconcileAttempt({ db, tenantId: tenant.id, bookingId: attempt.bookingId }, attempt, session);
 }

@@ -134,10 +134,21 @@ and amount before Waybook writes the receipt. The receipt retains its Stripe
 source and follows provider reconciliation.
 
 If Stripe creates a session but the response is interrupted, retrying can
-recover the original session with the same key. An unresolved attempt whose
-session was never saved stays reserved past the replay deadline and needs
-provider reconciliation. Hosted sandbox verification, signed webhooks,
-provider refunds and existing-account connection remain part of
+recover the original session with the same key. Configure a Stripe sandbox
+webhook listening to **Events on connected accounts** with snapshot events
+and set `WAYBOOK_STRIPE_SANDBOX_WEBHOOK_SECRET` for the same isolated deployment.
+The endpoint is `/api/webhooks/stripe-sandbox`. Subscribe to
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+and `checkout.session.expired`. Waybook verifies the original signed payload
+and confirms the session on the connected account before settling or releasing
+the balance. A signed terminal event can recover a session ID even if the
+session creation response never reached Waybook. The manual status check
+uses the same ledger transaction and remains available.
+
+An unresolved attempt without a saved session or a confirmed notification
+stays reserved past the replay deadline and needs provider reconciliation.
+Hosted sandbox verification, provider refunds and existing-account
+connection remain part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)
