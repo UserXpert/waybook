@@ -38,24 +38,25 @@ for (const tenant of [
     await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL((url) => url.pathname === `/${tenant.route}/app`);
-    await page.goto(`${route}?package=${id}`);
+    await page.goto(`${route}?sort=newest&package=${id}`);
     const detail = page.getByRole("dialog", { name: "Package details" });
     await expect(detail.getByRole("heading", { name: title })).toBeVisible({ timeout: 3000 });
     await expect(detail.getByText(amount, { exact: true })).toBeVisible();
     await expect(detail.getByText("4", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL((url) => url.pathname === route && !url.search);
+    await expect(page).toHaveURL((url) => url.pathname === route && url.search === "?sort=newest");
     const pagination = page.getByRole("navigation", { name: "Issued package pages" });
     await pagination.getByRole("link", { name: "Next page" }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("page") === "2");
     const open = page.getByRole("link", { name: `Open ${title} for ${customer}`, exact: true });
     await expect(open).toBeVisible();
     await open.press("Enter");
     await expect(detail.getByRole("link", { name: "Close package details" })).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL((url) => url.search === "?page=2");
+    await expect(page).toHaveURL((url) => url.searchParams.get("sort") === "newest" && url.searchParams.get("page") === "2" && !url.searchParams.has("package"));
     await expect(open).toBeFocused();
     await pagination.getByRole("link", { name: "Previous page" }).click();
-    await expect(page).toHaveURL((url) => url.pathname === route && !url.search);
+    await expect(page).toHaveURL((url) => url.pathname === route && url.search === "?sort=newest");
     await expect(page.getByRole("link", { name: `Open ${definition}`, exact: true })).toContainText(
       new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" }).format(300.25),
     );

@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
 const workspaces = [
-  { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL", client: "Client" },
-  { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL", client: "Patient" },
+  { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
+  { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
 ];
 
 for (const workspace of workspaces) {
@@ -14,6 +14,9 @@ for (const workspace of workspaces) {
     let fixtureStaffId: string | undefined;
     try {
       const [{ tenant_id: tenantId }] = await db`SELECT tenant_id FROM tenant_settings`;
+      const [terminology] = await db<{ client_term: string }[]>`SELECT client_term FROM tenant_terminology WHERE tenant_id = ${tenantId}`;
+      const client = terminology?.client_term === "patient" ? "patient" : "client";
+      const clientTitle = client === "patient" ? "Patient" : "Client";
       await db`INSERT INTO customers (tenant_id,name,email) SELECT ${tenantId}, ${batch} || ' ' || lpad((n / 2)::text,3,'0'),
         ${batch.toLowerCase().replaceAll(" ", "-")} || '-' || n || '@example.test' FROM generate_series(1,107) n`;
       const expected = await db<{ id: string; name: string; email: string }[]>`SELECT id,name,email FROM customers
@@ -51,8 +54,7 @@ for (const workspace of workspaces) {
 
       const row = rows.filter({ hasText: target.email });
       const opener = row.getByRole("link").first();
-      const client = workspace.client.toLowerCase();
-      const record = page.getByRole("dialog", { name: `${workspace.client} record for ${target.name}`, exact: true });
+      const record = page.getByRole("dialog", { name: `${clientTitle} record for ${target.name}`, exact: true });
       await opener.focus();
       await opener.press("Enter");
       await expect(record).toContainText(target.email);
