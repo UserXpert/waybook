@@ -4297,7 +4297,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   background: var(--waybook-accent-soft);
 }
 
-.recorded-appointment-payments { display: grid; gap: .75rem; }
+.recorded-appointment-payments, .recorded-appointment-payments__form { display: grid; gap: .75rem; }
 .recorded-appointment-payments__item {
   display: grid;
   gap: .65rem;
