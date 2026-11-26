@@ -3902,15 +3902,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .workspace-settings__heading span, :root[data-waybook-theme="dark"] .workspace-settings__panel > p, :root[data-waybook-theme="dark"] .workspace-settings__links small { color: #b5b5bf; }
 @media (max-width: 760px) { .tenant-dashboard-page .workspace-settings { padding-top: 1rem; }.workspace-settings__layout { grid-template-columns: 1fr; gap: 1rem; }.workspace-settings__nav { display: flex; flex-wrap: wrap; }.workspace-settings__panel { padding: 1.1rem; }.workspace-settings__links { grid-template-columns: 1fr; } }
 
-/* Workspace-wide tint and translucent surfaces. Booking previews retain their own theme. */
-:root[data-waybook-theme="light"] .tenant-dashboard-page {
-  background: radial-gradient(ellipse at 15% 5%, color-mix(in srgb, var(--waybook-accent) 12%, #fff) 0%, transparent 45%), radial-gradient(ellipse at 80% 24%, color-mix(in srgb, var(--waybook-accent) 22%, #f6f6fc) 0%, transparent 55%), #f5f5fa;
-  background-attachment: fixed;
-}
-:root[data-waybook-theme="dark"] .tenant-dashboard-page {
-  background: radial-gradient(ellipse at 15% 5%, color-mix(in srgb, var(--waybook-accent) 14%, #16161b) 0%, transparent 45%), radial-gradient(ellipse at 80% 24%, color-mix(in srgb, var(--waybook-accent) 22%, #15151d) 0%, transparent 55%), #101014;
-  background-attachment: fixed;
-}
+/* Translucent workspace surfaces. Booking previews retain their own theme. */
 :root[data-waybook-theme="light"] .tenant-dashboard-page :is(.waybook-data-card, .waybook-data-metrics, .staff-workspace, .staff-workspace__panel, .email-workspace, .workspace-settings__panel, .online-booking-tab__content, .embed-studio) {
   background-color: rgba(255, 255, 255, .8);
   border-color: rgba(255, 255, 255, .85);

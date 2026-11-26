@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { dashboardTints, defaultDashboardTint } from "@/lib/waybook/appearance";
+import { dashboardBackgrounds, dashboardTints, defaultDashboardBackground, defaultDashboardTint } from "@/lib/waybook/appearance";
 import "./globals.css";
 import "./ice-blue.css";
+import "./workspace-backgrounds.css";
 
 export const metadata: Metadata = {
   title: "Waybook — Booking operations",
@@ -20,9 +21,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" data-waybook-theme="light" data-waybook-tint={defaultDashboardTint} suppressHydrationWarning>
+    <html lang="en" data-waybook-theme="light" data-waybook-tint={defaultDashboardTint} data-waybook-background={defaultDashboardBackground} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var theme=localStorage.getItem("waybook.theme");var tint=localStorage.getItem("waybook.tint");var resolved=theme==="dark"||theme!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.waybookTheme=resolved;document.documentElement.dataset.waybookTint=${JSON.stringify(dashboardTints)}.includes(tint)?tint:${JSON.stringify(defaultDashboardTint)};}catch(e){}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function () {
+            try {
+              var theme = localStorage.getItem("waybook.theme");
+              var tint = localStorage.getItem("waybook.tint");
+              var background = localStorage.getItem("waybook.background");
+              var appearance = document.documentElement.dataset;
+              appearance.waybookTheme = theme === "dark" || theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+              appearance.waybookTint = ${JSON.stringify(dashboardTints)}.includes(tint) ? tint : ${JSON.stringify(defaultDashboardTint)};
+              appearance.waybookBackground = ${JSON.stringify(dashboardBackgrounds)}.includes(background) ? background : ${JSON.stringify(defaultDashboardBackground)};
+            } catch (error) {}
+          })();
+        ` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

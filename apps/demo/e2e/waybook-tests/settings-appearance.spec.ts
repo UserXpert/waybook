@@ -19,6 +19,7 @@ test("Settings appearance follows the system and retains explicit choices after 
   await expect(system).toHaveAttribute("aria-pressed", "true");
   await expect(html).toHaveAttribute("data-waybook-theme", "light");
   await expect(html).toHaveAttribute("data-waybook-tint", "blue");
+  await expect(html).toHaveAttribute("data-waybook-background", "ripple");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(html).toHaveAttribute("data-waybook-theme", "dark");
   await light.focus();
@@ -54,4 +55,40 @@ test("Settings appearance follows the system and retains explicit choices after 
   await expect(html).toHaveAttribute("data-waybook-tint", "amber");
   await system.click();
   await expect(html).toHaveAttribute("data-waybook-theme", "light");
+});
+
+test("Workspace background stays selected when appearance colours change", async ({ page }) => {
+  await page.goto("/nordic/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/nordic\/app$/);
+  await page.goto("/nordic/app/settings");
+
+  const html = page.locator("html");
+  const dashboard = page.locator(".tenant-dashboard-page");
+  const backgrounds = page.getByRole("group", { name: "Background pattern" });
+  const tints = page.getByRole("group", { name: "Accent tint" });
+  await expect(backgrounds.getByRole("button", { name: "Ripple" })).toHaveAttribute("aria-pressed", "true");
+  await expect(backgrounds.getByRole("button")).toHaveCount(5);
+  await backgrounds.getByRole("button", { name: "Folds" }).click();
+  await expect(dashboard).toHaveCSS("background-image", /linear-gradient\(122deg/);
+  await tints.getByRole("button", { name: "Violet" }).click();
+  await expect(html).toHaveAttribute("data-waybook-background", "folds");
+  await expect(dashboard).toHaveCSS("background-image", /linear-gradient\(122deg/);
+  await page.getByRole("group", { name: "Colour mode" }).getByRole("button", { name: "Dark" }).click();
+  await page.reload();
+  await expect(html).toHaveAttribute("data-waybook-theme", "dark");
+  await expect(html).toHaveAttribute("data-waybook-tint", "violet");
+  await expect(backgrounds.getByRole("button", { name: "Folds" })).toHaveAttribute("aria-pressed", "true");
+
+  await backgrounds.getByRole("button", { name: "Ripple" }).click();
+  await tints.getByRole("button", { name: "Neutral" }).click();
+  await expect(dashboard).toHaveCSS("background-image", /login-blue-background/);
+  await expect(dashboard).toHaveCSS("background-color", "rgb(14, 14, 16)");
+  await tints.getByRole("button", { name: "Ice Blue" }).click();
+  await expect(dashboard).toHaveCSS("background-image", /login-blue-background/);
+  await expect(dashboard).toHaveCSS("background-color", "rgb(13, 19, 28)");
+  await backgrounds.getByRole("button", { name: "Plain" }).click();
+  await expect(dashboard).toHaveCSS("background-image", "none");
 });

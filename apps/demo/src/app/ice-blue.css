@@ -8,7 +8,6 @@
   --ice-on-action: #fff;
   --ice-ink: #233c55;
   --ice-muted: #4b6177;
-  --ice-canvas: #e6f1fc;
   --ice-glass: rgb(248 252 255 / 82%);
   --ice-layer: rgb(244 250 255 / 94%);
   --ice-edge: #c9dcec;
@@ -25,35 +24,23 @@
   --ice-action-hover: #345b7e;
   --ice-ink: #e6f2ff;
   --ice-muted: #b6cadc;
-  --ice-canvas: #101e2b;
-  --ice-glass: rgb(24 42 58 / 88%);
-  --ice-layer: rgb(25 43 58 / 96%);
-  --ice-edge: #36516a;
-  --ice-field: #20384e;
-  --ice-field-edge: #587991;
+  --ice-glass: rgb(21 28 38 / 91%);
+  --ice-layer: rgb(20 27 37 / 96%);
+  --ice-edge: #303e4f;
+  --ice-field: #1c2937;
+  --ice-field-edge: #4c6479;
   --ice-focus: #9bcaee;
   --ice-shadow: 0 .6rem 2rem rgb(0 0 0 / 24%);
-  --wb-dark-canvas: #101e2b;
-  --wb-dark-surface: #192c3d;
-  --wb-dark-raised: #20384e;
-  --wb-dark-border: #36516a;
-  --wb-dark-border-subtle: #2a4257;
+  --wb-dark-canvas: #0d131c;
+  --wb-dark-surface: #151e29;
+  --wb-dark-raised: #1c2937;
+  --wb-dark-border: #303e4f;
+  --wb-dark-border-subtle: #283544;
   --wb-dark-text: #e6f2ff;
   --wb-dark-muted: #b6cadc;
 }
 
-:root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page {
-  background: linear-gradient(130deg, rgb(232 244 255 / 66%), rgb(238 247 255 / 88%)),
-    var(--ice-canvas) url("/brand/login-blue-background.jpg") center / cover no-repeat;
-  background-attachment: fixed;
-  color: var(--ice-ink);
-}
-
-:root[data-waybook-theme="dark"][data-waybook-tint="blue"] .tenant-dashboard-page {
-  background: radial-gradient(ellipse at 17% 0%, #223f5a 0%, transparent 58%),
-    radial-gradient(ellipse at 89% 15%, #1b344d 0%, transparent 54%), var(--ice-canvas);
-  background-attachment: fixed;
-}
+:root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page { color: var(--ice-ink); }
 
 :root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav {
   background: var(--ice-layer);
