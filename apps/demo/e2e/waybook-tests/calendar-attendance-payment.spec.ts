@@ -44,7 +44,7 @@ test("calendar attendance saves explicitly and requires a recorded payment to co
       const style = getComputedStyle(button);
       const line = getComputedStyle(button, "::before");
       const box = button.getBoundingClientRect();
-      return { background: style.backgroundColor, borderRadius: style.borderRadius, width: box.width, height: box.height, left: line.left, top: line.top };
+      return { background: style.backgroundColor, borderRadius: style.borderRadius, glyph: line.backgroundColor, width: box.width, height: box.height, left: line.left, top: line.top };
     });
     const before = await closeState();
     await close.hover();
