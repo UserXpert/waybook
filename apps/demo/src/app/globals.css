@@ -49,7 +49,7 @@ body {
   min-height: clamp(36rem, 84svh, 55rem);
   border: var(--login-frame-border) solid #fff;
   border-radius: var(--login-frame-radius);
-  corner-shape: superellipse(1.35);
+  corner-shape: squircle;
   box-shadow: 0 1.5rem 5rem #254b7529;
 }
 
@@ -70,7 +70,7 @@ body {
   gap: clamp(1.5rem, 4vh, 3rem);
   padding: clamp(5.5rem, 11vh, 7.25rem) clamp(1.5rem, 3vw, 2.75rem) clamp(1.5rem, 3vw, 2.75rem);
   border-radius: var(--login-inner-radius);
-  corner-shape: superellipse(1.35);
+  corner-shape: squircle;
   background: linear-gradient(180deg, #ffffff36, transparent 40%, #f2f8ff7a);
 }
 
@@ -92,6 +92,15 @@ body {
 
   .waybook-login-art::before { top: 0; }
   .waybook-login-art::after { bottom: 0; transform: scaleY(-1); }
+
+  @supports (corner-bottom-left-shape: superellipse(-2)) {
+    .waybook-login-art::before,
+    .waybook-login-art::after {
+      border-bottom-left-radius: var(--login-inner-radius);
+      corner-bottom-left-shape: superellipse(-2);
+      clip-path: none;
+    }
+  }
 }
 
 .waybook-login-schedule {
@@ -245,7 +254,7 @@ body {
   place-items: center;
   padding: clamp(2rem, 5vw, 5rem);
   border-radius: 0 var(--login-inner-radius) var(--login-inner-radius) 0;
-  corner-shape: superellipse(1.35);
+  corner-shape: squircle;
   background: #fff;
 }
 
@@ -404,7 +413,7 @@ body {
 
 .waybook-login > button,
 .waybook-login-providers button {
-  corner-shape: superellipse(1.35);
+  corner-shape: squircle;
   padding: .65rem 1rem;
   font-size: .93rem;
   font-weight: 500;
