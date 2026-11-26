@@ -12,7 +12,7 @@ const profiles = [
   { label: "read-only", role: "read-only", grants: true },
   { label: "manager", role: "manager", grants: false },
 ];
-const managerPages = ["products", "gift-cards", "packages", "sales/retail", "emails", "notifications"];
+const managerPages = ["products", "gift-cards", "packages", "sales/retail", "emails"];
 const delegatedPages = ["bookings", "services", "locations", "online-booking"];
 
 for (const workspace of workspaces) {
@@ -24,6 +24,8 @@ for (const workspace of workspaces) {
       const [{ password_hash: passwordHash }] = await control`SELECT password_hash FROM identities WHERE email=${workspace.owner}`;
       const features = await control`SELECT feature_key FROM tenant_feature_states WHERE tenant_id=${tenantId} AND is_enabled`;
       const enabled = new Set(features.map(({ feature_key }) => feature_key));
+      const [{ provider_arrival_alerts_enabled: arrivalAlertsEnabled }] = await tenant`
+        SELECT provider_arrival_alerts_enabled FROM tenant_settings WHERE tenant_id=${tenantId}`;
       const app = `/${workspace.route}/app`;
       for (const profile of profiles) {
         await test.step(profile.label, async () => {
@@ -54,10 +56,11 @@ for (const workspace of workspaces) {
             const hasGrant = profile.role === "staff" && profile.grants;
             const allowed = new Set([
               ...(isManager ? managerPages.filter((route) => route !== "emails" || enabled.has("email-notifications")) : []),
+              ...(isManager || (profile.role === "staff" && enabled.has("calendars") && arrivalAlertsEnabled) ? ["notifications"] : []),
               ...(isManager || hasGrant ? delegatedPages : []),
               ...(enabled.has("resources") && (isManager || hasGrant) ? ["resources"] : []),
             ]);
-            for (const route of [...managerPages, ...delegatedPages, "resources", "settings?tab=roles"]) {
+            for (const route of [...managerPages, ...delegatedPages, "resources", "notifications", "settings?tab=roles"]) {
               const response = await page.goto(`${app}/${route}`);
               expect.soft(response?.status(), `${profile.label} opening ${route}`).toBe(allowed.has(route) ? 200 : 404);
               await expect.soft(page.getByLabel("Tenant dashboard navigation"), route).toHaveCount(allowed.has(route) ? 1 : 0);
