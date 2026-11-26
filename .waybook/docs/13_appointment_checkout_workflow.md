@@ -76,7 +76,7 @@ In Chrome, **Check-in** offered **Waiting Room** or **In Service**. Waiting Room
 
 ### Benchmark verification still open
 
-The complete linked appointment, product checkout, split cash and simulated Front Desk settlement, card settlement, and standalone manual settlement were exercised in Chrome. Additional live verification remains for gift card redemption, account balance and IOU completion, actual front-desk hardware, the customer's text-link experience, receipt delivery, and refund settlement. The documentation above distinguishes those steps from observed screens and transactions.
+The complete linked appointment, product checkout, split cash and simulated Front Desk settlement, card settlement, and standalone manual settlement were exercised in Chrome. The Gift Cards register had no entries. Its setup form showed a scannable card number, starting balance, and owner lookup or inline creation. The form was closed without issuing a card. Additional live verification remains for gift card redemption, account balance and IOU completion, actual front-desk hardware, the customer's text-link experience, receipt delivery, and refund settlement. The documentation above distinguishes those steps from observed screens and transactions.
 
 ## Waybook acceptance checks
 
