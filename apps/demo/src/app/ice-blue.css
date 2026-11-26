@@ -19,50 +19,28 @@
 
 :root[data-waybook-tint="blue"][data-waybook-theme="dark"] {
   --waybook-accent: #416e96;
-  --waybook-accent-soft: #253e55;
+  --waybook-accent-soft: #263746;
   --waybook-accent-ink: #d3eaff;
   --ice-action-hover: #345b7e;
-  --ice-ink: #e6f2ff;
-  --ice-muted: #b6cadc;
-  --ice-glass: rgb(21 28 38 / 91%);
-  --ice-layer: rgb(20 27 37 / 96%);
-  --ice-edge: #303e4f;
-  --ice-field: #1c2937;
-  --ice-field-edge: #4c6479;
+  --ice-ink: #f0f2f5;
+  --ice-muted: #bac0ca;
+  --ice-glass: rgb(29 29 34 / 83%);
+  --ice-layer: rgb(30 31 36 / 96%);
+  --ice-edge: #393c43;
+  --ice-field: #242830;
+  --ice-field-edge: #565e69;
   --ice-focus: #9bcaee;
   --ice-shadow: 0 .6rem 2rem rgb(0 0 0 / 24%);
-  --wb-dark-canvas: #0d131c;
-  --wb-dark-surface: #151e29;
-  --wb-dark-raised: #1c2937;
-  --wb-dark-border: #303e4f;
-  --wb-dark-border-subtle: #283544;
-  --wb-dark-text: #e6f2ff;
-  --wb-dark-muted: #b6cadc;
+  --wb-dark-canvas: #11161c;
+  --wb-dark-surface: #1d1f24;
+  --wb-dark-raised: #242830;
+  --wb-dark-border: #393c43;
+  --wb-dark-border-subtle: #2b2e35;
+  --wb-dark-text: #f0f2f5;
+  --wb-dark-muted: #bac0ca;
 }
 
 :root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page { color: var(--ice-ink); }
-
-:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav {
-  background: var(--ice-layer);
-  border-color: var(--ice-edge);
-  box-shadow: var(--ice-shadow);
-  backdrop-filter: blur(16px);
-}
-
-:root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav__logo--light { display: block; }
-:root[data-waybook-theme="light"][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav__logo--dark { display: none; }
-
-:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav :is(
-  .tenant-dashboard-nav__workspace strong, nav a, .tenant-app-menu > button, .tenant-user-menu > button,
-  .tenant-nav-tools > button, .tenant-nav-tools > a
-) { color: var(--ice-ink); }
-
-:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page .tenant-dashboard-nav :is(
-  nav a, .tenant-app-menu > button, .tenant-user-menu > button, .tenant-nav-tools > button, .tenant-nav-tools > a
-):is(:hover, :focus-visible, [aria-current="page"], [aria-expanded="true"]) {
-  background: var(--waybook-accent-soft);
-  color: var(--waybook-accent-ink);
-}
 
 :root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(
   .waybook-data-card, .waybook-data-metrics, .dashboard-widget, .staff-workspace, .email-workspace,

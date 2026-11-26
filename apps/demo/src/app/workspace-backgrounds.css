@@ -1,16 +1,7 @@
 /* Pattern geometry is separate from the workspace tint and colour mode. */
 :root {
   --workspace-canvas: color-mix(in srgb, var(--waybook-accent) 10%, #f4f8fc);
-  --workspace-ripple-veil: color-mix(in srgb, var(--workspace-canvas) 58%, transparent);
-  --workspace-pattern-light: rgb(255 255 255 / 62%);
-  --workspace-pattern-line: rgb(27 55 80 / 11%);
-  --workspace-folds: linear-gradient(122deg, transparent 15%, var(--workspace-pattern-line) 31%,
-    var(--workspace-pattern-light) 37%, transparent 52%, var(--workspace-pattern-line) 67%,
-    var(--workspace-pattern-light) 73%, transparent 90%);
-  --workspace-horizon: radial-gradient(ellipse at 16% 10%, var(--workspace-pattern-light), transparent 60%),
-    radial-gradient(ellipse at 91% 100%, var(--workspace-pattern-line), transparent 68%);
-  --workspace-linen: repeating-linear-gradient(0deg, transparent 0 3px, var(--workspace-pattern-line) 3px 4px),
-    repeating-linear-gradient(90deg, transparent 0 4px, var(--workspace-pattern-light) 4px 5px, transparent 5px 7px);
+  --workspace-photo-veil: color-mix(in srgb, var(--workspace-canvas) 58%, transparent);
 }
 
 :root[data-waybook-tint="blue"] { --workspace-canvas: #e6f1fc; }
@@ -18,67 +9,67 @@
 
 :root[data-waybook-theme="dark"] {
   --workspace-canvas: color-mix(in srgb, var(--waybook-accent) 6%, #0e1014);
-  --workspace-ripple-veil: color-mix(in srgb, var(--workspace-canvas) 93%, transparent);
-  --workspace-pattern-light: rgb(255 255 255 / 5%);
-  --workspace-pattern-line: rgb(255 255 255 / 3%);
+  --workspace-photo-veil: color-mix(in srgb, var(--workspace-canvas) 93%, transparent);
 }
 
 :root[data-waybook-theme="dark"][data-waybook-tint="neutral"] { --workspace-canvas: #0e0e10; }
-:root[data-waybook-theme="dark"][data-waybook-tint="blue"] { --workspace-canvas: #0d131c; }
+:root[data-waybook-theme="dark"][data-waybook-tint="blue"] { --workspace-canvas: #11161c; }
 
-:root[data-waybook-theme] .tenant-dashboard-page,
-.tenant-appearance__pattern {
+:root[data-waybook-theme] .tenant-dashboard-page {
   background-color: var(--workspace-canvas);
-  background-image: var(--workspace-pattern, none);
-  background-blend-mode: var(--workspace-pattern-blend, normal);
+  background-image: linear-gradient(var(--workspace-photo-veil), var(--workspace-photo-veil)), var(--workspace-photo);
+  background-blend-mode: normal, luminosity;
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
+  background-attachment: fixed;
 }
 
-:root[data-waybook-theme] .tenant-dashboard-page { background-attachment: fixed; }
+:root[data-waybook-background="ripple"],
+.tenant-appearance__pattern[data-pattern="ripple"] { --workspace-photo: url("/brand/login-blue-background.jpg"); }
 
-:root[data-waybook-background="ripple"] .tenant-dashboard-page,
-.tenant-appearance__pattern[data-pattern="ripple"] {
-  --workspace-pattern: linear-gradient(var(--workspace-ripple-veil), var(--workspace-ripple-veil)),
-    url("/brand/login-blue-background.jpg");
-  --workspace-pattern-blend: normal, luminosity;
-}
+:root[data-waybook-background="photo-1"],
+.tenant-appearance__pattern[data-pattern="photo-1"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-1.avif"); }
 
-:root[data-waybook-background="folds"] .tenant-dashboard-page,
-.tenant-appearance__pattern[data-pattern="folds"] { --workspace-pattern: var(--workspace-folds); }
+:root[data-waybook-background="photo-2"],
+.tenant-appearance__pattern[data-pattern="photo-2"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-2.avif"); }
 
-:root[data-waybook-background="horizon"] .tenant-dashboard-page,
-.tenant-appearance__pattern[data-pattern="horizon"] { --workspace-pattern: var(--workspace-horizon); }
+:root[data-waybook-background="photo-3"],
+.tenant-appearance__pattern[data-pattern="photo-3"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-3.avif"); }
 
-:root[data-waybook-background="linen"] .tenant-dashboard-page,
-.tenant-appearance__pattern[data-pattern="linen"] { --workspace-pattern: var(--workspace-linen); }
+:root[data-waybook-background="photo-4"],
+.tenant-appearance__pattern[data-pattern="photo-4"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-4.jpeg"); }
 
-.tenant-appearance__pattern[data-pattern="plain"] { --workspace-pattern: none; }
-.tenant-appearance__pattern:not([data-pattern="ripple"]) { --workspace-pattern-blend: normal; }
+:root[data-waybook-background="photo-5"],
+.tenant-appearance__pattern[data-pattern="photo-5"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-5.jpeg"); }
+
+:root[data-waybook-background="photo-6"],
+.tenant-appearance__pattern[data-pattern="photo-6"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-6.jpeg"); }
+
+:root[data-waybook-background="photo-7"],
+.tenant-appearance__pattern[data-pattern="photo-7"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-7.jpeg"); }
+
+:root[data-waybook-background="photo-8"],
+.tenant-appearance__pattern[data-pattern="photo-8"] { --workspace-photo: url("/brand/workspace-backgrounds/photo-8.jpeg"); }
 
 .tenant-appearance__backgrounds {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(4.8rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(4.4rem, 1fr));
   gap: .55rem;
 }
 
 .tenant-appearance .tenant-appearance__backgrounds button {
-  display: grid;
-  gap: .35rem;
-  padding: .3rem .3rem .4rem;
+  display: block;
+  min-width: 0;
+  padding: .23rem;
   border-radius: .55rem;
-  font-size: .73rem;
 }
 
 .tenant-appearance__pattern {
   display: block;
   inline-size: 100%;
-  aspect-ratio: 1.7;
+  aspect-ratio: 1.55;
   border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-  border-radius: .32rem;
-}
-
-:root[data-waybook-theme="dark"] .tenant-appearance__pattern[data-pattern="ripple"] {
-  --workspace-ripple-veil: color-mix(in srgb, var(--workspace-canvas) 80%, transparent);
+  border-radius: .35rem;
+  background: var(--workspace-canvas) var(--workspace-photo) center / cover no-repeat;
 }
