@@ -45,6 +45,12 @@ globalThis.fetch = async (input, init) => {
       return Response.json(refund);
     }
     const refundId = url.pathname.split("/").at(-1);
+    if (request.method === "GET" && /^re_dashboard[A-Za-z0-9]+$/.test(refundId)) {
+      const intent = `pi_${refundId.slice("re_dashboard".length)}`;
+      if (![...sessions.values()].some(({ checkout }) => checkout.payment_intent === intent)) return error(404);
+      return Response.json({ id: refundId, object: "refund", payment_intent: intent, amount: 503, currency: "dkk",
+        metadata: {}, status: "succeeded" });
+    }
     const refund = refunds.get(refundId);
     if (!refund || request.method !== "GET") return error(404);
     const reads = (refundReads.get(refundId) ?? 0) + 1;

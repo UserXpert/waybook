@@ -59,7 +59,7 @@ type Product = { id: string; title: string; priceCents: number; currency: string
 type SaleLine = { id: string; title: string; unitPriceCents: number; quantity: number; discountCents: number };
 type PaymentItem = { id: string; kind: "payment" | "refund"; amountCents: number; method: string; recordedAt: Date; adjustment: boolean; refundReturned: boolean };
 type EligiblePackage = { id: string; title: string; remainingUnits: number; expiresAt: Date | null };
-type BookingActivity = { id: string; eventType: string; actorIdentityId: string | null; createdAt: Date };
+type BookingActivity = { id: string; eventType: string; actorIdentityId: string | null; createdAt: Date; providerRecorded: boolean };
 type ActivityActor = { id: string; displayName: string };
 type SaleSummary = { outstandingCents: string; collectedCents: string; refundDueCents: string; matchingCount: number; page: number };
 
@@ -234,7 +234,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   ` : [];
   const additionalServiceLines = selectedSale ? await getAdditionalAppointmentServices(db, tenant.id, selectedSale.bookingId) : [];
   const activity = selectedSale ? await db<BookingActivity[]>`
-    SELECT id, event_type AS "eventType", actor_identity_id AS "actorIdentityId", created_at AS "createdAt"
+    SELECT id, event_type AS "eventType", actor_identity_id AS "actorIdentityId", created_at AS "createdAt",
+      metadata->>'recordedVia' = 'stripe' AS "providerRecorded"
     FROM booking_events WHERE tenant_id=${tenant.id} AND booking_id=${selectedSale.bookingId}
     ORDER BY created_at DESC, id DESC LIMIT 100
   ` : [];
@@ -390,7 +391,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             </section> : null}
             {!paymentStep ? <>
               {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={`${reviewHref}&step=payment`}>Go to payments</Link> : null}
-              {selectedSale.attendanceStage === "checking_out" && balance === 0 ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
+              {selectedSale.attendanceStage === "checking_out" && (balance === 0 || selectedSale.stripeRefundedCents > 0) ?
+                <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
               {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
                 <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
               </section> : null}
@@ -420,7 +422,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               </section> : null}
               <Link className="waybook-action waybook-action--secondary sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>
               <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
-              {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
+              {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.providerRecorded ? "Stripe sandbox" : event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
             </> : null}
           </div>
         </aside>

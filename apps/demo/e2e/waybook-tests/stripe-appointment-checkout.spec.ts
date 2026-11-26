@@ -95,6 +95,26 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
             await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
             const receipt = { id: reserved.id, amount_cents: 6503, method: "card" };
             expect(await receipts(id)).toEqual([receipt]);
+            const paymentIntent = `pi_${sessionId.slice(8)}`;
+            const externalId = `re_dashboard${paymentIntent.slice(3)}`;
+            const externalResource = { object: "refund", id: externalId, amount: 503, currency: "dkk", payment_intent: paymentIntent };
+            const external = {
+              object: "event", id: "evt_dashboardRefund", livemode: false, account: "acct_checkoutFixture",
+              type: "refund.created", data: { object: externalResource },
+            };
+            expect(await deliverStripe(sender.request, endpoint, { ...external, account: "acct_unrelated" })).toBe(204);
+            expect(await deliverStripe(sender.request, endpoint, {
+              ...external, data: { object: { ...externalResource, amount: 1 } },
+            })).toBe(503);
+            expect(await receipts(id)).toEqual([receipt]);
+            const importRefund = () => deliverStripe(sender.request, endpoint, external);
+            expect(await Promise.all([importRefund(), importRefund()])).toEqual([204, 204]);
+            const [imported] = await db`SELECT id, state, created_by_identity_id FROM stripe_sandbox_refund_attempts WHERE refund_id = ${externalId}`;
+            expect(imported).toMatchObject({ state: "succeeded", created_by_identity_id: null });
+            const importedReceipt = { id: imported.id, amount_cents: 503, method: "card" };
+            expect(await receipts(id)).toEqual([receipt, importedReceipt]);
+            await page.reload();
+            await expect(sale.getByText("Refund recorded", { exact: true }).locator("..")).toContainText("Stripe sandbox");
             await sale.getByRole("button", { name: "Finish checkout" }).click();
             const refundAmount = sale.getByLabel("Refund amount (DKK)");
             const refundButton = sale.getByRole("button", { name: "Refund in Stripe sandbox" });
@@ -114,7 +134,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
               await page.goto("/nordic/app/sales");
               expect(await deliverStripe(sender.request, endpoint, refund, false)).toBe(400);
               expect(await deliverStripe(sender.request, endpoint, { ...refund, account: "acct_unrelated" })).toBe(204);
-              expect(await receipts(id)).toEqual([receipt]);
+              expect(await receipts(id)).toEqual([receipt, importedReceipt]);
               const sendRefund = () => deliverStripe(sender.request, endpoint, refund);
               expect(await Promise.all([sendRefund(), sendRefund()])).toEqual([204, 204]);
               expect(await db`SELECT state, refund_id FROM stripe_sandbox_refund_attempts WHERE id = ${pending.id}`)
@@ -122,16 +142,16 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
               await page.goto(paymentPath);
               if (status === "failed") {
                 await expect(sale.getByRole("alert")).toContainText("Stripe declined the last refund.");
-                await expect(refundAmount).toHaveValue("65.03");
-                expect(await receipts(id)).toEqual([receipt]);
+                await expect(refundAmount).toHaveValue("60.00");
+                expect(await receipts(id)).toEqual([receipt, importedReceipt]);
               } else {
-                await expect(refundAmount).toHaveValue("52.00");
+                await expect(refundAmount).toHaveValue("46.97");
                 const refunded = { id: pending.id, amount_cents: 1303, method: "card" };
-                expect(await receipts(id)).toEqual([receipt, refunded]);
+                expect(await receipts(id)).toEqual([receipt, importedReceipt, refunded]);
                 const failure = { ...refund, type: "refund.failed" };
                 const deliverFailure = () => deliverStripe(sender.request, endpoint, failure);
                 expect(await deliverFailure()).toBe(503);
-                expect(await receipts(id)).toEqual([receipt, refunded]);
+                expect(await receipts(id)).toEqual([receipt, importedReceipt, refunded]);
                 expect(await Promise.all([deliverFailure(), deliverFailure()])).toEqual([204, 204]);
                 const [returned] = await db`
                   SELECT state, return_payment_id, failure_balance_transaction_id
@@ -139,14 +159,14 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
                 `;
                 expect(returned).toEqual({ state: "failed", return_payment_id: expect.any(String),
                   failure_balance_transaction_id: `txn_${refundId.slice(3)}` });
-                expect(await receipts(id)).toEqual([receipt, refunded,
+                expect(await receipts(id)).toEqual([receipt, importedReceipt, refunded,
                   { id: returned.return_payment_id, amount_cents: 1303, method: "card" }]);
                 expect(await db`SELECT kind FROM payment_records WHERE id = ${returned.return_payment_id}`).toEqual([{ kind: "payment" }]);
                 await page.reload();
                 await expect(sale.getByText("Stripe sandbox card", { exact: true })).toHaveCount(1);
                 await expect(sale.getByText("Refund returned · card", { exact: true })).toBeVisible();
                 await expect(sale.getByRole("alert")).toContainText("Stripe returned the last refund");
-                await expect(refundAmount).toHaveValue("65.03");
+                await expect(refundAmount).toHaveValue("60.00");
                 await page.goto("/nordic/app/reports?range=7&sort=newest");
                 await expect(page.getByRole("row").filter({ hasText: name }).getByText("refund returned", { exact: true })).toBeVisible();
               }

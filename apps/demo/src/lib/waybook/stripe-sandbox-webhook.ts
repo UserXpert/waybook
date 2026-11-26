@@ -15,7 +15,10 @@ type ConnectedNotification = {
 
 export type StripeCheckoutNotification = ConnectedNotification & { kind: "checkout"; sessionId: string };
 export type StripeRefundNotification = ConnectedNotification & { kind: "refund"; refundId: string };
-export type StripeSandboxNotification = StripeCheckoutNotification | StripeRefundNotification;
+export type StripeDashboardRefundNotification = {
+  kind: "dashboard-refund"; accountId: string; refundId: string; paymentIntentId: string; amountCents: number;
+};
+export type StripeSandboxNotification = StripeCheckoutNotification | StripeRefundNotification | StripeDashboardRefundNotification;
 
 type StripeWebhookEnvelope = {
   id?: unknown;
@@ -25,6 +28,7 @@ type StripeWebhookEnvelope = {
   type?: unknown;
   data?: { object?: {
     object?: unknown; id?: unknown; client_reference_id?: unknown; livemode?: unknown;
+    payment_intent?: unknown; amount?: unknown; currency?: unknown;
     metadata?: { waybook_refund_attempt?: unknown };
   } };
 };
@@ -61,12 +65,18 @@ export function readStripeSandboxNotification(
       return { kind: "checkout", accountId: event.account, attemptId, sessionId: resource.id };
     }
   }
-  if (refundEvents.has(event.type) && resource.object === "refund") {
+  if (refundEvents.has(event.type) && resource.object === "refund" &&
+      (resource.livemode === undefined || resource.livemode === false) && /^re_[A-Za-z0-9]+$/.test(resource.id)) {
     // Refund snapshots can omit livemode. The signed envelope declares it.
     const attemptId = resource.metadata?.waybook_refund_attempt;
-    if ((resource.livemode === undefined || resource.livemode === false) && /^re_[A-Za-z0-9]+$/.test(resource.id) &&
-        typeof attemptId === "string" && uuidPattern.test(attemptId)) {
+    if (typeof attemptId === "string" && uuidPattern.test(attemptId)) {
       return { kind: "refund", accountId: event.account, attemptId, refundId: resource.id };
+    }
+    if (attemptId === undefined && resource.currency === "dkk" && typeof resource.payment_intent === "string" &&
+        /^pi_[A-Za-z0-9]+$/.test(resource.payment_intent) && typeof resource.amount === "number" &&
+        Number.isSafeInteger(resource.amount) && resource.amount > 0 && resource.amount <= 10_000_000) {
+      return { kind: "dashboard-refund", accountId: event.account, refundId: resource.id,
+        paymentIntentId: resource.payment_intent, amountCents: resource.amount };
     }
   }
   return null;

@@ -169,8 +169,15 @@ transaction that confirms the return. It preserves the original refund and
 adds a separate return entry for the same amount. Sales restores the
 refundable balance and Reports shows the return separately from collections.
 
-Hosted sandbox verification, refunds started in Stripe's Dashboard,
-and existing-account connection remain part of
+Tenant migration 0070 adds Stripe Dashboard refund reconciliation. When
+Stripe sends a signed refund notification for a payment already recorded in
+Waybook, Waybook matches the connected account and payment intent and confirms
+the exact refund through Stripe. The sale activity identifies Stripe as the
+source. Refunding an appointment in Stripe before staff finish checkout still
+allows them to finish the original appointment.
+
+Hosted sandbox verification, events delivered before the original Stripe
+payment is recorded, and existing-account connection remain part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)

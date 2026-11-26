@@ -3,7 +3,7 @@ import "server-only";
 import { tenantDb } from "./database";
 import { appointmentStripeAccount } from "./stripe-appointment-checkout";
 import type { StripeSandboxConfig } from "./stripe-connect-api";
-import type { StripeRefundNotification } from "./stripe-sandbox-webhook";
+import type { StripeDashboardRefundNotification, StripeRefundNotification } from "./stripe-sandbox-webhook";
 import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
 import { stripeRefundSandbox, type SandboxRefund, type SandboxRefundAttempt } from "./stripe-refund-api";
 
@@ -11,7 +11,7 @@ type Database = ReturnType<typeof tenantDb>;
 type Context = { db: Database; tenantId: string; bookingId: string };
 type Query = Pick<Database, "unsafe">;
 type StoredRefund = SandboxRefundAttempt & {
-  actorId: string;
+  actorId: string | null;
   refundId: string | null;
   state: SandboxRefund["state"];
   retryable: boolean;
@@ -48,6 +48,7 @@ async function refundAttempt(sql: Query, payment: PaidCheckout, id: string | nul
     SELECT ${refundColumns}
     FROM stripe_sandbox_refund_attempts r
     WHERE r.payment_attempt_id = $1 AND ($2::uuid = r.id OR ($2::uuid IS NULL AND r.state = 'pending'))
+    ORDER BY r.created_at DESC, r.id DESC LIMIT 1
   `, [payment.id, id]);
   return attempt ? { ...attempt, accountId: payment.accountId, paymentIntentId: payment.paymentIntentId } : null;
 }
@@ -119,7 +120,8 @@ async function postRefundEntry(
     VALUES ($1, $2, $3, $4, $5, 'card', $6)
   `, [id, tenantId, bookingId, kind, stored.amountCents, stored.actorId]);
   const metadata = JSON.stringify({ paymentId: id, originalPaymentId, amountCents: stored.amountCents,
-    method: "card", source: "stripe_sandbox", ...(returnPaymentId ? { originalRefundId: stored.id } : {}) });
+    method: "card", source: "stripe_sandbox", recordedVia: stored.actorId ? "waybook" : "stripe",
+    ...(returnPaymentId ? { originalRefundId: stored.id } : {}) });
   await sql.unsafe(`
     INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
     VALUES ($1, $2, $3, $4, $5::text::jsonb)
@@ -136,23 +138,28 @@ async function reconcileRefund(context: Context, attempt: StoredRefund, refund: 
     const payment = await paidCheckout(sql, context);
     if (!payment) throw new Error("The original Stripe payment is unavailable.");
     const stored = await refundAttempt(sql, payment, attempt.id);
-    if (!stored || (stored.refundId && stored.refundId !== refund.id)) throw new Error("The Stripe refund changed unexpectedly.");
-    if (stored.state === "succeeded" && refund.state === "failed") {
-      if (!refund.failureBalanceTransactionId) throw new Error("Stripe has not confirmed the returned refund balance.");
-      const returnPaymentId = crypto.randomUUID();
-      await sql.unsafe(`
-        UPDATE stripe_sandbox_refund_attempts
-        SET state = 'failed', return_payment_id = $2, failure_balance_transaction_id = $3 WHERE id = $1
-      `, [stored.id, returnPaymentId, refund.failureBalanceTransactionId]);
-      await postRefundEntry(sql, context, payment.id, stored, returnPaymentId);
-      return "failed";
-    }
-    if (stored.state !== "pending") return stored.state;
-    await sql.unsafe("UPDATE stripe_sandbox_refund_attempts SET refund_id = $2, state = $3 WHERE id = $1",
-      [stored.id, refund.id, refund.state]);
-    if (refund.state === "succeeded") await postRefundEntry(sql, context, payment.id, stored);
-    return refund.state;
+    if (!stored || stored.amountCents !== attempt.amountCents) throw new Error("The Stripe refund changed unexpectedly.");
+    return recordRefundOutcome(sql, context, payment, stored, refund);
   });
+}
+
+async function recordRefundOutcome(sql: Query, context: Context, payment: PaidCheckout, stored: StoredRefund, refund: SandboxRefund) {
+  if (stored.refundId && stored.refundId !== refund.id) throw new Error("The Stripe refund changed unexpectedly.");
+  if (stored.state === "succeeded" && refund.state === "failed") {
+    if (!refund.failureBalanceTransactionId) throw new Error("Stripe has not confirmed the returned refund balance.");
+    const returnPaymentId = crypto.randomUUID();
+    await sql.unsafe(`
+      UPDATE stripe_sandbox_refund_attempts
+      SET state = 'failed', return_payment_id = $2, failure_balance_transaction_id = $3 WHERE id = $1
+    `, [stored.id, returnPaymentId, refund.failureBalanceTransactionId]);
+    await postRefundEntry(sql, context, payment.id, stored, returnPaymentId);
+    return "failed";
+  }
+  if (stored.state !== "pending") return stored.state;
+  await sql.unsafe("UPDATE stripe_sandbox_refund_attempts SET refund_id = $2, state = $3 WHERE id = $1",
+    [stored.id, refund.id, refund.state]);
+  if (refund.state === "succeeded") await postRefundEntry(sql, context, payment.id, stored);
+  return refund.state;
 }
 
 export async function runStripeAppointmentRefund(context: Context, config: StripeSandboxConfig, input: RefundInput) {
@@ -165,23 +172,58 @@ export async function runStripeAppointmentRefund(context: Context, config: Strip
   if (!attempt.refundId && !attempt.retryable) {
     throw new Error("Check the original refund in Stripe before starting another.");
   }
-  const refund = attempt.refundId ? await stripe.retrieve(attempt, attempt.refundId) : await stripe.create(attempt);
+  const refund = !attempt.refundId ? await stripe.create(attempt) :
+    attempt.actorId ? await stripe.retrieve(attempt, attempt.refundId) : await stripe.retrieveDashboard(attempt, attempt.refundId);
   return reconcileRefund(context, attempt, refund);
 }
 
-export async function settleStripeRefundNotification(config: StripeSandboxConfig, notification: StripeRefundNotification) {
-  const { accountId, attemptId, refundId } = notification;
+export async function settleStripeRefundNotification(
+  config: StripeSandboxConfig, notification: StripeRefundNotification | StripeDashboardRefundNotification,
+) {
+  const { accountId, refundId } = notification;
   const tenant = await stripeSandboxTenantForAccount(accountId);
   if (!tenant) return;
   const db = tenantDb(tenant);
+  if (notification.kind === "dashboard-refund") {
+    await recordDashboardRefund(db, tenant.id, config, notification);
+    return;
+  }
   const [attempt] = await db.unsafe<(StoredRefund & { bookingId: string })[]>(`
     SELECT ${refundColumns}, p.booking_id AS "bookingId", p.account_id AS "accountId",
            p.payment_intent_id AS "paymentIntentId"
     FROM stripe_sandbox_refund_attempts r JOIN stripe_sandbox_checkout_attempts p ON p.id = r.payment_attempt_id
     WHERE p.tenant_id = $1 AND p.account_id = $2 AND p.state = 'settled'
       AND r.id = $3 AND r.state IN ('pending', 'succeeded')
-  `, [tenant.id, accountId, attemptId]);
+  `, [tenant.id, accountId, notification.attemptId]);
   if (!attempt || (attempt.refundId && attempt.refundId !== refundId)) return;
   const refund = await stripeRefundSandbox(config).retrieve(attempt, refundId);
   await reconcileRefund({ db, tenantId: tenant.id, bookingId: attempt.bookingId }, attempt, refund);
+}
+
+async function recordDashboardRefund(db: Database, tenantId: string, config: StripeSandboxConfig, notification: StripeDashboardRefundNotification) {
+  const { accountId, paymentIntentId, amountCents, refundId } = notification;
+  const [linked] = await db.unsafe<{ bookingId: string }[]>(`
+    SELECT booking_id AS "bookingId" FROM stripe_sandbox_checkout_attempts
+    WHERE tenant_id = $1 AND account_id = $2 AND payment_intent_id = $3 AND state = 'settled'
+  `, [tenantId, accountId, paymentIntentId]);
+  if (!linked) return;
+  const refund = await stripeRefundSandbox(config).retrieveDashboard(notification, refundId);
+  const context = { db, tenantId, bookingId: linked.bookingId };
+  await db.begin(async (sql) => {
+    await lockBooking(sql, context);
+    const paid = await paidCheckout(sql, context);
+    if (!paid || paid.accountId !== accountId || paid.paymentIntentId !== paymentIntentId) {
+      throw new Error("The original Stripe payment changed unexpectedly.");
+    }
+    await sql.unsafe(`
+      INSERT INTO stripe_sandbox_refund_attempts (id, payment_attempt_id, amount_cents, refund_id)
+      VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT (refund_id) DO NOTHING
+    `, [paid.id, amountCents, refundId]);
+    const [stored] = await sql.unsafe<StoredRefund[]>(`
+      SELECT ${refundColumns}, $2::text AS "accountId", $3::text AS "paymentIntentId"
+      FROM stripe_sandbox_refund_attempts r WHERE r.payment_attempt_id = $1 AND r.refund_id = $4
+    `, [paid.id, accountId, paymentIntentId, refundId]);
+    if (!stored || stored.amountCents !== amountCents) throw new Error("This refund does not match the original payment.");
+    await recordRefundOutcome(sql, context, paid, stored, refund);
+  });
 }

@@ -58,3 +58,17 @@ test("a failed refund carries the verified balance transaction if Stripe returne
   assert.deepEqual(await stripe.retrieve(attempt, payload.id),
     { id: payload.id, state: "failed", failureBalanceTransactionId: "txn_returnfixture" });
 });
+
+test("Dashboard refunds are retrieved under the connected account without a create request", async () => {
+  const stripe = stripeRefundSandbox(config, async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.method, "GET");
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    assert.equal(request.headers.get("Idempotency-Key"), null);
+    return Response.json({ ...payload, metadata: {} });
+  });
+  assert.deepEqual(await stripe.retrieveDashboard(attempt, payload.id), { id: payload.id, state: "succeeded" });
+  await assert.rejects(() => stripe.retrieveDashboard({ ...attempt, amountCents: 1 }, payload.id), /expected sandbox refund/);
+  const existingWaybook = stripeRefundSandbox(config, async () => Response.json(payload));
+  await assert.rejects(() => existingWaybook.retrieveDashboard(attempt, payload.id), /expected sandbox refund/);
+});

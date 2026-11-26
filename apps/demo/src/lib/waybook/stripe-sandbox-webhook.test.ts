@@ -68,3 +68,17 @@ test("Stripe refund events require a sandbox connected account and Waybook refun
   assert.equal(parse({ ...created, data: { object: { ...refund, livemode: true } } }), null);
   assert.equal(parse({ ...created, type: "charge.refunded" }), null);
 });
+
+test("Stripe Dashboard refund events identify an original payment without a Waybook request", () => {
+  const resource = { object: "refund", id: "re_dashboard", currency: "dkk", payment_intent: "pi_fixture", amount: 503 };
+  const parse = (object: object) => {
+    const bytes = Buffer.from(JSON.stringify({ ...event, type: "refund.created", data: { object } }));
+    return readStripeSandboxNotification(bytes, `t=${now},v1=${sign(bytes)}`, secret, now);
+  };
+  assert.deepEqual(parse(resource), { kind: "dashboard-refund", accountId, refundId: resource.id,
+    paymentIntentId: resource.payment_intent, amountCents: resource.amount });
+  assert.equal(parse({ ...resource, payment_intent: null }), null);
+  assert.equal(parse({ ...resource, amount: 0 }), null);
+  assert.equal(parse({ ...resource, currency: "usd" }), null);
+  assert.equal(parse({ ...resource, metadata: { waybook_refund_attempt: "malformed" } }), null);
+});

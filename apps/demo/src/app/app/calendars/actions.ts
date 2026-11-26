@@ -750,7 +750,14 @@ async function persistBookingStatus(
       SELECT cart.chargeable_cents = coalesce((
         SELECT sum(CASE WHEN kind = 'payment' THEN amount_cents ELSE -amount_cents END)
         FROM payment_records WHERE tenant_id = $1 AND booking_id = $2
-      ), 0) AS paid FROM appointment_checkout_amounts($1, $2) cart
+      ), 0) OR EXISTS (
+        SELECT 1 FROM payment_records p
+        JOIN booking_events e ON e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+          AND e.event_type = 'payment.payment' AND e.metadata->>'paymentId' = p.id::text
+          AND e.metadata->>'source' = 'stripe_sandbox'
+        WHERE p.tenant_id = $1 AND p.booking_id = $2 AND p.kind = 'payment'
+          AND p.amount_cents = cart.chargeable_cents
+      ) AS paid FROM appointment_checkout_amounts($1, $2) cart
     `, [tenant.id, booking.id]);
     if (!settlement?.paid) throw new Error("Settle the checkout balance before completing the appointment.");
   }
