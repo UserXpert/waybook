@@ -494,33 +494,57 @@ body {
 .waybook-login-error { background: #fff0f0; color: #8e2636; }
 .waybook-login-notice { background: #f3f0fb; color: #413365; }
 
-.staff-access-requests {
-  margin: 0 auto 1rem;
-}
-
-.staff-access-requests ul {
-  display: grid;
-  gap: .75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.staff-access-requests li {
+.staff-access-requests__summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: .75rem;
-  border-top: 1px solid #dce5df;
-  padding-top: .75rem;
+  gap: .5rem 1rem;
+  margin: 0 auto 1rem;
+  padding: .65rem 1rem;
 }
 
-.staff-access-requests li span {
+.staff-access-requests__summary h2 { margin: 0; }
+
+.staff-access-requests__summary button.waybook-row-link,
+.staff-access-requests button.waybook-row-link {
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.staff-access-requests ul {
+  display: grid;
+  margin: 0;
+  padding: 0 clamp(1.25rem, 4vw, 1.75rem);
+  list-style: none;
+}
+
+.staff-access-requests li {
+  display: grid;
+  gap: .75rem;
+  border-bottom: 1px solid var(--waybook-border, #dce5df);
+  padding: 1rem 0;
+}
+
+.staff-access-requests li :is(span, small) {
   display: block;
   overflow-wrap: anywhere;
   font-size: .85rem;
 }
+
+.staff-access-requests li small { margin-top: .3rem; font-weight: 500; }
+
+.staff-access-requests__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem .75rem;
+}
+
+.staff-access-requests form p { margin: .5rem 0; font-size: .85rem; }
+.staff-access-requests__empty { padding: 1.25rem 1.75rem; }
 
 @media (max-width: 760px) {
   .waybook-login-page { align-content: start; padding: .65rem; }

@@ -13,6 +13,15 @@ export function isStaffInvitationToken(value: string) {
 
 const tokenHash = (value: string) => createHash("sha256").update(value).digest("hex");
 
+async function requireInvitationOwner(tx: typeof controlDb, tenantId: string, ownerId: string) {
+  const [owner] = await tx<{ id: string }[]>`
+    SELECT m.id FROM tenant_memberships m JOIN tenants t ON t.id = m.tenant_id
+    WHERE m.tenant_id = ${tenantId} AND m.identity_id = ${ownerId} AND m.role = 'owner'
+      AND t.lifecycle_status = 'active' FOR SHARE OF m, t
+  `;
+  if (!owner) throw new Error("Only an active workspace owner can manage staff invitations.");
+}
+
 export async function issueStaffInvitation(
   tenant: TenantRecord,
   ownerId: string,
@@ -32,12 +41,7 @@ export async function issueStaffInvitation(
   const token = emailRequest?.token ?? randomBytes(32).toString("base64url");
   await controlDb.begin(async (transaction) => {
     const tx = transaction as unknown as typeof controlDb;
-    const [owner] = await tx<{ id: string }[]>`
-      SELECT m.id FROM tenant_memberships m JOIN tenants t ON t.id = m.tenant_id
-      WHERE m.tenant_id = ${tenant.id} AND m.identity_id = ${ownerId} AND m.role = 'owner'
-        AND t.lifecycle_status = 'active' FOR SHARE OF m, t
-    `;
-    if (!owner) throw new Error("Only an active workspace owner can issue an invitation.");
+    await requireInvitationOwner(tx, tenant.id, ownerId);
     if (emailRequest) {
       const [prepared] = await tx<{ valid: boolean }[]>`
         SELECT tenant_id = ${tenant.id} AND team_member_id = ${memberId}
@@ -165,6 +169,47 @@ export async function staffInvitationMayBeEmailed(tenantId: string, requestId: s
       AND token_hash = ${tokenHash(token)} AND revoked_at IS NULL AND expires_at > now()
   `;
   return Boolean(invite);
+}
+
+export async function refreshStaffEmailInvitation(
+  tenantId: string, ownerId: string, requestId: string, previousToken: string, nextToken: string,
+) {
+  return controlDb.begin(async (transaction) => {
+    const tx = transaction as unknown as typeof controlDb;
+    await requireInvitationOwner(tx, tenantId, ownerId);
+    const [invite] = await tx<{ id: string; tokenHash: string; claimedAt: Date | null; revoked: boolean }[]>`
+      SELECT id, token_hash AS "tokenHash", claimed_at AS "claimedAt", revoked_at IS NOT NULL AS revoked
+      FROM waybook_staff_invitations WHERE tenant_id = ${tenantId} AND email_request_id = ${requestId}
+      FOR UPDATE
+    `;
+    if (!invite || invite.claimedAt || invite.revoked) return false;
+    const nextHash = tokenHash(nextToken);
+    if (invite.tokenHash === nextHash) return true;
+    if (invite.tokenHash !== tokenHash(previousToken)) return false;
+    await tx`UPDATE waybook_staff_invitations SET token_hash = ${nextHash}, expires_at = now() + interval '48 hours'
+      WHERE id = ${invite.id}`;
+    await tx`INSERT INTO platform_audit_events (actor_identity_id, tenant_id, action, target_type, target_id)
+      VALUES (${ownerId}, ${tenantId}, 'staff.invitation.reissued', 'staff_invitation', ${invite.id})`;
+    return true;
+  });
+}
+
+export async function revokeStaffEmailInvitationForRequest(tenantId: string, ownerId: string, requestId: string) {
+  return controlDb.begin(async (transaction) => {
+    const tx = transaction as unknown as typeof controlDb;
+    await requireInvitationOwner(tx, tenantId, ownerId);
+    const [invite] = await tx<{ id: string; claimedAt: Date | null; revokedAt: Date | null }[]>`
+      SELECT id, claimed_at AS "claimedAt", revoked_at AS "revokedAt" FROM waybook_staff_invitations
+      WHERE tenant_id = ${tenantId} AND email_request_id = ${requestId} FOR UPDATE
+    `;
+    if (invite?.claimedAt) return false;
+    if (invite && !invite.revokedAt) {
+      await tx`UPDATE waybook_staff_invitations SET revoked_at = now() WHERE id = ${invite.id}`;
+      await tx`INSERT INTO platform_audit_events (actor_identity_id, tenant_id, action, target_type, target_id)
+        VALUES (${ownerId}, ${tenantId}, 'staff.invitation.revoked', 'staff_invitation', ${invite.id})`;
+    }
+    return true;
+  });
 }
 
 /** Consumes the short-lived OAuth session before granting application access. */

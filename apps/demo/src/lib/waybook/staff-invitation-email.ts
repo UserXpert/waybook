@@ -24,6 +24,7 @@ export function staffInvitationEmailConfig() {
 export type StaffInvitationEmailConfig = NonNullable<ReturnType<typeof staffInvitationEmailConfig>>;
 export type InvitationEmailSnapshot = {
   id: string;
+  sendNumber: number;
   email: string;
   emailStartedAt: Date;
   emailSender: string;
@@ -31,15 +32,16 @@ export type InvitationEmailSnapshot = {
   emailWorkspaceName: string;
 };
 
-export function staffRequestInvitationToken(secret: string, tenantId: string, requestId: string) {
-  return createHmac("sha256", secret).update(`waybook-staff-email:${tenantId}:${requestId}`).digest("base64url");
+export function staffRequestInvitationToken(secret: string, tenantId: string, requestId: string, sendNumber = 0) {
+  const suffix = sendNumber ? `:${sendNumber}` : "";
+  return createHmac("sha256", secret).update(`waybook-staff-email:${tenantId}:${requestId}${suffix}`).digest("base64url");
 }
 
 export function sendStaffInvitationEmail(apiKey: string, snapshot: InvitationEmailSnapshot, token: string) {
   const link = new URL(`/join?method=password#${token}`, snapshot.emailOrigin).href;
   return sendWithResend({
     apiKey,
-    idempotencyKey: `waybook-staff-invite/${snapshot.id}`,
+    idempotencyKey: snapshot.sendNumber ? `waybook-staff-invite/${snapshot.id}/${snapshot.sendNumber}` : `waybook-staff-invite/${snapshot.id}`,
     firstAttemptAt: snapshot.emailStartedAt,
     message: {
       from: snapshot.emailSender,

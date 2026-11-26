@@ -12,7 +12,7 @@ import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getGoogleAuth, googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { issueStaffInvitation, revokeStaffInvitation } from "@/lib/waybook/staff-invitations";
-import { inviteFromStaffAccessRequest } from "@/lib/waybook/staff-access-requests";
+import { deleteStaffAccessRequest, inviteFromStaffAccessRequest } from "@/lib/waybook/staff-access-requests";
 import { staffInvitationEmailConfig } from "@/lib/waybook/staff-invitation-email";
 import { requireFeature } from "@/lib/waybook/features";
 import { isStaffCalendarColor } from "@/lib/waybook/staff-calendar-colors";
@@ -292,19 +292,29 @@ export async function createStaffGoogleInvitation(formData: FormData) {
   return new URL(`/join#${token}`, configured.origin).href;
 }
 
-export async function grantStaffAccess(_: { error?: string; sent?: boolean }, formData: FormData): Promise<{ error?: string; sent?: boolean }> {
+type StaffAccessReviewState = { error?: string; sent?: boolean; deleted?: boolean };
+
+export async function reviewStaffAccess(_: StaffAccessReviewState, formData: FormData): Promise<StaffAccessReviewState> {
   const tenant = await ownerStaffTenant();
   const actor = await requireIdentity();
-  const configured = staffInvitationEmailConfig();
-  if (!configured) return { error: "Staff invitation email is unavailable until Waybook has a verified sender." };
   const requestId = String(formData.get("requestId") ?? "");
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)) {
     return { error: "This request is unavailable." };
   }
+  const intent = formData.get("intent");
   try {
-    return await inviteFromStaffAccessRequest(tenant, actor.id, requestId, configured);
+    if (intent === "delete") {
+      const deleted = await deleteStaffAccessRequest(tenant, actor.id, requestId);
+      return deleted ? { deleted: true } : { error: "This invitation was already claimed. Manage the account in Staff." };
+    }
+    if (intent !== "grant" && intent !== "resend") return { error: "Choose an action for this request." };
+    const sendNumber = String(formData.get("sendNumber") ?? "");
+    if (intent === "resend" && !/^\d{1,9}$/.test(sendNumber)) return { error: "Refresh the request list before resending." };
+    const configured = staffInvitationEmailConfig();
+    if (!configured) return { error: "Staff invitation email is unavailable until Waybook has a verified sender." };
+    return await inviteFromStaffAccessRequest(tenant, actor.id, requestId, configured, intent === "resend" ? Number(sendNumber) : undefined);
   } catch {
-    return { error: "The invitation couldn’t be created. Try again or review the profile in Staff." };
+    return { error: intent === "delete" ? "The request couldn’t be deleted. Try again." : "The invitation couldn’t be sent. Try again or review the profile in Staff." };
   }
 }
 

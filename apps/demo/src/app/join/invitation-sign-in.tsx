@@ -6,13 +6,18 @@ import { acceptEmailInvitation } from "./actions";
 
 export function InvitationSignIn({ password = false }: { password?: boolean }) {
   const [token, setToken] = useState<string | null>(null);
-  useEffect(() => setToken(window.location.hash.slice(1)), []);
+  useEffect(() => {
+    const readToken = () => setToken(window.location.hash.slice(1));
+    readToken();
+    window.addEventListener("hashchange", readToken);
+    return () => window.removeEventListener("hashchange", readToken);
+  }, []);
 
   if (token === null) return null;
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
     return <p className="waybook-login-error" role="alert">This invitation link is incomplete. Ask your workspace owner for a new link.</p>;
   }
-  if (password) return <InvitationPasswordForm token={token} />;
+  if (password) return <InvitationPasswordForm key={token} token={token} />;
   return <form action={startGoogleSignIn} className="waybook-login">
     <input type="hidden" name="invite" value={token} />
     <button type="submit">Continue with Google</button>
