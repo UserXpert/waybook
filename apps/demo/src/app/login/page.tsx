@@ -2,6 +2,7 @@ import { googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { startGoogleSignIn } from "./google-actions";
 import { login } from "./actions";
 import { PasswordField } from "./password-field";
+import { FeatureMessages } from "./feature-messages";
 
 export default async function Login({
   searchParams,
@@ -45,6 +46,9 @@ export default async function Login({
               </form>
             ) : null}
           </div>
+          <footer className="waybook-login-copyright">
+            <small>© {new Date().getUTCFullYear()} Waybook</small>
+          </footer>
         </section>
 
         <aside className="waybook-login-art" aria-label="Waybook product preview">
@@ -72,10 +76,7 @@ export default async function Login({
             </ul>
             <div className="waybook-login-schedule__bar" aria-hidden="true" />
           </div>
-          <div className="waybook-login-showcase-copy">
-            <p>Clear days. Calm teams.</p>
-            <span>Manage bookings, staff and studio resources in one place.</span>
-          </div>
+          <FeatureMessages />
         </aside>
       </section>
     </main>
