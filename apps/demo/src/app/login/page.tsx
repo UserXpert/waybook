@@ -48,6 +48,11 @@ export default async function Login({
             <h1 id="login-title">{clientBranding ? "Welcome back" : "Sign in to Waybook"}</h1>
             <p className="waybook-login-intro">Use your work account to access your workspace.</p>
             {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
+            {clientBranding && access === "request" ? (
+              <p id="staff-access" className="waybook-login-notice" role="status">
+                Ask your workspace owner to send a staff invitation to your work email.
+              </p>
+            ) : null}
             {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
             {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
             {access === "inactive" ? <p className="waybook-login-error" role="alert">Your staff access is inactive. Ask your workspace owner to restore it.</p> : null}
@@ -72,9 +77,15 @@ export default async function Login({
               </form>
             ) : null}
           </div>
-          <p className="waybook-login-signup">
-            New business? <a href="https://waybook-website.vercel.app/en#venteliste">{clientBranding ? "Request access" : "Sign up for early access"}</a>
-          </p>
+          {clientBranding ? (
+            <p className="waybook-login-signup">
+              Need staff access? <a href={`${loginPath}?access=request#staff-access`}>Request access</a>
+            </p>
+          ) : (
+            <p className="waybook-login-signup">
+              New business? <a href="https://waybook-website.vercel.app/en#venteliste">Sign up for early access</a>
+            </p>
+          )}
         </section>
 
         <aside className="waybook-login-art" aria-label="Waybook product preview">
