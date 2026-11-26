@@ -16,7 +16,7 @@ import { CalendarAppointmentDrawer } from "@/components/calendar-appointment-dra
 import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { availableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
+import { staffAvailableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
 import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
 import { calendarGridBounds } from "@/lib/waybook/calendar-grid-bounds";
 import { calculateStaffSlots, type ScheduleOverride, type ScheduleRule } from "@/lib/waybook/availability";
@@ -472,7 +472,7 @@ export default async function CalendarsPage({
     ? await Promise.all(
         availabilityServices.map(async (item) => ({
           serviceId: item.id,
-          candidates: await availableSlots(
+          candidates: await staffAvailableSlots(
             tenant,
             item.id,
             new Date(rangeStart.getTime() - 86_400_000),

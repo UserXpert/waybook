@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Sql } from "postgres";
-import { availableSlots } from "./booking";
+import { staffAvailableSlots } from "./booking";
 import type { TenantRecord } from "./database";
 
 export async function getAppointmentReservations(db: Sql, tenantId: string, bookingId: string) {
@@ -39,7 +39,7 @@ export async function linkedAppointmentOpenings(
   const openings = await Promise.all(reservations.map(async (reservation) => {
     const offset = toMilliseconds(reservation);
     const duration = reservation.endsAt.getTime() - reservation.startsAt.getTime();
-    const [provider] = await availableSlots(
+    const [provider] = await staffAvailableSlots(
       tenant, reservation.serviceId, new Date(from.getTime() + offset), new Date(until.getTime() + offset + duration),
       { locationId, teamMemberId: reservation.teamMemberId ?? undefined, durationMinutes: duration / 60_000,
         slotInterval: reservation.position === 1 ? primaryInterval : 1, excludeBookingBlockIds: excludedBlocks },

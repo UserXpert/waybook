@@ -9,7 +9,7 @@ import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellati
 import { fromZonedTime } from "date-fns-tz";
 import { BookingConflictError, withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
 import { requireIdentity } from "@/lib/waybook/auth";
-import { availableSlots } from "@/lib/waybook/booking";
+import { staffAvailableSlots } from "@/lib/waybook/booking";
 import { appointmentHasSettlement, calendarBookingVisibility, getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { getAppointmentReservations, linkedAppointmentOpenings } from "@/lib/waybook/linked-appointment-schedule";
 import { tenantDb } from "@/lib/waybook/database";
@@ -205,7 +205,7 @@ export async function getManualBookingAvailability(input: {
   }
   const db = tenantDb(tenant);
   const dayStart = fromZonedTime(`${input.date}T00:00:00`, tenant.timezone);
-  const candidates = await availableSlots(
+  const candidates = await staffAvailableSlots(
     tenant,
     input.serviceId,
     new Date(dayStart.getTime() - 86_400_000),
@@ -1060,7 +1060,7 @@ export async function updateAppointmentServices(formData: FormData): Promise<{ e
         }
         if (changed) {
           if (!catalog.active) throw new Error(`${catalog.title} is no longer available.`);
-          const [provider] = await availableSlots(tenant, item.serviceId, startsAt, endsAt, {
+          const [provider] = await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, {
             locationId: booking.locationId, slotInterval: 1, durationMinutes: duration / 60_000,
             teamMemberId: item.teamMemberId, excludeBookingBlockIds: excludedBlocks,
           }, connection);
@@ -1162,7 +1162,7 @@ async function createManualBookingRecord(formData: FormData) {
   if (!service) throw new Error("That staff member cannot deliver this service at the selected location.");
   const startsAt = fromZonedTime(`${localDate}T${localTime}`, tenant.timezone);
   const endsAt = new Date(startsAt.getTime() + service.durationMinutes * 60_000);
-  const candidates = await availableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
+  const candidates = await staffAvailableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
   const availableSlot = candidates.find((candidate) => candidate.teamMemberId === teamMemberId)?.slots.find((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime());
   if (!availableSlot) throw new Error("That staff member is not available at the selected time.");
   const linked: AdditionalServiceBooking[] = [];
@@ -1179,7 +1179,7 @@ async function createManualBookingRecord(formData: FormData) {
       || (extra.time && localDateTimeKey(nextStart, tenant.timezone) !== `${localDate}T${extra.time}`)) {
       throw new Error(`${item.title} must start on the appointment date, after the preceding service.`);
     }
-    const providers = await availableSlots(tenant, extra.serviceId, nextStart, nextEnd, { locationId, slotInterval: 1 });
+    const providers = await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { locationId, slotInterval: 1 });
     if (!providers.find((provider) => provider.teamMemberId === extra.teamMemberId)?.slots.some((slot) =>
       new Date(slot.startTime).getTime() === nextStart.getTime() && new Date(slot.endTime).getTime() === nextEnd.getTime(),
     )) {

@@ -13,6 +13,8 @@ test("online booking branding, policy and price settings persist for only the se
   const [before] = await db`SELECT tenant_id, booking_page::text AS booking_page FROM tenant_settings LIMIT 1`;
   const [primary] = await db<{ id: string }[]>`SELECT id FROM locations
     WHERE tenant_id=${before.tenant_id} AND slug='primary' AND is_active`;
+  const locationSettings = await db<{ id: string; is_online_bookable: boolean }[]>`
+    SELECT id, is_online_bookable FROM locations WHERE tenant_id=${before.tenant_id}`;
   try {
     await page.goto("/login");
     await page.getByLabel("Work email").fill("owner@nordic.local");
@@ -66,7 +68,12 @@ test("online booking branding, policy and price settings persist for only the se
     await expect(page.getByText(headline, { exact: true })).toHaveCount(0);
   } finally {
     try {
-      await db`UPDATE tenant_settings SET booking_page=${before.booking_page}::text::jsonb WHERE tenant_id=${before.tenant_id}`;
+      await db.begin(async (tx) => {
+        await tx`UPDATE tenant_settings SET booking_page=${before.booking_page}::text::jsonb WHERE tenant_id=${before.tenant_id}`;
+        await tx`UPDATE locations location SET is_online_bookable = previous.is_online_bookable
+          FROM jsonb_to_recordset(${JSON.stringify(locationSettings)}::text::jsonb) AS previous(id uuid, is_online_bookable boolean)
+          WHERE location.tenant_id=${before.tenant_id} AND location.id=previous.id`;
+      });
     } finally {
       await db.end();
     }
