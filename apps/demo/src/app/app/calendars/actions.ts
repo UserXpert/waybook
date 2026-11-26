@@ -852,14 +852,24 @@ async function createManualBookingRecord(formData: FormData) {
   const serviceId = String(formData.get("serviceId") ?? "");
   const localDate = String(formData.get("appointmentDate") ?? "");
   const localTime = String(formData.get("appointmentTime") ?? "");
+  const waitlistEntryId = String(formData.get("waitlistEntryId") ?? "");
+  const customerId = String(formData.get("customerId") ?? "");
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
-  if (!locationId || !teamMemberId || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{2}:\d{2}$/.test(localTime) || !name || !email.includes("@")) {
+  if (!locationId || !teamMemberId || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{2}:\d{2}$/.test(localTime) || (!waitlistEntryId && !customerId && (!name || !email.includes("@")))) {
     throw new Error("Choose a location, staff member, service, local appointment time, and valid client details.");
   }
   const { tenant, permissions } = await calendarPermissionContext();
   assertAppointmentPermission(permissions, teamMemberId);
+  if (customerId && (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(customerId)
+    || !(permissions.isManager || permissions.canViewClients || permissions.canManageClients))) {
+    throw new Error("You cannot select that client.");
+  }
+  if (waitlistEntryId && (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(waitlistEntryId)
+    || !(permissions.isManager || permissions.canManageWaitlist))) {
+    throw new Error("You cannot book that waitlist entry.");
+  }
   const db = tenantDb(tenant);
   const [service] = await db<{ id: string; durationMinutes: number; priceCents: number }[]>`
     SELECT s.id, s.duration_minutes AS "durationMinutes", s.price_cents AS "priceCents"
@@ -882,12 +892,22 @@ async function createManualBookingRecord(formData: FormData) {
   const identity = await requireIdentity();
   try {
     await withSerializableRetry(async () => db.begin(async (transaction) => {
-      const [customer] = await transaction.unsafe<{ id: string }[]>(`
+      const [waitlistCustomer] = waitlistEntryId ? await transaction.unsafe<{ id: string }[]>(`
+        UPDATE waitlist_entries SET status='booked', updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 AND service_id=$3 AND location_id=$4
+          AND status IN ('waiting','offered')
+        RETURNING customer_id AS id
+      `, [tenant.id, waitlistEntryId, service.id, locationId]) : [];
+      if (waitlistEntryId && !waitlistCustomer) throw new Error("This waitlist entry is unavailable or its service or location has changed.");
+      const [customer] = waitlistCustomer ? [waitlistCustomer] : customerId
+        ? await transaction.unsafe<{ id: string }[]>("SELECT id FROM customers WHERE tenant_id=$1 AND id=$2::uuid FOR KEY SHARE", [tenant.id, customerId])
+        : await transaction.unsafe<{ id: string }[]>(`
         INSERT INTO customers (tenant_id, name, email, phone)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (tenant_id, email) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone, updated_at = now()
         RETURNING id
       `, [tenant.id, name, email, phone]);
+      if (!customer) throw new Error("That client is unavailable. Select another client.");
       const [block] = await transaction.unsafe<{ id: string }[]>(`
         INSERT INTO booking_blocks (tenant_id, team_member_id, resource_id, location_id, starts_at, ends_at, state)
         VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')
@@ -898,6 +918,10 @@ async function createManualBookingRecord(formData: FormData) {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'confirmed', 'tenant')
         RETURNING id
       `, [tenant.id, block.id, service.id, locationId, teamMemberId, null, customer.id, startsAt, endsAt, service.priceCents]);
+      if (waitlistEntryId) await transaction.unsafe(
+        "INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'waitlist.booked', 'waitlist_entry', $3, $4::jsonb)",
+        [tenant.id, identity.id, waitlistEntryId, JSON.stringify({ status: "booked", bookingId: booking.id })],
+      );
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, 'booking.created_by_tenant', $4::jsonb)", [tenant.id, booking.id, identity.id, JSON.stringify({ source: "tenant" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking.created_by_tenant', 'booking', $3, $4::jsonb)", [tenant.id, identity.id, booking.id, JSON.stringify({ source: "tenant" })]);
     }));
@@ -906,6 +930,7 @@ async function createManualBookingRecord(formData: FormData) {
     throw error;
   }
   revalidateCalendars();
+  if (waitlistEntryId) revalidatePath("/app/waitlist");
 }
 
 /** Expected validation and availability failures stay inside the calendar form rather than becoming a page error. */

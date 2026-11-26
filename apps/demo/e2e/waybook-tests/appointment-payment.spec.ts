@@ -17,7 +17,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
       const [block] = await tx`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
         VALUES (${workspace.tenant_id},${member.id},${location.id},now()-interval '25 hours',now()-interval '24 hours','confirmed') RETURNING id,starts_at,ends_at`;
       const [created] = await tx`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents)
-        VALUES (${workspace.tenant_id},${block.id},${service.id},${member.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'completed',25050) RETURNING id, location_id`;
+        VALUES (${workspace.tenant_id},${block.id},${service.id},${member.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'arrived',25050) RETURNING id, location_id`;
       return created;
     });
 
@@ -96,6 +96,9 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(drawer.getByRole("button", { name: "Edit payment" })).toBeVisible();
     await expect(payment.locator('option[value="payment"]')).toHaveCount(0);
 
+    await drawer.getByRole("link", { name: "Checkout", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Appointment checkout" })).toContainText(customerName);
+
     await page.goto(`/nordic/app/sales?q=${encodeURIComponent(customerName)}`);
     await page.getByRole("cell", { name: customerName, exact: true }).click();
     const saleDrawer = page.getByRole("dialog", { name: "Appointment checkout" });
@@ -121,18 +124,25 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(salePayment).toHaveCount(0);
     await saleDrawer.getByRole("button", { name: "Delete payment", exact: true }).click();
     await saleDrawer.getByRole("button", { name: "Confirm deletion" }).click();
+    await saleDrawer.getByRole("link", { name: "Go to payments" }).click();
     await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("250.50");
+    await expect(salePayment.getByRole("button", { name: "Record payment" })).toBeDisabled();
+    await saleDrawer.getByRole("link", { name: "Back to checkout" }).click();
+    await expect(salePayment).toHaveCount(0);
+    await saleDrawer.getByRole("link", { name: "Go to payments" }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
+    await expect(salePayment.getByLabel("Method")).toBeVisible();
 
     const staleTab = await page.context().newPage();
     try {
       await staleTab.goto(page.url());
       const stalePayment = staleTab.getByRole("dialog", { name: "Appointment checkout" }).locator(".appointment-payment-form");
-      await stalePayment.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment");
-      await salePayment.getByRole("combobox", { name: "Payment", exact: true }).selectOption("payment");
-      await salePayment.getByRole("button", { name: "Record entry" }).click();
+      await stalePayment.getByLabel("Method").selectOption("card");
+      await salePayment.getByLabel("Method").selectOption("card");
+      await salePayment.getByRole("button", { name: "Record payment" }).click();
       await expect(salePayment).toHaveCount(0);
       await expect(saleDrawer.locator(".recorded-appointment-payments")).toContainText("250,50");
-      await stalePayment.getByRole("button", { name: "Record entry" }).click();
+      await stalePayment.getByRole("button", { name: "Record payment" }).click();
       await expect(stalePayment.getByRole("alert")).toContainText("A payment is already recorded.");
     } finally {
       await staleTab.close();

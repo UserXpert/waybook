@@ -20,11 +20,14 @@ for (const workspace of workspaces) {
     const sql = postgres(database, { max: 2, ssl: false });
     const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
     const tag = randomUUID().slice(0, 8);
-    const [settings] = await sql<{ tenantId: string; timezone: string; day: string }[]>`
-      SELECT tenant_id AS "tenantId", timezone, ((now() AT TIME ZONE timezone)::date + 3)::text AS day
+    const [settings] = await sql<{ tenantId: string; timezone: string; day: string; bookingPage: string | null }[]>`
+      SELECT tenant_id AS "tenantId", timezone, ((now() AT TIME ZONE timezone)::date + 3)::text AS day, booking_page::text AS "bookingPage"
       FROM tenant_settings LIMIT 1
     `;
-    const { tenantId, timezone, day } = settings;
+    const { tenantId, timezone, day, bookingPage } = settings;
+    const storedPage = bookingPage ? JSON.parse(bookingPage) : null;
+    const visiblePage = typeof storedPage === "string" ? JSON.parse(storedPage) : storedPage;
+    const visibility = visiblePage?.visibleServiceIds;
     const [resourcesFeature] = await control<{ is_enabled: boolean }[]>`
       SELECT is_enabled FROM tenant_feature_states WHERE tenant_id=${tenantId} AND feature_key='resources'
     `;
@@ -61,6 +64,10 @@ for (const workspace of workspaces) {
       if (!resourcesFeature.is_enabled) {
         await control`UPDATE tenant_feature_states SET is_enabled=true WHERE tenant_id=${tenantId} AND feature_key='resources'`;
       }
+      if (visibility != null) {
+        const visibleServiceIds = Array.isArray(visibility) ? [...visibility, service.id] : [service.id];
+        await sql`UPDATE tenant_settings SET booking_page=${sql.json({ ...visiblePage, visibleServiceIds })} WHERE tenant_id=${tenantId}`;
+      }
       await sql`INSERT INTO location_hours (tenant_id, location_id, day_of_week, start_time, end_time)
         SELECT ${tenantId}, ${location.id}, day, '09:00', '17:00' FROM generate_series(0,6) AS day`;
       await sql`INSERT INTO service_locations (tenant_id, service_id, location_id) VALUES (${tenantId},${service.id},${location.id})`;
@@ -75,7 +82,7 @@ for (const workspace of workspaces) {
 
       async function availableAt(memberId: string, time: string) {
         const response = await page.request.get(availabilityUrl);
-        expect(response.status()).toBe(200);
+        expect(response.status(), response.ok() ? undefined : await response.text()).toBe(200);
         const result: { availability: { teamMemberId: string; slots: { startTime: string }[] }[] } = await response.json();
         return result.availability.some((member) => member.teamMemberId === memberId &&
           member.slots.some((slot) => slot.startTime === start(time)));
@@ -87,6 +94,13 @@ for (const workspace of workspaces) {
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`/${workspace.route}/app`));
       expect(await availableAt(staff[0].id, "10:00")).toBe(true);
+
+      const existingEmail = `qa-booking-existing-${tag}@example.test`;
+      const [existingClient] = await sql<{ id: string }[]>`
+        INSERT INTO customers (tenant_id, name, email, phone)
+        VALUES (${tenantId}, ${customerNames[1]}, ${existingEmail}, '+4512345678')
+        RETURNING id
+      `;
 
       for (const [index, member] of staff.entries()) {
         await page.goto(calendar);
@@ -110,13 +124,30 @@ for (const workspace of workspaces) {
         await expect(page).toHaveURL((url) => !url.searchParams.has("create"));
         await expect(slot).toBeFocused();
         await slot.press("Enter");
-        await form.getByLabel("Client name").fill(customerNames[index]);
-        await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
+        if (index === 0) {
+          await form.getByRole("combobox", { name: /^Find a / }).fill(customerNames[index]);
+          await form.getByRole("option", { name: new RegExp(`^Add .* “${customerNames[index]}`) }).click();
+          await expect(form.getByLabel(/^(Client|Patient) name$/)).toHaveValue(customerNames[index]);
+          await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
+        } else {
+          await form.getByRole("combobox", { name: /^Find a / }).fill(existingEmail);
+          await form.getByRole("option", { name: new RegExp(`^${customerNames[index]}`) }).click();
+          await expect(form.getByRole("button", { name: "Change", exact: true })).toBeVisible();
+        }
         await form.getByRole("button", { name: "10:00", exact: true }).click();
         await form.getByRole("button", { name: "Confirm appointment" }).click();
         await expect(form.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
         expect(await availableAt(member.id, "10:00")).toBe(false);
       }
+
+      await expect.poll(async () => {
+        const [booking] = await sql<{ customerId: string; phone: string }[]>`
+          SELECT b.customer_id AS "customerId", c.phone FROM bookings b
+          JOIN customers c ON c.tenant_id=b.tenant_id AND c.id=b.customer_id
+          WHERE b.tenant_id=${tenantId} AND b.service_id=${service.id} AND c.email=${existingEmail}
+        `;
+        return booking;
+      }).toEqual({ customerId: existingClient.id, phone: "+4512345678" });
 
       const bookings = await sql<{ id: string; name: string; memberId: string; startsAt: Date; locationId: string }[]>`
         SELECT b.id,c.name,b.team_member_id AS "memberId",b.starts_at AS "startsAt",b.location_id AS "locationId"
@@ -216,7 +247,7 @@ for (const workspace of workspaces) {
         SELECT c.phone FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
         WHERE b.id=${moving.id} AND b.tenant_id=${tenantId}
       `;
-      expect(contact?.phone).toBeNull();
+      expect(contact?.phone).toBe(moving.name === customerNames[1] ? "+4512345678" : null);
 
       await drawer(pages[winnerIndex], winner).getByRole("button", { name: "Cancel appointment" }).click();
       await expect(drawer(pages[winnerIndex], winner).getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
@@ -332,6 +363,18 @@ for (const workspace of workspaces) {
       expect(await assignments()).toEqual([]);
       await expect(panel.getByRole("button", { name: "Reschedule appointment" })).toHaveCount(0);
       expect(await availableAt(moving.memberId, "11:30")).toBe(true);
+
+      await sql`DELETE FROM service_team_members
+        WHERE tenant_id=${tenantId} AND service_id=${service.id} AND team_member_id=${staff[0].id}`;
+      const staffWithoutService = new URLSearchParams({
+        location: location.id, employee: staff[0].id, createStaff: staff[0].id,
+        view: "team", day, create: `${day}T10:00`,
+      });
+      await page.goto(`/${workspace.route}/app/calendars?${staffWithoutService}`);
+      const recoveryDrawer = page.getByRole("dialog", { name: "New appointment" });
+      await expect(recoveryDrawer.getByRole("combobox", { name: "Service" })).toHaveValue("");
+      await expect(recoveryDrawer.getByText("Choose a service to see available times.")).toBeVisible();
+      await expect(recoveryDrawer.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
     } finally {
       await secondPage.close();
       // Keep audit history in the disposable database while hiding these fixtures from later tests.
@@ -340,6 +383,7 @@ for (const workspace of workspaces) {
       await sql`UPDATE services SET is_active=FALSE WHERE tenant_id=${tenantId} AND id=${service.id}`;
       await sql`UPDATE locations SET is_active=FALSE WHERE tenant_id=${tenantId} AND id=${location.id}`;
       try {
+        if (visibility != null) await sql`UPDATE tenant_settings SET booking_page=${bookingPage}::jsonb WHERE tenant_id=${tenantId}`;
         if (!resourcesFeature.is_enabled) {
           await control`UPDATE tenant_feature_states SET is_enabled=false WHERE tenant_id=${tenantId} AND feature_key='resources'`;
         }

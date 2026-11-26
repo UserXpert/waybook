@@ -119,7 +119,7 @@ for (const workspace of workspaces) {
         const appointment = page.getByRole("complementary", { name: "New appointment" });
         await expect(appointment.getByLabel(/^(Client|Patient) name$/)).toHaveValue(clientName);
         await expect(appointment.getByLabel("Email", { exact: true })).toHaveValue(clientEmail);
-        await expect(appointment.getByLabel("Phone", { exact: true })).toHaveValue("");
+        await expect(appointment.getByRole("textbox", { name: "Phone", exact: true })).toHaveValue("");
         await appointment.getByRole("button", { name: "10:00", exact: true }).click();
         await appointment.getByRole("button", { name: "Confirm appointment" }).click();
         await expect(appointment.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
@@ -129,8 +129,6 @@ for (const workspace of workspaces) {
         `;
         expect(appointments).toEqual([{ status: "confirmed" }]);
         await page.goto(`${path}?status=offered`);
-        await row.locator('select[name="status"]').selectOption("booked");
-        await row.getByRole("button", { name: "Save", exact: true }).click();
         await expect(row).toHaveCount(0);
         await page.goto(`${path}?status=booked`);
         await expect(row).toContainText("Booked");

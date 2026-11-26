@@ -26,6 +26,7 @@ This protocol deliberately does **not** require reading every document for a sma
 | Login, sessions, Google SSO, invitations, Create Business, provisioning | [02_auth_provisioning.md](02_auth_provisioning.md) | Identity or onboarding/provisioning behaviour changes |
 | Availability, slots, holds, bookings, tokens, DST, confirmation | [03_booking_engine.md](03_booking_engine.md) | Booking-domain behaviour or proof changes |
 | Control, tenant dashboard, feature flag, Staff, Calendars, public UI | [04_modules_ledger.md](04_modules_ledger.md) | A module/UI capability or its verification changes |
+| Front-desk appointment, waitlist, check-in, checkout, and payment workflow | [13_appointment_checkout_workflow.md](13_appointment_checkout_workflow.md) | The interaction contract or its verification changes |
 | Products, sales, wallet, gift cards, memberships, packages, payment references | [05_commerce_foundation.md](05_commerce_foundation.md) | A commerce boundary, migration, or vertical slice changes |
 | AWS database ownership and provider cutover | [06_aws_rds_cutover.md](06_aws_rds_cutover.md) | Hosting, networking, migration, backup, or provider decision changes |
 | Prioritised remaining work and pilot stop gate | [07_delivery_backlog.md](07_delivery_backlog.md) | A slice is added, completed, deferred, or the pilot release boundary changes |

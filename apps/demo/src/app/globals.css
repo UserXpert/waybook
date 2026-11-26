@@ -997,7 +997,7 @@ body {
 .tenant-dashboard-page .tenant-drawer-scrim { background: rgba(12,12,14,.42); backdrop-filter: blur(4px); }
 .tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button { border-color: #d2d2d5; background: #f2f2f3; color: #8b8b91; box-shadow: none; }
 .tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle):disabled,.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:disabled { border-color: #dedee1; background: #f4f4f5; color: #99999f; cursor: not-allowed; }
-.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle):not(.appointment-reschedule-picker__day):not(.appointment-reschedule-picker__slot):not(.calendar-search-picker__clear):not(:disabled),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:not(:disabled) { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }
+.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle):not(.appointment-reschedule-picker__day):not(.appointment-reschedule-picker__slot):not(.calendar-search-picker__clear):not([role="option"]):not(:disabled),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:not(:disabled) { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button { border-color: #d4d4d7; background: #fff; color: #55555b; box-shadow: none; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button:not(:disabled):hover,.tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button:not(:disabled):focus-visible { border-color: #a7a7ad; background: #f4f4f5; color: #252529; outline: 0; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button.is-selected { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); color: var(--waybook-accent-ink); box-shadow: inset 0 0 0 1px var(--waybook-accent); }
@@ -2112,6 +2112,46 @@ body {
 .tenant-dashboard-page .manual-appointment__slot-picker .appointment-reschedule-picker__slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .55rem; }
 .tenant-dashboard-page .manual-appointment__slot-picker .appointment-reschedule-picker__slot { min-height: 2.75rem; padding: .45rem .6rem; font-size: .86rem; font-weight: 600; }
 .tenant-dashboard-page .manual-appointment__slot-picker-empty { grid-column: 1 / -1; padding: .65rem 0; color: #78787f; font-size: .82rem; }
+.tenant-dashboard-page .manual-appointment__step,
+.tenant-dashboard-page .manual-appointment__client-fields { display: grid; gap: .65rem; min-width: 0; }
+.tenant-dashboard-page .manual-appointment__step-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.tenant-dashboard-page .manual-appointment__client-fields h3 { margin: 0; font-size: .82rem; font-weight: 600; }
+.tenant-dashboard-page .manual-appointment__client-fields small { font-weight: 400; opacity: .8; }
+.tenant-dashboard-page .manual-appointment__selection,
+.tenant-dashboard-page .manual-appointment__review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: .5rem;
+  background: var(--wb-dark-raised, #fff);
+}
+.tenant-dashboard-page :is(.manual-appointment__selection, .manual-appointment__review) > div { display: grid; gap: .2rem; min-width: 0; overflow-wrap: anywhere; }
+.tenant-dashboard-page :is(.manual-appointment__selection, .manual-appointment__review) span { font-size: .75rem; }
+.tenant-dashboard-page .appointment-drawer .manual-appointment .waybook-action--secondary:not(:disabled) {
+  border-color: var(--wb-dark-border, #d4d4d4);
+  background: var(--wb-dark-surface, #fff);
+  color: var(--wb-dark-text, #171717);
+}
+.tenant-dashboard-page .appointment-drawer .manual-appointment .waybook-action--secondary:not(:disabled):hover {
+  background: var(--wb-dark-raised, #f4f4f5);
+}
+@media (max-width: 520px) {
+  .tenant-dashboard-page .manual-appointment__review > button { width: 100%; }
+}
+.tenant-dashboard-page .appointment-drawer .manual-appointment .calendar-search-picker__results button {
+  inline-size: 100%;
+  padding: .65rem .75rem;
+  border-radius: 0;
+  font-weight: 400;
+}
+.tenant-dashboard-page .appointment-drawer .manual-appointment .calendar-search-picker > input:focus {
+  outline: 2px solid var(--waybook-accent-ink);
+  outline-offset: 1px;
+}
 .tenant-dashboard-page .manual-appointment__selectors .calendar-search-picker { min-width: 0; }
 .waybook-icon-button { display: grid; box-sizing: border-box; place-items: center; padding: 0; line-height: 1; }
 .waybook-icon-button > svg { display: block; width: 1em; height: 1em; overflow: visible; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }

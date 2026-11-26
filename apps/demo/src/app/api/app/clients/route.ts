@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const { tenant, membership } = await requireTenantWorkspace(request.headers);
   const forWaitlist = request.nextUrl.searchParams.get("purpose") === "waitlist";
-  await requireFeature(tenant.id, forWaitlist ? "calendars" : "booking-essentials");
+  const forAppointment = request.nextUrl.searchParams.get("purpose") === "appointment";
+  await requireFeature(tenant.id, forWaitlist || forAppointment ? "calendars" : "booking-essentials");
   const permissions = await staffPermissionContext(tenant, membership);
   const canViewDirectory = permissions.isManager || permissions.canViewClients || permissions.canManageClients;
   const canLookup = forWaitlist ? permissions.canManageWaitlist : canViewDirectory;
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(Number(request.nextUrl.searchParams.get("limit") ?? 20) || 20, 1), 50);
   const db = tenantDb(tenant);
   const lookupParams = [tenant.id, query, `%${query}%`, cursor, limit + 1];
-  const directory = request.nextUrl.searchParams.get("directory") === "1";
+  const directory = !forAppointment && request.nextUrl.searchParams.get("directory") === "1";
   const dates = tableDateFilters({
     sort: request.nextUrl.searchParams.get("sort") ?? undefined,
     from: request.nextUrl.searchParams.get("from") ?? undefined,

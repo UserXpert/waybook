@@ -96,8 +96,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; page?: string; sort?: string; activity?: string } & TableDateParams> }) {
-  const { location: rawLocation, q, status, sale, page: rawPage, sort, activity: paymentActivity, from, to } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; page?: string; sort?: string; activity?: string } & TableDateParams> }) {
+  const { location: rawLocation, q, status, sale, booking, step, page: rawPage, sort, activity: paymentActivity, from, to } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -109,6 +109,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const db = tenantDb(tenant);
   const location = typeof rawLocation === "string" && uuidPattern.test(rawLocation) ? rawLocation : undefined;
   const saleId = typeof sale === "string" && uuidPattern.test(sale) ? sale : undefined;
+  const bookingId = typeof booking === "string" && uuidPattern.test(booking) ? booking : undefined;
   const requestedPage = typeof rawPage === "string" && /^[1-9]\d{0,8}$/.test(rawPage) ? Number(rawPage) : 1;
   const selectedStatus = status && saleStatuses.includes(status) ? status : "all";
   const search = typeof q === "string" ? q.trim().slice(0, 100) : "";
@@ -182,7 +183,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       ORDER BY ${sortOrder}
     `,
     db<Product[]>`SELECT id,title,price_cents AS "priceCents",currency FROM commerce_catalog_items WHERE tenant_id=${tenant.id} AND kind='product' AND is_active=TRUE ORDER BY title`,
-    saleId ? db<SaleRow[]>`${saleRows} AND cs.id = ${saleId} ${groupSales}` : [],
+    saleId ? db<SaleRow[]>`${saleRows} AND cs.id = ${saleId} ${groupSales}`
+      : bookingId ? db<SaleRow[]>`${saleRows} AND cs.booking_id = ${bookingId} ${groupSales}` : [],
   ]);
   const selectedLocation = locations.find((item) => item.id === location);
   const sales = results.filter((row) => row.id !== null);
@@ -314,12 +316,15 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const canAddProducts = activeAppointment && products.length > 0;
       const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
       const recorded = paymentBalance?.payments ?? [];
+      const canRecordPayment = paymentBalance && recorded.length === 0 && outstandingCents > 0;
+      const paymentStep = step === "payment" && Boolean(canRecordPayment);
+      const reviewHref = saleHref(selectedSale);
       const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
       return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
         <aside className="tenant-drawer appointment-drawer sale-detail appointment-sale-drawer" data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
           <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose></header>
           <div className="appointment-drawer__body">
-            <Link className="waybook-primary-link sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>
+            {paymentStep ? <Link className="waybook-action waybook-action--secondary sale-detail__action" href={reviewHref}>Back to checkout</Link> : null}
             <section className="sale-detail__summary"><div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong><small>{selectedSale.locationName ?? "No location"}</small></div><div><span>Service</span><strong>{selectedSale.serviceTitle}</strong><small>{selectedSale.teamMemberName ?? `No assigned ${terminology.staffMember}`}</small></div></section>
             <section><h3>Totals</h3><dl className="sale-detail__totals">
               <div><dt>Booked service</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>
@@ -331,34 +336,39 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <dt>{balance < 0 ? "Credit due" : "Service balance"}</dt><dd>{money(Math.abs(balance))}</dd>
               </div> : null}
             </dl></section>
-            {paymentBalance && (recorded.length > 0 || outstandingCents > 0) ? <section><h3>Payment details</h3>
-              {recorded.length > 0
-                ? <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={selectedSale.status !== "cancelled"} />
-                : <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} secondary />}
+            {paymentStep && paymentBalance ? <section><h3>Payments</h3>
+              <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout />
             </section> : null}
-            {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
-              <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
+            {!paymentStep && recorded.length > 0 ? <section><h3>Payment details</h3>
+              <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={selectedSale.status !== "cancelled"} />
             </section> : null}
-            {canAddProducts ? <section><h3>Products</h3><form action={addProductToAppointmentSale} className="tenant-drawer-form">
-              <input type="hidden" name="saleId" value={selectedSale.id} />
-              <div className="tenant-drawer-form__grid">
-                <label>Product<select name="productId" defaultValue="" required><option value="" disabled>Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label>
-                <label>Quantity<input name="quantity" type="number" min={1} max={99} defaultValue={1} required /></label>
-              </div>
-              <button className="waybook-action waybook-action--secondary" type="submit">Add product</button>
-            </form></section> : null}
-            {selectedSale.packageRedeemed || activeAppointment ? <section><h3>Package</h3>
-              {selectedSale.packageRedeemed ? <p className="sale-detail__note">A package visit has been redeemed.</p> : canRedeemPackage ? <form action={redeemPackageForAppointmentSale} className="tenant-drawer-form">
+            {!paymentStep ? <>
+              {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={`${reviewHref}&step=payment`}>Go to payments</Link> : null}
+              {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
+                <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
+              </section> : null}
+              {canAddProducts ? <section><h3>Products</h3><form action={addProductToAppointmentSale} className="tenant-drawer-form">
                 <input type="hidden" name="saleId" value={selectedSale.id} />
-                <label>Eligible {terminology.client} package<select name="packageId" required defaultValue=""><option value="" disabled>Select package</option>{eligiblePackages.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.remainingUnits} visit{item.remainingUnits === 1 ? "" : "s"} remaining{item.expiresAt ? ` · expires ${new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.expiresAt)}` : ""}</option>)}</select></label>
-                <button className="waybook-action waybook-action--secondary" type="submit">Redeem package visit</button>
-              </form> : <p className="sale-detail__note">No eligible package can be redeemed.</p>}
-            </section> : null}
-            {selectedSale.giftCardRedeemed || (activeAppointment && recorded.length === 0 && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
-              {selectedSale.giftCardRedeemed ? <p className="sale-detail__note">A gift card has been used for this appointment.</p> : <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />}
-            </section> : null}
-            <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
-            {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
+                <div className="tenant-drawer-form__grid">
+                  <label>Product<select name="productId" defaultValue="" required><option value="" disabled>Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(product.priceCents)}</option>)}</select></label>
+                  <label>Quantity<input name="quantity" type="number" min={1} max={99} defaultValue={1} required /></label>
+                </div>
+                <button className="waybook-action waybook-action--secondary" type="submit">Add product</button>
+              </form></section> : null}
+              {selectedSale.packageRedeemed || activeAppointment ? <section><h3>Package</h3>
+                {selectedSale.packageRedeemed ? <p className="sale-detail__note">A package visit has been redeemed.</p> : canRedeemPackage ? <form action={redeemPackageForAppointmentSale} className="tenant-drawer-form">
+                  <input type="hidden" name="saleId" value={selectedSale.id} />
+                  <label>Eligible {terminology.client} package<select name="packageId" required defaultValue=""><option value="" disabled>Select package</option>{eligiblePackages.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.remainingUnits} visit{item.remainingUnits === 1 ? "" : "s"} remaining{item.expiresAt ? ` · expires ${new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.expiresAt)}` : ""}</option>)}</select></label>
+                  <button className="waybook-action waybook-action--secondary" type="submit">Redeem package visit</button>
+                </form> : <p className="sale-detail__note">No eligible package can be redeemed.</p>}
+              </section> : null}
+              {selectedSale.giftCardRedeemed || (activeAppointment && recorded.length === 0 && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
+                {selectedSale.giftCardRedeemed ? <p className="sale-detail__note">A gift card has been used for this appointment.</p> : <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />}
+              </section> : null}
+              <Link className="waybook-action waybook-action--secondary sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>
+              <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section>
+              {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
+            </> : null}
           </div>
         </aside>
       </TenantEditorDialog>;

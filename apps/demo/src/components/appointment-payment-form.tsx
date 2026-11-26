@@ -9,11 +9,11 @@ export function PaymentMethodOptions() {
   return <><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></>;
 }
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, secondary = false }: {
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
-  secondary?: boolean;
+  checkout?: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<PaymentState>({ error: null, success: null });
@@ -23,11 +23,13 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, seconda
   const interrupted = useRef<FormData | null>(null);
   const { outstandingCents, refundableCents, payments } = balance;
   const canAddPayment = payments.length === 0 && outstandingCents > 0;
-  const [kind, setKind] = useState("");
+  const [entryKind, setKind] = useState("");
+  const kind = checkout ? "payment" : entryKind;
+  const [method, setMethod] = useState(checkout ? "" : "card");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const amount = draftAmount ?? (kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "");
   const editingDisabled = pending || retryRequired;
-  const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Number(amount) > 0;
+  const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Boolean(method) && Number(amount) > 0;
 
   function changeKind(nextKind: string) {
     if (nextKind === "refund" || kind === "refund") setDraftAmount(null);
@@ -65,19 +67,23 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, seconda
 
   return <form className="tenant-drawer-form appointment-payment-form" onSubmit={saveEntry}>
     <input type="hidden" name="bookingId" value={bookingId} />
+    {checkout ? <p className="sale-detail__note">Record money already received for the appointment.</p> : null}
     <div className="tenant-drawer-form__grid">
-      <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
+      {checkout ? <input type="hidden" name="kind" value="payment" /> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
         <option value="" disabled>Select payment action</option>
         {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
         <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>
+      </select></label>}
+      <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
+        {checkout ? <option value="" disabled>Select payment method</option> : null}
+        <PaymentMethodOptions />
       </select></label>
-      <label>Method<select name="method" defaultValue="card" disabled={editingDisabled}><PaymentMethodOptions /></select></label>
       <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
     </div>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
-    <button type="submit" className={secondary ? "waybook-action waybook-action--secondary" : undefined} disabled={pending || (!retryRequired && !canRecord)}>
-      {pending ? "Recording…" : retryRequired ? "Retry entry" : "Record entry"}
+    <button type="submit" disabled={pending || (!retryRequired && !canRecord)}>
+      {pending ? "Recording…" : retryRequired ? "Retry entry" : checkout ? "Record payment" : "Record entry"}
     </button>
   </form>;
 }
