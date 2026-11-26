@@ -11,6 +11,7 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { requireIdentity } from "@/lib/waybook/auth";
 import { staffPermissionContext, workspaceSearchPermissions } from "@/lib/waybook/staff-permissions";
 import { tenantDb } from "@/lib/waybook/database";
+import { canReceiveArrivalAlerts, providerArrivalAlertPending } from "@/lib/waybook/provider-arrival-alerts";
 import { TenantAppMenu, type TenantAppLink } from "@/components/tenant-app-menu";
 import { TenantUserMenu } from "@/components/tenant-user-menu";
 import { TenantNavTools } from "@/components/tenant-nav-tools";
@@ -65,6 +66,10 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     ? `Search bookings or ${terms.clients}`
     : canSearchAppointments ? "Search bookings" : `Search ${terms.clients}`;
   const clientsEnabled = enabled.has("clients"), teamEnabled = enabled.has("team"), calendarsEnabled = enabled.has("calendars"), resourcesEnabled = enabled.has("resources"), notificationsEnabled = enabled.has("email-notifications");
+  const canReceiveAlerts = calendarsEnabled && membership.role !== "read-only" &&
+    (permissions.isManager || Boolean(permissions.teamMemberId)) &&
+    await canReceiveArrivalAlerts(tenantDb(tenant), tenant.id, identity.id);
+  const arrivalPending = canReceiveAlerts && await providerArrivalAlertPending(tenantDb(tenant), tenant.id, identity.id);
   const canUse = {
     overview: permissions.isManager,
     clients: clientsEnabled && (permissions.isManager || permissions.canViewClients || permissions.canManageClients),
@@ -79,7 +84,7 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     waitlist: calendarsEnabled && (permissions.isManager || permissions.canManageWaitlist),
     resources: resourcesEnabled && (permissions.isManager || permissions.canManageResources),
     serviceSettings: permissions.isManager || permissions.canManageServiceSettings,
-    notifications: permissions.isManager,
+    notifications: permissions.isManager || canReceiveAlerts,
     emails: notificationsEnabled && permissions.isManager,
     targets: permissions.isManager,
   };
@@ -102,7 +107,7 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     canUse.serviceSettings ? { id: "services", href: toHref("/app/services"), label: "Services", description: "Prices and duration", group: "Setup" } : null,
     canUse.serviceSettings ? { id: "locations", href: toHref("/app/locations"), label: "Locations", description: "Where you operate", group: "Setup" } : null,
     canUse.resources ? { id: "resources", href: toHref("/app/resources"), label: "Resources", description: "Rooms and equipment", group: "Setup" } : null,
-    canUse.notifications ? { id: "notifications", href: toHref("/app/notifications"), label: "Notifications", description: "Appointments to review", group: "Activity & insights" } : null,
+    canUse.notifications ? { id: "notifications", href: toHref("/app/notifications"), label: "Notifications", description: permissions.isManager ? "Appointments to review" : "Waiting room alerts", group: "Activity & insights" } : null,
     canUse.emails ? { id: "emails", href: toHref("/app/emails"), label: "Emails", description: "Email delivery history", group: "Activity & insights" } : null,
     canUse.targets ? { id: "targets", href: toHref("/app/targets"), label: "Targets", description: `Monthly ${terms.staff} plans`, group: "Activity & insights" } : null,
     canUse.reports ? { id: "reports", href: toHref("/app/reports"), label: "Reports", description: "Business performance", group: "Activity & insights" } : null,
@@ -113,7 +118,9 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     <nav aria-label="Primary navigation">{primary.map((link) => <Link key={link.id} href={link.href} aria-current={active === link.id ? "page" : undefined}><link.Icon aria-hidden="true" />{link.label}</Link>)}</nav>
     <TenantAppMenu links={appLinks} active={active} />
     <div className="tenant-nav-account-actions">
-      <TenantNavTools searchLabel={searchLabel} searchHref={searchEnabled ? toHref("/app/search") : undefined} notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false} />
+      <TenantNavTools searchLabel={searchLabel} searchHref={searchEnabled ? toHref("/app/search") : undefined}
+        notificationsHref={canUse.notifications ? toHref("/app/notifications") : undefined} notificationsPending={review?.pending ?? false}
+        arrivalAlertsHref={canReceiveAlerts ? toHref("/api/app/arrival-alerts") : undefined} arrivalAlertPending={arrivalPending} />
       <TenantUserMenu
         key={`${tenant.id}:${identity.id}`}
         photo={accountProfile?.photo ?? null}

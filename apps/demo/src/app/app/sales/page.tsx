@@ -83,6 +83,7 @@ function activityLabel(eventType: string, clientLabel: string) {
     "booking.completed": "Appointment completed",
     "booking.arrived": `${clientLabel} checked in`,
     "booking.waiting_room": "Checked in to waiting room",
+    "booking.waiting_room_providers_notified": "Waiting room alert sent",
     "booking.in_service": "Service started",
     "booking.checking_out": "Checkout opened",
     "booking.no_show": "Marked as no-show",

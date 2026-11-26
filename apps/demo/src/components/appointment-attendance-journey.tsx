@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { finishAppointmentCheckout, setAppointmentAttendanceStage } from "@/app/app/calendars/actions";
+import { finishAppointmentCheckout, notifyWaitingRoomProviders, setAppointmentAttendanceStage } from "@/app/app/calendars/actions";
 import { activeAppointmentStage, type AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
-export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpdateStatus, canCheckIn, canManage, checkoutPath, onChange }: {
+export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpdateStatus, canCheckIn, canManage, canNotifyProviders, checkoutPath, onChange }: {
   bookingId: string;
   status: string;
   stage: AppointmentAttendanceStage | null;
   canUpdateStatus: boolean;
   canCheckIn: boolean;
   canManage: boolean;
+  canNotifyProviders: boolean;
   checkoutPath: string;
   onChange: (bookingId: string) => Promise<void>;
 }) {
@@ -21,6 +22,7 @@ export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpda
   const [choosing, setChoosing] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [notifying, setNotifying] = useState(false);
   const waitingChoice = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (choosing) waitingChoice.current?.focus(); }, [choosing]);
   const checkoutHref = `${checkoutPath}?booking=${bookingId}`;
@@ -47,6 +49,21 @@ export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpda
     }
   }
 
+  async function notifyProviders() {
+    setNotifying(true);
+    setError("");
+    try {
+      const result = await notifyWaitingRoomProviders(bookingId);
+      if (result.error) { setError(result.error); return; }
+      showSuccessToast(result.count ? "Waiting room alert sent" : "No new provider alerts needed");
+      await onChange(bookingId).catch(() => router.refresh());
+    } catch {
+      setError("Could not notify providers. Please try again.");
+    } finally {
+      setNotifying(false);
+    }
+  }
+
   if (canManage && status === "completed") return <Link className="waybook-primary-link" href={checkoutHref}>View sale</Link>;
   if (canManage && current === "checking_out") return <Link className="waybook-primary-link" href={checkoutHref}>Continue checkout</Link>;
   if (!canChoose && !canStart && !canCheckout) return null;
@@ -58,7 +75,8 @@ export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpda
         <button type="button" disabled={pending} onClick={() => void advance("in_service")}>In service</button>
         <button type="button" disabled={pending} onClick={() => { setChoosing(false); setError(""); }}>Back</button>
       </div> : null}
-      {canStart ? <button type="button" disabled={pending} onClick={() => void advance("in_service")}>Start service</button> : null}
+      {canStart ? <button type="button" disabled={pending || notifying} onClick={() => void advance("in_service")}>Start service</button> : null}
+      {canStart && canNotifyProviders ? <button type="button" disabled={pending || notifying} onClick={() => void notifyProviders()}>{notifying ? "Notifying…" : "Notify providers"}</button> : null}
       {canCheckout ? <button type="button" className="waybook-action" disabled={pending} onClick={() => void advance("checking_out")}>Checkout</button> : null}
     </div>
     {error ? <p className="manual-appointment__message is-error" role="alert">{error}</p> : null}

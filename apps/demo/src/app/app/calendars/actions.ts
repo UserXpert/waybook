@@ -13,6 +13,7 @@ import { availableSlots } from "@/lib/waybook/booking";
 import { appointmentHasSettlement, calendarBookingVisibility, getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { getAppointmentReservations, linkedAppointmentOpenings } from "@/lib/waybook/linked-appointment-schedule";
 import { tenantDb } from "@/lib/waybook/database";
+import { arrivalAlertsEnabled, unnotifiedArrivalProviders } from "@/lib/waybook/provider-arrival-alerts";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
 import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
@@ -150,6 +151,10 @@ export async function getCalendarAppointment(bookingId: string) {
     .map(({ id, provider, title, startsAt, endsAt }) => ({ id, provider, title, startsAt, endsAt }));
   const canManageSchedule = canManageAppointment(permissions, ...providers) &&
     (canViewTeam || providers.length === 1 || providers.every((id) => id === permissions.teamMemberId));
+  const canUpdateStatus = canUpdateAppointmentAttendance(permissions, providers);
+  const canNotifyProviders = booking.status === "arrived" && booking.attendanceStage === "waiting_room" &&
+    canUpdateStatus && await arrivalAlertsEnabled(db, tenant.id) &&
+    (await db`${unnotifiedArrivalProviders(db, tenant.id, booking.id, providers)} LIMIT 1`).length > 0;
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -172,7 +177,8 @@ export async function getCalendarAppointment(bookingId: string) {
     canManage: permissions.isManager,
     canManageSchedule,
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
-    canUpdateStatus: canUpdateAppointmentAttendance(permissions, providers),
+    canUpdateStatus,
+    canNotifyProviders,
     resources,
     paymentBalance,
     days,
@@ -774,6 +780,52 @@ async function updateBookingStatus(formData: FormData) {
 }
 
 export type AttendanceResult = BookingDetailsResult;
+
+export async function notifyWaitingRoomProviders(bookingId: string) {
+  try {
+    const { tenant, db, booking, permissions } = await editableBooking(bookingId, "status");
+    const actor = await requireIdentity();
+    const count = await withSerializableRetry(() => db.begin(async (transaction) => {
+      const connection = transaction as unknown as typeof db;
+      await connection`SELECT id FROM booking_blocks WHERE tenant_id = ${tenant.id} AND id = ${booking.bookingBlockId} FOR UPDATE`;
+      const [current] = await connection`
+        SELECT b.id FROM bookings b
+        WHERE b.tenant_id = ${tenant.id} AND b.id = ${booking.id}
+          AND b.status = 'arrived' AND b.attendance_stage = 'waiting_room'
+          AND ${calendarBookingVisibility(connection, permissions.isManager || permissions.canViewTeamCalendar, permissions.teamMemberId)}
+        FOR UPDATE
+      `;
+      if (!current) throw new Error("This appointment is no longer in the waiting room.");
+      const reservations = await getAppointmentReservations(connection, tenant.id, booking.id);
+      const providers = reservations.map((item) => item.teamMemberId);
+      if (!canUpdateAppointmentAttendance(permissions, providers)) {
+        throw new Error("You do not have permission to notify providers for this appointment.");
+      }
+      const [settings] = await connection`
+        SELECT tenant_id FROM tenant_settings
+        WHERE tenant_id = ${tenant.id} AND provider_arrival_alerts_enabled FOR SHARE
+      `;
+      if (!settings) throw new Error("Waiting room alerts are turned off.");
+      const alerts = await connection`
+        WITH recipients AS (${unnotifiedArrivalProviders(connection, tenant.id, booking.id, providers)})
+        INSERT INTO provider_arrival_alerts (tenant_id, booking_id, team_member_id)
+        SELECT ${tenant.id}, ${booking.id}, id FROM recipients ON CONFLICT DO NOTHING
+        RETURNING team_member_id
+      `;
+      if (alerts.length) {
+        const event = "booking.waiting_room_providers_notified";
+        const metadata = JSON.stringify({ providerCount: alerts.length });
+        await connection`INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
+          VALUES (${tenant.id}, ${booking.id}, ${actor.id}, ${event}, ${metadata}::text::jsonb)`;
+      }
+      return alerts.length;
+    }));
+    revalidatePath("/app/notifications");
+    return { count, error: null };
+  } catch (error) {
+    return { count: 0, error: error instanceof Error && !("severity" in error) ? error.message : "Could not notify providers. Please try again." };
+  }
+}
 
 export async function setAppointmentAttendanceStage(bookingId: string, stage: AppointmentAttendanceStage): Promise<AttendanceResult> {
   try {

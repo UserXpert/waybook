@@ -48,6 +48,17 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await expect(page).toHaveURL(/\/nordic\/app/);
 
     const [waiting, direct, upcoming] = schedule;
+    const [segmentService] = await db`INSERT INTO services (tenant_id, slug, title, duration_minutes)
+      VALUES (${tenantId}, ${`follow-up-${tag}`}, ${`Follow-up ${tag}`}, 15) RETURNING id, title`;
+    await db`INSERT INTO service_locations (tenant_id, service_id, location_id)
+      VALUES (${tenantId}, ${segmentService.id}, ${location.id})`;
+    await db`INSERT INTO service_team_members (tenant_id, service_id, team_member_id)
+      VALUES (${tenantId}, ${segmentService.id}, ${upcoming.providerId})`;
+    const [segmentBlock] = await db`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+      SELECT tenant_id, ${upcoming.providerId}, location_id, ends_at, ends_at + interval '15 minutes', 'confirmed'
+      FROM bookings WHERE tenant_id=${tenantId} AND id=${waiting.id} RETURNING id`;
+    await db`INSERT INTO booking_service_segments (tenant_id, booking_id, booking_block_id, service_id, position, booked_price_cents)
+      VALUES (${tenantId}, ${waiting.id}, ${segmentBlock.id}, ${segmentService.id}, 2, 0)`;
     const open = async (item: typeof waiting) => {
       await page.goto(`/nordic/app/calendars?booking=${item.id}`);
       return page.getByRole("complementary", { name: `Appointment with ${item.name}` });
@@ -81,7 +92,21 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await expect(stageLabel(directDrawer)).toHaveText("In service");
     expect(await state(direct.id)).toEqual({ status: "arrived", attendance_stage: "in_service" });
     await expect(directDrawer.getByRole("button", { name: "Checkout", exact: true })).toHaveCount(0);
-    await staffContext.close();
+    const waitingEmail = `waiting-staff-${tag}@example.test`;
+    const segmentEmail = `segment-staff-${tag}@example.test`;
+    for (const [email, providerId] of [[waitingEmail, waiting.providerId], [segmentEmail, upcoming.providerId]]) {
+      const [provider] = await control`INSERT INTO identities (email, password_hash, display_name)
+        SELECT ${email}, password_hash, 'Waiting room provider' FROM identities WHERE email='owner@nordic.local' RETURNING id`;
+      await control`INSERT INTO tenant_memberships (tenant_id, identity_id, role) VALUES (${tenantId}, ${provider.id}, 'staff')`;
+      await db`UPDATE team_members SET identity_id=${provider.id} WHERE tenant_id=${tenantId} AND id=${providerId}`;
+    }
+    const waitingContext = await page.context().browser()!.newContext({ viewport: page.viewportSize() });
+    const waitingPage = await waitingContext.newPage();
+    await waitingPage.goto(new URL("/login", page.url()).href);
+    await waitingPage.getByLabel("Work email").fill(waitingEmail);
+    await waitingPage.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await waitingPage.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(waitingPage.getByRole("link", { name: "Notifications", exact: true })).toBeVisible();
 
     const drawer = await open(waiting);
     await drawer.getByRole("button", { name: "Check in", exact: true }).press("Enter");
@@ -91,8 +116,57 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await expect(stageLabel(drawer)).toHaveText("Waiting room");
     expect(await state(waiting.id)).toEqual({ status: "arrived", attendance_stage: "waiting_room" });
     await expect(drawer.getByRole("button", { name: "Checkout", exact: true })).toHaveCount(0);
+    const alerts = () => db<{ team_member_id: string }[]>`SELECT team_member_id FROM provider_arrival_alerts
+      WHERE tenant_id=${tenantId} AND booking_id=${waiting.id}`;
+    expect(await alerts()).toEqual([]);
+    const notify = drawer.getByRole("button", { name: "Notify providers", exact: true });
+    const secondDesk = await page.context().newPage();
+    await secondDesk.goto(page.url());
+    const secondNotify = secondDesk.getByRole("button", { name: "Notify providers", exact: true });
+    await expect(secondNotify).toBeVisible();
+    await Promise.all([notify.click(), secondNotify.click()]);
+    await expect.poll(alerts).toEqual(expect.arrayContaining([
+      { team_member_id: waiting.providerId }, { team_member_id: upcoming.providerId },
+    ]));
+    expect(await alerts()).toHaveLength(2);
+    await expect(secondNotify).toHaveCount(0);
+    await secondDesk.close();
+    await expect(notify).toHaveCount(0);
+    await expect(waitingPage.getByRole("link", { name: "Notifications: clients in the waiting room" })).toBeVisible({ timeout: 20_000 });
+    await waitingPage.getByRole("link", { name: "Notifications: clients in the waiting room" }).click();
+    const inbox = waitingPage.getByRole("region", { name: "Waiting room alerts" });
+    const alert = inbox.getByRole("listitem").filter({ hasText: waiting.name });
+    await expect(alert.getByRole("link", { name: "Open appointment" })).toHaveAttribute("href", `/nordic/app/calendars?booking=${waiting.id}`);
+    await expect(alert.getByRole("link", { name: "Open appointment" })).toBeInViewport({ ratio: 1 });
+    await expect(alert.getByRole("button", { name: "Mark as read" })).toBeInViewport({ ratio: 1 });
+    await expect(waitingPage.getByRole("heading", { name: "Appointments needing review" })).toHaveCount(0);
+    await staffPage.goto(new URL("/nordic/app/notifications", page.url()).href);
+    await expect(staffPage.getByText("No waiting room alerts.")).toBeVisible();
+    await staffContext.close();
+    await alert.getByRole("button", { name: "Mark as read" }).click();
+    await expect(alert.getByText("Read", { exact: true })).toBeVisible();
+    await expect(waitingPage.getByRole("link", { name: "Notifications", exact: true })).toBeVisible();
+    const segmentContext = await page.context().browser()!.newContext({ viewport: page.viewportSize() });
+    const segmentPage = await segmentContext.newPage();
+    await segmentPage.goto(new URL("/login", page.url()).href);
+    await segmentPage.getByLabel("Work email").fill(segmentEmail);
+    await segmentPage.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await segmentPage.getByRole("button", { name: "Sign in", exact: true }).click();
+    await segmentPage.getByRole("link", { name: "Notifications: clients in the waiting room" }).click();
+    const segmentAlert = segmentPage.getByRole("listitem").filter({ hasText: waiting.name });
+    await expect(segmentAlert.getByRole("button", { name: "Mark as read" })).toBeVisible();
+    await segmentAlert.getByRole("link", { name: "Open appointment" }).click();
+    const segmentDrawer = segmentPage.getByRole("complementary", { name: `Appointment with ${waiting.name}` });
+    await expect(segmentDrawer.getByText(segmentService.title, { exact: true })).toBeVisible();
+    await segmentContext.close();
+    await open(waiting);
+    await expect(drawer.getByRole("button", { name: "Start service" })).toBeVisible();
+    await expect(notify).toHaveCount(0);
     await drawer.getByRole("button", { name: "Start service", exact: true }).click();
     await expect(stageLabel(drawer)).toHaveText("In service");
+    await waitingPage.reload();
+    await expect(inbox.getByText("No waiting room alerts.")).toBeVisible();
+    await waitingContext.close();
     await drawer.getByRole("button", { name: "Checkout", exact: true }).click();
     const sale = page.getByRole("dialog", { name: "Appointment checkout" });
     await expect(sale).toContainText(service.title);
@@ -121,6 +195,22 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
       .toEqual(["booking.waiting_room", "booking.in_service", "booking.checking_out", "booking.completed"]);
     await sale.getByRole("link", { name: "Open appointment", exact: true }).click();
     await expect(drawer.getByRole("link", { name: "View sale", exact: true })).toBeVisible();
+
+    const alertsEnabled = async () => (await db<{ enabled: boolean }[]>`
+      SELECT provider_arrival_alerts_enabled AS enabled FROM tenant_settings WHERE tenant_id=${tenantId}`)[0].enabled;
+    const originalSetting = await alertsEnabled();
+    try {
+      await page.goto("/nordic/app/notifications");
+      const enableAlerts = page.getByRole("switch", { name: "Enable provider alerts" });
+      await expect(enableAlerts).toBeChecked();
+      await enableAlerts.press("Space");
+      await page.getByRole("button", { name: "Save settings" }).click();
+      await expect.poll(alertsEnabled).toBe(false);
+      await page.reload();
+      await expect(enableAlerts).not.toBeChecked();
+    } finally {
+      await db`UPDATE tenant_settings SET provider_arrival_alerts_enabled=${originalSetting} WHERE tenant_id=${tenantId}`;
+    }
   } finally {
     await Promise.all([db.end(), control.end()]);
   }
