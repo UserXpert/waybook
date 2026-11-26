@@ -59,7 +59,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const link = (event.target as Element | null)?.closest<HTMLAnchorElement>("a[href]");
-      if (!link || link.target || link.hasAttribute("download")) return;
+      if (!link || link.target || link.hasAttribute("download") || link.hasAttribute("data-appointment-navigation")) return;
       const url = new URL(link.href, window.location.href);
       const id = url.searchParams.get("booking");
       if (url.origin !== window.location.origin || url.pathname !== window.location.pathname || !id || !summariesRef.current.some((item) => item.id === id)) return;
@@ -93,6 +93,13 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>{staffLabel}</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
+          {detail.additionalServices.length > 0 ? <section className="appointment-drawer__details">
+            <h3>Additional services</h3>
+            <dl>{detail.additionalServices.map((service) => <div key={service.id}>
+              <dt>{service.title}</dt>
+              <dd>{clock(service.startsAt)}–{clock(service.endsAt)}{service.provider ? ` · ${service.provider}` : ""}</dd>
+            </div>)}</dl>
+          </section> : null}
           {detail.canManage && detail.status === "arrived" && detail.paymentBalance ? (
             <Link className="waybook-primary-link" href={`${checkoutPath}?booking=${detail.id}`}>Checkout</Link>
           ) : null}

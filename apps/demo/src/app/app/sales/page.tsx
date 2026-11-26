@@ -16,6 +16,7 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
+import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import { tenantDateKey, weekStartForLocalDate } from "@/lib/waybook/today-command-centre";
 import { addProductToAppointmentSale, redeemPackageForAppointmentSale, removeProductFromAppointmentSale } from "./actions";
@@ -207,6 +208,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     SELECT id,title_snapshot AS title,unit_price_cents AS "unitPriceCents",quantity,discount_cents AS "discountCents"
     FROM commerce_sale_lines WHERE tenant_id=${tenant.id} AND sale_id=${selectedSale.id} AND line_kind='product' ORDER BY created_at
   ` : [];
+  const additionalServiceLines = selectedSale ? await getAdditionalAppointmentServices(db, tenant.id, selectedSale.bookingId) : [];
   const activity = selectedSale ? await db<BookingActivity[]>`
     SELECT id, event_type AS "eventType", actor_identity_id AS "actorIdentityId", created_at AS "createdAt"
     FROM booking_events WHERE tenant_id=${tenant.id} AND booking_id=${selectedSale.bookingId}
@@ -331,7 +333,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             {paymentStep ? <Link className="waybook-action waybook-action--secondary sale-detail__action" href={reviewHref}>Back to checkout</Link> : null}
             <section className="sale-detail__summary"><div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong><small>{selectedSale.locationName ?? "No location"}</small></div><div><span>Service</span><strong>{selectedSale.serviceTitle}</strong><small>{selectedSale.teamMemberName ?? `No assigned ${terminology.staffMember}`}</small></div></section>
             <section><h3>Totals</h3><dl className="sale-detail__totals">
-              <div><dt>Booked service</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>
+              <div><dt>{additionalServiceLines.length > 0 ? selectedSale.serviceTitle : "Booked service"}</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>
+              {additionalServiceLines.map((line) => <div key={line.id}><dt>{line.title}{line.provider ? <small> · {line.provider}</small> : null}</dt><dd>{money(line.priceCents)}</dd></div>)}
               {selectedSale.noShowChargeCents > 0 ? <div><dt>No-show fee</dt><dd>{money(selectedSale.noShowChargeCents)}</dd></div> : null}
               {saleLines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{money(line.unitPriceCents * line.quantity - line.discountCents)}</dd></div>)}
               {selectedSale.packageRedeemed ? <div><dt>Package coverage</dt><dd>−{money(selectedSale.bookedPriceCents)}</dd></div> : null}

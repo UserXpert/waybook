@@ -85,6 +85,9 @@ export async function rescheduleManagedBooking(tenant: TenantRecord, credentials
     const booking = await lockBooking(db, tenant, credentials);
     if (!booking) return { status: "not_found" as const, outboxId: null };
     if (!canChange(booking)) return { status: "closed" as const, outboxId: null };
+    if ((await db`SELECT 1 FROM booking_service_segments WHERE tenant_id=${tenant.id} AND booking_id=${booking.id} LIMIT 1`).length > 0) {
+      return { status: "closed" as const, outboxId: null };
+    }
     if (startsAt.getTime() <= Date.now()) return { status: "unavailable" as const, outboxId: null };
     const durationMinutes = (new Date(booking.endsAt).getTime() - new Date(booking.startsAt).getTime()) / 60_000;
     const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);

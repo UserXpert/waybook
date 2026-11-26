@@ -1,4 +1,5 @@
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
+import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -68,6 +69,8 @@ type Booking = {
   customerEmail: string;
   customerPhone: string | null;
   serviceTitle: string;
+  isAdditionalService?: boolean;
+  hasLinkedServices?: boolean;
 };
 type TeamBooking = Booking & {
   teamMemberName: string;
@@ -380,6 +383,33 @@ export default async function CalendarsPage({
   const visibleRangeEnd = monthlyView ? addMonths(currentMonth, 1) : addDays(visibleRangeStart, teamView ? 1 : 7);
   const rangeStart = fromZonedTime(`${visibleRangeStart}T00:00:00`, tenant.timezone);
   const rangeEnd = fromZonedTime(`${visibleRangeEnd}T00:00:00`, tenant.timezone);
+  const calendarReservations = db`
+    SELECT b.id, b.booking_number AS "bookingNumber", reservation.block_id AS "bookingBlockId",
+      reservation.service_id AS "serviceId", reservation.member_id AS "teamMemberId", b.location_id AS "locationId",
+      bra.resource_id AS "resourceId", r.name AS "resourceName", reservation.starts_at AS "startsAt",
+      reservation.ends_at AS "endsAt", b.status, c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone",
+      s.title AS "serviceTitle", tm.name AS "teamMemberName", tm.calendar_color AS "teamMemberColor",
+      reservation.is_additional AS "isAdditionalService",
+      EXISTS (SELECT 1 FROM booking_service_segments seg WHERE seg.tenant_id = b.tenant_id AND seg.booking_id = b.id) AS "hasLinkedServices"
+    FROM bookings b
+    CROSS JOIN LATERAL (
+      SELECT b.booking_block_id AS block_id, b.service_id, b.team_member_id AS member_id, b.starts_at, b.ends_at, false AS is_additional
+      UNION ALL
+      SELECT block.id, seg.service_id, block.team_member_id, block.starts_at, block.ends_at, true
+      FROM booking_service_segments seg
+      JOIN booking_blocks block ON block.tenant_id = seg.tenant_id AND block.id = seg.booking_block_id
+      WHERE seg.tenant_id = b.tenant_id AND seg.booking_id = b.id
+        AND (${canViewTeam} OR b.team_member_id = ${restrictedEmployeeId || null}::uuid)
+    ) reservation
+    JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
+    JOIN services s ON s.id = reservation.service_id AND s.tenant_id = b.tenant_id
+    JOIN team_members tm ON tm.id = reservation.member_id AND tm.tenant_id = b.tenant_id
+    LEFT JOIN booking_resource_assignments bra ON NOT reservation.is_additional AND bra.booking_id = b.id
+      AND bra.tenant_id = b.tenant_id AND bra.released_at IS NULL
+    LEFT JOIN resources r ON r.id = bra.resource_id AND r.tenant_id = b.tenant_id
+    WHERE b.tenant_id = ${tenant.id} AND b.location_id = ${selectedLocation?.id ?? null}
+      AND reservation.starts_at >= ${rangeStart} AND reservation.starts_at < ${rangeEnd} AND b.status <> 'cancelled'
+  `;
   const [services, calendarServices, bookings, teamBookings] =
     selected && selectedLocation
       ? await Promise.all([
@@ -391,10 +421,10 @@ export default async function CalendarsPage({
           >`SELECT DISTINCT s.id, s.title, s.duration_minutes AS "durationMinutes" FROM services s JOIN service_team_members stm ON stm.service_id = s.id AND stm.tenant_id = s.tenant_id JOIN team_member_locations tml ON tml.tenant_id = stm.tenant_id AND tml.team_member_id = stm.team_member_id JOIN service_locations sl ON sl.service_id = s.id AND sl.tenant_id = s.tenant_id WHERE s.tenant_id = ${tenant.id} AND s.is_active = TRUE AND stm.team_member_id = ANY(${members.map((member) => member.id)}) AND tml.location_id = ${selectedLocation.id} AND sl.location_id = ${selectedLocation.id} ORDER BY s.title`,
           db<
             Booking[]
-          >`SELECT b.id, b.booking_number AS "bookingNumber", b.booking_block_id AS "bookingBlockId", b.service_id AS "serviceId", b.team_member_id AS "teamMemberId", b.location_id AS "locationId", bra.resource_id AS "resourceId", r.name AS "resourceName", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle" FROM bookings b JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL LEFT JOIN resources r ON r.id=bra.resource_id AND r.tenant_id=b.tenant_id WHERE b.tenant_id = ${tenant.id} AND b.location_id = ${selectedLocation.id} AND b.team_member_id = ${selected.id} AND b.starts_at >= ${rangeStart} AND b.starts_at < ${rangeEnd} AND b.status <> 'cancelled' ORDER BY b.starts_at ASC LIMIT 100`,
+          >`${calendarReservations} AND reservation.member_id = ${selected.id} ORDER BY reservation.starts_at LIMIT 100`,
           db<
             TeamBooking[]
-          >`SELECT b.id, b.booking_number AS "bookingNumber", b.booking_block_id AS "bookingBlockId", b.service_id AS "serviceId", b.team_member_id AS "teamMemberId", b.location_id AS "locationId", bra.resource_id AS "resourceId", r.name AS "resourceName", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle", tm.name AS "teamMemberName", tm.calendar_color AS "teamMemberColor" FROM bookings b JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL LEFT JOIN resources r ON r.id=bra.resource_id AND r.tenant_id=b.tenant_id WHERE b.tenant_id = ${tenant.id} AND b.location_id = ${selectedLocation.id} AND b.team_member_id = ANY(${members.map((member) => member.id)}) AND b.starts_at >= ${rangeStart} AND b.starts_at < ${rangeEnd} AND b.status <> 'cancelled' ORDER BY b.starts_at ASC LIMIT 300`,
+          >`${calendarReservations} AND reservation.member_id = ANY(${members.map((member) => member.id)}) ORDER BY reservation.starts_at LIMIT 300`,
         ])
       : ([[], [], [], []] as [
           Service[],
@@ -405,7 +435,7 @@ export default async function CalendarsPage({
   const selectedBooking =
     bookingId && isMemberId(bookingId)
         ? (((teamView || monthlyView) ? teamBookings : bookings).find(
-          (booking) => booking.id === bookingId,
+          (booking) => booking.id === bookingId && !booking.isAdditionalService,
         ) ??
         (
           await db<Booking[]>`
@@ -454,7 +484,7 @@ export default async function CalendarsPage({
       ORDER BY s.title
     `
     : calendarServices;
-  const [eligibleResources, paymentBalance] = await Promise.all([
+  const [eligibleResources, paymentBalance, additionalServices] = await Promise.all([
     selectedBooking && canManage ? db<ResourceChoice[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive"
     FROM resources r
@@ -463,6 +493,7 @@ export default async function CalendarsPage({
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [],
     selectedBooking && canManage ? getAppointmentPaymentBalance(db, tenant.id, selectedBooking.id) : null,
+    selectedBooking ? getAdditionalAppointmentServices(db, tenant.id, selectedBooking.id) : [],
   ]);
   const selectedBookingMember = selectedBooking
     ? members.find((member) => member.id === selectedBooking.teamMemberId)
@@ -586,7 +617,7 @@ export default async function CalendarsPage({
   const rescheduleDays = Array.from({ length: 7 }, (_, index) =>
     addDays(localDateKey(new Date(), tenant.timezone), index),
   );
-  const canManageBookingSchedule = Boolean(selectedBooking && canManageSchedule(selectedBooking.teamMemberId));
+  const canManageBookingSchedule = Boolean(selectedBooking && additionalServices.length === 0 && canManageSchedule(selectedBooking.teamMemberId));
   const rescheduleSlots = canManageBookingSchedule && selectedBooking && isMovableAppointmentStatus(selectedBooking.status)
     ? (await getRescheduleBookingAvailability({ bookingId: selectedBooking.id, startDate: rescheduleDays[0] })).slots
     : [];
@@ -968,7 +999,7 @@ export default async function CalendarsPage({
                       ])}
                       {teamDayBookings.map((booking) => (
                         <Link
-                          key={booking.id}
+                          key={booking.bookingBlockId}
                           href={href({
                             view: "team",
                             week: weekStartFor(teamDay),
@@ -977,7 +1008,7 @@ export default async function CalendarsPage({
                           })}
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
-                          draggable={canManageSchedule(booking.teamMemberId) && isMovableAppointmentStatus(booking.status)}
+                          draggable={!booking.hasLinkedServices && canManageSchedule(booking.teamMemberId) && isMovableAppointmentStatus(booking.status)}
                           style={teamPosition(booking)}
                         >
                           <strong>{booking.customerName}</strong>
@@ -1195,7 +1226,7 @@ export default async function CalendarsPage({
                       ))}
                       {bookings.map((booking) => (
                         <Link
-                          key={booking.id}
+                          key={booking.bookingBlockId}
                           href={href({
                             view: "staff",
                             day: undefined,
@@ -1203,7 +1234,7 @@ export default async function CalendarsPage({
                           })}
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
-                          draggable={canManageSchedule(booking.teamMemberId) && isMovableAppointmentStatus(booking.status)}
+                          draggable={!booking.hasLinkedServices && canManageSchedule(booking.teamMemberId) && isMovableAppointmentStatus(booking.status)}
                           style={staffWeekPosition({
                             startTime: booking.startsAt.toISOString(),
                             endTime: booking.endsAt.toISOString(),
@@ -1249,7 +1280,7 @@ export default async function CalendarsPage({
           canManage, canManageSchedule: canManageBookingSchedule, canChangeAttendanceNow: canChangeAttendanceNow(selectedBooking),
           canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
           resourceId: canManage ? selectedBooking.resourceId : null,
-          resources: eligibleResources, paymentBalance, days: canManageBookingSchedule ? rescheduleDays : [], slots: rescheduleSlots, timezone: tenant.timezone,
+          resources: eligibleResources, paymentBalance, days: canManageBookingSchedule ? rescheduleDays : [], slots: rescheduleSlots, additionalServices, timezone: tenant.timezone,
         } : null}
       />
       {requestedAppointment && createMember && selectedLocation ? (
@@ -1272,6 +1303,7 @@ export default async function CalendarsPage({
             </header>
             <div className="appointment-drawer__body">
               <ManualAppointmentForm terminology={terms}
+                calendarPath={tenantPath(tenantSlug, "/app/calendars")}
                 initialLocation={selectedLocation}
                 initialMember={createMember}
                 initialService={manualService ?? null}

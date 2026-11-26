@@ -10,6 +10,7 @@ import { fromZonedTime } from "date-fns-tz";
 import { BookingConflictError, withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { availableSlots } from "@/lib/waybook/booking";
+import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
@@ -125,8 +126,7 @@ export async function getCalendarAppointment(bookingId: string) {
   `;
   if (!booking) throw new Error("Booking is unavailable.");
   const { teamMemberId, ...detail } = booking;
-  const canManageSchedule = canManageAppointment(permissions, teamMemberId);
-  const [resources, paymentBalance] = await Promise.all([
+  const [resources, paymentBalance, additionalServices] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -134,7 +134,9 @@ export async function getCalendarAppointment(bookingId: string) {
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [],
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
+    getAdditionalAppointmentServices(db, tenant.id, bookingId),
   ]);
+  const canManageSchedule = additionalServices.length === 0 && canManageAppointment(permissions, teamMemberId);
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -160,6 +162,7 @@ export async function getCalendarAppointment(bookingId: string) {
     paymentBalance,
     days,
     slots,
+    additionalServices,
     timezone: tenant.timezone,
   };
 }
@@ -221,7 +224,7 @@ export async function getRescheduleBookingAvailability(input: {
 }) {
   if (!input.bookingId || !/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) return { slots: [] };
   const { tenant, db, booking, permissions } = await editableBooking(input.bookingId);
-  if (!booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) return { slots: [] };
+  if (booking.hasLinkedServices || !booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) return { slots: [] };
   const today = localDateKey(new Date(), tenant.timezone);
   if (input.startDate < today) return { slots: [] };
   const durationMinutes = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
@@ -270,10 +273,11 @@ async function editableBooking(bookingId: string, purpose: "appointment" | "stat
     : await calendarPermissionContext();
   const db = tenantDb(tenant);
   const [booking] = await db<{
-    id: string; bookingBlockId: string; teamMemberId: string | null; resourceId: string | null; serviceId: string; locationId: string; customerEmail: string; status: string; startsAt: Date; endsAt: Date; durationMinutes: number;
+    id: string; bookingBlockId: string; teamMemberId: string | null; resourceId: string | null; serviceId: string; locationId: string; customerEmail: string; status: string; startsAt: Date; endsAt: Date; durationMinutes: number; hasLinkedServices: boolean;
   }[]>`
     SELECT b.id, b.booking_block_id AS "bookingBlockId", b.team_member_id AS "teamMemberId", b.resource_id AS "resourceId", b.service_id AS "serviceId", b.location_id AS "locationId", c.email AS "customerEmail", b.status, b.starts_at AS "startsAt", b.ends_at AS "endsAt",
-      s.duration_minutes AS "durationMinutes"
+      s.duration_minutes AS "durationMinutes",
+      EXISTS (SELECT 1 FROM booking_service_segments segment WHERE segment.tenant_id = b.tenant_id AND segment.booking_id = b.id) AS "hasLinkedServices"
     FROM bookings b JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
     WHERE b.id = ${bookingId} AND b.tenant_id = ${tenant.id} LIMIT 1
   `;
@@ -359,6 +363,7 @@ async function checkCalendarMove(input: CalendarMoveInput): Promise<CalendarMove
     return { error: "Choose a valid staff member and appointment time." };
   }
   const { tenant, db, booking, permissions } = await editableBooking(input.bookingId);
+  if (booking.hasLinkedServices) return { error: "Linked services must be rescheduled together." };
   assertAppointmentPermission(permissions, booking.teamMemberId, input.teamMemberId);
   if (!booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) return { error: "Only confirmed or arrived assigned appointments can be moved." };
   const startsAt = fromZonedTime(input.startsAt, tenant.timezone);
@@ -405,6 +410,7 @@ export async function getCalendarBookingMoveTargets(input: {
       requested.set(`${target.teamMemberId}|${target.startsAt}`, target);
     }
     const { tenant, booking, permissions } = await editableBooking(input.bookingId);
+    if (booking.hasLinkedServices) return { targets: [], error: "Linked services must be rescheduled together." };
     if (!booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) {
       return { targets: [], error: "Only confirmed or arrived assigned appointments can be moved." };
     }
@@ -860,7 +866,38 @@ export async function correctAppointmentPayment(formData: FormData): Promise<Pay
   }
 }
 
-export type ManualBookingState = { error: string | null; success: string | null };
+export type ManualBookingState = {
+  error: string | null;
+  success: string | null;
+  booking?: { id: string; date: string; locationId: string };
+};
+
+type AdditionalServiceInput = { serviceId: string; teamMemberId: string; time: string };
+type AdditionalServiceBooking = {
+  serviceId: string;
+  teamMemberId: string;
+  startsAt: Date;
+  endsAt: Date;
+  priceCents: number;
+  title: string;
+};
+
+function additionalServiceInputs(value: FormDataEntryValue | null): AdditionalServiceInput[] {
+  if (value === null || value === "") return [];
+  if (typeof value !== "string" || value.length > 3000) throw new Error("Choose services, providers, and times for this appointment.");
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { throw new Error("Choose services, providers, and times for this appointment."); }
+  if (!Array.isArray(parsed) || parsed.length > 5) throw new Error("An appointment can include up to six services.");
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  for (const item of parsed) {
+    if (!item || typeof item !== "object" || typeof item.serviceId !== "string" || typeof item.teamMemberId !== "string"
+      || !uuid.test(item.serviceId) || !uuid.test(item.teamMemberId)
+      || typeof item.time !== "string" || (item.time !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.time))) {
+      throw new Error("Choose a service, provider, and time for each row.");
+    }
+  }
+  return parsed;
+}
 
 /** Creates a staff-entered appointment after the same availability and exclusion checks as public booking. */
 async function createManualBookingRecord(formData: FormData) {
@@ -871,6 +908,7 @@ async function createManualBookingRecord(formData: FormData) {
   const localTime = String(formData.get("appointmentTime") ?? "");
   const waitlistEntryId = String(formData.get("waitlistEntryId") ?? "");
   const customerId = String(formData.get("customerId") ?? "");
+  const additionalServices = additionalServiceInputs(formData.get("additionalServices"));
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
@@ -879,6 +917,7 @@ async function createManualBookingRecord(formData: FormData) {
   }
   const { tenant, permissions } = await calendarPermissionContext();
   assertAppointmentPermission(permissions, teamMemberId);
+  for (const extra of additionalServices) assertAppointmentPermission(permissions, extra.teamMemberId);
   if (customerId && (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(customerId)
     || !(permissions.isManager || permissions.canViewClients || permissions.canManageClients))) {
     throw new Error("You cannot select that client.");
@@ -906,9 +945,33 @@ async function createManualBookingRecord(formData: FormData) {
   const candidates = await availableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
   const availableSlot = candidates.find((candidate) => candidate.teamMemberId === teamMemberId)?.slots.find((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime());
   if (!availableSlot) throw new Error("That staff member is not available at the selected time.");
+  const linked: AdditionalServiceBooking[] = [];
+  let previousEnd = endsAt;
+  for (const [index, extra] of additionalServices.entries()) {
+    const [item] = await db<{ title: string; priceCents: number; durationMinutes: number }[]>`
+      SELECT title, price_cents AS "priceCents", duration_minutes AS "durationMinutes"
+      FROM services WHERE tenant_id = ${tenant.id} AND id = ${extra.serviceId} AND is_active
+    `;
+    if (!item) throw new Error(`Service ${index + 2} is no longer available.`);
+    const nextStart = extra.time ? fromZonedTime(`${localDate}T${extra.time}`, tenant.timezone) : previousEnd;
+    const nextEnd = new Date(nextStart.getTime() + item.durationMinutes * 60_000);
+    if (localDateKey(nextStart, tenant.timezone) !== localDate || nextStart < previousEnd
+      || (extra.time && localDateTimeKey(nextStart, tenant.timezone) !== `${localDate}T${extra.time}`)) {
+      throw new Error(`${item.title} must start on the appointment date, after the preceding service.`);
+    }
+    const providers = await availableSlots(tenant, extra.serviceId, nextStart, nextEnd, { locationId, slotInterval: 1 });
+    if (!providers.find((provider) => provider.teamMemberId === extra.teamMemberId)?.slots.some((slot) =>
+      new Date(slot.startTime).getTime() === nextStart.getTime() && new Date(slot.endTime).getTime() === nextEnd.getTime(),
+    )) {
+      throw new Error(`${item.title} is unavailable with that provider at ${localDateTimeKey(nextStart, tenant.timezone).slice(11)}. Choose another time or provider.`);
+    }
+    linked.push({ ...extra, startsAt: nextStart, endsAt: nextEnd, priceCents: item.priceCents, title: item.title });
+    previousEnd = nextEnd;
+  }
   const identity = await requireIdentity();
+  let bookingId: string;
   try {
-    await withSerializableRetry(async () => db.begin(async (transaction) => {
+    bookingId = await withSerializableRetry(async () => db.begin(async (transaction) => {
       const [waitlistCustomer] = waitlistEntryId ? await transaction.unsafe<{ id: string }[]>(`
         UPDATE waitlist_entries SET status='booked', updated_at=now()
         WHERE tenant_id=$1 AND id=$2 AND service_id=$3 AND location_id=$4
@@ -935,12 +998,30 @@ async function createManualBookingRecord(formData: FormData) {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'confirmed', 'tenant')
         RETURNING id
       `, [tenant.id, block.id, service.id, locationId, teamMemberId, null, customer.id, startsAt, endsAt, service.priceCents]);
+      for (const [index, extra] of linked.entries()) {
+        try {
+          const [reservation] = await transaction.unsafe<{ id: string }[]>(`
+            INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+            VALUES ($1, $2, $3, $4, $5, 'confirmed') RETURNING id
+          `, [tenant.id, extra.teamMemberId, locationId, extra.startsAt, extra.endsAt]);
+          await transaction.unsafe(`
+            INSERT INTO booking_service_segments (tenant_id, booking_id, booking_block_id, service_id, position, booked_price_cents)
+            VALUES ($1, $2, $3, $4, $5, $6)
+          `, [tenant.id, booking.id, reservation.id, extra.serviceId, index + 2, extra.priceCents]);
+        } catch (error) {
+          if (error && typeof error === "object" && "code" in error && error.code === "23P01") {
+            throw new Error(`${extra.title} was just taken. Choose another time or provider.`);
+          }
+          throw error;
+        }
+      }
       if (waitlistEntryId) await transaction.unsafe(
         "INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'waitlist.booked', 'waitlist_entry', $3, $4::jsonb)",
         [tenant.id, identity.id, waitlistEntryId, JSON.stringify({ status: "booked", bookingId: booking.id })],
       );
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, 'booking.created_by_tenant', $4::jsonb)", [tenant.id, booking.id, identity.id, JSON.stringify({ source: "tenant" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking.created_by_tenant', 'booking', $3, $4::jsonb)", [tenant.id, identity.id, booking.id, JSON.stringify({ source: "tenant" })]);
+      return booking.id;
     }));
   } catch (error) {
     if (error instanceof BookingConflictError) throw new Error("That time was just taken. Choose another time.");
@@ -948,13 +1029,14 @@ async function createManualBookingRecord(formData: FormData) {
   }
   revalidateCalendars();
   if (waitlistEntryId) revalidatePath("/app/waitlist");
+  return { id: bookingId, date: localDate, locationId };
 }
 
 /** Expected validation and availability failures stay inside the calendar form rather than becoming a page error. */
 export async function createManualBooking(_previousState: ManualBookingState, formData: FormData): Promise<ManualBookingState> {
   try {
-    await createManualBookingRecord(formData);
-    return { error: null, success: "Appointment confirmed and added to the calendar." };
+    const booking = await createManualBookingRecord(formData);
+    return { error: null, success: "Appointment confirmed and added to the calendar.", booking };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not confirm this appointment.", success: null };
   }
