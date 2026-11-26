@@ -1,6 +1,7 @@
 import { googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { startGoogleSignIn } from "./google-actions";
 import { login } from "./actions";
+import { PasswordField } from "./password-field";
 
 export default async function Login({
   searchParams,
@@ -27,8 +28,9 @@ export default async function Login({
             {access === "unavailable" ? <p className="waybook-login-error" role="alert">Your staff profile is unavailable. Ask your workspace owner to check your access.</p> : null}
             <form action={login} className="waybook-login">
               <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>
-              <div className="waybook-login-password">
-                <label>Password<input name="password" type="password" autoComplete="current-password" placeholder="Enter your password" required /></label>
+              <PasswordField />
+              <div className="waybook-login-options">
+                <label><input name="rememberMe" type="checkbox" />Remember me</label>
                 <a href="/login?reset=1">Forgot password?</a>
               </div>
               {error ? <span className="waybook-login-error" role="alert">Invalid email or password.</span> : null}
@@ -36,7 +38,10 @@ export default async function Login({
             </form>
             {googleAvailable ? (
               <form action={startGoogleSignIn} className="waybook-login-providers">
-                <button type="submit">Continue with Google</button>
+                <button type="submit">
+                  <img src="/brand/google-g.png" width="18" height="18" alt="" />
+                  Continue with Google
+                </button>
               </form>
             ) : null}
           </div>

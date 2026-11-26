@@ -36,22 +36,28 @@ export const currentIdentity = cache(async (): Promise<Identity | null> => {
   return rows[0] ?? null;
 });
 
-export async function signIn(email: string, password: string) {
+export async function signIn(email: string, password: string, rememberMe: boolean) {
   const rows = await controlDb<Array<Identity & { passwordHash: string }>>`
     SELECT id, email, display_name AS "displayName", is_platform_admin AS "isPlatformAdmin", password_hash AS "passwordHash"
     FROM identities WHERE email = ${email.toLowerCase().trim()} LIMIT 1
   `;
   const identity = rows[0];
   if (!identity || !passwordMatches(password, identity.passwordHash)) return false;
-  await createWaybookSession(identity.id);
+  await createWaybookSession(identity.id, rememberMe);
   return true;
 }
 
 /** Issues the same revocable application session after either sign-in path. */
-export async function createWaybookSession(identityId: string) {
+export async function createWaybookSession(identityId: string, persistent = true) {
   const token = randomBytes(32).toString("base64url");
   await controlDb`INSERT INTO sessions (identity_id, token_hash, expires_at) VALUES (${identityId}, ${hash(token)}, now() + interval '12 hours')`;
-  (await cookies()).set(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 12 });
+  (await cookies()).set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    ...(persistent ? { maxAge: 60 * 60 * 12 } : {}),
+  });
 }
 
 export async function signOut() {

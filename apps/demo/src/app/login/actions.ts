@@ -6,6 +6,7 @@ import { signIn } from "@/lib/waybook/auth";
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  if (!(await signIn(email, password))) redirect("/login?error=invalid");
+  const rememberMe = formData.get("rememberMe") === "on";
+  if (!(await signIn(email, password, rememberMe))) redirect("/login?error=invalid");
   redirect("/");
 }
