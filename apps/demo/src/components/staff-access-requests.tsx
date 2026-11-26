@@ -10,7 +10,7 @@ export async function StaffAccessRequests({ tenant }: { tenant: TenantRecord }) 
       <div className="waybook-section-heading">
         <div>
           <h2 id="staff-access-requests-title">Staff access requests</h2>
-          <p>Check each request. Granting access creates a one-time invitation for you to share.</p>
+          <p>Check each request. Granting access emails the staff member a one-time invitation to set their password.</p>
         </div>
       </div>
       <ul>

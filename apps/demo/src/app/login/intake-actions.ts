@@ -1,11 +1,12 @@
 "use server";
 
-import { headers } from "next/headers";
+import { randomBytes } from "node:crypto";
+import { cookies, headers } from "next/headers";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { submitStaffAccessRequest } from "@/lib/waybook/staff-access-requests";
 import { tenantForPublicRequest } from "@/lib/waybook/tenant-context";
 
-type IntakeState = { submitted?: boolean; error?: string };
+type IntakeState = { submitted?: boolean; invitationSent?: boolean; error?: string };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function text(formData: FormData, field: string) {
@@ -28,8 +29,16 @@ export async function requestStaffAccess(_: IntakeState, formData: FormData): Pr
     if (!tenant || !(await isFeatureEnabled(tenant.id, "team"))) {
       return { error: "Staff access requests are unavailable for this workspace." };
     }
-    const saved = await submitStaffAccessRequest(tenant, { name, email, phone });
-    return saved ? { submitted: true } : { error: "Please try again later or contact your workspace owner." };
+    const cookieJar = await cookies();
+    const key = `waybook_staff_receipt_${tenant.id}`;
+    const savedReceipt = cookieJar.get(key)?.value;
+    const receipt = savedReceipt && /^[\w-]{43}$/.test(savedReceipt) ? savedReceipt : randomBytes(32).toString("base64url");
+    const saved = await submitStaffAccessRequest(tenant, { name, email, phone }, receipt);
+    if (saved === "limited") return { error: "Please try again later or contact your workspace owner." };
+    cookieJar.set(key, receipt, {
+      httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 7 * 24 * 60 * 60,
+    });
+    return { submitted: true, invitationSent: saved === "emailed" };
   } catch {
     return { error: "We couldn’t save your request. Try again or contact your workspace owner." };
   }

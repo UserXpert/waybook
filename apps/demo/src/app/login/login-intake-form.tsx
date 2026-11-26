@@ -7,15 +7,20 @@ const categories = ["Salons and beauty", "Trades and services", "Restaurants and
 
 export function LoginIntakeForm({ staff, loginPath }: { staff: boolean; loginPath: string }) {
   const [state, action, pending] = useActionState(staff ? requestStaffAccess : joinBusinessWaitlist, {});
+  const confirmation = staff
+    ? state.invitationSent ? "Your invitation has been emailed. Check your work inbox and spam folder for the link."
+      : "Request received. If you’ve already been invited, check your work inbox and spam folder."
+    : "You’re on the waitlist. We’ll contact you about early access.";
   return (
     <>
       <h1 id="login-title">{staff ? "Request staff access" : "Sign up for early access"}</h1>
       <p className="waybook-login-intro">
-        {staff ? "Your workspace owner will review your request." : "Join the waitlist for your business."}
+        {staff ? state.invitationSent ? "Your workspace owner approved your request."
+          : "Your workspace owner will review your request." : "Join the waitlist for your business."}
       </p>
       {state.submitted ? (
         <p className="waybook-login-notice" role="status">
-          {staff ? "Request received. Your workspace owner can now review it." : "You’re on the waitlist. We’ll contact you about early access."}
+          {confirmation}
         </p>
       ) : (
         <form action={action} className="waybook-login waybook-login-intake">
