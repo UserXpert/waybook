@@ -11,6 +11,7 @@ import { BookingConflictError, withSerializableRetry } from "@/lib/waybook/trans
 import { requireIdentity } from "@/lib/waybook/auth";
 import { availableSlots } from "@/lib/waybook/booking";
 import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
+import { getAppointmentReservations, linkedAppointmentOpenings } from "@/lib/waybook/linked-appointment-schedule";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
@@ -136,7 +137,7 @@ export async function getCalendarAppointment(bookingId: string) {
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
     getAdditionalAppointmentServices(db, tenant.id, bookingId),
   ]);
-  const canManageSchedule = additionalServices.length === 0 && canManageAppointment(permissions, teamMemberId);
+  const canManageSchedule = canManageAppointment(permissions, teamMemberId, ...additionalServices.map((item) => item.teamMemberId));
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -224,9 +225,19 @@ export async function getRescheduleBookingAvailability(input: {
 }) {
   if (!input.bookingId || !/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) return { slots: [] };
   const { tenant, db, booking, permissions } = await editableBooking(input.bookingId);
-  if (booking.hasLinkedServices || !booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) return { slots: [] };
+  if (!booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) return { slots: [] };
   const today = localDateKey(new Date(), tenant.timezone);
   if (input.startDate < today) return { slots: [] };
+  if (booking.hasLinkedServices) {
+    const reservations = await getAppointmentReservations(db, tenant.id, booking.id);
+    assertAppointmentPermission(permissions, ...reservations.map((item) => item.teamMemberId));
+    const endDate = new Date(`${input.startDate}T12:00:00Z`);
+    if (!Number.isFinite(endDate.getTime())) return { slots: [] };
+    endDate.setUTCDate(endDate.getUTCDate() + 7);
+    const from = fromZonedTime(`${input.startDate}T00:00:00`, tenant.timezone);
+    const until = fromZonedTime(`${endDate.toISOString().slice(0, 10)}T00:00:00`, tenant.timezone);
+    return { slots: await linkedAppointmentOpenings(db, tenant, booking.locationId, reservations, from, until, 30) };
+  }
   const durationMinutes = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
   if (durationMinutes <= 0) return { slots: [] };
   const locationHours = await db<{ dayOfWeek: number; startTime: string; endTime: string }[]>`
@@ -289,7 +300,10 @@ async function editableBooking(bookingId: string, purpose: "appointment" | "stat
       throw new Error("You do not have permission to change appointment status.");
     }
   } else {
-    assertAppointmentPermission(permissions, booking.teamMemberId);
+    const reservations = booking.hasLinkedServices && !permissions.isManager && !permissions.canManageTeamAppointments
+      ? await getAppointmentReservations(db, tenant.id, booking.id)
+      : [];
+    assertAppointmentPermission(permissions, booking.teamMemberId, ...reservations.map((item) => item.teamMemberId));
   }
   return { tenant, db, booking, permissions };
 }
@@ -522,7 +536,7 @@ export async function updateBookingDetails(formData: FormData): Promise<BookingD
   return { error: null };
 }
 
-export async function rescheduleBooking(formData: FormData) {
+async function rescheduleBookingRecord(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   const localStartsAt = String(formData.get("startsAt") ?? "");
   const teamMemberId = String(formData.get("teamMemberId") ?? "");
@@ -530,20 +544,53 @@ export async function rescheduleBooking(formData: FormData) {
   const initial = await editableBooking(bookingId);
   if (!initial.booking.teamMemberId || !isMovableAppointmentStatus(initial.booking.status)) throw new Error("Only confirmed or arrived assigned appointments can be rescheduled.");
   const nextTeamMemberId = teamMemberId || initial.booking.teamMemberId;
-  const move = await checkCalendarMove({ bookingId, startsAt: localStartsAt, teamMemberId: nextTeamMemberId });
-  if (move.error || !move.context || !move.startsAt || !move.endsAt) throw new Error(move.error ?? "That appointment can no longer be moved.");
-  const { tenant, db, booking } = move.context;
-  const { startsAt, endsAt } = move;
+  const move = initial.booking.hasLinkedServices
+    ? {
+        error: null, context: initial, startsAt: fromZonedTime(localStartsAt, initial.tenant.timezone),
+        endsAt: undefined,
+      }
+    : await checkCalendarMove({ bookingId, startsAt: localStartsAt, teamMemberId: nextTeamMemberId });
+  if (move.error || !move.context || !move.startsAt) throw new Error(move.error ?? "That appointment can no longer be moved.");
+  const { tenant, db, booking, permissions } = move.context;
+  const { startsAt } = move;
+  if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() < Date.now() || localDateTimeKey(startsAt, tenant.timezone) !== localStartsAt) {
+    throw new Error("Choose a valid future appointment time.");
+  }
+  const endsAt = move.endsAt ?? new Date(startsAt.getTime() + booking.endsAt.getTime() - booking.startsAt.getTime());
   try {
     const outboxId = await withSerializableRetry(async () => db.begin(async (transaction) => {
+      if (booking.hasLinkedServices) await transaction.unsafe("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
       // Keep the block/booking lock order aligned with status changes. The status
       // is re-read after the locks so a final transition after preflight wins.
       const [block] = await transaction.unsafe<{ state: string }[]>("SELECT state FROM booking_blocks WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.bookingBlockId, tenant.id]);
       if (!block || block.state !== "confirmed") throw new Error("Booking can no longer be rescheduled.");
-      const [current] = await transaction.unsafe<{ status: string }[]>("SELECT status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
+      const [current] = await transaction.unsafe<{ status: string; startsAt: Date }[]>('SELECT status, starts_at AS "startsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [booking.id, tenant.id]);
       if (!current) throw new Error("Booking is unavailable.");
       assertMovableAppointmentStatus(current.status);
-      await transaction.unsafe("UPDATE booking_blocks SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.bookingBlockId, tenant.id]);
+      const expectedStart = formData.get("expectedStartsAt");
+      if ((expectedStart && current.startsAt.toISOString() !== expectedStart) || current.startsAt.getTime() !== booking.startsAt.getTime()) {
+        throw new Error("This appointment has moved. Reopen it to see the latest schedule.");
+      }
+      if (booking.hasLinkedServices) {
+        if (nextTeamMemberId !== booking.teamMemberId) throw new Error("Rescheduling keeps the provider assigned to each service.");
+        const connection = transaction as unknown as typeof db;
+        const reservations = await getAppointmentReservations(connection, tenant.id, booking.id);
+        assertAppointmentPermission(permissions, ...reservations.map((item) => item.teamMemberId));
+        const openings = await linkedAppointmentOpenings(connection, tenant, booking.locationId, reservations, startsAt, new Date(startsAt.getTime() + 1), 1);
+        if (!openings.length) throw new Error("That time is no longer available for every service. Choose another time.");
+        const delta = startsAt.getTime() - current.startsAt.getTime();
+        const ids = reservations.map(({ id }) => id);
+        // All original blocks must leave the exclusion constraint together before
+        // re-entering it, because a small move can overlap the adjacent old block.
+        await transaction.unsafe("UPDATE booking_blocks SET state = 'released' WHERE tenant_id = $1 AND id = ANY($2::uuid[])", [tenant.id, ids]);
+        await transaction.unsafe(`
+          UPDATE booking_blocks SET starts_at = starts_at + ($1::bigint * interval '1 millisecond'),
+            ends_at = ends_at + ($1::bigint * interval '1 millisecond'), state = 'confirmed'
+          WHERE tenant_id = $2 AND id = ANY($3::uuid[])
+        `, [delta, tenant.id, ids]);
+      } else {
+        await transaction.unsafe("UPDATE booking_blocks SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.bookingBlockId, tenant.id]);
+      }
       await transaction.unsafe("UPDATE bookings SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL, updated_at = now() WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.id, tenant.id]);
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.rescheduled', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.rescheduled', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
@@ -557,6 +604,15 @@ export async function rescheduleBooking(formData: FormData) {
     throw error;
   }
   revalidateCalendars();
+}
+
+export async function rescheduleBooking(formData: FormData): Promise<{ error: string | null }> {
+  try {
+    await rescheduleBookingRecord(formData);
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not reschedule this appointment. Choose another time." };
+  }
 }
 
 /** Moves an appointment from a calendar drag gesture, including an eligible staff reassignment. */

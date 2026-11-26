@@ -2,8 +2,8 @@ import "server-only";
 import type { Sql } from "postgres";
 
 export async function getAdditionalAppointmentServices(db: Sql, tenantId: string, bookingId: string) {
-  const rows = await db<{ id: string; title: string; priceCents: number; provider: string | null; startsAt: Date; endsAt: Date }[]>`
-    SELECT segment.id, service.title, segment.booked_price_cents AS "priceCents", member.name AS provider,
+  const rows = await db<{ id: string; title: string; priceCents: number; provider: string | null; teamMemberId: string | null; startsAt: Date; endsAt: Date }[]>`
+    SELECT segment.id, service.title, segment.booked_price_cents AS "priceCents", member.name AS provider, block.team_member_id AS "teamMemberId",
       block.starts_at AS "startsAt", block.ends_at AS "endsAt"
     FROM booking_service_segments segment
     JOIN services service ON service.tenant_id = segment.tenant_id AND service.id = segment.service_id

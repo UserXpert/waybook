@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { fromZonedTime } from "date-fns-tz";
 import postgres from "postgres";
 
-test("book two services with separate providers and settle one sale", async ({ page }) => {
+test("book and move two services with separate providers and settle one sale", async ({ page }) => {
   page.setDefaultTimeout(8000);
   const database = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
   const url = new URL(database);
@@ -80,6 +80,28 @@ test("book two services with separate providers and settle one sale", async ({ p
     await expect(page).toHaveURL((url) => url.searchParams.get("booking") === booking.id && !url.searchParams.has("create"));
     const saved = page.getByRole("complementary", { name: `Appointment with ${clientName}` });
     await expect(saved.getByText(second.title, { exact: true })).toBeVisible();
+    const schedule = saved.locator("section").filter({ has: page.getByRole("heading", { name: "Reschedule", exact: true }) });
+    await expect(schedule.getByText("All services move together with their assigned providers.")).toBeVisible();
+    await schedule.locator(".appointment-reschedule-picker__day").filter({ hasText: new RegExp(`${day.slice(-2)}$`) }).click();
+    await schedule.getByRole("button", { name: "11:00", exact: true }).click();
+
+    const [laterBlock] = await sql`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+      VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("11:45")}, ${time("12:15")}, 'confirmed') RETURNING id`;
+    const move = schedule.getByRole("button", { name: "Reschedule appointment" });
+    await move.click();
+    await expect(schedule.getByRole("alert")).toHaveText("That time is no longer available for every service. Choose another time.");
+    const positions = () => sql`
+      SELECT b.starts_at, block.starts_at AS added_start, block.team_member_id AS added_provider
+      FROM bookings b JOIN booking_service_segments segment ON segment.tenant_id=b.tenant_id AND segment.booking_id=b.id
+      JOIN booking_blocks block ON block.tenant_id=segment.tenant_id AND block.id=segment.booking_block_id
+      WHERE b.tenant_id=${tenantId} AND b.id=${booking.id}
+    `;
+    expect((await positions())[0]).toEqual({ starts_at: time("10:00"), added_start: time("10:45"), added_provider: secondary.id });
+    await sql`UPDATE booking_blocks SET state='released' WHERE tenant_id=${tenantId} AND id=${laterBlock.id}`;
+    await move.click();
+    await expect(saved.getByText(new RegExp(`11:45–12:15 · ${secondary.name}`))).toBeVisible();
+    expect((await positions())[0]).toEqual({ starts_at: time("11:00"), added_start: time("11:45"), added_provider: secondary.id });
+
     await saved.getByRole("button", { name: "Close appointment", exact: true }).click();
     const segments = page.getByRole("link").filter({ hasText: clientName });
     await expect(segments).toHaveCount(2);

@@ -617,7 +617,9 @@ export default async function CalendarsPage({
   const rescheduleDays = Array.from({ length: 7 }, (_, index) =>
     addDays(localDateKey(new Date(), tenant.timezone), index),
   );
-  const canManageBookingSchedule = Boolean(selectedBooking && additionalServices.length === 0 && canManageSchedule(selectedBooking.teamMemberId));
+  const canManageBookingSchedule = Boolean(selectedBooking && canManageAppointment(
+    permissions, selectedBooking.teamMemberId, ...additionalServices.map((item) => item.teamMemberId),
+  ));
   const rescheduleSlots = canManageBookingSchedule && selectedBooking && isMovableAppointmentStatus(selectedBooking.status)
     ? (await getRescheduleBookingAvailability({ bookingId: selectedBooking.id, startDate: rescheduleDays[0] })).slots
     : [];
