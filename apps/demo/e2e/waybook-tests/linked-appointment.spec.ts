@@ -23,8 +23,8 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     const [{ tenantId, timezone, day }] = await sql<{ tenantId: string; timezone: string; day: string }[]>`
       SELECT tenant_id AS "tenantId", timezone, ((now() AT TIME ZONE timezone)::date + 3)::text AS day FROM tenant_settings LIMIT 1
     `;
-    const [location] = await sql`INSERT INTO locations (tenant_id, slug, name, timezone)
-      VALUES (${tenantId}, ${`linked-${tag}`}, ${`Linked studio ${tag}`}, ${timezone}) RETURNING id`;
+    const [location] = await sql`INSERT INTO locations (tenant_id, slug, name, timezone, is_online_bookable)
+      VALUES (${tenantId}, ${`linked-${tag}`}, ${`Linked studio ${tag}`}, ${timezone}, FALSE) RETURNING id`;
     const [first, second, replacement] = await sql`INSERT INTO services (tenant_id, slug, title, duration_minutes, price_cents)
       VALUES (${tenantId}, ${`first-${tag}`}, ${`First treatment ${tag}`}, 45, 7000),
              (${tenantId}, ${`second-${tag}`}, ${`Second treatment ${tag}`}, 30, 3000),
@@ -45,6 +45,10 @@ test("book, move, pay, and scope the provider view of linked services", async ({
       SELECT ${tenantId}, member, 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU', '09:00', '17:00', ${timezone}
       FROM unnest(${providers}::uuid[]) AS member`;
     const time = (clock: string) => fromZonedTime(`${day}T${clock}`, timezone);
+    const publicAvailability = await page.request.get("/nordic/api/public/availability", { params: {
+      service: first.id, location: location.id, start: time("09:00").toISOString(), end: time("17:00").toISOString(),
+    } });
+    expect(publicAvailability.status()).toBe(422);
     const [competingBlock] = await sql`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
       VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("10:45")}, ${time("11:15")}, 'confirmed') RETURNING id`;
 

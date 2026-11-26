@@ -13,8 +13,10 @@ export { isSlotWithinLocationHours };
 
 type Service = { id: string; durationMinutes: number };
 type Location = { id: string; timezone: string };
-async function resolvedLocation(tenant: TenantRecord, requestedId?: string, db = tenantDb(tenant)) {
-  const rows = requestedId ? await db<Location[]>`SELECT id, timezone FROM locations WHERE tenant_id=${tenant.id} AND id=${requestedId} AND is_active=TRUE AND is_online_bookable=TRUE` : await db<Location[]>`SELECT id, timezone FROM locations WHERE tenant_id=${tenant.id} AND slug='primary' AND is_active=TRUE AND is_online_bookable=TRUE LIMIT 1`;
+async function resolvedLocation(tenant: TenantRecord, requestedId?: string, db = tenantDb(tenant), onlineOnly = true) {
+  const target = requestedId ? db`id = ${requestedId}` : db`slug = 'primary'`;
+  const rows = await db<Location[]>`SELECT id, timezone FROM locations
+    WHERE tenant_id = ${tenant.id} AND ${target} AND is_active AND (${!onlineOnly} OR is_online_bookable) LIMIT 1`;
   if (!rows[0]) throw new Error("Location is unavailable.");
   return rows[0];
 }
@@ -23,10 +25,20 @@ async function resolvedLocationId(tenant: TenantRecord, requestedId?: string) {
   return (await resolvedLocation(tenant, requestedId)).id;
 }
 
-/** Calculates tenant-scoped slots from persisted services, schedules, bookings, and active holds. */
-export async function availableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options?: { excludeBookingBlockId?: string; excludeBookingBlockIds?: string[]; teamMemberId?: string; locationId?: string; slotInterval?: number; durationMinutes?: number }, db = tenantDb(tenant)) {
+type SlotOptions = { excludeBookingBlockId?: string; excludeBookingBlockIds?: string[]; teamMemberId?: string; locationId?: string; slotInterval?: number; durationMinutes?: number };
+
+export function availableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options?: SlotOptions, db = tenantDb(tenant)) {
+  return calculateAvailableSlots(tenant, serviceSlug, startsAt, endsAt, options, db, true);
+}
+
+/** Use after checking the operator's calendar or waitlist permissions. */
+export function staffAvailableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options: SlotOptions & { locationId: string }, db = tenantDb(tenant)) {
+  return calculateAvailableSlots(tenant, serviceSlug, startsAt, endsAt, options, db, false);
+}
+
+async function calculateAvailableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options: SlotOptions | undefined, db: ReturnType<typeof tenantDb>, onlineOnly: boolean) {
   const [location, [service]] = await Promise.all([
-    resolvedLocation(tenant, options?.locationId, db),
+    resolvedLocation(tenant, options?.locationId, db, onlineOnly),
     db<Service[]>`SELECT id, duration_minutes AS "durationMinutes" FROM services WHERE tenant_id = ${tenant.id} AND (slug = ${serviceSlug} OR id::text = ${serviceSlug}) AND is_active = true LIMIT 1`,
   ]);
   const locationId = location.id;
