@@ -9,11 +9,13 @@ import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellati
 import { fromZonedTime } from "date-fns-tz";
 import { BookingConflictError, withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
 import { requireIdentity } from "@/lib/waybook/auth";
-import { availableSlots } from "@/lib/waybook/booking";
+import { staffAvailableSlots } from "@/lib/waybook/booking";
+import { appointmentHasSettlement, calendarBookingVisibility, getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
+import { getAppointmentReservations, linkedAppointmentOpenings } from "@/lib/waybook/linked-appointment-schedule";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
-import { canManageAppointment, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 import {
   assertMovableAppointmentStatus,
@@ -108,25 +110,25 @@ function localDateTimeKey(date: Date, timezone: string) {
 
 /** Load one visible appointment without rebuilding the calendar. */
 export async function getCalendarAppointment(bookingId: string) {
-  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) throw new Error("Booking is unavailable.");
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) return null;
   const { tenant, permissions } = await calendarPermissionContext();
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
-  if (!canViewTeam && !permissions.teamMemberId) throw new Error("You do not have permission to view this calendar.");
+  if (!canViewTeam && !permissions.teamMemberId) return null;
   const db = tenantDb(tenant);
-  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string; teamMemberId: string }[]>`
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
     SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
       bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,
-      c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId"
+      c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId",
+      b.updated_at::text AS revision, b.booked_price_cents AS "priceCents", ${appointmentHasSettlement(db)} AS "hasSettlement"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
     JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
-    JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
+    LEFT JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
     LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
-    WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND (${canViewTeam} OR b.team_member_id=${permissions.teamMemberId ?? null}::uuid) LIMIT 1
+    WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND ${calendarBookingVisibility(db, canViewTeam, permissions.teamMemberId)} LIMIT 1
   `;
-  if (!booking) throw new Error("Booking is unavailable.");
-  const { teamMemberId, ...detail } = booking;
-  const canManageSchedule = canManageAppointment(permissions, teamMemberId);
-  const [resources, paymentBalance] = await Promise.all([
+  if (!booking) return null;
+  const { teamMemberId, revision, priceCents, hasSettlement, ...detail } = booking;
+  const [resources, paymentBalance, additionalServices] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -134,7 +136,18 @@ export async function getCalendarAppointment(bookingId: string) {
     WHERE r.tenant_id=${tenant.id} AND r.is_active=TRUE ORDER BY r.name
   ` : [],
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
+    getAdditionalAppointmentServices(db, tenant.id, bookingId),
   ]);
+  const providers = [teamMemberId, ...additionalServices.map((item) => item.teamMemberId)];
+  const ownSegment = !canViewTeam && teamMemberId !== permissions.teamMemberId
+    ? additionalServices.find((item) => item.teamMemberId === permissions.teamMemberId)
+    : undefined;
+  if (!canViewTeam && teamMemberId !== permissions.teamMemberId && !ownSegment) return null;
+  const visibleAdditionalServices = additionalServices
+    .filter((item) => item.id !== ownSegment?.id && (canViewTeam || item.teamMemberId === permissions.teamMemberId))
+    .map(({ id, provider, title, startsAt, endsAt }) => ({ id, provider, title, startsAt, endsAt }));
+  const canManageSchedule = canManageAppointment(permissions, ...providers) &&
+    (canViewTeam || providers.length === 1 || providers.every((id) => id === permissions.teamMemberId));
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -150,16 +163,24 @@ export async function getCalendarAppointment(bookingId: string) {
     resourceId: permissions.isManager ? booking.resourceId : null,
     serviceId: permissions.isManager ? booking.serviceId : "",
     locationId: permissions.isManager ? booking.locationId : "",
-    startsAt: booking.startsAt.toISOString(),
-    endsAt: booking.endsAt.toISOString(),
+    serviceTitle: ownSegment?.title ?? booking.serviceTitle,
+    teamMemberName: ownSegment?.provider ?? booking.teamMemberName ?? "",
+    startsAt: ownSegment?.startsAt ?? booking.startsAt.toISOString(),
+    endsAt: ownSegment?.endsAt ?? booking.endsAt.toISOString(),
     canManage: permissions.isManager,
     canManageSchedule,
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
-    canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
+    canUpdateStatus: canUpdateAppointmentAttendance(permissions, providers),
     resources,
     paymentBalance,
     days,
     slots,
+    additionalServices: visibleAdditionalServices,
+    serviceEditor: permissions.isManager && !hasSettlement && isMovableAppointmentStatus(booking.status)
+      ? { revision, primary: { id: null, serviceId: booking.serviceId, title: booking.serviceTitle, teamMemberId,
+          provider: booking.teamMemberName, startsAt: booking.startsAt.toISOString(), endsAt: booking.endsAt.toISOString(), priceCents },
+        additional: additionalServices }
+      : null,
     timezone: tenant.timezone,
   };
 }
@@ -184,7 +205,7 @@ export async function getManualBookingAvailability(input: {
   }
   const db = tenantDb(tenant);
   const dayStart = fromZonedTime(`${input.date}T00:00:00`, tenant.timezone);
-  const candidates = await availableSlots(
+  const candidates = await staffAvailableSlots(
     tenant,
     input.serviceId,
     new Date(dayStart.getTime() - 86_400_000),
@@ -224,6 +245,16 @@ export async function getRescheduleBookingAvailability(input: {
   if (!booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) return { slots: [] };
   const today = localDateKey(new Date(), tenant.timezone);
   if (input.startDate < today) return { slots: [] };
+  if (booking.hasLinkedServices) {
+    const reservations = await getAppointmentReservations(db, tenant.id, booking.id);
+    assertAppointmentPermission(permissions, ...reservations.map((item) => item.teamMemberId));
+    const endDate = new Date(`${input.startDate}T12:00:00Z`);
+    if (!Number.isFinite(endDate.getTime())) return { slots: [] };
+    endDate.setUTCDate(endDate.getUTCDate() + 7);
+    const from = fromZonedTime(`${input.startDate}T00:00:00`, tenant.timezone);
+    const until = fromZonedTime(`${endDate.toISOString().slice(0, 10)}T00:00:00`, tenant.timezone);
+    return { slots: await linkedAppointmentOpenings(db, tenant, booking.locationId, reservations, from, until, 30) };
+  }
   const durationMinutes = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
   if (durationMinutes <= 0) return { slots: [] };
   const locationHours = await db<{ dayOfWeek: number; startTime: string; endTime: string }[]>`
@@ -270,22 +301,31 @@ async function editableBooking(bookingId: string, purpose: "appointment" | "stat
     : await calendarPermissionContext();
   const db = tenantDb(tenant);
   const [booking] = await db<{
-    id: string; bookingBlockId: string; teamMemberId: string | null; resourceId: string | null; serviceId: string; locationId: string; customerEmail: string; status: string; startsAt: Date; endsAt: Date; durationMinutes: number;
+    id: string; bookingBlockId: string; teamMemberId: string | null; resourceId: string | null; serviceId: string; locationId: string; customerEmail: string; status: string; startsAt: Date; endsAt: Date; durationMinutes: number; hasLinkedServices: boolean;
   }[]>`
     SELECT b.id, b.booking_block_id AS "bookingBlockId", b.team_member_id AS "teamMemberId", b.resource_id AS "resourceId", b.service_id AS "serviceId", b.location_id AS "locationId", c.email AS "customerEmail", b.status, b.starts_at AS "startsAt", b.ends_at AS "endsAt",
-      s.duration_minutes AS "durationMinutes"
+      s.duration_minutes AS "durationMinutes",
+      EXISTS (SELECT 1 FROM booking_service_segments segment WHERE segment.tenant_id = b.tenant_id AND segment.booking_id = b.id) AS "hasLinkedServices"
     FROM bookings b JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
     WHERE b.id = ${bookingId} AND b.tenant_id = ${tenant.id} LIMIT 1
   `;
   if (!booking) throw new Error("Booking is unavailable.");
+  const linkedProviders = booking.hasLinkedServices && !permissions.isManager
+    ? (await getAppointmentReservations(db, tenant.id, booking.id)).filter((item) => item.position > 1).map((item) => item.teamMemberId)
+    : [];
+  const providers = [booking.teamMemberId, ...linkedProviders];
   if (purpose === "manager") {
     // The tenant role check above is the authorization boundary for payments.
   } else if (purpose === "status") {
-    if (!permissions.isManager && !permissions.canUpdateAppointmentStatus) {
+    if (!canUpdateAppointmentAttendance(permissions, providers)) {
       throw new Error("You do not have permission to change appointment status.");
     }
   } else {
-    assertAppointmentPermission(permissions, booking.teamMemberId);
+    if (booking.hasLinkedServices && !permissions.isManager && !permissions.canViewTeamCalendar
+      && providers.some((id) => id !== permissions.teamMemberId)) {
+      throw new Error("You do not have permission to change this appointment.");
+    }
+    assertAppointmentPermission(permissions, ...providers);
   }
   return { tenant, db, booking, permissions };
 }
@@ -359,6 +399,7 @@ async function checkCalendarMove(input: CalendarMoveInput): Promise<CalendarMove
     return { error: "Choose a valid staff member and appointment time." };
   }
   const { tenant, db, booking, permissions } = await editableBooking(input.bookingId);
+  if (booking.hasLinkedServices) return { error: "Linked services must be rescheduled together." };
   assertAppointmentPermission(permissions, booking.teamMemberId, input.teamMemberId);
   if (!booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) return { error: "Only confirmed or arrived assigned appointments can be moved." };
   const startsAt = fromZonedTime(input.startsAt, tenant.timezone);
@@ -405,6 +446,7 @@ export async function getCalendarBookingMoveTargets(input: {
       requested.set(`${target.teamMemberId}|${target.startsAt}`, target);
     }
     const { tenant, booking, permissions } = await editableBooking(input.bookingId);
+    if (booking.hasLinkedServices) return { targets: [], error: "Linked services must be rescheduled together." };
     if (!booking.teamMemberId || !isMovableAppointmentStatus(booking.status)) {
       return { targets: [], error: "Only confirmed or arrived assigned appointments can be moved." };
     }
@@ -516,7 +558,7 @@ export async function updateBookingDetails(formData: FormData): Promise<BookingD
   return { error: null };
 }
 
-export async function rescheduleBooking(formData: FormData) {
+async function rescheduleBookingRecord(formData: FormData) {
   const bookingId = String(formData.get("bookingId") ?? "");
   const localStartsAt = String(formData.get("startsAt") ?? "");
   const teamMemberId = String(formData.get("teamMemberId") ?? "");
@@ -524,20 +566,53 @@ export async function rescheduleBooking(formData: FormData) {
   const initial = await editableBooking(bookingId);
   if (!initial.booking.teamMemberId || !isMovableAppointmentStatus(initial.booking.status)) throw new Error("Only confirmed or arrived assigned appointments can be rescheduled.");
   const nextTeamMemberId = teamMemberId || initial.booking.teamMemberId;
-  const move = await checkCalendarMove({ bookingId, startsAt: localStartsAt, teamMemberId: nextTeamMemberId });
-  if (move.error || !move.context || !move.startsAt || !move.endsAt) throw new Error(move.error ?? "That appointment can no longer be moved.");
-  const { tenant, db, booking } = move.context;
-  const { startsAt, endsAt } = move;
+  const move = initial.booking.hasLinkedServices
+    ? {
+        error: null, context: initial, startsAt: fromZonedTime(localStartsAt, initial.tenant.timezone),
+        endsAt: undefined,
+      }
+    : await checkCalendarMove({ bookingId, startsAt: localStartsAt, teamMemberId: nextTeamMemberId });
+  if (move.error || !move.context || !move.startsAt) throw new Error(move.error ?? "That appointment can no longer be moved.");
+  const { tenant, db, booking, permissions } = move.context;
+  const { startsAt } = move;
+  if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() < Date.now() || localDateTimeKey(startsAt, tenant.timezone) !== localStartsAt) {
+    throw new Error("Choose a valid future appointment time.");
+  }
+  const endsAt = move.endsAt ?? new Date(startsAt.getTime() + booking.endsAt.getTime() - booking.startsAt.getTime());
   try {
     const outboxId = await withSerializableRetry(async () => db.begin(async (transaction) => {
+      if (booking.hasLinkedServices) await transaction.unsafe("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
       // Keep the block/booking lock order aligned with status changes. The status
       // is re-read after the locks so a final transition after preflight wins.
       const [block] = await transaction.unsafe<{ state: string }[]>("SELECT state FROM booking_blocks WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.bookingBlockId, tenant.id]);
       if (!block || block.state !== "confirmed") throw new Error("Booking can no longer be rescheduled.");
-      const [current] = await transaction.unsafe<{ status: string }[]>("SELECT status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
+      const [current] = await transaction.unsafe<{ status: string; startsAt: Date }[]>('SELECT status, starts_at AS "startsAt" FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE', [booking.id, tenant.id]);
       if (!current) throw new Error("Booking is unavailable.");
       assertMovableAppointmentStatus(current.status);
-      await transaction.unsafe("UPDATE booking_blocks SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.bookingBlockId, tenant.id]);
+      const expectedStart = formData.get("expectedStartsAt");
+      if ((expectedStart && current.startsAt.toISOString() !== expectedStart) || current.startsAt.getTime() !== booking.startsAt.getTime()) {
+        throw new Error("This appointment has moved. Reopen it to see the latest schedule.");
+      }
+      if (booking.hasLinkedServices) {
+        if (nextTeamMemberId !== booking.teamMemberId) throw new Error("Rescheduling keeps the provider assigned to each service.");
+        const connection = transaction as unknown as typeof db;
+        const reservations = await getAppointmentReservations(connection, tenant.id, booking.id);
+        assertAppointmentPermission(permissions, ...reservations.map((item) => item.teamMemberId));
+        const openings = await linkedAppointmentOpenings(connection, tenant, booking.locationId, reservations, startsAt, new Date(startsAt.getTime() + 1), 1);
+        if (!openings.length) throw new Error("That time is no longer available for every service. Choose another time.");
+        const delta = startsAt.getTime() - current.startsAt.getTime();
+        const ids = reservations.map(({ id }) => id);
+        // All original blocks must leave the exclusion constraint together before
+        // re-entering it, because a small move can overlap the adjacent old block.
+        await transaction.unsafe("UPDATE booking_blocks SET state = 'released' WHERE tenant_id = $1 AND id = ANY($2::uuid[])", [tenant.id, ids]);
+        await transaction.unsafe(`
+          UPDATE booking_blocks SET starts_at = starts_at + ($1::bigint * interval '1 millisecond'),
+            ends_at = ends_at + ($1::bigint * interval '1 millisecond'), state = 'confirmed'
+          WHERE tenant_id = $2 AND id = ANY($3::uuid[])
+        `, [delta, tenant.id, ids]);
+      } else {
+        await transaction.unsafe("UPDATE booking_blocks SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.bookingBlockId, tenant.id]);
+      }
       await transaction.unsafe("UPDATE bookings SET team_member_id = $1, starts_at = $2, ends_at = $3, resource_id = NULL, updated_at = now() WHERE id = $4 AND tenant_id = $5", [nextTeamMemberId, startsAt, endsAt, booking.id, tenant.id]);
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, event_type, metadata) VALUES ($1, $2, 'booking.rescheduled', $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, action, target_type, target_id, metadata) VALUES ($1, 'booking.rescheduled', 'booking', $2, $3::jsonb)", [tenant.id, booking.id, JSON.stringify({ startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), teamMemberId: nextTeamMemberId, source: "appointment_drawer" })]);
@@ -551,6 +626,15 @@ export async function rescheduleBooking(formData: FormData) {
     throw error;
   }
   revalidateCalendars();
+}
+
+export async function rescheduleBooking(formData: FormData): Promise<{ error: string | null }> {
+  try {
+    await rescheduleBookingRecord(formData);
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not reschedule this appointment. Choose another time." };
+  }
 }
 
 /** Moves an appointment from a calendar drag gesture, including an eligible staff reassignment. */
@@ -860,7 +944,180 @@ export async function correctAppointmentPayment(formData: FormData): Promise<Pay
   }
 }
 
-export type ManualBookingState = { error: string | null; success: string | null };
+export type ManualBookingState = {
+  error: string | null;
+  success: string | null;
+  booking?: { id: string; date: string; locationId: string };
+};
+
+type AdditionalServiceInput = { serviceId: string; teamMemberId: string; time: string; segmentId?: string };
+type AdditionalServiceBooking = {
+  serviceId: string;
+  teamMemberId: string;
+  startsAt: Date;
+  endsAt: Date;
+  priceCents: number;
+  title: string;
+};
+
+function additionalServiceInputs(value: FormDataEntryValue | null, maximum = 5): AdditionalServiceInput[] {
+  if (value === null || value === "") return [];
+  if (typeof value !== "string" || value.length > 3000) throw new Error("Choose services, providers, and times for this appointment.");
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { throw new Error("Choose services, providers, and times for this appointment."); }
+  if (!Array.isArray(parsed) || parsed.length > maximum) throw new Error("An appointment can include up to six services.");
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  for (const item of parsed) {
+    if (!item || typeof item !== "object" || typeof item.serviceId !== "string" || typeof item.teamMemberId !== "string"
+      || !uuid.test(item.serviceId) || !uuid.test(item.teamMemberId)
+      || (item.segmentId !== undefined && (typeof item.segmentId !== "string" || !uuid.test(item.segmentId)))
+      || typeof item.time !== "string" || (item.time !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.time))) {
+      throw new Error("Choose a service, provider, and time for each row.");
+    }
+  }
+  return parsed;
+}
+
+async function insertAdditionalBookingService(transaction: TransactionSql, tenantId: string, bookingId: string, locationId: string, position: number, service: AdditionalServiceBooking) {
+  try {
+    const [reservation] = await transaction.unsafe<{ id: string }[]>(`
+      INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+      VALUES ($1, $2, $3, $4, $5, 'confirmed') RETURNING id
+    `, [tenantId, service.teamMemberId, locationId, service.startsAt, service.endsAt]);
+    await transaction.unsafe(`
+      INSERT INTO booking_service_segments (tenant_id, booking_id, booking_block_id, service_id, position, booked_price_cents)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [tenantId, bookingId, reservation.id, service.serviceId, position, service.priceCents]);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "23P01") {
+      throw new Error(`${service.title} was just taken. Choose another time or provider.`);
+    }
+    throw error;
+  }
+}
+
+export async function updateAppointmentServices(formData: FormData): Promise<{ error: string | null }> {
+  try {
+    const bookingId = String(formData.get("bookingId") ?? "");
+    const expectedRevision = String(formData.get("revision") ?? "");
+    const requested = additionalServiceInputs(formData.get("services"), 6);
+    if (!requested.length || requested[0].segmentId || !expectedRevision) throw new Error("Open the appointment and choose its services.");
+    const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+    const identity = await requireIdentity();
+    await withSerializableRetry(() => db.begin(async (transaction) => {
+      const connection = transaction as unknown as typeof db;
+      const [primaryBlock] = await connection<{ state: string }[]>`
+        SELECT state FROM booking_blocks WHERE tenant_id=${tenant.id} AND id=${booking.bookingBlockId} FOR UPDATE
+      `;
+      const [current] = await connection<{ serviceId: string; priceCents: number; teamMemberId: string | null; startsAt: Date; endsAt: Date; revision: string; status: string }[]>`
+        SELECT b.service_id AS "serviceId", b.booked_price_cents AS "priceCents", b.team_member_id AS "teamMemberId",
+          b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.updated_at::text AS revision, b.status
+        FROM bookings b WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} FOR UPDATE
+      `;
+      if (!current || primaryBlock?.state !== "confirmed" || !isMovableAppointmentStatus(current.status)) {
+        throw new Error("This appointment is no longer open for service changes.");
+      }
+      if (current.revision !== expectedRevision) throw new Error("This appointment has changed. Reopen it before editing services.");
+      // Read committed gives the settlement check a fresh snapshot after the
+      // lock shared with payment and package redemption writers.
+      const [financial] = await connection<{ settled: boolean }[]>`
+        SELECT ${appointmentHasSettlement(connection)} AS settled FROM bookings b WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId}
+      `;
+      if (financial?.settled) throw new Error("Services can only be edited before recording a payment or redeeming a package.");
+
+      const existing = await connection<{ id: string; blockId: string; serviceId: string; priceCents: number; teamMemberId: string | null; startsAt: Date; endsAt: Date }[]>`
+        SELECT seg.id, block.id AS "blockId", seg.service_id AS "serviceId", seg.booked_price_cents AS "priceCents",
+          block.team_member_id AS "teamMemberId", block.starts_at AS "startsAt", block.ends_at AS "endsAt"
+        FROM booking_service_segments seg
+        JOIN booking_blocks block ON block.tenant_id=seg.tenant_id AND block.id=seg.booking_block_id
+        WHERE seg.tenant_id=${tenant.id} AND seg.booking_id=${bookingId}
+        ORDER BY seg.position
+      `;
+      const localDate = localDateKey(current.startsAt, tenant.timezone);
+      const excludedBlocks = [booking.bookingBlockId, ...existing.map((item) => item.blockId)];
+      const plan: (AdditionalServiceBooking & { original?: typeof existing[number]; changed: boolean })[] = [];
+      let priorIndex = -1;
+      let previousEnd = current.startsAt;
+      for (const [index, item] of requested.entries()) {
+        const originalIndex = item.segmentId ? existing.findIndex((row) => row.id === item.segmentId) : -1;
+        if (item.segmentId && originalIndex <= priorIndex) throw new Error("The service list has changed. Reopen the appointment.");
+        priorIndex = index === 0 ? -1 : item.segmentId ? originalIndex : existing.length;
+        const original = existing[originalIndex];
+        const previous = index === 0 ? current : original;
+        const startsAt = index === 0 ? current.startsAt : item.time ? fromZonedTime(`${localDate}T${item.time}`, tenant.timezone) : previousEnd;
+        const [catalog] = await connection<{ title: string; priceCents: number; durationMinutes: number; active: boolean }[]>`
+          SELECT title, price_cents AS "priceCents", duration_minutes AS "durationMinutes", is_active AS active
+          FROM services WHERE tenant_id=${tenant.id} AND id=${item.serviceId}
+        `;
+        if (!catalog) throw new Error(`Service ${index + 1} is unavailable.`);
+        const sameService = previous?.serviceId === item.serviceId;
+        const duration = sameService ? previous.endsAt.getTime() - previous.startsAt.getTime() : catalog.durationMinutes * 60_000;
+        const endsAt = new Date(startsAt.getTime() + duration);
+        const changed = !sameService || item.teamMemberId !== previous.teamMemberId || startsAt.getTime() !== previous.startsAt.getTime();
+        if (!Number.isFinite(startsAt.getTime()) || startsAt < previousEnd || localDateKey(startsAt, tenant.timezone) !== localDate
+          || (index > 0 && item.time && localDateTimeKey(startsAt, tenant.timezone) !== `${localDate}T${item.time}`)) {
+          throw new Error(`${catalog.title} must start on the appointment date, after the preceding service.`);
+        }
+        if (changed) {
+          if (!catalog.active) throw new Error(`${catalog.title} is no longer available.`);
+          const [provider] = await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, {
+            locationId: booking.locationId, slotInterval: 1, durationMinutes: duration / 60_000,
+            teamMemberId: item.teamMemberId, excludeBookingBlockIds: excludedBlocks,
+          }, connection);
+          if (!provider?.slots.some((slot) => Date.parse(slot.startTime) === startsAt.getTime() && Date.parse(slot.endTime) === endsAt.getTime())) {
+            throw new Error(`${catalog.title} is unavailable with that provider at ${localDateTimeKey(startsAt, tenant.timezone).slice(11)}. Choose another provider or time.`);
+          }
+        }
+        plan.push({ ...item, original, startsAt, endsAt, changed, title: catalog.title, priceCents: sameService ? previous.priceCents : catalog.priceCents });
+        previousEnd = endsAt;
+      }
+      const [first, ...additional] = plan;
+      const kept = new Set(additional.flatMap((item) => item.original ? [item.original.id] : []));
+      const removed = existing.filter((item) => !kept.has(item.id)).map((item) => item.id);
+      if (removed.length) await connection`DELETE FROM booking_service_segments WHERE tenant_id=${tenant.id} AND booking_id=${bookingId} AND id=ANY(${removed}::uuid[])`;
+      const changedBlocks = [
+        ...(first.changed ? [booking.bookingBlockId] : []),
+        ...additional.flatMap((item) => item.changed && item.original ? [item.original.blockId] : []),
+      ];
+      if (changedBlocks.length) await connection`
+        UPDATE booking_blocks SET state='released' WHERE tenant_id=${tenant.id} AND id=ANY(${changedBlocks}::uuid[])
+      `;
+      if (first.changed) {
+        await connection`UPDATE booking_blocks SET team_member_id=${first.teamMemberId}, ends_at=${first.endsAt}, state='confirmed'
+          WHERE tenant_id=${tenant.id} AND id=${booking.bookingBlockId}`;
+        await connection`UPDATE bookings SET service_id=${first.serviceId}, team_member_id=${first.teamMemberId},
+          booked_price_cents=${first.priceCents}, ends_at=${first.endsAt}, updated_at=now()
+          WHERE tenant_id=${tenant.id} AND id=${bookingId}`;
+      } else {
+        await connection`UPDATE bookings SET updated_at=now() WHERE tenant_id=${tenant.id} AND id=${bookingId}`;
+      }
+      for (const [index, item] of additional.entries()) {
+        if (!item.original) {
+          await insertAdditionalBookingService(transaction, tenant.id, bookingId, booking.locationId, index + 2, item);
+          continue;
+        }
+        if (item.changed) await connection`UPDATE booking_blocks SET team_member_id=${item.teamMemberId},
+          starts_at=${item.startsAt}, ends_at=${item.endsAt}, state='confirmed'
+          WHERE tenant_id=${tenant.id} AND id=${item.original.blockId}`;
+        await connection`UPDATE booking_service_segments SET position=${index + 2},
+          service_id=${item.serviceId}, booked_price_cents=${item.priceCents}
+          WHERE tenant_id=${tenant.id} AND booking_id=${bookingId} AND id=${item.original.id}`;
+      }
+      const line = ({ serviceId, teamMemberId, startsAt, endsAt, priceCents }: Pick<AdditionalServiceBooking, "serviceId" | "startsAt" | "endsAt" | "priceCents"> & { teamMemberId: string | null }) =>
+        ({ serviceId, teamMemberId, startsAt, endsAt, priceCents });
+      const metadata = JSON.stringify({ before: [current, ...existing].map(line), after: plan.map(line) });
+      await connection`INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
+        VALUES (${tenant.id}, ${bookingId}, ${identity.id}, 'booking.services_updated', ${metadata}::text::jsonb)`;
+      await connection`INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
+        VALUES (${tenant.id}, ${identity.id}, 'booking.services_updated', 'booking', ${bookingId}, ${metadata}::text::jsonb)`;
+    }));
+    revalidateCalendars();
+    return { error: null };
+  } catch (error) {
+    if (error instanceof BookingConflictError) return { error: "A service time was just taken. Review the service times and try again." };
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not save the services. Please try again." };
+  }
+}
 
 /** Creates a staff-entered appointment after the same availability and exclusion checks as public booking. */
 async function createManualBookingRecord(formData: FormData) {
@@ -871,6 +1128,7 @@ async function createManualBookingRecord(formData: FormData) {
   const localTime = String(formData.get("appointmentTime") ?? "");
   const waitlistEntryId = String(formData.get("waitlistEntryId") ?? "");
   const customerId = String(formData.get("customerId") ?? "");
+  const additionalServices = additionalServiceInputs(formData.get("additionalServices"));
   const name = String(formData.get("customerName") ?? "").trim();
   const email = String(formData.get("customerEmail") ?? "").trim().toLowerCase();
   const phone = String(formData.get("customerPhone") ?? "").trim() || null;
@@ -879,6 +1137,7 @@ async function createManualBookingRecord(formData: FormData) {
   }
   const { tenant, permissions } = await calendarPermissionContext();
   assertAppointmentPermission(permissions, teamMemberId);
+  for (const extra of additionalServices) assertAppointmentPermission(permissions, extra.teamMemberId);
   if (customerId && (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(customerId)
     || !(permissions.isManager || permissions.canViewClients || permissions.canManageClients))) {
     throw new Error("You cannot select that client.");
@@ -903,12 +1162,36 @@ async function createManualBookingRecord(formData: FormData) {
   if (!service) throw new Error("That staff member cannot deliver this service at the selected location.");
   const startsAt = fromZonedTime(`${localDate}T${localTime}`, tenant.timezone);
   const endsAt = new Date(startsAt.getTime() + service.durationMinutes * 60_000);
-  const candidates = await availableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
+  const candidates = await staffAvailableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
   const availableSlot = candidates.find((candidate) => candidate.teamMemberId === teamMemberId)?.slots.find((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime());
   if (!availableSlot) throw new Error("That staff member is not available at the selected time.");
+  const linked: AdditionalServiceBooking[] = [];
+  let previousEnd = endsAt;
+  for (const [index, extra] of additionalServices.entries()) {
+    const [item] = await db<{ title: string; priceCents: number; durationMinutes: number }[]>`
+      SELECT title, price_cents AS "priceCents", duration_minutes AS "durationMinutes"
+      FROM services WHERE tenant_id = ${tenant.id} AND id = ${extra.serviceId} AND is_active
+    `;
+    if (!item) throw new Error(`Service ${index + 2} is no longer available.`);
+    const nextStart = extra.time ? fromZonedTime(`${localDate}T${extra.time}`, tenant.timezone) : previousEnd;
+    const nextEnd = new Date(nextStart.getTime() + item.durationMinutes * 60_000);
+    if (localDateKey(nextStart, tenant.timezone) !== localDate || nextStart < previousEnd
+      || (extra.time && localDateTimeKey(nextStart, tenant.timezone) !== `${localDate}T${extra.time}`)) {
+      throw new Error(`${item.title} must start on the appointment date, after the preceding service.`);
+    }
+    const providers = await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { locationId, slotInterval: 1 });
+    if (!providers.find((provider) => provider.teamMemberId === extra.teamMemberId)?.slots.some((slot) =>
+      new Date(slot.startTime).getTime() === nextStart.getTime() && new Date(slot.endTime).getTime() === nextEnd.getTime(),
+    )) {
+      throw new Error(`${item.title} is unavailable with that provider at ${localDateTimeKey(nextStart, tenant.timezone).slice(11)}. Choose another time or provider.`);
+    }
+    linked.push({ ...extra, startsAt: nextStart, endsAt: nextEnd, priceCents: item.priceCents, title: item.title });
+    previousEnd = nextEnd;
+  }
   const identity = await requireIdentity();
+  let bookingId: string;
   try {
-    await withSerializableRetry(async () => db.begin(async (transaction) => {
+    bookingId = await withSerializableRetry(async () => db.begin(async (transaction) => {
       const [waitlistCustomer] = waitlistEntryId ? await transaction.unsafe<{ id: string }[]>(`
         UPDATE waitlist_entries SET status='booked', updated_at=now()
         WHERE tenant_id=$1 AND id=$2 AND service_id=$3 AND location_id=$4
@@ -935,12 +1218,16 @@ async function createManualBookingRecord(formData: FormData) {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'confirmed', 'tenant')
         RETURNING id
       `, [tenant.id, block.id, service.id, locationId, teamMemberId, null, customer.id, startsAt, endsAt, service.priceCents]);
+      for (const [index, extra] of linked.entries()) {
+        await insertAdditionalBookingService(transaction, tenant.id, booking.id, locationId, index + 2, extra);
+      }
       if (waitlistEntryId) await transaction.unsafe(
         "INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'waitlist.booked', 'waitlist_entry', $3, $4::jsonb)",
         [tenant.id, identity.id, waitlistEntryId, JSON.stringify({ status: "booked", bookingId: booking.id })],
       );
       await transaction.unsafe("INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata) VALUES ($1, $2, $3, 'booking.created_by_tenant', $4::jsonb)", [tenant.id, booking.id, identity.id, JSON.stringify({ source: "tenant" })]);
       await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, 'booking.created_by_tenant', 'booking', $3, $4::jsonb)", [tenant.id, identity.id, booking.id, JSON.stringify({ source: "tenant" })]);
+      return booking.id;
     }));
   } catch (error) {
     if (error instanceof BookingConflictError) throw new Error("That time was just taken. Choose another time.");
@@ -948,13 +1235,14 @@ async function createManualBookingRecord(formData: FormData) {
   }
   revalidateCalendars();
   if (waitlistEntryId) revalidatePath("/app/waitlist");
+  return { id: bookingId, date: localDate, locationId };
 }
 
 /** Expected validation and availability failures stay inside the calendar form rather than becoming a page error. */
 export async function createManualBooking(_previousState: ManualBookingState, formData: FormData): Promise<ManualBookingState> {
   try {
-    await createManualBookingRecord(formData);
-    return { error: null, success: "Appointment confirmed and added to the calendar." };
+    const booking = await createManualBookingRecord(formData);
+    return { error: null, success: "Appointment confirmed and added to the calendar.", booking };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not confirm this appointment.", success: null };
   }

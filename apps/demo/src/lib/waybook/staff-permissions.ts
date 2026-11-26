@@ -155,6 +155,14 @@ export function canManageAppointment(
   );
 }
 
+export function canUpdateAppointmentAttendance(context: StaffPermissionContext, providers: Array<string | null>) {
+  return context.isManager || (context.canUpdateAppointmentStatus && (
+    providers.length <= 1 || context.canViewTeamCalendar || (
+      context.teamMemberId !== null && providers.every((provider) => provider === context.teamMemberId)
+    )
+  ));
+}
+
 export function canManageTimeOff(
   context: StaffPermissionContext,
   teamMemberId: string,

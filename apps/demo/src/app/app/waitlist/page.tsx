@@ -7,7 +7,7 @@ import { notFound, redirect } from "next/navigation";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { WaitlistForm, WaitlistStatusForm } from "@/components/waitlist-forms";
-import { availableSlots } from "@/lib/waybook/booking";
+import { staffAvailableSlots } from "@/lib/waybook/booking";
 import { tenantDb } from "@/lib/waybook/database";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -95,7 +95,7 @@ export default async function WaitlistPage({ searchParams }: { searchParams: Pro
     endDay.setUTCDate(endDay.getUTCDate() + (requestedEntry.preferredLocalDate ? 1 : 7));
     const start = fromZonedTime(`${date}T00:00:00`, tenant.timezone);
     const end = fromZonedTime(`${endDay.toISOString().slice(0, 10)}T00:00:00`, tenant.timezone);
-    const candidates = await availableSlots(tenant, requestedEntry.serviceId, start, end, {
+    const candidates = await staffAvailableSlots(tenant, requestedEntry.serviceId, start, end, {
       locationId: requestedEntry.locationId, slotInterval: 30,
     });
     return candidates.filter(({ teamMemberId }) => canBookStaff(teamMemberId)

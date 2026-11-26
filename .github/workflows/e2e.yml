@@ -16,7 +16,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Draft browser tests (deferred)' || 'e2e' }}
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       WAYBOOK_CONTROL_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_control
       WAYBOOK_NORDIC_STUDIO_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_nordic

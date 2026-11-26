@@ -15,7 +15,7 @@ export function DrawerHeaderSubmitActions() {
     const promote = () => document.querySelectorAll<HTMLElement>(".tenant-drawer:not([data-drawer-inline-actions])").forEach((drawer) => {
       const header = drawer.querySelector<HTMLElement>(":scope > header");
       if (!header) return;
-      const forms = drawer.querySelectorAll<HTMLFormElement>("form.tenant-drawer-form:not([data-drawer-submit-in-header])");
+      const forms = drawer.querySelectorAll<HTMLFormElement>("form.tenant-drawer-form:not([data-drawer-submit-in-header], [data-drawer-inline-actions])");
       forms.forEach((form) => {
         const submit = [...form.querySelectorAll<HTMLButtonElement>('button[type="submit"]')].find((button) => primarySubmit.test(button.textContent?.trim() ?? ""));
         if (!submit || submit.dataset.drawerHeaderSubmit === "true") return;

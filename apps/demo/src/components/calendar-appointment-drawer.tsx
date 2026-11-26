@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
+import { AppointmentServiceEditor } from "@/components/appointment-service-editor";
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { appointmentDrawerCapabilities } from "@/lib/waybook/appointment-drawer-capabilities";
 
 import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 
-type Detail = Awaited<ReturnType<typeof getCalendarAppointment>>;
+type Detail = NonNullable<Awaited<ReturnType<typeof getCalendarAppointment>>>;
 export type CalendarAppointmentSummary = Pick<Detail, "id" | "bookingNumber" | "customerName" | "serviceTitle" | "teamMemberName" | "startsAt" | "endsAt" | "status">;
 
 export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, checkoutPath, staffLabel = "Staff" }: { summaries: CalendarAppointmentSummary[]; initialDetail: Detail | null; timezone: string; checkoutPath: string; staffLabel?: string }) {
@@ -33,7 +34,9 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     setDetail(null);
     setSelected(summariesRef.current.find((item) => item.id === id) ?? { id, bookingNumber: "", customerName: "Appointment", serviceTitle: "", teamMemberName: "", startsAt: "", endsAt: "", status: "" });
     void getCalendarAppointment(id).then((result) => {
-      if (request.current === serial) { setSelected(result); setDetail(result); }
+      if (request.current !== serial) return;
+      if (result) { setSelected(result); setDetail(result); }
+      else { setSelected(null); setDetail(null); }
     }).catch(() => { if (request.current === serial) setError("Could not load this appointment. Please try again."); });
   }, []);
 
@@ -59,7 +62,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const link = (event.target as Element | null)?.closest<HTMLAnchorElement>("a[href]");
-      if (!link || link.target || link.hasAttribute("download")) return;
+      if (!link || link.target || link.hasAttribute("download") || link.hasAttribute("data-appointment-navigation")) return;
       const url = new URL(link.href, window.location.href);
       const id = url.searchParams.get("booking");
       if (url.origin !== window.location.origin || url.pathname !== window.location.pathname || !id || !summariesRef.current.some((item) => item.id === id)) return;
@@ -93,14 +96,23 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>{staffLabel}</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
+          {detail.additionalServices.length > 0 ? <section className="appointment-drawer__details">
+            <h3>Additional services</h3>
+            <dl>{detail.additionalServices.map((service) => <div key={service.id}>
+              <dt>{service.title}</dt>
+              <dd>{clock(service.startsAt)}–{clock(service.endsAt)}{service.provider ? ` · ${service.provider}` : ""}</dd>
+            </div>)}</dl>
+          </section> : null}
+          {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
+            bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
           {detail.canManage && detail.status === "arrived" && detail.paymentBalance ? (
             <Link className="waybook-primary-link" href={`${checkoutPath}?booking=${detail.id}`}>Checkout</Link>
           ) : null}
           {capabilities.canEdit ? (
-            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance} onPaymentRecorded={refreshAppointment} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} onStatusSaved={refreshAppointment} timezone={detail.timezone} days={detail.days} slots={detail.slots} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} resourceId={detail.resourceId} resources={detail.resources} />
+            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance} onPaymentRecorded={refreshAppointment} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} onStatusSaved={refreshAppointment} timezone={detail.timezone} days={detail.days} slots={detail.slots} currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} resourceId={detail.resourceId} resources={detail.resources} />
           ) : <>
             {capabilities.canUpdateStatus || (capabilities.canCancel && detail.status === "cancelled") ? <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} onStatusSaved={refreshAppointment} updateStatus={saveAppointmentAttendance} /> : null}
-            {capabilities.canReschedule ? <AppointmentRescheduleActions key={detail.id} bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} reschedule={rescheduleBooking} /> : null}
+            {capabilities.canReschedule ? <AppointmentRescheduleActions key={detail.id} bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} reschedule={rescheduleBooking} /> : null}
             {!capabilities.canUpdateStatus && !capabilities.canReschedule ? <p className="tenant-drawer-note">You have view-only access to this appointment.</p> : null}
           </>}
           {capabilities.canCancel && isMovableAppointmentStatus(detail.status) ? <CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /> : null}

@@ -61,6 +61,9 @@ for (const workspaceCase of workspaces) test(`staff grants and deactivation gove
     await tenant`UPDATE staff_permissions SET can_manage_team_time_off=true
       WHERE tenant_id=${workspace.id} AND team_member_id=${member.id}`;
     await staff.goto(timeOff);
+    const directory = staff.getByRole("complementary", { name: /directory/i });
+    await directory.getByRole("searchbox").fill(colleagueName);
+    await directory.getByRole("button", { name: "Search", exact: true }).click();
     await staff.getByRole("link", { name: new RegExp(colleagueName) }).click();
     await expect(staff).toHaveURL(colleagueTimeOff);
     await expect(staff.getByRole("heading", { name: colleagueName, exact: true })).toBeVisible();

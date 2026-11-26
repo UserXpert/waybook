@@ -5,6 +5,8 @@ import { defaultTenantTerminology, titleTerminology, type TenantTerminology } fr
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 
 import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
+import { fromZonedTime } from "date-fns-tz";
+import Link from "next/link";
 import { createManualBooking, getManualBookingAvailability } from "@/app/app/calendars/actions";
 import { SearchPicker } from "@/components/calendar-selectors";
 
@@ -13,7 +15,8 @@ type Member = { id: string; name: string };
 type Service = { id: string; title: string; durationMinutes: number; priceCents: number };
 type Client = { id: string; name: string; email: string; phone: string | null };
 type Slot = { teamMemberId: string; startTime: string };
-type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; terminology?: TenantTerminology };
+type ServiceDraft = { id: string; service: Service | null; member: Member | null; time: string };
+type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; calendarPath: string; terminology?: TenantTerminology };
 
 const servicePrice = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
 
@@ -23,11 +26,12 @@ function localDateKey(timezone: string) { const parts = new Intl.DateTimeFormat(
 function dateLabel(value: string) { const date = new Date(`${value}T12:00:00Z`); return { weekday: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date), day: new Intl.DateTimeFormat("en-GB", { day: "2-digit" }).format(date), full: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(date) }; }
 
 /** Selection lists are searched in bounded windows; availability and writes stay server-authoritative. */
-export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, terminology = defaultTenantTerminology }: Props) {
+export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, calendarPath, terminology = defaultTenantTerminology }: Props) {
   const [state, formAction, pending] = useActionState(createManualBooking, { error: null, success: null });
   const [location, setLocation] = useState(initialLocation);
   const [member, setMember] = useState<Member | null>(initialMember);
   const [service, setService] = useState<Service | null>(initialService);
+  const [additionalServices, setAdditionalServices] = useState<ServiceDraft[]>([]);
   const [date, setDate] = useState(defaultDate);
   const [dateWindowStart, setDateWindowStart] = useState(defaultDate);
   const [time, setTime] = useState(defaultTime ?? "");
@@ -51,16 +55,30 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   useEffect(() => { let cancelled = false; if (!locationId || !serviceId) { setSlots([]); setChecking(false); return; } setChecking(true); getManualBookingAvailability({ locationId, serviceId, date }).then((result) => { if (!cancelled) setSlots(result.slots); }).catch(() => { if (!cancelled) setSlots([]); }).finally(() => { if (!cancelled) setChecking(false); }); return () => { cancelled = true; }; }, [date, locationId, serviceId]);
   useEffect(() => { if (!checking && !timeSlots.some((slot) => clock(slot.startTime, timezone) === time)) setTime(!waitlistEntryId && timeSlots[0] ? clock(timeSlots[0].startTime, timezone) : ""); }, [checking, time, timeSlots, timezone, waitlistEntryId]);
   const clientLabel = titleTerminology(terminology.client);
-  const price = service ? servicePrice.format(service.priceCents / 100) : "";
+  const totalCents = (service?.priceCents ?? 0) + additionalServices.reduce((sum, row) => sum + (row.service?.priceCents ?? 0), 0);
+  const durationMinutes = (service?.durationMinutes ?? 0) + additionalServices.reduce((sum, row) => sum + (row.service?.durationMinutes ?? 0), 0);
+  const linkedReady = additionalServices.every((row) => row.service && row.member);
+  const editAdditionalService = (id: string, update: Partial<ServiceDraft>) => setAdditionalServices(
+    (current) => current.map((row) => row.id === id ? { ...row, ...update } : row),
+  );
+  const selectedSlot = timeSlots.find((slot) => clock(slot.startTime, timezone) === time);
+  let precedingEnd = selectedSlot && service ? new Date(new Date(selectedSlot.startTime).getTime() + service.durationMinutes * 60_000) : null;
+  const suggestedStarts = additionalServices.map((row) => {
+    const defaultStart = precedingEnd;
+    const start = row.time ? fromZonedTime(`${date}T${row.time}`, timezone) : defaultStart;
+    precedingEnd = start && row.service ? new Date(start.getTime() + row.service.durationMinutes * 60_000) : null;
+    return defaultStart ? clock(defaultStart.toISOString(), timezone) : "";
+  });
   const hasClientFields = showNewClient || !canLookupClients || Boolean(waitlistEntryId);
   const clientReady = Boolean(selectedClient || (hasClientFields && client.name.trim() && client.email.includes("@")));
 
-  const slotSelected = timeSlots.some((slot) => clock(slot.startTime, timezone) === time);
+  const slotSelected = Boolean(selectedSlot);
   const originalOpeningUnavailable = waitlistEntryId && defaultTime && !checking && !time && date === defaultDate;
   if (waitlistUnavailable && !state.success) return <p role="alert">This waitlist request is no longer available. Return to the waitlist to review it.</p>;
 
   return <form action={formAction} className="tenant-drawer-form manual-appointment">
     <input type="hidden" name="locationId" value={locationId} /><input type="hidden" name="teamMemberId" value={teamMemberId} /><input type="hidden" name="serviceId" value={serviceId} />
+    <input type="hidden" name="additionalServices" value={JSON.stringify(additionalServices.map((row) => ({ serviceId: row.service?.id ?? "", teamMemberId: row.member?.id ?? "", time: row.time })))} />
     {waitlistEntryId ? <input type="hidden" name="waitlistEntryId" value={waitlistEntryId} /> : null}
     <section className="manual-appointment__step" aria-label={clientLabel}>
       {selectedClient ? (
@@ -100,7 +118,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
       )}
     </section>
     <div className="tenant-drawer-form__grid manual-appointment__selectors">
-      {waitlistEntryId ? <label>Location<input value={location.name} readOnly /></label> : <SearchPicker<Location> label="Location" selectedLabel={location.name} placeholder="Search locations" searchUrl={locationSearchUrl} resultsLabel={(item) => item.name} onPick={(item) => { setLocation(item); setService(null); if (!fixedStaff) setMember(null); }} />}
+      {waitlistEntryId ? <label>Location<input value={location.name} readOnly /></label> : <SearchPicker<Location> label="Location" selectedLabel={location.name} placeholder="Search locations" searchUrl={locationSearchUrl} resultsLabel={(item) => item.name} onPick={(item) => { if (item.id === locationId) return; setLocation(item); setService(null); setAdditionalServices([]); if (!fixedStaff) setMember(null); }} />}
       {fixedStaff ? (
         <label>{titleTerminology(terminology.staffPlural)}<input value={initialMember.name} readOnly /></label>
       ) : (
@@ -108,13 +126,38 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
       )}
     </div>
     <div className="manual-appointment__selectors">{waitlistEntryId ? <label>Service<input value={service?.title ?? ""} readOnly /></label> : <SearchPicker<Service> label="Service" selectedLabel={service ? `${service.title} · ${service.durationMinutes} min` : ""} placeholder="Search services" searchUrl={serviceSearchUrl} resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${servicePrice.format(item.priceCents / 100)}`} onPick={setService} onClear={service ? () => setService(null) : undefined} />}</div>
+    {service ? <section className="manual-appointment__step" aria-label="Additional services">
+      {additionalServices.map((row, index) => <fieldset className="manual-appointment__step" key={row.id}>
+        <legend>Service {index + 2}</legend>
+        <SearchPicker<Service>
+          label={`Service ${index + 2}`} selectedLabel={row.service ? `${row.service.title} · ${row.service.durationMinutes} min` : ""}
+          placeholder="Search services" searchUrl={serviceSearchUrl}
+          resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${servicePrice.format(item.priceCents / 100)}`}
+          onPick={(item) => editAdditionalService(row.id, { service: item, member: fixedStaff ? initialMember : null })}
+        />
+        <div className="tenant-drawer-form__grid">
+          {fixedStaff || !row.service ? <label>{`Provider for service ${index + 2}`}<input readOnly disabled={!fixedStaff} value={fixedStaff ? initialMember.name : ""} placeholder="Choose a service first" /></label> : <SearchPicker<Member>
+            label={`Provider for service ${index + 2}`} selectedLabel={row.member?.name ?? ""}
+            placeholder="Search eligible staff" resultsLabel={(item) => item.name}
+            searchUrl={(query) => row.service ? `${tenantApiPrefix()}/api/app/staff?${new URLSearchParams({ locationId, serviceId: row.service.id, q: query, limit: "8" })}` : ""}
+            onPick={(item) => editAdditionalService(row.id, { member: item })}
+          />}
+          <label>Start time<input type="time" value={row.time} onChange={(event) => editAdditionalService(row.id, { time: event.target.value })} />
+            <small>{suggestedStarts[index] ? `Defaults to ${suggestedStarts[index]}` : "Defaults to after the preceding service"}</small>
+          </label>
+        </div>
+        <button type="button" className="waybook-action waybook-action--secondary" onClick={() => setAdditionalServices((current) => current.filter((item) => item.id !== row.id))}>Remove service {index + 2}</button>
+      </fieldset>)}
+      {additionalServices.length < 5 ? <button type="button" className="waybook-action waybook-action--secondary" onClick={() => setAdditionalServices((current) => [...current, { id: crypto.randomUUID(), service: null, member: fixedStaff ? initialMember : null, time: "" }])}>Add service</button> : null}
+    </section> : null}
     <input type="hidden" name="appointmentDate" value={date} /><input type="hidden" name="appointmentTime" value={time} />
     <section className="appointment-reschedule-picker manual-appointment__slot-picker" aria-label="Appointment schedule"><div className="manual-appointment__slot-picker-heading"><strong>Date</strong><span>{checking ? "Checking availability…" : service ? "Choose an available time" : "Choose a service first"}</span></div><div className="appointment-reschedule-picker__navigation" aria-label="Choose another week"><button type="button" aria-label="Previous week" disabled={dateAt(dateWindowStart, -7) < today} onClick={() => setDateWindowStart((current) => dateAt(current, -7))}>←</button><span>{dateLabel(dates[0] ?? dateWindowStart).day} {new Intl.DateTimeFormat("en-GB", { month: "short" }).format(new Date(`${dates[0] ?? dateWindowStart}T12:00:00Z`))} – {dateLabel(dates.at(-1) ?? dateWindowStart).day} {new Intl.DateTimeFormat("en-GB", { month: "short" }).format(new Date(`${dates.at(-1) ?? dateWindowStart}T12:00:00Z`))}</span><button type="button" aria-label="Next week" onClick={() => setDateWindowStart((current) => dateAt(current, 7))}>→</button></div><div className="appointment-reschedule-picker__days" role="group" aria-label="Appointment date">{dates.map((value) => { const label = dateLabel(value); return <button type="button" key={value} className={`appointment-reschedule-picker__day${value === date ? " is-selected" : ""}`} aria-pressed={value === date} onClick={() => { if (waitlistEntryId && value !== date) setTime(""); setDate(value); }}><small>{label.weekday}</small><strong>{label.day}</strong><span className="sr-only">{label.full}</span></button>; })}</div><p className="manual-appointment__slot-picker-title">Available times</p><div className="appointment-reschedule-picker__slots" role="group" aria-label="Appointment time">{checking ? <span className="manual-appointment__slot-picker-empty">Checking availability…</span> : !service ? <span className="manual-appointment__slot-picker-empty">Choose a service to see available times.</span> : timeSlots.length ? timeSlots.map((slot) => { const value = clock(slot.startTime, timezone); return <button type="button" key={slot.startTime} className={`appointment-reschedule-picker__slot${value === time ? " is-selected" : ""}`} aria-pressed={value === time} onClick={() => setTime(value)}>{value}</button>; }) : <span className="manual-appointment__slot-picker-empty">No bookable times are available for this {terminology.staffMember} on this date.</span>}</div></section>
     {originalOpeningUnavailable && !state.success ? <p className="manual-appointment__message is-error" role="status">That opening is no longer available. Choose another time.</p> : null}
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}{state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
     <div className="manual-appointment__review">
-      {service ? <div><strong>{price}</strong><span>{service.durationMinutes} min{time ? ` · ${dateLabel(date).full}, ${time}` : ""}</span></div> : null}
-      <button type="submit" className="waybook-action" disabled={pending || checking || !locationId || !serviceId || !teamMemberId || !slotSelected || !clientReady || waitlistUnavailable}>{pending ? "Confirming…" : "Confirm appointment"}</button>
+      {service ? <div><strong>{servicePrice.format(totalCents / 100)}</strong><span>{durationMinutes} min{time ? ` · ${dateLabel(date).full}, ${time}` : ""}</span></div> : null}
+      {state.booking ? <Link className="waybook-primary-link" data-appointment-navigation href={`${calendarPath}?${new URLSearchParams({ view: "team", location: state.booking.locationId, day: state.booking.date, booking: state.booking.id })}`}>View appointment</Link> :
+        <button type="submit" className="waybook-action" disabled={pending || checking || !locationId || !serviceId || !teamMemberId || !slotSelected || !clientReady || !linkedReady || waitlistUnavailable}>{pending ? "Confirming…" : "Confirm appointment"}</button>}
     </div>
   </form>;
 }
