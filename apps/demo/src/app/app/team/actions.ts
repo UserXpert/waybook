@@ -12,6 +12,7 @@ import { controlDb, tenantDb, type TenantRecord } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getGoogleAuth, googleSignInAvailable } from "@/lib/waybook/google-auth";
 import { issueStaffInvitation, revokeStaffInvitation } from "@/lib/waybook/staff-invitations";
+import { inviteFromStaffAccessRequest } from "@/lib/waybook/staff-access-requests";
 import { requireFeature } from "@/lib/waybook/features";
 import { isStaffCalendarColor } from "@/lib/waybook/staff-calendar-colors";
 import { staffLifecycleAvailable } from "@/lib/waybook/staff-lifecycle";
@@ -288,6 +289,23 @@ export async function createStaffGoogleInvitation(formData: FormData) {
   if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(memberId)) throw new Error("Staff member is unavailable.");
   const token = await issueStaffInvitation(tenant, actor.id, memberId);
   return new URL(`/join#${token}`, configured.origin).href;
+}
+
+export async function grantStaffAccess(_: { error?: string; invitation?: string }, formData: FormData): Promise<{ error?: string; invitation?: string }> {
+  const tenant = await ownerStaffTenant();
+  const actor = await requireIdentity();
+  const configured = getGoogleAuth();
+  if (!configured || !(await googleSignInAvailable())) return { error: "Google invitations are unavailable right now." };
+  const requestId = String(formData.get("requestId") ?? "");
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestId)) {
+    return { error: "This request is unavailable." };
+  }
+  try {
+    const result = await inviteFromStaffAccessRequest(tenant, actor.id, requestId);
+    return "error" in result ? result : { invitation: new URL(`/join#${result.token}`, configured.origin).href };
+  } catch {
+    return { error: "The invitation couldn’t be created. Try again or review the profile in Staff." };
+  }
 }
 
 export async function cancelStaffGoogleInvitation(formData: FormData) {

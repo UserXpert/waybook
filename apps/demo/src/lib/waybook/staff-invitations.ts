@@ -12,12 +12,19 @@ export function isStaffInvitationToken(value: string) {
 
 const tokenHash = (value: string) => createHash("sha256").update(value).digest("hex");
 
-export async function issueStaffInvitation(tenant: TenantRecord, ownerId: string, memberId: string) {
-  const [staff] = await tenantDb(tenant)<{ email: string; name: string; role: InviteRole; identityId: string | null }[]>`
+export async function issueStaffInvitation(
+  tenant: TenantRecord,
+  ownerId: string,
+  memberId: string,
+  staffDb = tenantDb(tenant),
+  requiredRole?: InviteRole,
+) {
+  const [staff] = await staffDb<{ email: string; name: string; role: InviteRole; identityId: string | null }[]>`
     SELECT lower(btrim(email)) AS email, name, role, identity_id AS "identityId" FROM team_members
     WHERE tenant_id = ${tenant.id} AND id = ${memberId} AND is_active AND archived_at IS NULL
   `;
   if (!staff?.email || !roles.includes(staff.role)) throw new Error("Only active staff with a work email can be invited.");
+  if (requiredRole && staff.role !== requiredRole) throw new Error("The staff role changed before the invitation was created.");
   if (staff.role === "owner" && staff.identityId !== ownerId) throw new Error("Owners can only link their own Google account.");
 
   const token = randomBytes(32).toString("base64url");

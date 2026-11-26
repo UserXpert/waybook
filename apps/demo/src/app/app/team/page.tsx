@@ -10,6 +10,7 @@ import { canEditStaffPhoto } from "@/lib/waybook/staff-photo-permissions";
 import { StaffPhotoUpload } from "@/components/staff-photo-upload";
 import { StaffHoursEditor } from "@/components/staff-hours-editor";
 import { StaffAccessMenu } from "@/components/staff-access-menu";
+import { StaffAccessRequests } from "@/components/staff-access-requests";
 import { StaffDetailsForm } from "@/components/staff-details-form";
 import { StaffTimeOffForm } from "@/components/staff-time-off-form";
 import { AsyncMultiSelect } from "@/components/async-multi-select";
@@ -141,6 +142,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
 
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="team" />
+    {membership.role === "owner" ? <StaffAccessRequests tenant={tenant} /> : null}
     <section className="staff-workspace">
       <aside className="staff-workspace__directory" aria-label={`${titleTerminology(terms.staff)} directory`}>
         <div className="staff-workspace__directory-heading">

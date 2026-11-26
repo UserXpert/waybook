@@ -9,6 +9,7 @@ import { startGoogleSignIn } from "./google-actions";
 import { login } from "./actions";
 import { PasswordField } from "./password-field";
 import { FeatureMessages } from "./feature-messages";
+import { LoginIntakeForm } from "./login-intake-form";
 
 async function getClientBranding(requestHeaders: Headers) {
   const tenant = await tenantForPublicRequest(requestHeaders).catch(() => null);
@@ -29,13 +30,15 @@ async function getClientBranding(requestHeaders: Headers) {
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; reset?: string; google?: string; access?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string; google?: string; access?: string; signup?: string }>;
 }) {
   const requestHeaders = await headers();
-  const [{ error, reset, google, access }, clientBranding, googleAvailable] = await Promise.all([
+  const [{ error, reset, google, access, signup }, clientBranding, googleAvailable] = await Promise.all([
     searchParams, getClientBranding(requestHeaders), googleSignInAvailable(),
   ]);
   const loginPath = loginPathForTenant(requestHeaders.get("x-waybook-tenant-route"));
+  const requestingStaffAccess = Boolean(clientBranding && access === "request");
+  const showIntake = requestingStaffAccess || (!clientBranding && signup === "1");
 
   return (
     <main className="waybook-login-page">
@@ -45,47 +48,44 @@ export default async function Login({
         <section className="waybook-login-panel" aria-labelledby="login-title">
           {clientBranding?.src ? <ClientLogo src={clientBranding.src} name={clientBranding.name} /> : null}
           <div className="waybook-login-panel__inner">
-            <h1 id="login-title">{clientBranding ? "Welcome back" : "Sign in to Waybook"}</h1>
-            <p className="waybook-login-intro">Use your work account to access your workspace.</p>
-            {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
-            {clientBranding && access === "request" ? (
-              <p id="staff-access" className="waybook-login-notice" role="status">
-                Ask your workspace owner to send a staff invitation to your work email.
-              </p>
-            ) : null}
-            {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
-            {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
-            {access === "inactive" ? <p className="waybook-login-error" role="alert">Your staff access is inactive. Ask your workspace owner to restore it.</p> : null}
-            {access === "role-pending" ? <p className="waybook-login-error" role="alert">Your workspace role change is pending. Ask your workspace owner to check your access.</p> : null}
-            {access === "unavailable" ? <p className="waybook-login-error" role="alert">Your staff profile is unavailable. Ask your workspace owner to check your access.</p> : null}
-            <form action={login} className="waybook-login">
-              <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>
-              <PasswordField />
-              <div className="waybook-login-options">
-                <label><input name="rememberMe" type="checkbox" />Remember me</label>
-                <a href={`${loginPath}?reset=1`}>Forgot password?</a>
-              </div>
-              {error ? <span className="waybook-login-error" role="alert">Invalid email or password.</span> : null}
-              <button type="submit">Sign in</button>
-            </form>
-            {googleAvailable ? (
-              <form action={startGoogleSignIn} className="waybook-login-providers">
-                <button type="submit">
-                  <img src="/brand/google-g.png" width="18" height="18" alt="" />
-                  Continue with Google
-                </button>
+            {showIntake ? <LoginIntakeForm staff={requestingStaffAccess} loginPath={loginPath} /> : <>
+              <h1 id="login-title">{clientBranding ? "Welcome back" : "Sign in to Waybook"}</h1>
+              <p className="waybook-login-intro">Use your work account to access your workspace.</p>
+              {reset ? <p className="waybook-login-notice" role="status">Password resets are managed by your workspace owner. Ask them to reset your staff access.</p> : null}
+              {google === "denied" ? <p className="waybook-login-error" role="alert">Google sign-in could not be completed. Use your invited Google account or ask your workspace owner for a new invitation.</p> : null}
+              {google === "unavailable" ? <p className="waybook-login-error" role="alert">Google sign-in is currently unavailable.</p> : null}
+              {access === "inactive" ? <p className="waybook-login-error" role="alert">Your staff access is inactive. Ask your workspace owner to restore it.</p> : null}
+              {access === "role-pending" ? <p className="waybook-login-error" role="alert">Your workspace role change is pending. Ask your workspace owner to check your access.</p> : null}
+              {access === "unavailable" ? <p className="waybook-login-error" role="alert">Your staff profile is unavailable. Ask your workspace owner to check your access.</p> : null}
+              <form action={login} className="waybook-login">
+                <label>Work email<input name="email" type="email" autoComplete="email" placeholder="you@studio.com" required /></label>
+                <PasswordField />
+                <div className="waybook-login-options">
+                  <label><input name="rememberMe" type="checkbox" />Remember me</label>
+                  <a href={`${loginPath}?reset=1`}>Forgot password?</a>
+                </div>
+                {error ? <span className="waybook-login-error" role="alert">Invalid email or password.</span> : null}
+                <button type="submit">Sign in</button>
               </form>
-            ) : null}
+              {googleAvailable ? (
+                <form action={startGoogleSignIn} className="waybook-login-providers">
+                  <button type="submit">
+                    <img src="/brand/google-g.png" width="18" height="18" alt="" />
+                    Continue with Google
+                  </button>
+                </form>
+              ) : null}
+            </>}
           </div>
-          {clientBranding ? (
+          {!showIntake && (clientBranding ? (
             <p className="waybook-login-signup">
-              Need staff access? <a href={`${loginPath}?access=request#staff-access`}>Request access</a>
+              Need staff access? <a href={`${loginPath}?access=request`}>Request access</a>
             </p>
           ) : (
             <p className="waybook-login-signup">
-              New business? <a href="https://waybook-website.vercel.app/en#venteliste">Sign up for early access</a>
+              New business? <a href="/login?signup=1">Sign up for early access</a>
             </p>
-          )}
+          ))}
         </section>
 
         <aside className="waybook-login-art" aria-label="Waybook product preview">
