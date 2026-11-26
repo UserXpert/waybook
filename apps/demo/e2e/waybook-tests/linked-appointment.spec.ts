@@ -25,9 +25,10 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     `;
     const [location] = await sql`INSERT INTO locations (tenant_id, slug, name, timezone)
       VALUES (${tenantId}, ${`linked-${tag}`}, ${`Linked studio ${tag}`}, ${timezone}) RETURNING id`;
-    const [first, second] = await sql`INSERT INTO services (tenant_id, slug, title, duration_minutes, price_cents)
+    const [first, second, replacement] = await sql`INSERT INTO services (tenant_id, slug, title, duration_minutes, price_cents)
       VALUES (${tenantId}, ${`first-${tag}`}, ${`First treatment ${tag}`}, 45, 7000),
-             (${tenantId}, ${`second-${tag}`}, ${`Second treatment ${tag}`}, 30, 3000) RETURNING id, title`;
+             (${tenantId}, ${`second-${tag}`}, ${`Second treatment ${tag}`}, 30, 3000),
+             (${tenantId}, ${`replacement-${tag}`}, ${`Replacement service ${tag}`}, 45, 9000) RETURNING id, title`;
     const [primary, secondary] = await sql`INSERT INTO team_members (tenant_id, name, email, role)
       VALUES (${tenantId}, ${`Primary provider ${tag}`}, ${`primary-${tag}@example.test`}, 'staff'),
              (${tenantId}, ${`Second provider ${tag}`}, ${`second-${tag}@example.test`}, 'staff') RETURNING id, name`;
@@ -35,9 +36,9 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await sql`INSERT INTO location_hours (tenant_id, location_id, day_of_week, start_time, end_time)
       SELECT ${tenantId}, ${location.id}, day, '09:00', '17:00' FROM generate_series(0,6) AS day`;
     await sql`INSERT INTO service_locations (tenant_id, service_id, location_id)
-      VALUES (${tenantId}, ${first.id}, ${location.id}), (${tenantId}, ${second.id}, ${location.id})`;
+      VALUES (${tenantId}, ${first.id}, ${location.id}), (${tenantId}, ${second.id}, ${location.id}), (${tenantId}, ${replacement.id}, ${location.id})`;
     await sql`INSERT INTO service_team_members (tenant_id, service_id, team_member_id)
-      VALUES (${tenantId}, ${first.id}, ${primary.id}), (${tenantId}, ${second.id}, ${secondary.id})`;
+      VALUES (${tenantId}, ${first.id}, ${primary.id}), (${tenantId}, ${second.id}, ${secondary.id}), (${tenantId}, ${replacement.id}, ${primary.id})`;
     await sql`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id)
       SELECT ${tenantId}, member, ${location.id} FROM unnest(${providers}::uuid[]) AS member`;
     await sql`INSERT INTO availability_rules (tenant_id, team_member_id, rrule, start_time, end_time, timezone)
@@ -107,16 +108,60 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await expect(saved.getByText(new RegExp(`11:45–12:15 · ${secondary.name}`))).toBeVisible();
     expect((await positions())[0]).toEqual({ starts_at: time("11:00"), added_start: time("11:45"), added_provider: secondary.id });
 
+    const edit = saved.getByRole("button", { name: "Edit services", exact: true });
+    const editor = saved.getByRole("region", { name: "Appointment services" });
+    const save = editor.getByRole("button", { name: "Save services", exact: true });
+    const currentService = async () => (await sql`SELECT service_id FROM bookings WHERE tenant_id=${tenantId} AND id=${booking.id}`)[0]?.service_id;
+    await sql`UPDATE services SET price_cents=3500 WHERE tenant_id=${tenantId} AND id=${second.id}`;
+    await edit.click();
+    await editor.getByRole("combobox", { name: "Choose service 1" }).fill(replacement.title);
+    await editor.getByRole("option", { name: new RegExp(replacement.title) }).click();
+    await editor.getByRole("combobox", { name: "Provider for service 1" }).fill(primary.name);
+    await editor.getByRole("option", { name: primary.name, exact: true }).click();
+    await editor.getByLabel(/Start time for service 2/).fill("12:15");
+    const [editBlock] = await sql`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+      VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("12:15")}, ${time("12:45")}, 'confirmed') RETURNING id`;
+    await save.click();
+    await expect(editor.getByRole("alert")).toContainText(`${second.title} is unavailable`);
+    expect(await currentService()).toBe(first.id);
+    expect((await positions())[0].added_start).toEqual(time("11:45"));
+    await sql`UPDATE booking_blocks SET state='released' WHERE tenant_id=${tenantId} AND id=${editBlock.id}`;
+    await save.click();
+    await expect(saved.getByText(replacement.title, { exact: true })).toBeVisible();
+    await expect(saved.getByText(new RegExp(`12:15–12:45 · ${secondary.name}`))).toBeVisible();
+    expect(await currentService()).toBe(replacement.id);
+    expect((await sql`SELECT booked_price_cents FROM booking_service_segments WHERE tenant_id=${tenantId} AND booking_id=${booking.id}`)[0]?.booked_price_cents).toBe(3000);
+
+    await edit.click();
+    await editor.getByRole("button", { name: "Remove service 2" }).click();
+    await save.click();
+    await expect(saved.getByText(second.title, { exact: true })).toHaveCount(0);
+    expect(await positions()).toHaveLength(0);
+    await edit.click();
+    await editor.getByRole("button", { name: "Add service", exact: true }).click();
+    await editor.getByRole("combobox", { name: "Choose service 2" }).fill(second.title);
+    await editor.getByRole("option", { name: new RegExp(second.title) }).click();
+    await editor.getByRole("combobox", { name: "Provider for service 2" }).fill(secondary.name);
+    await editor.getByRole("option", { name: secondary.name, exact: true }).click();
+    await save.click();
+    await expect(saved.getByText(new RegExp(`11:45–12:15 · ${secondary.name}`))).toBeVisible();
+
     await saved.getByRole("button", { name: "Close appointment", exact: true }).click();
     const segments = page.getByRole("link").filter({ hasText: clientName });
     await expect(segments).toHaveCount(2);
+
+    const staleEditorPage = await page.context().newPage();
+    await staleEditorPage.goto(`/nordic/app/calendars?day=${day}&booking=${booking.id}`);
+    await staleEditorPage.getByRole("button", { name: "Edit services", exact: true }).click();
+    const staleEditor = staleEditorPage.getByRole("region", { name: "Appointment services" });
+    await staleEditor.getByLabel(/Start time for service 2/).fill("12:30");
 
     await page.goto(`/nordic/app/sales?booking=${booking.id}`);
     const checkout = page.getByRole("complementary", { name: `Sale details for ${clientName}` });
     await expect(checkout.getByText(second.title, { exact: false })).toBeVisible();
     await checkout.getByRole("link", { name: "Go to payments" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
-    await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("100.00");
+    await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("125.00");
     const method = checkout.getByRole("combobox", { name: "Method", exact: true });
     await method.selectOption("cash");
     await expect(method).toHaveValue("cash");
@@ -125,7 +170,14 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     const [settled] = await sql`SELECT
       (SELECT count(*)::int FROM commerce_sales WHERE tenant_id=${tenantId} AND booking_id=${booking.id}) AS sales,
       (SELECT sum(amount_cents)::int FROM payment_records WHERE tenant_id=${tenantId} AND booking_id=${booking.id} AND kind='payment') AS paid`;
-    expect(settled).toEqual({ sales: 1, paid: 10000 });
+    expect(settled).toEqual({ sales: 1, paid: 12500 });
+    await staleEditor.getByRole("button", { name: "Save services", exact: true }).click();
+    await expect(staleEditor.getByRole("alert")).toContainText("Services can only be edited before recording a payment");
+    expect((await positions())[0].added_start).toEqual(time("11:45"));
+    await staleEditorPage.close();
+    await page.goto(`/nordic/app/calendars?day=${day}&booking=${booking.id}`);
+    await expect(saved.getByText(replacement.title, { exact: true })).toBeVisible();
+    await expect(edit).toHaveCount(0);
     await page.goto(`/nordic/app/calendars?day=${day}&location=${location.id}&view=month&service=${second.id}`);
     await expect(page.locator(".waybook-month-calendar__appointment").filter({ hasText: clientName })).toHaveCount(1);
 
@@ -133,8 +185,8 @@ test("book, move, pay, and scope the provider view of linked services", async ({
       VALUES (${tenantId}, ${`Unassigned provider ${tag}`}, ${`unassigned-${tag}@example.test`}, 'staff') RETURNING id`;
     await sql`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) VALUES (${tenantId}, ${other.id}, ${location.id})`;
     const roleCases = [
-      { provider: primary.id, email: `primary-login-${tag}@example.test`, own: first.title, peer: second.title },
-      { provider: secondary.id, email: `secondary-login-${tag}@example.test`, own: second.title, peer: first.title },
+      { provider: primary.id, email: `primary-login-${tag}@example.test`, own: replacement.title, peer: second.title },
+      { provider: secondary.id, email: `secondary-login-${tag}@example.test`, own: second.title, peer: replacement.title },
       { provider: other.id, email: `unassigned-login-${tag}@example.test`, own: null, peer: null },
     ];
     for (const staff of roleCases) {

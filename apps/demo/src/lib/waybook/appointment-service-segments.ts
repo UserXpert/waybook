@@ -10,9 +10,15 @@ export function calendarBookingVisibility(db: Sql, canViewTeam: boolean, teamMem
   ))`;
 }
 
+/** Booking alias is b. Payment and package writers lock that booking row. */
+export function appointmentHasSettlement(db: Sql) {
+  return db`(EXISTS (SELECT 1 FROM payment_records p WHERE p.tenant_id = b.tenant_id AND p.booking_id = b.id)
+    OR EXISTS (SELECT 1 FROM commerce_entitlement_entries e WHERE e.tenant_id = b.tenant_id AND e.booking_id = b.id))`;
+}
+
 export async function getAdditionalAppointmentServices(db: Sql, tenantId: string, bookingId: string) {
-  const rows = await db<{ id: string; title: string; priceCents: number; provider: string | null; teamMemberId: string | null; startsAt: Date; endsAt: Date }[]>`
-    SELECT segment.id, service.title, segment.booked_price_cents AS "priceCents", member.name AS provider, block.team_member_id AS "teamMemberId",
+  const rows = await db<{ id: string; serviceId: string; title: string; priceCents: number; provider: string | null; teamMemberId: string | null; startsAt: Date; endsAt: Date }[]>`
+    SELECT segment.id, segment.service_id AS "serviceId", service.title, segment.booked_price_cents AS "priceCents", member.name AS provider, block.team_member_id AS "teamMemberId",
       block.starts_at AS "startsAt", block.ends_at AS "endsAt"
     FROM booking_service_segments segment
     JOIN services service ON service.tenant_id = segment.tenant_id AND service.id = segment.service_id

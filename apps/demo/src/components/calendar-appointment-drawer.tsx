@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
+import { AppointmentServiceEditor } from "@/components/appointment-service-editor";
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { appointmentDrawerCapabilities } from "@/lib/waybook/appointment-drawer-capabilities";
@@ -102,6 +103,8 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
               <dd>{clock(service.startsAt)}–{clock(service.endsAt)}{service.provider ? ` · ${service.provider}` : ""}</dd>
             </div>)}</dl>
           </section> : null}
+          {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
+            bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
           {detail.canManage && detail.status === "arrived" && detail.paymentBalance ? (
             <Link className="waybook-primary-link" href={`${checkoutPath}?booking=${detail.id}`}>Checkout</Link>
           ) : null}

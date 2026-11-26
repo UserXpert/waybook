@@ -2117,6 +2117,11 @@ body {
 .tenant-dashboard-page .manual-appointment__step-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
 .tenant-dashboard-page .manual-appointment fieldset.manual-appointment__step { margin: 0; min-width: 0; }
 .tenant-dashboard-page .manual-appointment__step > button { justify-self: start; }
+.tenant-dashboard-page .appointment-service-editor .tenant-drawer-form__grid { align-items: start; }
+.tenant-dashboard-page .appointment-service-editor label.appointment-service-editor__time { display: grid; grid-template-columns: minmax(0, 1fr); gap: .35rem; }
+.tenant-dashboard-page .appointment-service-editor__time input { width: 100%; }
+.tenant-dashboard-page .appointment-service-editor__time small { grid-column: 1; font-weight: 400; }
+.tenant-dashboard-page .appointment-service-editor__review { flex-wrap: wrap; }
 .tenant-dashboard-page .manual-appointment__client-fields h3 { margin: 0; font-size: .82rem; font-weight: 600; }
 .tenant-dashboard-page .manual-appointment__client-fields small { font-weight: 400; opacity: .8; }
 .tenant-dashboard-page .manual-appointment__selection,

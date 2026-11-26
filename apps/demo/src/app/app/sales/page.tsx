@@ -75,6 +75,7 @@ function activityLabel(eventType: string, clientLabel: string) {
     "booking.created_by_tenant": "Appointment created",
     "booking.confirmed": "Appointment confirmed",
     "booking.rescheduled": "Appointment rescheduled",
+    "booking.services_updated": "Appointment services updated",
     "booking.cancelled": "Appointment cancelled",
     "booking.completed": "Appointment completed",
     "booking.arrived": `${clientLabel} checked in`,
