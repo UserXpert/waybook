@@ -98,14 +98,14 @@ export async function TenantDashboardNav({ tenantId, tenantSlug, tenantName, act
     canUse.waitlist ? { id: "waitlist", href: toHref("/app/waitlist"), label: "Waitlist", description: "Fill open times", group: "Operations" } : null,
     canUse.clients ? { id: "clients", href: toHref("/app/customers"), label: titleTerminology(terms.clients), description: `${titleTerminology(terms.client)} history`, group: "Operations" } : null,
     canUse.team ? { id: "team", href: toHref("/app/team"), label: titleTerminology(terms.staffPlural), description: "Hours and eligibility", group: "Setup" } : null,
-    canUse.targets ? { id: "targets", href: toHref("/app/targets"), label: "Targets", description: `Monthly ${terms.staff} plans`, group: "Insights" } : null,
     canUse.serviceSettings ? { id: "onlineBooking", href: toHref("/app/online-booking"), label: "Online booking", description: "Public page and catalogue", group: "Setup" } : null,
     canUse.serviceSettings ? { id: "services", href: toHref("/app/services"), label: "Services", description: "Prices and duration", group: "Setup" } : null,
     canUse.serviceSettings ? { id: "locations", href: toHref("/app/locations"), label: "Locations", description: "Where you operate", group: "Setup" } : null,
-    canUse.resources ? { id: "resources", href: toHref("/app/resources"), label: "Resources", description: "Rooms and equipment", group: "Operations" } : null,
-    canUse.notifications ? { id: "notifications", href: toHref("/app/notifications"), label: "Notifications", description: "Appointments to review", group: "Operations" } : null,
-    canUse.emails ? { id: "emails", href: toHref("/app/emails"), label: "Emails", description: "Email delivery history", group: "Operations" } : null,
-    canUse.reports ? { id: "reports", href: toHref("/app/reports"), label: "Reports", description: "Business performance", group: "Insights" } : null,
+    canUse.resources ? { id: "resources", href: toHref("/app/resources"), label: "Resources", description: "Rooms and equipment", group: "Setup" } : null,
+    canUse.notifications ? { id: "notifications", href: toHref("/app/notifications"), label: "Notifications", description: "Appointments to review", group: "Activity & insights" } : null,
+    canUse.emails ? { id: "emails", href: toHref("/app/emails"), label: "Emails", description: "Email delivery history", group: "Activity & insights" } : null,
+    canUse.targets ? { id: "targets", href: toHref("/app/targets"), label: "Targets", description: `Monthly ${terms.staff} plans`, group: "Activity & insights" } : null,
+    canUse.reports ? { id: "reports", href: toHref("/app/reports"), label: "Reports", description: "Business performance", group: "Activity & insights" } : null,
   ].filter(Boolean) as TenantAppLink[];
 
   return <><DrawerToggleSemantics /><DrawerHeaderSubmitActions /><header className="tenant-dashboard-nav" aria-label="Tenant dashboard navigation">

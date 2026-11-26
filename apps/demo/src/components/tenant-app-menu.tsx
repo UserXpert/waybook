@@ -6,7 +6,9 @@ import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Bell, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, ClipboardList, Gift, ListPlus, Mail, MapPin, PackageOpen, PanelsTopLeft, ReceiptText, Search, Target, UsersRound, UserRound, X, Globe2 } from "lucide-react";
 
-export type TenantAppLink = { id: string; href: string; label: string; description: string; group: "Operations" | "Commerce" | "Setup" | "Insights" };
+const groups = ["Operations", "Commerce", "Setup", "Activity & insights"] as const;
+
+export type TenantAppLink = { id: string; href: string; label: string; description: string; group: (typeof groups)[number] };
 
 const appIcons = {
   bookings: ClipboardList, sales: ReceiptText, products: PackageOpen, giftCards: Gift, packages: PackageOpen, calendars: CalendarDays, waitlist: ListPlus, clients: UsersRound,
@@ -44,7 +46,6 @@ export function TenantAppMenu({ links, active }: { links: TenantAppLink[]; activ
     return () => { document.removeEventListener("keydown", handleKey); trigger?.focus(); };
   }, [open]);
   const visibleLinks = useMemo(() => links.filter((link) => `${link.label} ${link.description}`.toLowerCase().includes(query.trim().toLowerCase())), [links, query]);
-  const groups: TenantAppLink["group"][] = ["Operations", "Commerce", "Setup", "Insights"];
 
   return <div className="tenant-app-menu">
     <button ref={triggerRef} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => { setQuery(""); setOpen(true); }}><PanelsTopLeft aria-hidden="true" /> Apps</button>
