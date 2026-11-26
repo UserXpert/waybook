@@ -52,6 +52,13 @@ type SaleSummary = { outstandingCents: string; collectedCents: string; refundDue
 
 const salesPageSize = 150;
 const saleStatuses = ["all", "open", "paid", "refund", "cancelled"];
+const defaultSaleSort = "appointment-newest";
+const saleSortOptions = [
+  { value: defaultSaleSort, label: "Appointment date · newest first" },
+  { value: "appointment-oldest", label: "Appointment date · oldest first" },
+  { value: "payment-newest", label: "Payment activity · newest first" },
+  { value: "payment-oldest", label: "Payment activity · oldest first" },
+] as const;
 const uuidPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const money = (cents: number) => new Intl.NumberFormat("en-DK", {
   style: "currency", currency: "DKK", minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2,
@@ -85,8 +92,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; page?: string }> }) {
-  const { location: rawLocation, q, status, sale, page: rawPage } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; page?: string; sort?: string; activity?: string }> }) {
+  const { location: rawLocation, q, status, sale, page: rawPage, sort, activity: paymentActivity } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -102,6 +109,16 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const selectedStatus = status && saleStatuses.includes(status) ? status : "all";
   const search = typeof q === "string" ? q.trim().slice(0, 100) : "";
   const pattern = `%${search}%`;
+  const selectedSort = saleSortOptions.find(({ value }) => value === sort)?.value ?? defaultSaleSort;
+  const selectedActivity = paymentActivity === "with" || paymentActivity === "without" ? paymentActivity : "all";
+  const sortingPayments = selectedSort === "payment-newest" || selectedSort === "payment-oldest";
+  const sortDirection = selectedSort === "appointment-oldest" || selectedSort === "payment-oldest" ? "ascending" : "descending";
+  const sortOrder = {
+    "appointment-newest": db`"startsAt" DESC, "bookingId" DESC`,
+    "appointment-oldest": db`"startsAt" ASC, "bookingId" ASC`,
+    "payment-newest": db`"lastPaymentAt" DESC NULLS LAST, "startsAt" DESC, "bookingId" DESC`,
+    "payment-oldest": db`"lastPaymentAt" ASC NULLS LAST, "startsAt" ASC, "bookingId" ASC`,
+  }[selectedSort];
   const saleRows = db`
       SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.booked_price_cents AS "bookedPriceCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
@@ -136,6 +153,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
           ELSE 'refund'
         END AS settlement_status
         FROM scoped
+        WHERE ${selectedActivity === "all" ? db`TRUE` : db`("lastPaymentAt" IS NOT NULL) = ${selectedActivity === "with"}`}
       ), totals AS (
         SELECT count(*) FILTER (WHERE ${statusFilter})::int AS "matchingCount",
           coalesce(sum(greatest(0, "bookedPriceCents" - "paidCents"))
@@ -149,12 +167,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         FROM totals
       ), visible_sales AS (
         SELECT * FROM classified WHERE ${statusFilter}
-        ORDER BY "lastPaymentAt" DESC NULLS LAST, "startsAt" DESC, "bookingId" DESC
+        ORDER BY ${sortOrder}
         LIMIT ${salesPageSize}
         OFFSET (SELECT (page - 1) * ${salesPageSize} FROM pagination)
       )
       SELECT visible_sales.*, pagination.* FROM pagination LEFT JOIN visible_sales ON TRUE
-      ORDER BY "lastPaymentAt" DESC NULLS LAST, "startsAt" DESC, "bookingId" DESC
+      ORDER BY ${sortOrder}
     `,
     db<Product[]>`SELECT id,title,price_cents AS "priceCents",currency FROM commerce_catalog_items WHERE tenant_id=${tenant.id} AND kind='product' AND is_active=TRUE ORDER BY title`,
     saleId ? db<SaleRow[]>`${saleRows} AND cs.id = ${saleId} ${groupSales}` : [],
@@ -205,6 +223,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   if (location) saleListParams.set("location", location);
   if (search) saleListParams.set("q", search);
   if (selectedStatus !== "all") saleListParams.set("status", selectedStatus);
+  if (selectedActivity !== "all") saleListParams.set("activity", selectedActivity);
+  if (selectedSort !== defaultSaleSort) saleListParams.set("sort", selectedSort);
   const listHref = (pageNumber: number) => {
     const params = new URLSearchParams(saleListParams);
     if (pageNumber > 1) params.set("page", String(pageNumber));
@@ -237,9 +257,29 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       <article><span>Credit due</span><strong>{money(Number(refundDueCents))}</strong></article>
     </section>
     <section className="waybook-data-card">
-      <div className="waybook-section-heading"><h2>Appointment checkouts</h2><form method="get" className="waybook-list-filter"><label>Location<select name="location" defaultValue={selectedLocation?.id ?? ""}><option value="">All locations</option>{locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Status<select name="status" defaultValue={selectedStatus}><option value="all">All sales</option><option value="open">Open balance</option><option value="paid">Paid</option><option value="refund">Credit due</option><option value="cancelled">Cancelled</option></select></label><label>Search<input name="q" type="search" defaultValue={search} placeholder={`${clientLabel} or service`} /></label><button type="submit">Apply</button></form></div>
+      <h2>Appointment checkouts</h2>
+      <form action={salesPath} method="get" className="waybook-list-filter sales-filters">
+        <label>Location<select name="location" defaultValue={selectedLocation?.id ?? ""}>
+          <option value="">All locations</option>
+          {locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select></label>
+        <label>Status<select name="status" defaultValue={selectedStatus}>
+          <option value="all">All sales</option><option value="open">Open balance</option>
+          <option value="paid">Paid</option><option value="refund">Credit due</option><option value="cancelled">Cancelled</option>
+        </select></label>
+        <label>Payment activity<select name="activity" defaultValue={selectedActivity}>
+          <option value="all">Any payment activity</option>
+          <option value="with">With payment activity</option>
+          <option value="without">No payment activity</option>
+        </select></label>
+        <label>Sort by<select name="sort" defaultValue={selectedSort}>
+          {saleSortOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <label>Search<input name="q" type="search" defaultValue={search} placeholder={`${clientLabel} or service`} /></label>
+        <button type="submit">Apply</button>
+      </form>
       <div className="waybook-table-wrap"><table>
-        <thead><tr><th>Sale</th><th>Status</th><th>Date</th><th>{clientLabel}</th><th>Service</th><th>Total</th><th>Payments</th></tr></thead>
+        <thead><tr><th>Sale</th><th>Status</th><th aria-sort={sortingPayments ? undefined : sortDirection}>Appointment date</th><th>{clientLabel}</th><th>Service</th><th>Total</th><th aria-sort={sortingPayments ? sortDirection : undefined}>Payments</th></tr></thead>
         <tbody>{sales.map((row) => {
           const state = settlement(row);
           const href = saleHref(row);
@@ -248,7 +288,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             <td><b className={`sales-status ${state.tone}`}>{state.label}</b><small>{state.detail}</small></td>
             <td>{dateTime.format(row.startsAt)}</td><td>{row.customerName}</td><td>{row.serviceTitle}</td>
             <td>{money(row.bookedPriceCents)}</td>
-            <td>{row.paymentCount ? money(row.paidCents) : "No entries"}{row.lastPaymentAt ? <small>{dateTime.format(row.lastPaymentAt)}</small> : null}</td>
+            <td>{row.paymentCount ? money(row.paidCents) : "No entries"}{row.lastPaymentAt ? <small>Last entry {dateTime.format(row.lastPaymentAt)}</small> : null}</td>
           </BookingListRow>;
         })}{sales.length === 0 ? <tr><td colSpan={7}>No appointment sales match these filters.</td></tr> : null}</tbody>
       </table></div>

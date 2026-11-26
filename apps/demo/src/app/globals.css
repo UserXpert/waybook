@@ -4339,3 +4339,18 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme] .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions > .tenant-drawer-close:hover:not(:focus-visible) {
   outline: none;
 }
+
+.tenant-dashboard-page .sales-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  margin: .85rem 0 1.1rem;
+}
+.tenant-dashboard-page .sales-filters :is(input, select) { width: 100%; min-width: 0; font-weight: 400; }
+.tenant-dashboard-page .sales-filters > button { align-self: end; }
+@media (max-width: 1020px) {
+  .tenant-dashboard-page .sales-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .tenant-dashboard-page .sales-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sales-filters label:has(select[name="activity"], select[name="sort"]) { grid-column: 1 / -1; }
+}
