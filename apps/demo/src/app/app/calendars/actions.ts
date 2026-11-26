@@ -10,12 +10,12 @@ import { fromZonedTime } from "date-fns-tz";
 import { BookingConflictError, withSerializableRetry } from "@/lib/waybook/transaction-conflicts";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { availableSlots } from "@/lib/waybook/booking";
-import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
+import { calendarBookingVisibility, getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { getAppointmentReservations, linkedAppointmentOpenings } from "@/lib/waybook/linked-appointment-schedule";
 import { tenantDb } from "@/lib/waybook/database";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
-import { canManageAppointment, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 import {
   assertMovableAppointmentStatus,
@@ -110,22 +110,22 @@ function localDateTimeKey(date: Date, timezone: string) {
 
 /** Load one visible appointment without rebuilding the calendar. */
 export async function getCalendarAppointment(bookingId: string) {
-  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) throw new Error("Booking is unavailable.");
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) return null;
   const { tenant, permissions } = await calendarPermissionContext();
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
-  if (!canViewTeam && !permissions.teamMemberId) throw new Error("You do not have permission to view this calendar.");
+  if (!canViewTeam && !permissions.teamMemberId) return null;
   const db = tenantDb(tenant);
-  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string; teamMemberId: string }[]>`
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null }[]>`
     SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
       bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,
       c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
     JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
-    JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
+    LEFT JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
     LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
-    WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND (${canViewTeam} OR b.team_member_id=${permissions.teamMemberId ?? null}::uuid) LIMIT 1
+    WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND ${calendarBookingVisibility(db, canViewTeam, permissions.teamMemberId)} LIMIT 1
   `;
-  if (!booking) throw new Error("Booking is unavailable.");
+  if (!booking) return null;
   const { teamMemberId, ...detail } = booking;
   const [resources, paymentBalance, additionalServices] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
@@ -137,7 +137,16 @@ export async function getCalendarAppointment(bookingId: string) {
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
     getAdditionalAppointmentServices(db, tenant.id, bookingId),
   ]);
-  const canManageSchedule = canManageAppointment(permissions, teamMemberId, ...additionalServices.map((item) => item.teamMemberId));
+  const providers = [teamMemberId, ...additionalServices.map((item) => item.teamMemberId)];
+  const ownSegment = !canViewTeam && teamMemberId !== permissions.teamMemberId
+    ? additionalServices.find((item) => item.teamMemberId === permissions.teamMemberId)
+    : undefined;
+  if (!canViewTeam && teamMemberId !== permissions.teamMemberId && !ownSegment) return null;
+  const visibleAdditionalServices = additionalServices
+    .filter((item) => item.id !== ownSegment?.id && (canViewTeam || item.teamMemberId === permissions.teamMemberId))
+    .map(({ id, provider, title, startsAt, endsAt }) => ({ id, provider, title, startsAt, endsAt }));
+  const canManageSchedule = canManageAppointment(permissions, ...providers) &&
+    (canViewTeam || providers.length === 1 || providers.every((id) => id === permissions.teamMemberId));
   const today = localDateKey(new Date(), tenant.timezone);
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
@@ -153,17 +162,19 @@ export async function getCalendarAppointment(bookingId: string) {
     resourceId: permissions.isManager ? booking.resourceId : null,
     serviceId: permissions.isManager ? booking.serviceId : "",
     locationId: permissions.isManager ? booking.locationId : "",
-    startsAt: booking.startsAt.toISOString(),
-    endsAt: booking.endsAt.toISOString(),
+    serviceTitle: ownSegment?.title ?? booking.serviceTitle,
+    teamMemberName: ownSegment?.provider ?? booking.teamMemberName ?? "",
+    startsAt: ownSegment?.startsAt ?? booking.startsAt.toISOString(),
+    endsAt: ownSegment?.endsAt ?? booking.endsAt.toISOString(),
     canManage: permissions.isManager,
     canManageSchedule,
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
-    canUpdateStatus: permissions.isManager || permissions.canUpdateAppointmentStatus,
+    canUpdateStatus: canUpdateAppointmentAttendance(permissions, providers),
     resources,
     paymentBalance,
     days,
     slots,
-    additionalServices,
+    additionalServices: visibleAdditionalServices,
     timezone: tenant.timezone,
   };
 }
@@ -293,17 +304,22 @@ async function editableBooking(bookingId: string, purpose: "appointment" | "stat
     WHERE b.id = ${bookingId} AND b.tenant_id = ${tenant.id} LIMIT 1
   `;
   if (!booking) throw new Error("Booking is unavailable.");
+  const linkedProviders = booking.hasLinkedServices && !permissions.isManager
+    ? (await getAppointmentReservations(db, tenant.id, booking.id)).filter((item) => item.position > 1).map((item) => item.teamMemberId)
+    : [];
+  const providers = [booking.teamMemberId, ...linkedProviders];
   if (purpose === "manager") {
     // The tenant role check above is the authorization boundary for payments.
   } else if (purpose === "status") {
-    if (!permissions.isManager && !permissions.canUpdateAppointmentStatus) {
+    if (!canUpdateAppointmentAttendance(permissions, providers)) {
       throw new Error("You do not have permission to change appointment status.");
     }
   } else {
-    const reservations = booking.hasLinkedServices && !permissions.isManager && !permissions.canManageTeamAppointments
-      ? await getAppointmentReservations(db, tenant.id, booking.id)
-      : [];
-    assertAppointmentPermission(permissions, booking.teamMemberId, ...reservations.map((item) => item.teamMemberId));
+    if (booking.hasLinkedServices && !permissions.isManager && !permissions.canViewTeamCalendar
+      && providers.some((id) => id !== permissions.teamMemberId)) {
+      throw new Error("You do not have permission to change this appointment.");
+    }
+    assertAppointmentPermission(permissions, ...providers);
   }
   return { tenant, db, booking, permissions };
 }

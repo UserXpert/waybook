@@ -1,6 +1,15 @@
 import "server-only";
 import type { Sql } from "postgres";
 
+/** Booking alias is b in calendar queries that check attendance and detail access. */
+export function calendarBookingVisibility(db: Sql, canViewTeam: boolean, teamMemberId: string | null) {
+  return db`(${canViewTeam} OR b.team_member_id = ${teamMemberId}::uuid OR EXISTS (
+    SELECT 1 FROM booking_service_segments segment
+    JOIN booking_blocks block ON block.tenant_id = segment.tenant_id AND block.id = segment.booking_block_id
+    WHERE segment.tenant_id = b.tenant_id AND segment.booking_id = b.id AND block.team_member_id = ${teamMemberId}::uuid
+  ))`;
+}
+
 export async function getAdditionalAppointmentServices(db: Sql, tenantId: string, bookingId: string) {
   const rows = await db<{ id: string; title: string; priceCents: number; provider: string | null; teamMemberId: string | null; startsAt: Date; endsAt: Date }[]>`
     SELECT segment.id, service.title, segment.booked_price_cents AS "priceCents", member.name AS provider, block.team_member_id AS "teamMemberId",

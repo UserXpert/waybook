@@ -3,14 +3,19 @@ import { expect, test } from "@playwright/test";
 import { fromZonedTime } from "date-fns-tz";
 import postgres from "postgres";
 
-test("book and move two services with separate providers and settle one sale", async ({ page }) => {
+test("book, move, pay, and scope the provider view of linked services", async ({ page }) => {
+  test.setTimeout(90_000);
   page.setDefaultTimeout(8000);
   const database = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
-  const url = new URL(database);
-  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.pathname.startsWith("/waybook_e2e_")) {
-    throw new Error("Linked appointment QA requires a disposable local database.");
+  const controlDatabase = process.env.WAYBOOK_CONTROL_DATABASE_URL!;
+  for (const raw of [database, controlDatabase]) {
+    const url = new URL(raw);
+    if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) || !url.pathname.startsWith("/waybook_e2e_")) {
+      throw new Error("Linked appointment QA requires disposable local databases.");
+    }
   }
   const sql = postgres(database, { max: 1, ssl: false });
+  const control = postgres(controlDatabase, { max: 1, ssl: false });
   const tag = randomUUID().slice(0, 8);
   const clientName = `Linked client ${tag}`;
   const clientEmail = `linked-${tag}@example.test`;
@@ -121,7 +126,62 @@ test("book and move two services with separate providers and settle one sale", a
       (SELECT count(*)::int FROM commerce_sales WHERE tenant_id=${tenantId} AND booking_id=${booking.id}) AS sales,
       (SELECT sum(amount_cents)::int FROM payment_records WHERE tenant_id=${tenantId} AND booking_id=${booking.id} AND kind='payment') AS paid`;
     expect(settled).toEqual({ sales: 1, paid: 10000 });
+    await page.goto(`/nordic/app/calendars?day=${day}&location=${location.id}&view=month&service=${second.id}`);
+    await expect(page.locator(".waybook-month-calendar__appointment").filter({ hasText: clientName })).toHaveCount(1);
+
+    const [other] = await sql`INSERT INTO team_members (tenant_id, name, email, role)
+      VALUES (${tenantId}, ${`Unassigned provider ${tag}`}, ${`unassigned-${tag}@example.test`}, 'staff') RETURNING id`;
+    await sql`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) VALUES (${tenantId}, ${other.id}, ${location.id})`;
+    const roleCases = [
+      { provider: primary.id, email: `primary-login-${tag}@example.test`, own: first.title, peer: second.title },
+      { provider: secondary.id, email: `secondary-login-${tag}@example.test`, own: second.title, peer: first.title },
+      { provider: other.id, email: `unassigned-login-${tag}@example.test`, own: null, peer: null },
+    ];
+    for (const staff of roleCases) {
+      const [identity] = await control`INSERT INTO identities (email, password_hash, display_name)
+        SELECT ${staff.email}, password_hash, 'Test provider' FROM identities WHERE email='owner@nordic.local' RETURNING id`;
+      await control`INSERT INTO tenant_memberships (tenant_id, identity_id, role) VALUES (${tenantId}, ${identity.id}, 'staff')`;
+      await sql`UPDATE team_members SET identity_id=${identity.id} WHERE tenant_id=${tenantId} AND id=${staff.provider}`;
+      await sql`INSERT INTO staff_permissions (tenant_id, team_member_id, can_manage_own_appointments, can_update_appointment_status)
+        VALUES (${tenantId}, ${staff.provider}, true, true)`;
+      await page.context().clearCookies();
+      await page.goto("/login");
+      await page.getByLabel("Work email").fill(staff.email);
+      await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await expect(page).toHaveURL(/\/nordic\/app\/calendars/);
+
+      const week = `/nordic/app/calendars?day=${day}&location=${location.id}`;
+      await page.goto(week);
+      const ownCard = page.getByRole("link", { name: new RegExp(clientName) });
+      if (staff.own) {
+        await expect(ownCard).toHaveCount(1);
+        await expect(ownCard).toContainText(staff.own);
+        await ownCard.click();
+        await expect(saved.getByText(staff.own, { exact: true })).toBeVisible();
+        // Hard navigation must use the same permissions and service projection.
+        await page.goto(`/nordic/app/calendars?day=${day}&booking=${booking.id}`);
+        await expect(saved.getByText(staff.own, { exact: true })).toBeVisible();
+        await expect(saved.getByText(staff.peer!, { exact: true })).toHaveCount(0);
+        await expect(saved.getByText(clientEmail)).toHaveCount(0);
+        await expect(saved.getByText("You have view-only access to this appointment.")).toBeVisible();
+        await expect(saved.getByRole("heading", { name: "Appointment status" })).toHaveCount(0);
+        await expect(saved.getByRole("button", { name: "Cancel appointment" })).toHaveCount(0);
+        await expect(saved.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
+        await expect(saved.getByRole("link", { name: "Checkout" })).toHaveCount(0);
+        await page.goto(`${week}&view=month`);
+        await expect(page.getByRole("link").filter({ hasText: clientName }).first()).toBeVisible();
+        await page.goto(`/nordic/app/sales?booking=${booking.id}`);
+        await expect(checkout).toHaveCount(0);
+        await expect(page).not.toHaveURL(/\/app\/sales/);
+      } else {
+        await expect(ownCard).toHaveCount(0);
+        await page.goto(`${week}&booking=${booking.id}`);
+        await expect(saved).toHaveCount(0);
+        await expect(page.getByText(clientName, { exact: true })).toHaveCount(0);
+      }
+    }
   } finally {
-    await sql.end();
+    await Promise.all([sql.end(), control.end()]);
   }
 });

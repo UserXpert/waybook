@@ -10,7 +10,7 @@ import { appointmentDrawerCapabilities } from "@/lib/waybook/appointment-drawer-
 
 import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 
-type Detail = Awaited<ReturnType<typeof getCalendarAppointment>>;
+type Detail = NonNullable<Awaited<ReturnType<typeof getCalendarAppointment>>>;
 export type CalendarAppointmentSummary = Pick<Detail, "id" | "bookingNumber" | "customerName" | "serviceTitle" | "teamMemberName" | "startsAt" | "endsAt" | "status">;
 
 export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, checkoutPath, staffLabel = "Staff" }: { summaries: CalendarAppointmentSummary[]; initialDetail: Detail | null; timezone: string; checkoutPath: string; staffLabel?: string }) {
@@ -33,7 +33,9 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     setDetail(null);
     setSelected(summariesRef.current.find((item) => item.id === id) ?? { id, bookingNumber: "", customerName: "Appointment", serviceTitle: "", teamMemberName: "", startsAt: "", endsAt: "", status: "" });
     void getCalendarAppointment(id).then((result) => {
-      if (request.current === serial) { setSelected(result); setDetail(result); }
+      if (request.current !== serial) return;
+      if (result) { setSelected(result); setDetail(result); }
+      else { setSelected(null); setDetail(null); }
     }).catch(() => { if (request.current === serial) setError("Could not load this appointment. Please try again."); });
   }, []);
 
