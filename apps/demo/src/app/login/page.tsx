@@ -13,11 +13,7 @@ export default async function Login({
   return (
     <main className="waybook-login-page">
       <section className="waybook-login-shell">
-        <picture className="waybook-login-brand">
-          <source media="(max-width: 760px)" srcSet="/brand/waybook-logo.svg" />
-          <img src="/brand/waybook-logo-white.svg" alt="Waybook" />
-        </picture>
-        <div className="waybook-login-art" aria-hidden="true" />
+        <img className="waybook-login-brand" src="/brand/waybook-logo.svg" alt="Waybook" />
 
         <section className="waybook-login-panel" aria-labelledby="login-title">
           <div className="waybook-login-panel__inner">
@@ -45,6 +41,37 @@ export default async function Login({
             ) : null}
           </div>
         </section>
+
+        <aside className="waybook-login-art" aria-label="Waybook product preview">
+          <div className="waybook-login-schedule">
+            <div className="waybook-login-schedule__header">
+              <strong>Today at Nordic Studio</strong>
+              <span>Schedule preview</span>
+            </div>
+            <div className="waybook-login-schedule__total">
+              <strong>12</strong>
+              <span>appointments in motion</span>
+              <b>+3 confirmed</b>
+            </div>
+            <ul className="waybook-login-schedule__bookings">
+              <li>
+                <span className="waybook-login-schedule__initials" aria-hidden="true">AC</span>
+                <span><strong>Avery Chen</strong><small>10:00 · Private session</small></span>
+                <b>Confirmed</b>
+              </li>
+              <li>
+                <span className="waybook-login-schedule__initials" aria-hidden="true">SA</span>
+                <span><strong>Sofie Andersen</strong><small>10:30 · Studio session</small></span>
+                <b>Ready</b>
+              </li>
+            </ul>
+            <div className="waybook-login-schedule__bar" aria-hidden="true" />
+          </div>
+          <div className="waybook-login-showcase-copy">
+            <p>Clear days. Calm teams.</p>
+            <span>Manage bookings, staff and studio resources in one place.</span>
+          </div>
+        </aside>
       </section>
     </main>
   );
