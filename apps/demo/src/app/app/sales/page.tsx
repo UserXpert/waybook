@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
+import { TableDateFields } from "@/components/table-date-fields";
+import { dateFilterParams, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { BookingListRow } from "@/components/booking-list-controls";
 import { SaleAppointmentDetailsForm } from "@/components/sale-appointment-details-form";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
@@ -52,9 +54,10 @@ type SaleSummary = { outstandingCents: string; collectedCents: string; refundDue
 
 const salesPageSize = 150;
 const saleStatuses = ["all", "open", "paid", "refund", "cancelled"];
-const defaultSaleSort = "appointment-newest";
+const defaultSaleSort = "appointment-today";
 const saleSortOptions = [
-  { value: defaultSaleSort, label: "Appointment date · newest first" },
+  { value: defaultSaleSort, label: "Appointment date · today first" },
+  { value: "appointment-newest", label: "Appointment date · newest first" },
   { value: "appointment-oldest", label: "Appointment date · oldest first" },
   { value: "payment-newest", label: "Payment activity · newest first" },
   { value: "payment-oldest", label: "Payment activity · oldest first" },
@@ -92,8 +95,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; page?: string; sort?: string; activity?: string }> }) {
-  const { location: rawLocation, q, status, sale, page: rawPage, sort, activity: paymentActivity } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; page?: string; sort?: string; activity?: string } & TableDateParams> }) {
+  const { location: rawLocation, q, status, sale, page: rawPage, sort, activity: paymentActivity, from, to } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -111,9 +114,11 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const pattern = `%${search}%`;
   const selectedSort = saleSortOptions.find(({ value }) => value === sort)?.value ?? defaultSaleSort;
   const selectedActivity = paymentActivity === "with" || paymentActivity === "without" ? paymentActivity : "all";
+  const dates = tableDateFilters({ from, to }, tenant.timezone);
   const sortingPayments = selectedSort === "payment-newest" || selectedSort === "payment-oldest";
-  const sortDirection = selectedSort === "appointment-oldest" || selectedSort === "payment-oldest" ? "ascending" : "descending";
+  const sortDirection = selectedSort === defaultSaleSort ? "other" : selectedSort.endsWith("-oldest") ? "ascending" : "descending";
   const sortOrder = {
+    "appointment-today": tableDateOrder(db, "startsAt", "bookingId", dates),
     "appointment-newest": db`"startsAt" DESC, "bookingId" DESC`,
     "appointment-oldest": db`"startsAt" ASC, "bookingId" ASC`,
     "payment-newest": db`"lastPaymentAt" DESC NULLS LAST, "startsAt" DESC, "bookingId" DESC`,
@@ -144,6 +149,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         ${saleRows}
           ${location ? db`AND b.location_id = ${location}` : db``}
           ${search ? db`AND (c.name ILIKE ${pattern} OR s.title ILIKE ${pattern})` : db``}
+        ${dateRangeWhere(db, "b.starts_at", dates)}
         ${groupSales}
       ), classified AS (
         SELECT *, CASE
@@ -219,7 +225,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   ` : [];
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
-  const saleListParams = new URLSearchParams();
+  const saleListParams = dateFilterParams(new URLSearchParams(), dates);
   if (location) saleListParams.set("location", location);
   if (search) saleListParams.set("q", search);
   if (selectedStatus !== "all") saleListParams.set("status", selectedStatus);
@@ -275,6 +281,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         <label>Sort by<select name="sort" defaultValue={selectedSort}>
           {saleSortOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
         </select></label>
+        <TableDateFields dates={dates} label="Appointment date range" withSort={false} />
         <label>Search<input name="q" type="search" defaultValue={search} placeholder={`${clientLabel} or service`} /></label>
         <button type="submit">Apply</button>
       </form>

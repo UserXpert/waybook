@@ -1,3 +1,5 @@
+import { TableDateFields } from "@/components/table-date-fields";
+import { dateFilterParams, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { notFound } from "next/navigation";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import Link from "next/link";
@@ -21,8 +23,8 @@ const money = (cents: number, currency: string) => new Intl.NumberFormat("en-DK"
 const salesPageSize = 100;
 const uuidPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
-export default async function RetailCheckoutPage({ searchParams }: { searchParams: Promise<{ sale?: string; page?: string }> }) {
-  const { sale, page: rawPage } = await searchParams;
+export default async function RetailCheckoutPage({ searchParams }: { searchParams: Promise<{ sale?: string; page?: string } & TableDateParams> }) {
+  const { sale, page: rawPage, sort, from, to } = await searchParams;
   const saleId = typeof sale === "string" && uuidPattern.test(sale) ? sale : null;
   const requestedPage = typeof rawPage === "string" && /^[1-9]\d{0,8}$/.test(rawPage) ? Number(rawPage) : 1;
   const { tenant, membership } = await requireTenantWorkspace();
@@ -32,6 +34,9 @@ export default async function RetailCheckoutPage({ searchParams }: { searchParam
   const terminology = await getTenantTerminology(tenant);
   const clientLabel = titleTerminology(terminology.client);
   const db = tenantDb(tenant);
+  const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
+  const dateRange = dateRangeWhere(db, "cs.created_at", dates);
+  const dateOrder = tableDateOrder(db, "cs.created_at", "cs.id", dates);
   const retailScope = db`
     FROM commerce_sales cs
     JOIN customers c ON c.id=cs.customer_id AND c.tenant_id=cs.tenant_id
@@ -45,26 +50,31 @@ export default async function RetailCheckoutPage({ searchParams }: { searchParam
   `;
   const [products, [total], selectedSales] = await Promise.all([
     db<Product[]>`SELECT id,title,sku,price_cents AS "priceCents",currency FROM commerce_catalog_items WHERE tenant_id=${tenant.id} AND kind='product' AND is_active=TRUE ORDER BY title`,
-    db<{ count: number }[]>`SELECT count(*)::int AS count ${retailScope}`,
+    db<{ count: number }[]>`SELECT count(*)::int AS count ${retailScope} ${dateRange}`,
     saleId ? db<RetailSale[]>`${saleDetails} AND cs.id=${saleId}` : [],
   ]);
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total.count / salesPageSize)));
   const offset = (page - 1) * salesPageSize;
   const [sales, lines, transactions] = await Promise.all([
-    db<RetailSale[]>`${saleDetails} ORDER BY cs.created_at DESC, cs.id DESC LIMIT ${salesPageSize} OFFSET ${offset}`,
+    db<RetailSale[]>`${saleDetails} ${dateRange} ORDER BY ${dateOrder} LIMIT ${salesPageSize} OFFSET ${offset}`,
     selectedSales.length ? db<RetailLine[]>`SELECT id,title_snapshot AS title,unit_price_cents AS "unitPriceCents",quantity,discount_cents AS "discountCents" FROM commerce_sale_lines WHERE tenant_id=${tenant.id} AND sale_id=${saleId} ORDER BY created_at` : [],
     selectedSales.length ? db<RetailTransaction[]>`SELECT method,amount_cents AS "amountCents",recorded_at AS "recordedAt" FROM commerce_sale_transactions WHERE tenant_id=${tenant.id} AND sale_id=${saleId} ORDER BY recorded_at DESC` : [],
   ]);
   const selected = selectedSales[0];
   const path = tenantPath(tenantSlug, "/app/sales/retail");
-  const listHref = (pageNumber: number) => pageNumber > 1 ? `${path}?page=${pageNumber}` : path;
+  const listHref = (pageNumber: number, id?: string) => {
+    const params = dateFilterParams(new URLSearchParams(), dates);
+    if (pageNumber > 1) params.set("page", String(pageNumber));
+    if (id) params.set("sale", id);
+    return params.size ? `${path}?${params}` : path;
+  };
   const closeHref = listHref(page);
-  const saleHref = (id: string) => `${closeHref}${page > 1 ? "&" : "?"}sale=${id}`;
+  const saleHref = (id: string) => listHref(page, id);
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="sales" />
     <section className="reports-intro"><div><p>SALES · RETAIL</p><h1>New checkout</h1><span>Create a draft retail sale, then add products before payment is recorded.</span></div><Link className="waybook-primary-link" href={tenantPath(tenantSlug, "/app/sales")}>Appointment sales</Link></section>
     <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Start a retail checkout</h2><p>Products use an immutable price snapshot once added. Only active products can be selected.</p></div></div><RetailCheckoutForm action={createRetailCheckout} submitLabel="Create draft"><ClientPicker name="customerId" terminology={terminology} required /><label>Product<select name="productId" required defaultValue=""><option value="" disabled>Select product</option>{products.map((item) => <option key={item.id} value={item.id}>{item.title}{item.sku ? ` · ${item.sku}` : ""} · {money(item.priceCents, item.currency)}</option>)}</select></label><label>Quantity<input name="quantity" type="number" defaultValue={1} min={1} max={99} required /></label></RetailCheckoutForm></section>
-    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Retail checkouts</h2><p>Drafts are editable; a collected checkout is permanently closed and paid by one recorded tender.</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>Checkout</th><th>{clientLabel}</th><th>Status</th><th>Total</th><th>Created</th></tr></thead><tbody>{sales.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : undefined}><td><Link className="waybook-row-link" href={saleHref(item.id)}>Retail checkout</Link></td><td>{item.customerName}</td><td><b className={`sales-status ${item.status === "closed" ? "is-paid" : "is-open"}`}>{item.status}</b></td><td>{money(item.totalCents, item.currency)}</td><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.createdAt)}</td></tr>)}{sales.length === 0 ? <tr><td colSpan={5}>No retail checkouts yet.</td></tr> : null}</tbody></table></div>
+    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Retail checkouts</h2><p>Drafts are editable; a collected checkout is permanently closed and paid by one recorded tender.</p></div></div><form method="get" className="waybook-list-filter dated-list-filters"><TableDateFields dates={dates} label="Created date range" /><button type="submit">Apply</button></form><div className="waybook-table-wrap"><table><thead><tr><th>Checkout</th><th>{clientLabel}</th><th>Status</th><th>Total</th><th>Created</th></tr></thead><tbody>{sales.map((item) => <tr key={item.id} className={selected?.id === item.id ? "is-selected" : undefined}><td><Link className="waybook-row-link" href={saleHref(item.id)}>Retail checkout</Link></td><td>{item.customerName}</td><td><b className={`sales-status ${item.status === "closed" ? "is-paid" : "is-open"}`}>{item.status}</b></td><td>{money(item.totalCents, item.currency)}</td><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.createdAt)}</td></tr>)}{sales.length === 0 ? <tr><td colSpan={5}>No retail checkouts yet.</td></tr> : null}</tbody></table></div>
       {total.count > salesPageSize ? <nav className="waybook-list-filter sales-pagination" aria-label="Retail checkout pages">
         <span>Showing {offset + 1}–{Math.min(offset + salesPageSize, total.count)} of {total.count}</span>
         {page > 1 ? <Link href={listHref(page - 1)}>Previous page</Link> : null}

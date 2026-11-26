@@ -2,6 +2,9 @@ import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-edito
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CustomerForm } from "@/components/customer-form";
+import { TableDateFields } from "@/components/table-date-fields";
+import { clientDirectoryAppointment, clientDirectoryQuery } from "@/lib/waybook/client-lookup-query";
+import { dateFilterParams, tableDateFilters, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { ClientDirectoryList } from "@/components/client-directory-list";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { tenantDb } from "@/lib/waybook/database";
@@ -21,8 +24,8 @@ const money = (cents: number, currency = "DKK") => new Intl.NumberFormat("en-DK"
   style: "currency", currency, minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2,
 }).format(cents / 100);
 
-export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ customer?: string; q?: string; after?: string; create?: string; edit?: string }> }) {
-  const { customer: customerId, q, after, create, edit } = await searchParams;
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ customer?: string; q?: string; after?: string; create?: string; edit?: string } & TableDateParams> }) {
+  const { customer: customerId, q, after, create, edit, sort, from, to } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   if (!await isFeatureEnabled(tenant.id, "clients")) redirect("/" + tenantSlug + "/app");
@@ -40,14 +43,10 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const customerRowSql = "SELECT c.id,c.name,c.email,c.phone,c.created_at AS \"createdAt\",count(b.id)::int AS \"bookingCount\",coalesce(sum(b.booked_price_cents) FILTER (WHERE b.status <> 'cancelled'),0)::int AS \"bookedValueCents\",max(b.starts_at) FILTER (WHERE b.status NOT IN ('cancelled','no_show') AND b.starts_at < now()) AS \"lastBookingAt\",min(b.starts_at) FILTER (WHERE b.status IN ('confirmed','arrived') AND b.starts_at >= now()) AS \"nextBookingAt\" FROM customers c LEFT JOIN bookings b ON b.customer_id=c.id AND b.tenant_id=c.tenant_id";
   const directoryFilter = "c.tenant_id=$1 AND ($2='' OR c.name ILIKE $3 OR c.email ILIKE $3 OR coalesce(c.phone,'') ILIKE $3)";
   const directoryParameters = [tenant.id, search, pattern];
-  // Pick the page before aggregating bookings, so history for every other
-  // customer is not grouped just to render the first 50 results.
+  const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
+  const hasRange = Boolean(dates.start || dates.end);
   const [directoryRows, [summary]] = await Promise.all([
-    db.unsafe<CustomerRow[]>(`WITH page AS MATERIALIZED (
-      SELECT c.id FROM customers c WHERE ${directoryFilter}
-        AND ($4::uuid IS NULL OR (c.name,c.id) > (coalesce((SELECT name FROM customers WHERE tenant_id=$1 AND id=$4::uuid),''),$4::uuid))
-      ORDER BY c.name,c.id LIMIT 51
-    ) ${customerRowSql} JOIN page ON page.id=c.id WHERE c.tenant_id=$1 GROUP BY c.id ORDER BY c.name,c.id`, [...directoryParameters, cursor]),
+    db.unsafe<CustomerRow[]>(clientDirectoryQuery, [...directoryParameters, cursor, 51, dates.sort, dates.start, dates.end]),
     db.unsafe<{ matching: number; returning: number; bookedAhead: number }[]>(`
       SELECT count(*)::int AS matching,
         count(*) FILTER (WHERE EXISTS (
@@ -57,8 +56,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           SELECT 1 FROM bookings b WHERE b.tenant_id=c.tenant_id AND b.customer_id=c.id
             AND b.status IN ('confirmed','arrived') AND b.starts_at >= now()
         ))::int AS "bookedAhead"
-      FROM customers c WHERE ${directoryFilter}
-    `, directoryParameters),
+      FROM customers c ${hasRange ? clientDirectoryAppointment : ""} WHERE ${directoryFilter}
+      ${hasRange ? "AND ($4::timestamptz IS NULL OR next.date >= $4) AND ($5::timestamptz IS NULL OR next.date < $5)" : ""}
+    `, hasRange ? [...directoryParameters, dates.start, dates.end] : directoryParameters),
   ]);
   const hasMore = directoryRows.length > 50;
   const customers = directoryRows.slice(0, 50);
@@ -76,7 +76,8 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     `,
   ]) : [[], [], [], []] as [CustomerBooking[], PaymentItem[], GiftCardItem[], { paidCents: string }[]];
   const searchInputId = "client-directory-search";
-  const closeHref = "/" + tenantSlug + "/app/customers" + (search ? "?q=" + encodeURIComponent(search) : "");
+  const listParams = dateFilterParams(new URLSearchParams(search ? { q: search } : {}), dates);
+  const closeHref = "/" + tenantSlug + "/app/customers" + (listParams.size ? `?${listParams}` : "");
   const selectedHref = (customer: CustomerRow, suffix = "") => closeHref + (closeHref.includes("?") ? "&" : "?") + "customer=" + customer.id + suffix;
   const createHref = closeHref + (closeHref.includes("?") ? "&" : "?") + "create=1";
   const editHref = selected ? selectedHref(selected, "&edit=1") : closeHref;
@@ -97,7 +98,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     <header><div><p>{clients.toUpperCase()} · DATABASE-BACKED</p><h1>{tenant.name}</h1><span>{membership.role} · {tenant.timezone}</span></div><form action={logout}><button>Sign out</button></form></header>
     {canManage ? null : <p className="waybook-permission-note">Your role has read-only access to {client} records.</p>}
     <section className="waybook-data-metrics client-pulse"><article><span>{clientsTitle}</span><strong>{summary.matching}</strong><small>Matching the current directory</small></article><article><span>Returning</span><strong>{summary.returning}</strong><small>Two or more bookings</small></article><article><span>Booked ahead</span><strong>{summary.bookedAhead}</strong><small>{clientsTitle} with a future appointment</small></article></section>
-    <section className="waybook-data-card"><div className="waybook-section-heading"><div><p>{client.toUpperCase()} DIRECTORY</p><h2>{clientsTitle}</h2><span>Search people, open their record, and act on the next appointment.</span></div><div className="client-list-actions">{canManage ? <Link className="waybook-primary-link" href={createHref}>Add {client}</Link> : null}<form method="get" className="waybook-list-filter"><label>Search {clients}<input id={searchInputId} name="q" type="search" defaultValue={search} placeholder="Name, email, or phone" /></label><button type="submit">Search</button></form></div></div><ClientDirectoryList key={JSON.stringify([tenant.id, search, cursor])} recordOpen={Boolean(selected)} searchInputId={searchInputId} initialClients={customers.map((customer) => ({ id: customer.id, name: customer.name, email: customer.email, phone: customer.phone, bookingCount: customer.bookingCount, bookedValueCents: customer.bookedValueCents, lastBookingAt: customer.lastBookingAt?.toISOString() ?? null, nextBookingAt: customer.nextBookingAt?.toISOString() ?? null }))} initialNextCursor={hasMore ? customers.at(-1)?.id ?? null : null} query={search} path={"/" + tenantSlug + "/app/customers"} timeZone={tenant.timezone} clientLabel={client} clientsLabel={clients} /></section>
+    <section className="waybook-data-card"><div className="waybook-section-heading"><div><p>{client.toUpperCase()} DIRECTORY</p><h2>{clientsTitle}</h2><span>Search people, open their record, and act on the next appointment.</span></div><div className="client-list-actions">{canManage ? <Link className="waybook-primary-link" href={createHref}>Add {client}</Link> : null}</div></div><form method="get" className="waybook-list-filter dated-list-filters"><label>Search {clients}<input id={searchInputId} name="q" type="search" defaultValue={search} placeholder="Name, email, or phone" /></label><TableDateFields dates={dates} label="Next appointment range" /><button type="submit">Search</button></form><ClientDirectoryList key={JSON.stringify([tenant.id, listParams.toString(), cursor])} recordOpen={Boolean(selected)} searchInputId={searchInputId} initialClients={customers.map((customer) => ({ id: customer.id, name: customer.name, email: customer.email, phone: customer.phone, bookingCount: customer.bookingCount, bookedValueCents: customer.bookedValueCents, lastBookingAt: customer.lastBookingAt?.toISOString() ?? null, nextBookingAt: customer.nextBookingAt?.toISOString() ?? null }))} initialNextCursor={hasMore ? customers.at(-1)?.id ?? null : null} filters={listParams.toString()} path={"/" + tenantSlug + "/app/customers"} timeZone={tenant.timezone} clientLabel={client} clientsLabel={clients} /></section>
     {selected ? <TenantEditorDialog key={selected.id} title={`${clientTitle} record for ${selected.name}`} closeHref={closeHref} showScrim={!formOpen} cycleFocus><aside className="tenant-drawer appointment-drawer client-record" aria-label={`${clientTitle} record for ${selected.name}`}><header><div><p>{client.toUpperCase()} RECORD</p><h2>{selected.name}</h2><span>{selected.email}{selected.phone ? ` · ${selected.phone}` : ""}</span></div><div className="client-record__header-actions">{canManage ? <Link href={editHref}>Edit</Link> : null}<TenantEditorClose label={`Close ${client} record`} href={closeHref}>×</TenantEditorClose></div></header><div className="appointment-drawer__body"><nav className="client-record__tabs" aria-label={`${clientTitle} record sections`}><a href="#client-overview">Overview</a><a href="#client-timeline">Timeline</a><a href="#client-wallet">Wallet</a></nav><section id="client-overview" className="client-record__overview"><div><span>Visits</span><strong>{selected.bookingCount}</strong></div><div><span>Booked value</span><strong>{money(selected.bookedValueCents)}</strong></div><div><span>Paid to date</span><strong>{money(paidCents)}</strong></div></section>{dueStatus && latestCadencedBooking ? <section className="customer-notes"><h3>{dueStatus}</h3><p>Based on {latestCadencedBooking.serviceTitle}’s {latestCadencedBooking.recommendedRebookDays}-day return cadence.</p></section> : null}{canManage && appointmentHref ? <Link className="waybook-primary-link" href={appointmentHref}>Book appointment</Link> : null}<section><div className="client-record__section-heading"><div><h3>Upcoming appointments</h3><p>Confirmed appointments for this {client}.</p></div></div>{upcoming.length ? <ul className="client-record__upcoming">{upcoming.map((booking) => <li key={booking.id}><div><strong>{booking.serviceTitle}</strong><span>{time.format(booking.startsAt)} · {booking.staffName ?? "Unassigned"}</span></div><b>{booking.status === "arrived" ? "Checked in" : "Confirmed"}</b></li>)}</ul> : <p className="client-record__empty">No upcoming appointments.</p>}</section><section id="client-wallet"><div className="client-record__section-heading"><div><h3>Wallet & payments</h3><p>Recorded payments and balances.</p></div></div>{payments.length ? <ul className="client-record__ledger">{payments.map((item) => <li key={item.id}><div><strong>{item.serviceTitle}</strong><span>{time.format(item.recordedAt)} · {item.method.replace("_", " ")}</span></div><b className={item.kind === "refund" ? "is-refund" : ""}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="client-record__empty">No payment records yet.</p>}{giftCards.length ? <><h4>Gift cards</h4><ul className="client-record__ledger">{giftCards.map((giftCard) => <li key={giftCard.id}><div><strong>Gift card ending {giftCard.codeLastFour}</strong><span>{giftCard.status}</span></div><b>{money(giftCard.balanceCents, giftCard.currency)}</b></li>)}</ul></> : <p className="client-record__empty">No gift cards linked to this {client}.</p>}</section><section id="client-timeline" className="customer-history"><div><h3>Service timeline</h3><p>Appointments, services and outcomes.</p></div>{history.length ? <ul>{history.map((booking) => <li key={booking.id}><div><strong>{booking.serviceTitle}</strong><span>{time.format(booking.startsAt)} · {booking.staffName ?? "Unassigned"}</span></div><div><b>{money(booking.priceCents)}</b><small>{booking.status.replace("_", " ")}</small>{canManage && booking.status !== "cancelled" && rebookHref(booking) ? <Link className="client-record__rebook" href={rebookHref(booking)!}>Book again</Link> : null}</div></li>)}</ul> : <p>No appointments yet.</p>}</section></div></aside></TenantEditorDialog> : null}
     {formOpen ? <TenantEditorDialog key={selected ? `edit-${selected.id}` : "new"} title={selected ? `Edit ${client} ${selected.name}` : `Add ${client}`} closeHref={selected ? selectedHref(selected) : closeHref} initialField="name" centered><section className="client-form-modal"><header><div><p>{client.toUpperCase()} RECORD</p><h2>{selected ? "Edit " + selected.name : `Add ${client}`}</h2><span>Update contact details.</span></div><TenantEditorClose className="client-form-modal__close" label={`Close ${client} form`} href={selected ? selectedHref(selected) : closeHref}>×</TenantEditorClose></header><div className="client-form-modal__body"><CustomerForm key={selected?.id ?? "new"} customer={selected} clientLabel={client} /></div></section></TenantEditorDialog> : null}
   </main>;

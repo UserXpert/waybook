@@ -1,3 +1,5 @@
+import { TableDateFields } from "@/components/table-date-fields";
+import { dateFilterParams, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { notFound } from "next/navigation";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import Link from "next/link";
@@ -23,8 +25,8 @@ const money = (cents: number, currency: string) => new Intl.NumberFormat("en-DK"
 const pageSize = 150;
 const uuidPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
-export default async function GiftCardsPage({ searchParams }: { searchParams: Promise<{ card?: string; new?: string; q?: string; edit?: string; page?: string }> }) {
-  const { card, new: createNew, q, edit, page: rawPage } = await searchParams;
+export default async function GiftCardsPage({ searchParams }: { searchParams: Promise<{ card?: string; new?: string; q?: string; edit?: string; page?: string } & TableDateParams> }) {
+  const { card, new: createNew, q, edit, page: rawPage, sort, from, to } = await searchParams;
   const selectedId = typeof card === "string" && uuidPattern.test(card) ? card : null;
   const requestedPage = typeof rawPage === "string" && /^[1-9]\d{0,8}$/.test(rawPage) ? Number(rawPage) : 1;
   const { tenant, membership } = await requireTenantWorkspace();
@@ -35,6 +37,9 @@ export default async function GiftCardsPage({ searchParams }: { searchParams: Pr
   const terminology = await getTenantTerminology(tenant);
   const clientLabel = titleTerminology(terminology.client);
   const db = tenantDb(tenant);
+  const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
+  const dateRange = dateRangeWhere(db, "gc.created_at", dates);
+  const dateOrder = tableDateOrder(db, "gc.created_at", "gc.id", dates);
   const cardScope = db`
     FROM commerce_gift_cards gc
     LEFT JOIN customers c ON c.id=gc.issued_to_customer_id AND c.tenant_id=gc.tenant_id
@@ -56,18 +61,18 @@ export default async function GiftCardsPage({ searchParams }: { searchParams: Pr
   const pattern = `%${search}%`;
   const searchFilter = search ? db`AND (gc.code_last_four ILIKE ${pattern} OR c.name ILIKE ${pattern})` : db``;
   const [[total], [selected]] = await Promise.all([
-    db<{ count: number }[]>`SELECT count(*)::int AS count ${cardScope} ${searchFilter}`,
+    db<{ count: number }[]>`SELECT count(*)::int AS count ${cardScope} ${searchFilter} ${dateRange}`,
     selectedId ? db<GiftCard[]>`${cardSummary} AND gc.id=${selectedId}` : [],
   ]);
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(total.count / pageSize)));
   const offset = (page - 1) * pageSize;
   const [cards, entries] = await Promise.all([
-    db<GiftCard[]>`${cardSummary} ${searchFilter} ORDER BY gc.created_at DESC,gc.id DESC LIMIT ${pageSize} OFFSET ${offset}`,
+    db<GiftCard[]>`${cardSummary} ${searchFilter} ${dateRange} ORDER BY ${dateOrder} LIMIT ${pageSize} OFFSET ${offset}`,
     selected ? db<GiftCardEntry[]>`SELECT id,kind,direction,amount_cents AS "amountCents",created_at AS "createdAt" FROM commerce_gift_card_entries WHERE tenant_id=${tenant.id} AND gift_card_id=${selected.id} ORDER BY created_at DESC,id DESC` : [],
   ]);
   const path = tenantPath(tenantSlug, "/app/gift-cards");
   const registerHref = (pageNumber: number, cardId?: string) => {
-    const params = new URLSearchParams();
+    const params = dateFilterParams(new URLSearchParams(), dates);
     if (cardId) params.set("card", cardId);
     if (search) params.set("q", search);
     if (pageNumber > 1) params.set("page", String(pageNumber));
@@ -80,7 +85,7 @@ export default async function GiftCardsPage({ searchParams }: { searchParams: Pr
   return <main className="waybook-data-page tenant-dashboard-page">
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="giftCards" />
     <section className="reports-intro"><div><p>{clientLabel.toUpperCase()} VALUE · DATABASE-BACKED</p><h1>Gift cards</h1><span>Issue cards, link them to a {terminology.client}, and track their remaining balance without storing the full number.</span></div></section>
-    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Gift-card register</h2><p>Balances are derived from immutable entries. Use a card for an eligible appointment from Sales.</p></div><Link className="waybook-primary-link" href={`${path}?new=1`}>Add gift card</Link></div><form method="get" className="waybook-list-filter"><label>Search<input name="q" type="search" defaultValue={search} placeholder={`Card suffix or ${terminology.client}`} /></label><button type="submit">Apply</button></form><div className="waybook-table-wrap"><table><thead><tr><th>Number</th><th>Balance</th><th>Owner {terminology.client}</th><th>Status</th><th>Issued</th></tr></thead><tbody>{cards.map((item) => <TableRowLink key={item.id} href={listHref(item)} label={`Open gift card ending ${item.codeLastFour}`} className={selected?.id === item.id ? "is-selected" : undefined}><td><div className="catalogue-row">{item.photoDataUrl ? <img src={item.photoDataUrl} alt="" /> : null}<span><strong>•••• {item.codeLastFour}</strong><small>{item.entryCount} ledger {item.entryCount === 1 ? "entry" : "entries"}</small></span></div></td><td>{money(item.balanceCents, item.currency)}</td><td>{item.ownerName ?? "Not linked"}</td><td><b className={`sales-status ${item.status === "active" ? "is-paid" : "is-cancelled"}`}>{item.status}</b></td><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.createdAt)}</td></TableRowLink>)}{cards.length === 0 ? <tr><td colSpan={5}>{search ? "No gift cards match this search." : `No gift cards yet. Add one to start tracking ${terminology.client}-held value.`}</td></tr> : null}</tbody></table></div>
+    <section className="waybook-data-card"><div className="waybook-section-heading"><div><h2>Gift-card register</h2><p>Balances are derived from immutable entries. Use a card for an eligible appointment from Sales.</p></div><Link className="waybook-primary-link" href={`${path}?new=1`}>Add gift card</Link></div><form method="get" className="waybook-list-filter dated-list-filters"><label>Search<input name="q" type="search" defaultValue={search} placeholder={`Card suffix or ${terminology.client}`} /></label><TableDateFields dates={dates} label="Issued date range" /><button type="submit">Apply</button></form><div className="waybook-table-wrap"><table><thead><tr><th>Number</th><th>Balance</th><th>Owner {terminology.client}</th><th>Status</th><th>Issued</th></tr></thead><tbody>{cards.map((item) => <TableRowLink key={item.id} href={listHref(item)} label={`Open gift card ending ${item.codeLastFour}`} className={selected?.id === item.id ? "is-selected" : undefined}><td><div className="catalogue-row">{item.photoDataUrl ? <img src={item.photoDataUrl} alt="" /> : null}<span><strong>•••• {item.codeLastFour}</strong><small>{item.entryCount} ledger {item.entryCount === 1 ? "entry" : "entries"}</small></span></div></td><td>{money(item.balanceCents, item.currency)}</td><td>{item.ownerName ?? "Not linked"}</td><td><b className={`sales-status ${item.status === "active" ? "is-paid" : "is-cancelled"}`}>{item.status}</b></td><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium" }).format(item.createdAt)}</td></TableRowLink>)}{cards.length === 0 ? <tr><td colSpan={5}>{search ? "No gift cards match this search." : `No gift cards yet. Add one to start tracking ${terminology.client}-held value.`}</td></tr> : null}</tbody></table></div>
       {total.count > pageSize ? <nav className="waybook-list-filter sales-pagination" aria-label="Gift-card register pages">
         <span>Showing {offset + 1}–{Math.min(offset + pageSize, total.count)} of {total.count}</span>
         {page > 1 ? <Link href={registerHref(page - 1)}>Previous page</Link> : null}

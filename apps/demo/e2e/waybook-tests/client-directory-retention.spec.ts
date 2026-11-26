@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
 const workspaces = [
-  { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
-  { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
+  { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL", client: "Client" },
+  { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL", client: "Patient" },
 ];
 
 for (const workspace of workspaces) {
@@ -26,10 +26,10 @@ for (const workspace of workspaces) {
       await db`WITH blocks AS (
         INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
         SELECT ${tenantId},${fixtureStaff.id},${locationId}, now() + n * interval '1 day', now() + n * interval '1 day' + interval '30 minutes','confirmed'
-        FROM unnest(ARRAY[-1,1,2]) AS days(n) RETURNING id,starts_at,ends_at
+        FROM unnest(ARRAY[-2,-1,1,2]) AS days(n) RETURNING id,starts_at,ends_at
       ) INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,booked_price_cents)
         SELECT ${tenantId},id,${serviceId},${fixtureStaff.id},${locationId},
-          CASE WHEN starts_at > now() + interval '36 hours' THEN ${expected[104].id}::uuid ELSE ${target.id}::uuid END,
+          CASE WHEN starts_at > now() + interval '36 hours' THEN ${expected[104].id}::uuid WHEN starts_at >= now() THEN ${expected[100].id}::uuid ELSE ${target.id}::uuid END,
           starts_at,ends_at,CASE WHEN starts_at < now() THEN 'completed' WHEN starts_at > now() + interval '36 hours' THEN 'cancelled' ELSE 'confirmed' END,'tenant',10000
         FROM blocks`;
       const app = `/${workspace.route}/app`;
@@ -47,11 +47,12 @@ for (const workspace of workspaces) {
       await rows.nth(99).scrollIntoViewIfNeeded();
       await expect(rows).toHaveCount(expected.length);
       expect(await rows.evaluateAll((items) => items.map((row) => new URL(row.querySelector("a")!.href).searchParams.get("customer"))))
-        .toEqual(expected.map(({ id }) => id));
+        .toEqual([expected[100].id, ...expected.filter((_, index) => index !== 100).map(({ id }) => id)]);
 
       const row = rows.filter({ hasText: target.email });
       const opener = row.getByRole("link").first();
-      const record = page.getByRole("dialog", { name: `Client record for ${target.name}`, exact: true });
+      const client = workspace.client.toLowerCase();
+      const record = page.getByRole("dialog", { name: `${workspace.client} record for ${target.name}`, exact: true });
       await opener.focus();
       await opener.press("Enter");
       await expect(record).toContainText(target.email);
@@ -63,14 +64,14 @@ for (const workspace of workspaces) {
 
       await opener.press("Enter");
       await record.getByRole("link", { name: "Edit", exact: true }).click();
-      const editor = page.getByRole("dialog", { name: `Edit client ${target.name}`, exact: true });
+      const editor = page.getByRole("dialog", { name: `Edit ${client} ${target.name}`, exact: true });
       const phone = "+45 55 42 11 01";
       await editor.getByRole("textbox", { name: "Phone", exact: true }).fill(phone);
-      await editor.getByRole("button", { name: "Save client", exact: true }).click();
+      await editor.getByRole("button", { name: `Save ${client}`, exact: true }).click();
       await expect(editor.getByRole("status")).toHaveText("Contact details saved.");
-      await editor.getByRole("link", { name: "Close client form" }).click();
+      await editor.getByRole("link", { name: `Close ${client} form` }).click();
       await expect(editor).toHaveCount(0);
-      await record.getByRole("link", { name: "Close client record" }).click();
+      await record.getByRole("link", { name: `Close ${client} record` }).click();
       await expect(record).toHaveCount(0);
       await expect(row).toContainText(phone);
       await expect(rows).toHaveCount(expected.length);
@@ -81,15 +82,15 @@ for (const workspace of workspaces) {
       await page.getByRole("button", { name: "Search", exact: true }).click();
       await expect(rows).toHaveCount(1);
       await expect(rows.first()).toContainText(target.email);
-      await expect(summary).toHaveText(["1", "1", "1"]);
+      await expect(summary).toHaveText(["1", "1", "0"]);
 
       await opener.press("Enter");
       await record.getByRole("link", { name: "Edit", exact: true }).click();
       const updatedEmail = `updated-${target.email}`.replace("@example.test", "@example.invalid");
       await editor.getByRole("textbox", { name: "Email", exact: true }).fill(updatedEmail);
-      await editor.getByRole("button", { name: "Save client", exact: true }).click();
+      await editor.getByRole("button", { name: `Save ${client}`, exact: true }).click();
       await expect(editor.getByRole("status")).toHaveText("Contact details saved.");
-      await editor.getByRole("link", { name: "Close client form" }).click();
+      await editor.getByRole("link", { name: `Close ${client} form` }).click();
       await expect(editor).toHaveCount(0);
       await page.keyboard.press("Escape");
       await expect(record).toHaveCount(0);
