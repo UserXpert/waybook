@@ -30,6 +30,10 @@ export function TenantNavTools({ searchHref, searchLabel, notificationsHref, not
     router.push(`${searchHref}?q=${encodeURIComponent(value)}`);
     setOpen(false);
   };
+  const bell = <span className="tenant-nav-tools__bell" aria-hidden="true">
+    <Bell />
+    {notificationsHref && notificationsPending ? <span className="tenant-nav-tools__notification-dot" /> : null}
+  </span>;
   return <div className={`tenant-nav-tools${open ? " is-searching" : ""}`}>
     {searchHref && (open ? (
       <form className="tenant-nav-tools__search" role="search" onSubmit={submit} onKeyDown={(event) => {
@@ -44,6 +48,6 @@ export function TenantNavTools({ searchHref, searchLabel, notificationsHref, not
     ) : (
       <button ref={triggerRef} type="button" aria-label={searchLabel} onClick={() => setOpen(true)}><Search aria-hidden="true" /></button>
     ))}
-    {notificationsHref ? <Link href={notificationsHref} aria-label={notificationsPending ? "Notifications: appointments need review" : "Notifications"} className="tenant-nav-tools__notifications"><Bell aria-hidden="true" />{notificationsPending ? <span className="tenant-nav-tools__notification-dot" aria-hidden="true" /> : null}</Link> : <button type="button" aria-label="Notifications unavailable" disabled><Bell aria-hidden="true" /></button>}
+    {notificationsHref ? <Link href={notificationsHref} aria-label={notificationsPending ? "Notifications: appointments need review" : "Notifications"} className="tenant-nav-tools__notifications">{bell}</Link> : <button type="button" aria-label="Notifications unavailable" disabled>{bell}</button>}
   </div>;
 }

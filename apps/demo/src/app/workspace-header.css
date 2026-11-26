@@ -3,6 +3,7 @@
   --workspace-header-surface: color-mix(in srgb, var(--waybook-accent) 5%, #f9fcff);
   --workspace-header-ink: #243747;
   --workspace-header-edge: #d8e3ed;
+  --workspace-header-notification: #19845d;
   --workspace-header-current: color-mix(in srgb, var(--waybook-accent) 13%, #f4f8fc);
 }
 
@@ -10,6 +11,7 @@
   --workspace-header-surface: #101010;
   --workspace-header-ink: #e9e9ee;
   --workspace-header-edge: #29292d;
+  --workspace-header-notification: #48c891;
   --workspace-header-current: #292b30;
 }
 
@@ -40,15 +42,94 @@
 }
 
 :root[data-waybook-theme][data-waybook-header] .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search {
-  background: var(--workspace-header-surface);
+  background: color-mix(in srgb, var(--workspace-header-surface) 92%, var(--workspace-header-ink));
   border-color: var(--workspace-header-edge);
+  border-radius: .7rem;
+  padding-inline: .65rem .2rem;
+  color: var(--workspace-header-ink);
+}
+
+:root[data-waybook-theme][data-waybook-header] .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search:focus-within {
+  border-color: color-mix(in srgb, var(--workspace-header-ink) 25%, var(--workspace-header-edge));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--workspace-header-ink) 10%, transparent);
 }
 
 :root[data-waybook-theme][data-waybook-header] .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search input {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  padding: 0 .1rem;
   background: transparent;
   color: var(--workspace-header-ink);
 }
 
+:root[data-waybook-header] .tenant-nav-tools__search > svg { flex: 0 0 auto; }
+:root[data-waybook-header] .tenant-nav-tools__search > button {
+  flex: 0 0 1.9rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--workspace-header-ink);
+}
+
+:root[data-waybook-header] .tenant-nav-tools__search > button:is(:hover, :focus-visible) {
+  background: var(--workspace-header-current);
+}
+
+:root[data-waybook-header] .tenant-nav-tools__search > button:focus-visible {
+  outline: 2px solid var(--workspace-header-ink);
+  outline-offset: -2px;
+}
+
+.tenant-nav-tools .tenant-nav-tools__bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+}
+
+.tenant-nav-tools .tenant-nav-tools__bell > svg { width: 100%; height: 100%; }
+.tenant-nav-tools .tenant-nav-tools__notification-dot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: .4375rem;
+  height: .4375rem;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--workspace-header-notification, #19845d);
+  box-shadow: 0 0 0 1.5px var(--workspace-header-surface, #fff);
+}
+
+.tenant-nav-tools__notifications:is(:hover, :focus-visible) .tenant-nav-tools__notification-dot {
+  box-shadow: 0 0 0 1.5px var(--workspace-header-current, #f4f8fc);
+}
+
 :root[data-waybook-header] .tenant-nav-tools__search input::placeholder {
   color: color-mix(in srgb, var(--workspace-header-ink) 75%, transparent);
+}
+
+@media (min-width: 1200px) {
+  .tenant-dashboard-page .tenant-dashboard-nav:has(.tenant-nav-tools.is-searching) {
+    grid-template-columns: minmax(0, 1fr) auto auto max-content;
+  }
+  .tenant-dashboard-page .tenant-dashboard-nav:has(.tenant-nav-tools.is-searching) .tenant-nav-account-actions {
+    grid-column: 4;
+  }
+}
+
+@media (max-width: 1199px) {
+  .tenant-dashboard-page .tenant-dashboard-nav:has(.tenant-nav-tools.is-searching) {
+    padding-bottom: 3.35rem;
+  }
+  .tenant-dashboard-page .tenant-dashboard-nav .tenant-nav-tools__search {
+    position: absolute;
+    top: auto;
+    right: clamp(.75rem, 5vw, 4rem);
+    bottom: .55rem;
+    width: min(19rem, calc(100% - 1.5rem));
+  }
 }

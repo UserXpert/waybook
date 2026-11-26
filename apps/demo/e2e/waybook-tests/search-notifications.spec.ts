@@ -51,6 +51,18 @@ for (const tenant of [
     await search.click();
     const query = page.getByRole("textbox", { name: /^Search bookings or / });
     await expect(query).toBeFocused();
+    await expect(query).toHaveCSS("outline-style", "none");
+    await expect(page.getByRole("search")).not.toHaveCSS("box-shadow", "none");
+    const closeSearch = page.getByRole("button", { name: "Close search", exact: true });
+    const closeColor = await closeSearch.evaluate((element) => getComputedStyle(element).color);
+    await closeSearch.hover();
+    await expect(closeSearch).toHaveCSS("border-radius", "50%");
+    await expect(closeSearch).toHaveCSS("color", closeColor);
+    const [appsBox, searchBox] = await Promise.all([
+      page.getByRole("button", { name: "Apps", exact: true }).boundingBox(),
+      page.getByRole("search").boundingBox(),
+    ]);
+    expect(appsBox!.x + appsBox!.width <= searchBox!.x || appsBox!.y + appsBox!.height <= searchBox!.y).toBe(true);
     await query.press("Escape");
     await expect(search).toBeFocused();
     await search.press("Enter");
@@ -90,12 +102,22 @@ for (const tenant of [
     await expect(page.getByRole("heading", { name: clientName, exact: true })).toBeVisible();
     await page.locator(".client-record").getByRole("link", { name: /^Close (client|patient) record$/ }).click();
 
-    await page.getByRole("link", { name: "Notifications: appointments need review" }).click();
+    const notifications = page.getByRole("link", { name: "Notifications: appointments need review" });
+    const bell = notifications.locator("svg");
+    const unread = notifications.locator(".tenant-nav-tools__notification-dot");
+    await expect(unread).toHaveCSS("background-color", "rgb(25, 132, 93)");
+    const [iconBox, dotBox] = await Promise.all([bell.boundingBox(), unread.boundingBox()]);
+    const dotCenterX = dotBox!.x + dotBox!.width / 2;
+    const dotCenterY = dotBox!.y + dotBox!.height / 2;
+    expect(dotCenterX).toBeGreaterThan(iconBox!.x + iconBox!.width / 2);
+    expect(dotCenterY).toBeLessThan(iconBox!.y + iconBox!.height / 2);
+    await notifications.click();
     await expect(page.getByRole("heading", { name: "Appointments needing review" })).toBeVisible();
     const review = page.getByRole("row").filter({ hasText: clientName });
     await review.getByRole("link", { name: "Review booking" }).click();
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("booking") === fixture.booking.id);
     await page.getByRole("button", { name: "Completed", exact: true }).click();
+    await page.getByRole("button", { name: "Save status", exact: true }).click();
     await expect(page.getByText("This appointment’s status is final and cannot be changed.")).toBeVisible();
     await page.goto(`${app}/notifications`);
     await expect(review).toHaveCount(0);

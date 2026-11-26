@@ -91,7 +91,7 @@
 :root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(
   input:not([type="hidden"], [type="color"], [type="checkbox"], [type="radio"], [type="range"], [type="submit"], [type="button"]),
   select, textarea, .online-booking-tab .embed-studio__colour
-):not(:disabled, [aria-invalid="true"], .tenant-booking-page *, .embed-studio__colour input),
+):not(:disabled, [aria-invalid="true"], .tenant-booking-page *, .embed-studio__colour input, .tenant-nav-tools__search input),
 :root[data-waybook-theme][data-waybook-tint="blue"] .tenant-app-menu__search {
   background-color: var(--ice-field);
   border-color: var(--ice-field-edge);
@@ -125,7 +125,7 @@
   color: var(--ice-ink);
 }
 
-:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(input, select, textarea, button, a):not(.tenant-booking-page *):focus-visible,
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(input, select, textarea, button, a):not(.tenant-booking-page *, .tenant-nav-tools__search *):focus-visible,
 :root[data-waybook-theme][data-waybook-tint="blue"] .tenant-app-menu__search:focus-within {
   outline: 2px solid var(--ice-focus);
   outline-offset: 2px;

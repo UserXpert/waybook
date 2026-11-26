@@ -1031,7 +1031,7 @@ body {
 .tenant-nav-tools { display: flex; align-items: center; gap: .2rem; }
 .tenant-nav-tools > button,.tenant-nav-tools > a,.tenant-nav-tools__search > button { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border: 0; border-radius: .55rem; background: transparent; color: #c4c4c8; cursor: pointer; }
 .tenant-nav-tools > a { text-decoration: none; }
-.tenant-nav-tools > button:hover,.tenant-nav-tools > a:hover,.tenant-nav-tools__search > button:hover { background: #262626; color: #fff; }
+.tenant-nav-tools > button:hover,.tenant-nav-tools > a:hover { background: #262626; color: #fff; }
 .tenant-nav-tools > button:disabled { cursor: default; opacity: .35; }
 .tenant-nav-tools > button svg,.tenant-nav-tools > a svg,.tenant-nav-tools__search svg { width: 1rem; height: 1rem; }
 .tenant-nav-tools__search { display: flex; width: min(19rem, 32vw); align-items: center; gap: .3rem; border: 1px solid #3d3d42; border-radius: .55rem; padding-left: .6rem; background: #1b1b1d; color: #bdbdc4; }
@@ -3810,8 +3810,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .waybook-week-calendar__corner { font-size: .8125rem; }
 .tenant-dashboard-page .embed-studio__intro h2,
 .tenant-dashboard-page .email-workspace__sidebar h2 { font-weight: 500; letter-spacing: -.025em; }
-.tenant-nav-tools__notifications { position: relative; }
-.tenant-nav-tools__notification-dot { position: absolute; top: .35rem; right: .35rem; width: .5rem; height: .5rem; border: 1px solid #151517; border-radius: 50%; background: #f97360; }
 .tenant-dashboard-page .team-day-calendar__staff strong,
 .tenant-dashboard-page .waybook-week-calendar__entry.is-booking > strong { font-weight: 400; }
 
