@@ -1,19 +1,28 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { recordPayment, type PaymentState } from "@/app/app/calendars/actions";
 
+const paymentMethods = [
+  { value: "card", label: "Card" },
+  { value: "cash", label: "Cash" },
+  { value: "bank_transfer", label: "Bank transfer" },
+  { value: "other", label: "Other" },
+];
+
 export function PaymentMethodOptions() {
-  return <><option value="card">Card</option><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></>;
+  return <>{paymentMethods.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</>;
 }
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false }: {
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, giftCardHref }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
   checkout?: boolean;
+  giftCardHref?: string;
 }) {
   const router = useRouter();
   const [state, setState] = useState<PaymentState>({ error: null, success: null });
@@ -67,17 +76,27 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
 
   return <form className="tenant-drawer-form appointment-payment-form" onSubmit={saveEntry}>
     <input type="hidden" name="bookingId" value={bookingId} />
-    {checkout ? <p className="sale-detail__note">Record money already received for the appointment.</p> : null}
+    {checkout ? <fieldset className="appointment-payment-methods" disabled={editingDisabled}>
+      <legend>Payment method</legend>
+      <div className="appointment-payment-methods__choices">
+        {paymentMethods.map(({ value, label }) => <label key={value} className="appointment-payment-methods__option">
+          <input type="radio" name="method" value={value} checked={method === value} onChange={() => setMethod(value)} required />
+          <span>{value === "card" ? "Card paid elsewhere" : label}</span>
+        </label>)}
+        {giftCardHref ? (editingDisabled
+          ? <span className="appointment-payment-methods__option" aria-disabled="true">Gift card</span>
+          : <Link className="appointment-payment-methods__option" href={giftCardHref}>Gift card</Link>) : null}
+      </div>
+    </fieldset> : null}
     <div className="tenant-drawer-form__grid">
       {checkout ? <><input type="hidden" name="kind" value="payment" /><input type="hidden" name="expectedBalanceCents" value={outstandingCents} /></> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
         <option value="" disabled>Select payment action</option>
         {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
         <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>
       </select></label>}
-      <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
-        {checkout ? <option value="" disabled>Select payment method</option> : null}
+      {!checkout ? <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
         <PaymentMethodOptions />
-      </select></label>
+      </select></label> : null}
       <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
     </div>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
