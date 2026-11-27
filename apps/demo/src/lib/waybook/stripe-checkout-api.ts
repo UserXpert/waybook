@@ -3,6 +3,7 @@ import type { StripeSandboxConfig } from "./stripe-connect-api";
 const checkoutSessions = "https://api.stripe.com/v1/checkout/sessions";
 const sessionIdPattern = /^cs_test_[A-Za-z0-9]+$/;
 const attemptIdPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+export const stripeCheckoutLifetimeSeconds = 2 * 60 * 60;
 
 export type SandboxCheckoutAttempt = {
   id: string;
@@ -105,6 +106,31 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
   }
 
   return {
+    async findAfterExpiry(attempt: SandboxCheckoutAttempt) {
+      const clockSkewSeconds = 120;
+      const query = new URLSearchParams({
+        "created[gte]": String(attempt.expiresAtSeconds - stripeCheckoutLifetimeSeconds - clockSkewSeconds),
+        "created[lte]": String(attempt.expiresAtSeconds + clockSkewSeconds),
+        limit: "100",
+      });
+      let found: SandboxCheckoutSession | null = null;
+      // Never release a reservation based on a partial or inconsistent list.
+      for (let pageNumber = 0; pageNumber < 5; pageNumber++) {
+        const response = await stripeRequest(attempt.accountId, `${checkoutSessions}?${query}`, "GET");
+        const page = await response.json() as { object?: unknown; has_more?: unknown; data?: SessionResponse[] } | null;
+        if (page?.object !== "list" || typeof page.has_more !== "boolean" || !Array.isArray(page.data)) break;
+        for (const session of page.data) {
+          if (session?.client_reference_id !== attempt.id) continue;
+          if (found) throw new Error("Stripe returned more than one checkout session for the attempt.");
+          found = verifySession(session, attempt);
+        }
+        if (!page.has_more) return found;
+        const lastId = page.data.at(-1)?.id;
+        if (typeof lastId !== "string" || !sessionIdPattern.test(lastId) || lastId === query.get("starting_after")) break;
+        query.set("starting_after", lastId);
+      }
+      throw new Error("Stripe could not confirm the original checkout session.");
+    },
     async findByPaymentIntent(accountId: string, paymentIntentId: string) {
       if (!/^pi_[A-Za-z0-9]+$/.test(paymentIntentId)) throw new Error("Invalid Stripe payment intent.");
       const query = new URLSearchParams({ payment_intent: paymentIntentId, limit: "2" });

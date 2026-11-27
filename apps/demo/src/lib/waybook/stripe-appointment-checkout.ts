@@ -2,7 +2,7 @@ import "server-only";
 
 import { controlDb, tenantDb } from "./database";
 import { stripeConnectSandbox, stripeSandboxConfig, type StripeSandboxConfig } from "./stripe-connect-api";
-import { stripeCheckoutSandbox, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
+import { stripeCheckoutLifetimeSeconds, stripeCheckoutSandbox, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
 import type { StripeCheckoutNotification } from "./stripe-sandbox-webhook";
 import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
 
@@ -81,8 +81,8 @@ async function reserveAttempt(
     await sql.unsafe(`
       INSERT INTO stripe_sandbox_checkout_attempts
         (tenant_id, booking_id, account_id, amount_cents, return_path, return_origin, created_by_identity_id, expires_at_seconds)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + 7200)
-    `, [tenantId, bookingId, accountId, cart.total, input.returnPath, config.origin, input.actorId]);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + $8::int)
+    `, [tenantId, bookingId, accountId, cart.total, input.returnPath, config.origin, input.actorId, stripeCheckoutLifetimeSeconds]);
     return currentAttempt(sql, tenantId, bookingId);
   });
 }
@@ -144,15 +144,19 @@ export async function runAppointmentStripeCheckout(
   const stripe = stripeCheckoutSandbox(config);
   let sessionId = attempt.sessionId;
   if (!sessionId) {
-    if (input.action === "return") {
-      throw new Error("Stripe’s session has not been saved. Check payment status before taking another payment.");
-    }
     if (Date.now() >= attempt.expiresAtSeconds * 1000) {
-      throw new Error("The session was not saved. Check this attempt in Stripe before accepting another payment.");
+      const recovered = await stripe.findAfterExpiry(attempt);
+      if (!recovered) throw new Error("Stripe did not confirm the original session. Check this attempt in Stripe before accepting another payment.");
+      if (input.action !== "cancel" || recovered.state !== "open") return reconcileAttempt(context, attempt, recovered);
+      sessionId = recovered.id;
+    } else {
+      if (input.action === "return") {
+        throw new Error("Stripe’s session has not been saved. Check payment status before taking another payment.");
+      }
+      const created = await stripe.create(attempt);
+      await reconcileAttempt(context, attempt, created);
+      sessionId = created.id;
     }
-    const created = await stripe.create(attempt);
-    await reconcileAttempt(context, attempt, created);
-    sessionId = created.id;
   }
   const session = input.action === "cancel" ? await stripe.expire(attempt, sessionId) : await stripe.retrieve(attempt, sessionId);
   return reconcileAttempt(context, attempt, session);

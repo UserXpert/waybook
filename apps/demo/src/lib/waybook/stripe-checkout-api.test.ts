@@ -88,6 +88,37 @@ test("retrieval distinguishes paid, expired and processing sessions", async () =
   }
 });
 
+test("expired attempt recovery finds and verifies the original session across pages", async () => {
+  const cursors: (string | null)[] = [];
+  const stripe = stripeCheckoutSandbox(config, async (input, init) => {
+    const request = new Request(input, init);
+    const query = new URL(request.url).searchParams;
+    assert.equal(request.method, "GET");
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    assert.equal(query.get("created[gte]"), "1799999880");
+    assert.equal(query.get("created[lte]"), "1800007320");
+    const cursor = query.get("starting_after");
+    cursors.push(cursor);
+    const unrelated = { ...open, id: "cs_test_other", client_reference_id: "other-attempt" };
+    return cursor === null
+      ? Response.json({ object: "list", has_more: true, data: [unrelated] })
+      : Response.json({ object: "list", has_more: false, data: [
+        { ...open, status: "complete", payment_status: "paid", payment_intent: "pi_fixture", url: null },
+      ] });
+  });
+  assert.deepEqual(await stripe.findAfterExpiry(attempt), { id: sessionId, state: "paid", paymentIntentId: "pi_fixture" });
+  assert.deepEqual(cursors, [null, "cs_test_other"]);
+});
+
+test("expired attempt recovery fails closed on ambiguous or unverified results", async () => {
+  const list = (data: unknown[], hasMore = false) => stripeCheckoutSandbox(config, async () =>
+    Response.json({ object: "list", has_more: hasMore, data }));
+  assert.equal(await list([]).findAfterExpiry(attempt), null);
+  await assert.rejects(list([open, { ...open, id: "cs_test_duplicate" }]).findAfterExpiry(attempt), /more than one/);
+  await assert.rejects(list([{ ...open, amount_total: 1 }]).findAfterExpiry(attempt), /expected sandbox checkout session/);
+  await assert.rejects(list([], true).findAfterExpiry(attempt), /could not confirm/);
+});
+
 test("lookup identifies the Checkout Session for a single connected payment intent", async () => {
   const session = { ...open, status: "complete", payment_status: "paid", payment_intent: "pi_fixture" };
   const page = { object: "list", has_more: false, data: [session] };
