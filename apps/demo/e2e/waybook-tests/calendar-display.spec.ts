@@ -68,6 +68,14 @@ test("alternate calendar time zone preserves the exact booking instant across mi
   await page.goto(`${calendar}&day=${workspaceDate}`);
   const booking = page.locator(".team-day-calendar__grid .is-booking").filter({ hasText: clientName });
   await expect(booking).toContainText("09:00");
+  await booking.click();
+  await page.getByRole("button", { name: "More appointment actions" }).click();
+  await page.getByRole("button", { name: "Cancel appointment", exact: true }).click();
+  await page.getByRole("alertdialog", { name: "Cancel this appointment?" })
+    .getByRole("button", { name: "Cancel appointment" }).click();
+  await expect(page.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
+  await page.goto(`${calendar}&day=${workspaceDate}`);
+  await expect(booking).toHaveCount(0);
 });
 
 test("holiday preferences add labels to Day, Week and Month", async ({ page }) => {
