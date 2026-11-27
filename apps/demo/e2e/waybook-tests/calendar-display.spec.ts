@@ -48,12 +48,30 @@ test("alternate calendar time zone preserves the exact booking instant across mi
   await drawer.getByLabel("Email", { exact: true }).fill(`timezone-${tag}@example.test`);
   await drawer.getByLabel("Phone", { exact: true }).fill("+4512345678");
   await drawer.getByRole("button", { name: "Confirm appointment" }).click();
+  const calendarRequests = "**/nordic/app/calendars**";
+  let availabilityRequests = 0;
+  await page.route(calendarRequests, async (route) => {
+    const request = route.request();
+    if (request.headers()["next-action"] && request.postData()?.includes('"startDate"')) {
+      availabilityRequests += 1;
+      if (availabilityRequests === 1) return route.abort("failed");
+    }
+    await route.continue();
+  });
   await drawer.getByRole("link", { name: "View appointment" }).click();
   await expect(page).toHaveURL((url) => url.searchParams.get("day") === displayDate && Boolean(url.searchParams.get("booking")));
   await expect(page.getByRole("region", { name: "Schedule", exact: true })).toContainText(displayTime);
-  await page.getByRole("button", { name: "More appointment actions" }).click();
+  await page.getByRole("button", { name: "Edit appointment" }).click();
+  await expect(page.getByRole("heading", { name: "Edit", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reschedule appointment" })).toHaveCount(0);
+  expect(availabilityRequests).toBe(0);
   await page.getByRole("button", { name: "Reschedule", exact: true }).click();
   await expect(page.getByText(`Choose a time in ${workspaceTimezone}.`, { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Could not load availability." })).toBeVisible();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.locator(".appointment-reschedule-picker__day").first()).toBeVisible();
+  expect(availabilityRequests).toBe(2);
+  await page.unroute(calendarRequests);
   await page.goto(`/nordic/app/calendars?view=staff&day=${displayDate}&employee=${provider}`);
   await expect(page.locator(".staff-week-calendar__grid .is-booking").filter({ hasText: clientName })).toContainText(displayTime);
   await page.goto(`/nordic/app/calendars?view=month&day=${displayDate}`);
