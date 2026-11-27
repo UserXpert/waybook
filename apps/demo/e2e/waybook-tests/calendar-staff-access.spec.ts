@@ -89,7 +89,8 @@ for (const workspace of workspaces) {
         const create = async (name: string, email: string, time: string) => {
           await createPanel.getByLabel(/^(client|patient) name$/i).fill(name);
           await createPanel.getByLabel("Email", { exact: true }).fill(email);
-          await createPanel.getByRole("button", { name: time, exact: true }).click();
+          await createPanel.getByLabel("Phone", { exact: true }).fill("+4511223344");
+          await expect(createPanel.getByRole("region", { name: "Selected calendar slot" })).toContainText(time);
           await createPanel.getByRole("button", { name: "Confirm appointment" }).click();
           await expect(createPanel.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
         };
@@ -103,9 +104,12 @@ for (const workspace of workspaces) {
         await page.goto(board);
         await expect(slot(colleague.id, "10:00")).toHaveCount(0);
         await slot(own.id, "10:00").click();
+        await expect(createPanel.getByRole("region", { name: "Selected calendar slot" })).toContainText(own.name);
+        await createPanel.getByRole("button", { name: "Change slot" }).click();
         const fixedStaff = createPanel.getByRole("textbox").filter({ visible: true });
         await expect(createPanel.locator("input[readonly]")).toHaveValue(own.name);
         await expect(fixedStaff.and(createPanel.locator("input[readonly]"))).toBeVisible();
+        await createPanel.getByRole("button", { name: "Hide slot options" }).click();
         await create(ownCustomer, `calendar-own-${tag}@example.test`, "10:00");
         const ownBooking = await getBooking(ownCustomer);
         expect(ownBooking).toMatchObject({ memberId: own.id, startsAt: startsAt("10:00"), status: "confirmed" });
@@ -113,13 +117,16 @@ for (const workspace of workspaces) {
         // The own-schedule grant exposes the same controls on direct and client-opened drawers.
         await page.goto(`${board}&booking=${ownBooking.id}`);
         const ownPanel = panelFor(ownCustomer);
-        await expect(ownPanel.getByRole("heading", { name: "Reschedule" })).toBeVisible();
-        await expect(ownPanel.getByRole("button", { name: "Cancel appointment" })).toBeVisible();
+        await expect(ownPanel.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
+        await ownPanel.getByRole("button", { name: "More appointment actions" }).click();
+        await expect(ownPanel.getByRole("button", { name: "Reschedule", exact: true })).toBeVisible();
+        await expect(ownPanel.getByRole("button", { name: "Cancellation options" })).toBeVisible();
         for (const name of ["Edit", "Sales ledger"]) await expect(ownPanel.getByRole("heading", { name })).toHaveCount(0);
         await expect(ownPanel.getByRole("button", { name: "Completed", exact: true })).toHaveCount(0);
         await page.goto(board);
         await expect(bookingCard(ownBooking.id)).toHaveAttribute("draggable", "true");
         await bookingCard(ownBooking.id).click();
+        await ownPanel.getByRole("button", { name: "Edit appointment" }).click();
         await ownPanel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) }).click();
         await ownPanel.getByRole("button", { name: "11:30", exact: true }).click();
         await ownPanel.getByRole("button", { name: "Reschedule appointment" }).click();
@@ -135,7 +142,9 @@ for (const workspace of workspaces) {
         await page.goto(teamBoard);
         await expect(slot(own.id, "10:00")).toBeVisible();
         await slot(colleague.id, "10:00").click();
+        await createPanel.getByRole("button", { name: "Change slot" }).click();
         await expect(createPanel.locator("input[readonly]")).toHaveCount(0);
+        await createPanel.getByRole("button", { name: "Hide slot options" }).click();
         await create(teamCustomer, `calendar-team-${tag}@example.test`, "10:00");
         const teamBooking = await getBooking(teamCustomer);
         expect(teamBooking).toMatchObject({ memberId: colleague.id, startsAt: startsAt("10:00"), status: "confirmed" });
@@ -157,11 +166,16 @@ for (const workspace of workspaces) {
         await expect(bookingCard(teamBooking.id)).toHaveAttribute("draggable", "false");
         await expect(page.locator(`[data-calendar-drop-cell][data-calendar-team-member-id="${colleague.id}"]`)).toHaveCount(0);
         await page.getByRole("link", { name: "New appointment", exact: true }).click();
+        await expect(createPanel.getByRole("region", { name: "Selected calendar slot" })).toContainText(own.name);
+        await expect(createPanel.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
+        await createPanel.getByRole("button", { name: /^(Change|Choose) slot$/ }).click();
         await expect(createPanel.locator("input[readonly]")).toHaveValue(own.name);
         await page.goto(`${teamBoard}&booking=${teamBooking.id}`);
         await expect(teamPanel.getByText("You have view-only access to this appointment.")).toBeVisible();
         await expect(teamPanel.getByRole("button", { name: "Cancel appointment" })).toHaveCount(0);
         await page.goto(`${teamBoard}&booking=${ownBooking.id}`);
+        await ownPanel.getByRole("button", { name: "More appointment actions" }).click();
+        await ownPanel.getByRole("button", { name: "Cancellation options" }).click();
         await ownPanel.getByRole("button", { name: "Cancel appointment" }).click();
         await expect(ownPanel.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
         await expect.poll(() => getBooking(ownCustomer)).toMatchObject({ status: "cancelled", blockState: "cancelled" });
@@ -170,7 +184,8 @@ for (const workspace of workspaces) {
         await page.goto(teamBoard);
         await expect(bookingCard(teamBooking.id)).toHaveAttribute("draggable", "true");
         await bookingCard(teamBooking.id).click();
-        await expect(teamPanel.getByRole("heading", { name: "Reschedule" })).toBeVisible();
+        await teamPanel.getByRole("button", { name: "More appointment actions" }).click();
+        await teamPanel.getByRole("button", { name: "Cancellation options" }).click();
         await expect(teamPanel.getByRole("heading", { name: "Sales ledger" })).toHaveCount(0);
         await teamPanel.getByRole("button", { name: "Cancel appointment" }).click();
         await expect(teamPanel.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();

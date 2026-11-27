@@ -32,9 +32,9 @@ for (const workspace of workspaces) {
       SELECT is_enabled FROM tenant_feature_states WHERE tenant_id=${tenantId} AND feature_key='resources'
     `;
     const [primary] = await sql<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id=${tenantId} AND slug='primary'`;
-    const [location] = await sql<{ id: string }[]>`
+    const [location] = await sql<{ id: string; name: string }[]>`
       INSERT INTO locations (tenant_id, slug, name, timezone)
-      VALUES (${tenantId}, ${`qa-${tag}`}, ${`Z QA branch ${tag}`}, ${timezone}) RETURNING id
+      VALUES (${tenantId}, ${`qa-${tag}`}, ${`Z QA branch ${tag}`}, ${timezone}) RETURNING id, name
     `;
     const [service] = await sql<{ id: string }[]>`
       INSERT INTO services (tenant_id, slug, title, duration_minutes)
@@ -108,11 +108,23 @@ for (const workspace of workspaces) {
         await slot.focus();
         await slot.press("Enter");
         const form = page.getByRole("complementary", { name: "New appointment" });
+        const clientLookup = form.getByRole("combobox", { name: /^Find a / });
+        await expect(clientLookup).toBeFocused();
+        const selectedSlot = form.getByRole("region", { name: "Selected calendar slot" });
+        const changeSlot = selectedSlot.getByRole("button", { name: "Change slot" });
+        await expect(selectedSlot).toContainText(member.name);
+        await expect(selectedSlot).toContainText("10:00");
+        await expect(form.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
+        await page.keyboard.press("Shift+Tab");
+        await expect(changeSlot).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
         await expect(form.getByRole("link", { name: "Close new appointment" })).toBeFocused();
         for (let step = 0; step < 8; step += 1) {
           await page.keyboard.press("Tab");
           await expect(form.locator(":focus")).toHaveCount(1);
         }
+        await changeSlot.click();
+        await expect(form.getByRole("region", { name: "Appointment schedule" })).toBeVisible();
         const locationPicker = form.getByRole("combobox", { name: "Location" });
         await locationPicker.fill("Unmatched location");
         await expect(locationPicker).toHaveAttribute("aria-expanded", "true");
@@ -128,13 +140,28 @@ for (const workspace of workspaces) {
           await form.getByRole("combobox", { name: /^Find a / }).fill(customerNames[index]);
           await form.getByRole("option", { name: new RegExp(`^Add .* “${customerNames[index]}`) }).click();
           await expect(form.getByLabel(/^(Client|Patient) name$/)).toHaveValue(customerNames[index]);
+          await expect(form.getByLabel("Email", { exact: true })).toBeFocused();
+          await form.getByRole("button", { name: "Back to search" }).click();
+          await expect(clientLookup).toBeFocused();
+          await expect(selectedSlot).toContainText(location.name);
+          await expect(selectedSlot).toContainText("10:00");
+          await form.getByRole("button", { name: /^Add (client|patient)$/i }).click();
+          await expect(form.getByLabel("Email", { exact: true })).toBeFocused();
           await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
+          await expect(form.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
+          await form.getByLabel("Phone", { exact: true }).fill("+4511223344");
         } else {
           await form.getByRole("combobox", { name: /^Find a / }).fill(existingEmail);
           await form.getByRole("option", { name: new RegExp(`^${customerNames[index]}`) }).click();
-          await expect(form.getByRole("button", { name: "Change", exact: true })).toBeVisible();
+          const change = form.getByRole("button", { name: "Change", exact: true });
+          await expect(change).toBeFocused();
+          await change.click();
+          await expect(clientLookup).toBeFocused();
+          await clientLookup.fill(existingEmail);
+          await form.getByRole("option", { name: new RegExp(`^${customerNames[index]}`) }).click();
+          await expect(change).toBeVisible();
         }
-        await form.getByRole("button", { name: "10:00", exact: true }).click();
+        await expect(form.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
         await form.getByRole("button", { name: "Confirm appointment" }).click();
         await expect(form.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
         expect(await availableAt(member.id, "10:00")).toBe(false);
@@ -188,14 +215,16 @@ for (const workspace of workspaces) {
       await firstCard.focus();
       await firstCard.press("Enter");
       await expect(firstDrawer.getByRole("button", { name: "Close appointment" })).toBeFocused();
-      await expect(firstNameField).toHaveValue(first.name);
+      await expect(firstNameField).toHaveCount(0);
+      await expect(firstDrawer.getByRole("button", { name: "Edit appointment" })).toBeVisible();
       await page.keyboard.press("Shift+Tab");
-      await expect(firstDrawer.getByRole("button", { name: "Cancel appointment" })).toBeFocused();
+      await expect(firstDrawer.getByRole("button", { name: "Edit appointment" })).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(firstDrawer).toHaveCount(0);
       await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
       await expect(firstCard).toBeFocused();
       await firstCard.press("Enter");
+      await firstDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(firstNameField).toHaveValue(first.name);
       await firstNameField.fill("Unsaved calendar name");
       await expect(firstDrawer.getByRole("button", { name: "Save changes" })).toBeEnabled();
@@ -203,10 +232,13 @@ for (const workspace of workspaces) {
       await expect(firstDrawer).toHaveCount(0);
       await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
       await page.goForward();
+      await expect(firstNameField).toHaveCount(0);
+      await firstDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(firstNameField).toHaveValue(first.name);
       await firstNameField.fill("Unsaved before reload");
       await page.reload();
       await expect(page).toHaveURL((url) => url.searchParams.get("booking") === first.id);
+      await firstDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(firstNameField).toHaveValue(first.name);
       const drawerDocument = await page.evaluate(() => performance.timeOrigin);
       await firstDrawer.getByRole("button", { name: "Close appointment", exact: true }).click();
@@ -214,6 +246,7 @@ for (const workspace of workspaces) {
       await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
       expect(await page.evaluate(() => performance.timeOrigin)).toBe(drawerDocument);
       await page.goto(`${calendar}&booking=${second.id}`);
+      await secondDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(secondDrawer.getByLabel("Customer name")).toHaveValue(second.name);
       await expect(secondDrawer.getByRole("button", { name: "Save changes" })).toBeDisabled();
       await expect(firstDrawer).toHaveCount(0);
@@ -225,6 +258,7 @@ for (const workspace of workspaces) {
           ? `${calendar}&booking=${booking.id}`
           : `/${workspace.route}/app/bookings?booking=${booking.id}`);
         const panel = drawer(browserPage, bookings[index]);
+        if (index === 0) await panel.getByRole("button", { name: "Edit appointment" }).click();
         await expect(panel.getByRole("button", { name: "Completed", exact: true })).toHaveCount(0);
         await panel.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
         await panel.getByLabel("Phone", { exact: true }).fill(`+451010100${index}`);
@@ -247,9 +281,14 @@ for (const workspace of workspaces) {
         SELECT c.phone FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
         WHERE b.id=${moving.id} AND b.tenant_id=${tenantId}
       `;
-      expect(contact?.phone).toBe(moving.name === customerNames[1] ? "+4512345678" : null);
+      expect(contact?.phone).toBe(moving.name === customerNames[1] ? "+4512345678" : "+4511223344");
 
-      await drawer(pages[winnerIndex], winner).getByRole("button", { name: "Cancel appointment" }).click();
+      const winningDrawer = drawer(pages[winnerIndex], winner);
+      if (winnerIndex === 0) {
+        await winningDrawer.getByRole("button", { name: "More appointment actions" }).click();
+        await winningDrawer.getByRole("button", { name: "Cancellation options" }).click();
+      }
+      await winningDrawer.getByRole("button", { name: "Cancel appointment" }).click();
       await expect(drawer(pages[winnerIndex], winner).getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
       await expect.poll(async () => (await assignments()).length).toBe(0);
       expect(await availableAt(winner.memberId, "10:00")).toBe(true);
@@ -264,6 +303,7 @@ for (const workspace of workspaces) {
       };
       await page.goto(`${calendar}&booking=${moving.id}`);
       const pendingMove = drawer(page, moving);
+      await pendingMove.getByRole("button", { name: "Edit appointment" }).click();
       await pendingMove.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
       await pendingMove.getByRole("button", { name: "Save changes" }).click();
       await expect.poll(assignments).toEqual([{ bookingId: moving.id }]);
@@ -315,6 +355,8 @@ for (const workspace of workspaces) {
       } else {
         await page.goto(`${calendar}&booking=${moving.id}`);
         const panel = drawer(page, moving);
+        await panel.getByRole("button", { name: "More appointment actions" }).click();
+        await panel.getByRole("button", { name: "Reschedule", exact: true }).click();
         const date = panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) });
         const slot = panel.getByRole("button", { name: "11:30", exact: true });
         const reschedule = panel.getByRole("button", { name: "Reschedule appointment" });
@@ -357,6 +399,8 @@ for (const workspace of workspaces) {
 
       await page.goto(`${calendar}&booking=${moving.id}`);
       const panel = drawer(page, moving);
+      await panel.getByRole("button", { name: "More appointment actions" }).click();
+      await panel.getByRole("button", { name: "Cancellation options" }).click();
       await panel.getByRole("button", { name: "Cancel appointment" }).click();
       await expect(panel.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
       await expect.poll(readBooking).toMatchObject({ state: "cancelled", status: "cancelled" });
@@ -373,6 +417,8 @@ for (const workspace of workspaces) {
       await page.goto(`/${workspace.route}/app/calendars?${staffWithoutService}`);
       const recoveryDrawer = page.getByRole("dialog", { name: "New appointment" });
       await expect(recoveryDrawer.getByRole("combobox", { name: "Service" })).toHaveValue("");
+      await expect(recoveryDrawer.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
+      await recoveryDrawer.getByRole("button", { name: "Choose slot", exact: true }).click();
       await expect(recoveryDrawer.getByText("Choose a service to see available times.")).toBeVisible();
       await expect(recoveryDrawer.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
     } finally {

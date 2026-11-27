@@ -30,6 +30,7 @@ type SaleRow = {
   customerId: string;
   currency: string;
   startsAt: Date;
+  endsAt: Date;
   status: string;
   attendanceStage: AppointmentAttendanceStage | null;
   bookedPriceCents: number;
@@ -139,7 +140,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     "payment-oldest": db`"lastPaymentAt" ASC NULLS LAST, "startsAt" ASC, "bookingId" ASC`,
   }[selectedSort];
   const saleRows = db`
-      SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.status, b.attendance_stage AS "attendanceStage", b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
+      SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, b.attendance_stage AS "attendanceStage", b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
         c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
@@ -240,6 +241,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     GROUP BY cp.id HAVING coalesce(sum(CASE WHEN ce.direction='credit' THEN ce.units ELSE -ce.units END),0) > 0
     ORDER BY cp.created_at
   ` : [];
+  const clock = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, hour: "2-digit", minute: "2-digit" });
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
   const saleListParams = dateFilterParams(new URLSearchParams(), dates);
@@ -334,24 +336,47 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const paymentStep = step === "payment" && Boolean(canRecordPayment);
       const reviewHref = saleHref(selectedSale);
       const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
+      const bookedServices = [{
+        id: selectedSale.bookingId, title: selectedSale.serviceTitle, provider: selectedSale.teamMemberName,
+        startsAt: selectedSale.startsAt, endsAt: selectedSale.endsAt, priceCents: selectedSale.bookedPriceCents,
+      }, ...additionalServiceLines];
       return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
         <aside className="tenant-drawer appointment-drawer sale-detail appointment-sale-drawer" data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
           <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose></header>
           <div className="appointment-drawer__body">
             {paymentStep ? <Link className="waybook-action waybook-action--secondary sale-detail__action" href={reviewHref}>Back to checkout</Link> : null}
-            <section className="sale-detail__summary"><div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong><small>{selectedSale.locationName ?? "No location"}</small></div><div><span>Service</span><strong>{selectedSale.serviceTitle}</strong><small>{selectedSale.teamMemberName ?? `No assigned ${terminology.staffMember}`}</small></div></section>
-            <section><h3>Totals</h3><dl className="sale-detail__totals">
-              <div><dt>{additionalServiceLines.length > 0 ? selectedSale.serviceTitle : "Booked service"}</dt><dd>{money(selectedSale.bookedPriceCents)}</dd></div>
-              {additionalServiceLines.map((line) => <div key={line.id}><dt>{line.title}{line.provider ? <small> · {line.provider}</small> : null}</dt><dd>{money(line.priceCents)}</dd></div>)}
-              {selectedSale.noShowChargeCents > 0 ? <div><dt>No-show fee</dt><dd>{money(selectedSale.noShowChargeCents)}</dd></div> : null}
-              {saleLines.map((line) => <div key={line.id}><dt>{line.title} × {line.quantity}</dt><dd>{money(line.unitPriceCents * line.quantity - line.discountCents)}</dd></div>)}
+            <section className="appointment-checkout__client" aria-label={clientLabel}>
+              <div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong></div>
+              {selectedSale.locationName ? <small>{selectedSale.locationName}</small> : null}
+            </section>
+            {!paymentStep ? <section aria-label="Checkout items" className="appointment-checkout__items">
+              <h3>Checkout items</h3>
+              <ul>
+                {bookedServices.map((line) => <li key={line.id}>
+                  <div>
+                    <strong>{line.title}</strong>
+                    <small>{clock.format(new Date(line.startsAt))}–{clock.format(new Date(line.endsAt))}
+                      {line.provider ? ` · ${line.provider}` : ` · No assigned ${terminology.staffMember}`}</small>
+                  </div>
+                  <b>{money(line.priceCents)}</b>
+                </li>)}
+                {selectedSale.noShowChargeCents > 0 ? <li><strong>No-show fee</strong><b>{money(selectedSale.noShowChargeCents)}</b></li> : null}
+                {saleLines.map((line) => <li key={line.id}>
+                  <strong>{line.title} × {line.quantity}</strong><b>{money(line.unitPriceCents * line.quantity - line.discountCents)}</b>
+                </li>)}
+              </ul>
+            </section> : null}
+            <section aria-label="Checkout totals"><h3>Totals</h3><dl className="sale-detail__totals">
               {selectedSale.packageRedeemed ? <div><dt>Package coverage</dt><dd>−{money(selectedSale.bookedPriceCents)}</dd></div> : null}
               <div><dt>Checkout total</dt><dd>{money(selectedSale.chargeableCents)}</dd></div>
               <div><dt>Net payments</dt><dd>{money(selectedSale.paidCents)}</dd></div>
               {selectedSale.status !== "cancelled" ? <div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}>
                 <dt>{balance < 0 ? "Credit due" : "Balance due"}</dt><dd>{money(Math.abs(balance))}</dd>
               </div> : null}
-            </dl></section>
+            </dl>
+              {!paymentStep && canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={`${reviewHref}&step=payment`}>Go to payments</Link> : null}
+              {!paymentStep && selectedSale.attendanceStage === "checking_out" && balance === 0 ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
+            </section>
             {paymentStep && paymentBalance ? <section><h3>Payments</h3>
               <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout />
             </section> : null}
@@ -359,8 +384,6 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={selectedSale.status !== "cancelled"} />
             </section> : null}
             {!paymentStep ? <>
-              {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={`${reviewHref}&step=payment`}>Go to payments</Link> : null}
-              {selectedSale.attendanceStage === "checking_out" && balance === 0 ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
               {selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
                 <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
               </section> : null}

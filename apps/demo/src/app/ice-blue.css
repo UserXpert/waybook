@@ -14,6 +14,7 @@
   --ice-field: #e9f2fb;
   --ice-field-edge: #aabcce;
   --ice-focus: #467ca8;
+  --waybook-field-focus-border: #6589a8;
   --ice-shadow: 0 .6rem 2rem rgb(40 78 116 / 10%);
 }
 
@@ -30,6 +31,7 @@
   --ice-field: #242830;
   --ice-field-edge: #565e69;
   --ice-focus: #9bcaee;
+  --waybook-field-focus-border: #87a8c2;
   --ice-shadow: 0 .6rem 2rem rgb(0 0 0 / 24%);
   --wb-dark-canvas: #11161c;
   --wb-dark-surface: #1d1f24;
@@ -66,7 +68,7 @@
   .waybook-primary-link,
   .waybook-action:not(.waybook-action--secondary, .waybook-action--danger),
   .waybook-list-filter button[type="submit"], .waybook-list-filter > button:not([type]),
-  .tenant-drawer-header-actions > button:not(.tenant-drawer-close),
+  .tenant-drawer-header-actions > button:not(.tenant-drawer-close, .calendar-drawer-icon),
   .tenant-drawer-form > button:not(.staff-multi-toggle, .waybook-action--secondary, .waybook-action--danger),
   .tenant-inline-form > button, .retail-checkout-form button[type="submit"],
   .waybook-customer-form > button[type="submit"],
@@ -125,8 +127,7 @@
   color: var(--ice-ink);
 }
 
-:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(input, select, textarea, button, a):not(.tenant-booking-page *, .tenant-nav-tools__search *):focus-visible,
-:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-app-menu__search:focus-within {
+:root[data-waybook-theme][data-waybook-tint="blue"] .tenant-dashboard-page :is(input[type="checkbox"], input[type="radio"], input[type="range"], input[type="color"], button, a):not(.tenant-booking-page *, .tenant-nav-tools__search *):focus-visible {
   outline: 2px solid var(--ice-focus);
   outline-offset: 2px;
 }

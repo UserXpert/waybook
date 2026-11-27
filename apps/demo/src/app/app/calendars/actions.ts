@@ -119,20 +119,23 @@ export async function getCalendarAppointment(bookingId: string) {
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) return null;
   const db = tenantDb(tenant);
-  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; attendanceStage: AppointmentAttendanceStage | null; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; locationName: string | null; customerId: string; customerCreatedAt: Date; createdAt: Date; updatedAt: Date; source: "public" | "tenant"; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; attendanceStage: AppointmentAttendanceStage | null; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
     SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
+      l.name AS "locationName", c.id AS "customerId", c.created_at AS "customerCreatedAt",
+      b.created_at AS "createdAt", b.updated_at AS "updatedAt", b.source,
       bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,b.attendance_stage AS "attendanceStage",
       c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId",
       b.updated_at::text AS revision, b.booked_price_cents AS "priceCents", ${appointmentHasSettlement(db)} AS "hasSettlement"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
     JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
+    LEFT JOIN locations l ON l.id=b.location_id AND l.tenant_id=b.tenant_id
     LEFT JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
     LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
     WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND ${calendarBookingVisibility(db, canViewTeam, permissions.teamMemberId)} LIMIT 1
   `;
   if (!booking) return null;
-  const { teamMemberId, revision, priceCents, hasSettlement, ...detail } = booking;
-  const [resources, paymentBalance, additionalServices] = await Promise.all([
+  const { teamMemberId, revision, priceCents, hasSettlement, customerId, customerCreatedAt, createdAt, updatedAt, source, ...detail } = booking;
+  const [resources, paymentBalance, additionalServices, bookingActors] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -141,6 +144,18 @@ export async function getCalendarAppointment(bookingId: string) {
   ` : [],
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
     getAdditionalAppointmentServices(db, tenant.id, bookingId),
+    permissions.isManager ? db<{ event: "created" | "updated"; name: string }[]>`
+      SELECT DISTINCT ON (activity.event) activity.event, member.name
+      FROM booking_events e
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN e.event_type = 'booking.created_by_tenant' THEN 'created' ELSE 'updated' END AS event
+      ) activity
+      JOIN team_members member ON member.tenant_id=e.tenant_id AND member.identity_id=e.actor_identity_id
+      WHERE e.tenant_id=${tenant.id} AND e.booking_id=${bookingId}
+        AND (e.event_type = 'booking.created_by_tenant'
+          OR (e.event_type LIKE 'booking.%' AND e.created_at::text = ${revision}))
+      ORDER BY activity.event, e.created_at DESC, e.id, member.id
+    ` : [],
   ]);
   const providers = [teamMemberId, ...additionalServices.map((item) => item.teamMemberId)];
   const ownSegment = !canViewTeam && teamMemberId !== permissions.teamMemberId
@@ -149,7 +164,9 @@ export async function getCalendarAppointment(bookingId: string) {
   if (!canViewTeam && teamMemberId !== permissions.teamMemberId && !ownSegment) return null;
   const visibleAdditionalServices = additionalServices
     .filter((item) => item.id !== ownSegment?.id && (canViewTeam || item.teamMemberId === permissions.teamMemberId))
-    .map(({ id, provider, title, startsAt, endsAt }) => ({ id, provider, title, startsAt, endsAt }));
+    .map(({ id, provider, title, startsAt, endsAt, priceCents }) => ({
+      id, provider, title, startsAt, endsAt, priceCents: permissions.isManager ? priceCents : null,
+    }));
   const canManageSchedule = canManageAppointment(permissions, ...providers) &&
     (canViewTeam || providers.length === 1 || providers.every((id) => id === permissions.teamMemberId));
   const canUpdateStatus = canUpdateAppointmentAttendance(permissions, providers);
@@ -168,6 +185,12 @@ export async function getCalendarAppointment(bookingId: string) {
     // never contact or resource data used by the manager editing surface.
     customerEmail: permissions.isManager ? booking.customerEmail : "",
     customerPhone: permissions.isManager ? booking.customerPhone : null,
+    clientRecord: permissions.isManager ? { id: customerId, createdAt: customerCreatedAt.toISOString() } : null,
+    activity: permissions.isManager ? {
+      source, createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString(),
+      bookedBy: bookingActors.find((event) => event.event === "created")?.name,
+      updatedBy: bookingActors.find((event) => event.event === "updated")?.name,
+    } : null,
     resourceId: permissions.isManager ? booking.resourceId : null,
     serviceId: permissions.isManager ? booking.serviceId : "",
     locationId: permissions.isManager ? booking.locationId : "",
@@ -185,6 +208,7 @@ export async function getCalendarAppointment(bookingId: string) {
     paymentBalance,
     days,
     slots,
+    primaryServicePriceCents: permissions.isManager ? priceCents : null,
     additionalServices: visibleAdditionalServices,
     serviceEditor: permissions.isManager && !hasSettlement && isMovableAppointmentStatus(booking.status)
       ? { revision, primary: { id: null, serviceId: booking.serviceId, title: booking.serviceTitle, teamMemberId,
@@ -1133,6 +1157,71 @@ async function insertAdditionalBookingService(transaction: TransactionSql, tenan
   }
 }
 
+async function linkedServiceGrid(
+  tenant: Parameters<typeof staffAvailableSlots>[0],
+  db: ReturnType<typeof tenantDb>,
+  serviceId: string,
+  localDate: string,
+  earliest: Date,
+  options: { locationId: string; teamMemberId: string; durationMinutes: number; excludeBookingBlockIds?: string[] },
+) {
+  const dayStart = fromZonedTime(`${localDate}T00:00`, tenant.timezone);
+  const [provider] = await staffAvailableSlots(tenant, serviceId, dayStart, new Date(dayStart.getTime() + 48 * 60 * 60_000),
+    { ...options, slotInterval: 30 }, db);
+  return (provider?.slots ?? []).filter((slot) => {
+    const start = new Date(slot.startTime);
+    const key = localDateTimeKey(start, tenant.timezone);
+    return start >= earliest && key.startsWith(`${localDate}T`)
+      && fromZonedTime(key, tenant.timezone).getTime() === start.getTime();
+  });
+}
+
+export async function getLinkedServiceStartOptions(input: {
+  locationId: string; serviceId: string; teamMemberId: string; date: string;
+  earliest: string; bookingId?: string; segmentId?: string;
+}) {
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const earliest = new Date(input.earliest);
+  if (![input.locationId, input.serviceId, input.teamMemberId].every((id) => uuid.test(id))
+    || (input.bookingId && !uuid.test(input.bookingId)) || (input.segmentId && !uuid.test(input.segmentId))
+    || !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !Number.isFinite(earliest.getTime())) {
+    return { times: [], sequentialAvailable: false };
+  }
+  const { tenant, permissions } = await calendarPermissionContext();
+  assertAppointmentPermission(permissions, input.teamMemberId);
+  const db = tenantDb(tenant);
+  if (localDateKey(earliest, tenant.timezone) !== input.date) return { times: [], sequentialAvailable: false };
+  let excludeBookingBlockIds: string[] = [];
+  let retainedDuration: number | undefined;
+  if (input.bookingId) {
+    const { booking } = await editableBooking(input.bookingId, "manager");
+    if (booking.locationId !== input.locationId || localDateKey(booking.startsAt, tenant.timezone) !== input.date
+      || !isMovableAppointmentStatus(booking.status)) return { times: [], sequentialAvailable: false };
+    excludeBookingBlockIds = (await getAppointmentReservations(db, tenant.id, input.bookingId)).map(({ id }) => id);
+    if (input.segmentId) {
+      const original = (await getAdditionalAppointmentServices(db, tenant.id, input.bookingId))
+        .find((service) => service.id === input.segmentId && service.serviceId === input.serviceId);
+      if (original) retainedDuration = (Date.parse(original.endsAt) - Date.parse(original.startsAt)) / 60_000;
+    }
+  }
+  const [service] = await db<{ durationMinutes: number }[]>`
+    SELECT duration_minutes AS "durationMinutes" FROM services
+    WHERE tenant_id=${tenant.id} AND id=${input.serviceId} AND is_active
+  `;
+  if (!service) return { times: [], sequentialAvailable: false };
+  const durationMinutes = retainedDuration ?? service.durationMinutes;
+  const options = { locationId: input.locationId, teamMemberId: input.teamMemberId, durationMinutes, excludeBookingBlockIds };
+  const end = new Date(earliest.getTime() + durationMinutes * 60_000);
+  const [grid, [provider]] = await Promise.all([
+    linkedServiceGrid(tenant, db, input.serviceId, input.date, earliest, options),
+    staffAvailableSlots(tenant, input.serviceId, earliest, end, { ...options, slotInterval: 1 }, db),
+  ]);
+  return {
+    times: grid.map((slot) => localDateTimeKey(new Date(slot.startTime), tenant.timezone).slice(11)),
+    sequentialAvailable: Boolean(provider?.slots.some((slot) => Date.parse(slot.startTime) === earliest.getTime())),
+  };
+}
+
 export async function updateAppointmentServices(formData: FormData): Promise<{ error: string | null }> {
   try {
     const bookingId = String(formData.get("bookingId") ?? "");
@@ -1197,11 +1286,16 @@ export async function updateAppointmentServices(formData: FormData): Promise<{ e
         }
         if (changed) {
           if (!catalog.active) throw new Error(`${catalog.title} is no longer available.`);
-          const [provider] = await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, {
-            locationId: booking.locationId, slotInterval: 1, durationMinutes: duration / 60_000,
-            teamMemberId: item.teamMemberId, excludeBookingBlockIds: excludedBlocks,
-          }, connection);
-          if (!provider?.slots.some((slot) => Date.parse(slot.startTime) === startsAt.getTime() && Date.parse(slot.endTime) === endsAt.getTime())) {
+          const options = {
+            locationId: booking.locationId, teamMemberId: item.teamMemberId,
+            durationMinutes: duration / 60_000, excludeBookingBlockIds: excludedBlocks,
+          };
+          const requiresGrid = index > 0 && item.time && startsAt.getTime() !== previousEnd.getTime()
+            && startsAt.getTime() !== original?.startsAt.getTime();
+          const slots = requiresGrid
+            ? await linkedServiceGrid(tenant, connection, item.serviceId, localDate, previousEnd, options)
+            : (await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, { ...options, slotInterval: 1 }, connection))[0]?.slots ?? [];
+          if (!slots.some((slot) => Date.parse(slot.startTime) === startsAt.getTime() && Date.parse(slot.endTime) === endsAt.getTime())) {
             throw new Error(`${catalog.title} is unavailable with that provider at ${localDateTimeKey(startsAt, tenant.timezone).slice(11)}. Choose another provider or time.`);
           }
         }
@@ -1272,6 +1366,7 @@ async function createManualBookingRecord(formData: FormData) {
   if (!locationId || !teamMemberId || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{2}:\d{2}$/.test(localTime) || (!waitlistEntryId && !customerId && (!name || !email.includes("@")))) {
     throw new Error("Choose a location, staff member, service, local appointment time, and valid client details.");
   }
+  if (!waitlistEntryId && !customerId && !phone) throw new Error("Enter a phone number for the new client.");
   const { tenant, permissions } = await calendarPermissionContext();
   assertAppointmentPermission(permissions, teamMemberId);
   for (const extra of additionalServices) assertAppointmentPermission(permissions, extra.teamMemberId);
@@ -1316,10 +1411,11 @@ async function createManualBookingRecord(formData: FormData) {
       || (extra.time && localDateTimeKey(nextStart, tenant.timezone) !== `${localDate}T${extra.time}`)) {
       throw new Error(`${item.title} must start on the appointment date, after the preceding service.`);
     }
-    const providers = await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { locationId, slotInterval: 1 });
-    if (!providers.find((provider) => provider.teamMemberId === extra.teamMemberId)?.slots.some((slot) =>
-      new Date(slot.startTime).getTime() === nextStart.getTime() && new Date(slot.endTime).getTime() === nextEnd.getTime(),
-    )) {
+    const options = { locationId, teamMemberId: extra.teamMemberId, durationMinutes: item.durationMinutes };
+    const slots = extra.time && nextStart.getTime() !== previousEnd.getTime()
+      ? await linkedServiceGrid(tenant, db, extra.serviceId, localDate, previousEnd, options)
+      : (await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { ...options, slotInterval: 1 }, db))[0]?.slots ?? [];
+    if (!slots.some((slot) => Date.parse(slot.startTime) === nextStart.getTime() && Date.parse(slot.endTime) === nextEnd.getTime())) {
       throw new Error(`${item.title} is unavailable with that provider at ${localDateTimeKey(nextStart, tenant.timezone).slice(11)}. Choose another time or provider.`);
     }
     linked.push({ ...extra, startsAt: nextStart, endsAt: nextEnd, priceCents: item.priceCents, title: item.title });

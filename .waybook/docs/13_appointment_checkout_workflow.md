@@ -4,15 +4,17 @@ This specification defines the front-desk workflow for Waybook. It uses the Mang
 
 ## Book from the calendar
 
-1. Select an open slot. Open the booking drawer alongside the calendar and carry in the date, start time, location, and staff member. For the general New appointment action, provide an editable starting date and location.
-2. Focus client search. Search by name, email, or phone according to the operator’s directory permissions. Show identifying contact details per result so staff can distinguish similar names. Selecting a result displays a compact client summary with a Change action.
+1. Select an open slot. Open the booking drawer alongside the calendar and carry in the date, start time, location, and staff member. Show the selected slot and provider in a compact summary. Change slot opens the schedule controls. For the general New appointment action, show editable date, time, and location controls.
+2. Focus client search. Start searching after one character by name, email, or phone according to the operator’s directory permissions. Show identifying contact details per result so staff can distinguish similar names. Selecting a result displays a compact client summary with a Change action.
 3. Offer **Add client** from the search, including when there are no matches. Seed the name from the search and collect the contact fields inline. Return the newly created client to the same draft. Cancelling inline creation restores search and preserves the appointment choices.
-4. Open a searchable service catalogue. Group services under their existing categories where available. Show name, price, and duration on each result. Keep the selection surface usable with keyboard, pointer, and touch. Restrict choices to the selected location and make any staff eligibility conflict clear before confirmation.
-5. Show each selected service as an editable row with its staff member, start time, duration, and price. **Add service** appends another row after the preceding service by default. Staff can change the assigned provider or timing where eligible. Show all segments on the calendar as one linked appointment and update the combined duration and price as the draft changes.
+4. Open a searchable service catalogue that can be browsed immediately and filters after one character. Group services under their existing categories where available. Show name, price, and duration on each result. Keep the selection surface usable with keyboard, pointer, and touch. Restrict choices to the selected location and make any staff eligibility conflict clear before confirmation.
+5. Show each selected service as an editable row with its staff member, start time, duration, and price. **Add service** focuses the catalogue, uses the previous provider when eligible, and defaults to starting after the preceding service. Staff can change the assigned provider or choose a later bookable slot. Consecutive services can start at the exact end of the preceding service. Show all segments on the calendar as one linked appointment and update the combined duration and price as the draft changes.
 6. Keep the send-confirmation choice where supported by tenant settings. Preserve the workspace’s operations-only boundary for notes. Provide one primary **Book appointment** action. The server must recheck all segments and create the appointment atomically. If a slot changes, preserve the draft and identify the affected segment so staff can select another time.
 7. After saving, open the confirmed appointment in the same calendar context. Display the client, booking time, all service rows, and the next action. Apply the same review and atomic save rules when adding or changing services on an existing appointment.
 
-In the playground, a 2:00 PM Signature Facial with Harriet saved as Confirmed. Editing it and adding an Express Facial created consecutive linked blocks from 2:00–3:30 PM and 3:30–4:15 PM. The rows retained their individual prices of $100 and $80. The notification option was off for the edit.
+An unsaved draft opened from Harriet’s 1:15 PM slot inherited Harriet for an Express Facial and put the next Custom Facial with Harriet at 2:00 PM. In the playground, a 2:00 PM Signature Facial with Harriet saved as Confirmed. Editing it and adding an Express Facial created consecutive linked blocks from 2:00–3:30 PM and 3:30–4:15 PM. The rows retained their individual prices of $100 and $80. The notification option was off for the edit.
+
+A read-only playground check on 27 November confirmed that typing one letter returns matching clients with their contact details. Opening the service catalogue shows grouped results before typing, and one letter filters the catalogue. The test used an unsaved draft and was discarded.
 
 ## Book a waitlist opening
 
@@ -34,16 +36,20 @@ In the playground, the past-date entry showed preferences without a booking acti
 | Checking out | Continue checkout | Resume the same sale with its items, discounts, and any posted transactions. |
 | Completed | View sale or Rebook | Open the historical sale or start a new draft with the relevant client and services. |
 
-Treat those front-desk actions as explicit transitions, gated by the operator’s permissions. Preserve the separate **Save changes** behaviour for edits within the appointment drawer. For a No show, show payment method and amount directly in that drawer, including when the current service balance is zero. The operator can select Completed and submit once. If required payment details are missing, show a compact inline message and keep the draft. Commit the no-show payment and completion atomically.
+Keep front-desk actions visible in the calendar appointment summary according to the operator’s permissions. **Check in** opens a compact Waiting room or In service menu beside **Edit services**.
+
+The top-right pencil opens appointment details, attendance and rescheduling for authorized staff. **Save changes** appears in edit mode. The three-dot menu opens Reschedule directly or shows a cancellation confirmation. The read-only drawer puts attendance and its next action first, followed by the schedule and location, client, services, and booking details. Managers can open the client record and see the recorded phone, email, and client-since month. Booking details show the reference, booking channel and timestamps, with staff attribution when a matching event records it. The appointment summary shows each service’s provider, time range and duration, with the booked price visible to managers. Editing services starts with compact rows showing service, provider, time and price. **Add service** focuses a searchable list and uses the previous provider when eligible. The next service starts after the previous service unless staff choose a later available slot.
+
+For a No show, the pencil opens payment method and amount in the same drawer, including when the current service balance is zero. The operator can select Completed and submit once. If required payment details are missing, show a compact inline message and keep the draft. Commit the no-show payment and completion atomically.
 
 In Chrome, **Check-in** offered **Waiting Room** or **In Service**. Waiting Room showed **Notify** and **In Service**. Moving the demo appointment into service revealed **Checkout**. The future appointment showed a confirmation before checkout. The playground card test used a separate appointment with checkout already in progress.
 
-In the same-day early-arrival test, a confirmed 11:00 appointment entered Waiting Room before 11:00. Waybook uses the workspace time zone to make Check in available on the appointment date. Authorized staff can choose Waiting room or In service before the booked start.
+Waybook uses the workspace time zone to make Check in available on the appointment date. Authorized staff can choose Waiting room or In service before the booked start.
 
 ## Review checkout
 
-1. Open checkout for the existing appointment with the client and editable sale lines in view. Show each booked service with its provider, quantity where relevant, and booked price. Display added products separately. Group secondary options such as adjustments and eligible redemptions under an accessible secondary action.
-2. Keep a running subtotal and a clear **Go to payments** action. Changes to line items must update the amount due. Show whether any item is still pending checkout before describing its amount as payable.
+1. Open checkout for the existing appointment with the client and itemized sale in view. Show each booked service with its provider, time range, and booked price. Display added products separately. Group secondary options such as adjustments and eligible redemptions under an accessible secondary action.
+2. Keep a running subtotal and a clear **Go to payments** action. Changes to line items must update the amount due. Keep the payment action with the totals and show whether any item is still pending checkout before describing its amount as payable.
 3. Open Payments in the same context. Show subtotal, optional tip when supported, total, previous payments, and outstanding amount. Prefill the payment amount from the outstanding balance. Returning to review keeps the sale and its edits.
 
 ## Take or record payment
