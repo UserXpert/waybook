@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  assertMovableAppointmentStatus, canChangeAttendanceNow,
+  assertMovableAppointmentStatus, canBeginAppointmentAttendance, canChangeAttendanceNow,
   isMovableAppointmentStatus,
 } from "./appointment-lifecycle";
 
@@ -12,6 +12,16 @@ test("only live appointment statuses can move", () => {
     assert.equal(isMovableAppointmentStatus(status), false, status);
     assert.throws(() => assertMovableAppointmentStatus(status), /confirmed or arrived/);
   }
+});
+
+test("check-in opens at midnight on the appointment date in the workspace timezone", () => {
+  const startsAt = new Date("2026-11-27T08:00:00Z");
+  const timezone = "Europe/Copenhagen";
+
+  assert.equal(canBeginAppointmentAttendance(startsAt, timezone, Date.parse("2026-11-26T22:59:59Z")), false);
+  assert.equal(canBeginAppointmentAttendance(startsAt, timezone, Date.parse("2026-11-26T23:00:00Z")), true);
+  assert.equal(canBeginAppointmentAttendance(startsAt, timezone, Date.parse("2026-11-27T06:00:00Z")), true);
+  assert.equal(canBeginAppointmentAttendance(startsAt, timezone, Date.parse("2026-11-28T08:00:00Z")), true);
 });
 
 test("a terminal status re-read after preflight prevents a move", () => {

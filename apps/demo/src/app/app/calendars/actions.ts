@@ -22,6 +22,7 @@ import {
   activeAppointmentStage,
   type AppointmentAttendanceStage,
   assertMovableAppointmentStatus,
+  canBeginAppointmentAttendance,
   canChangeAttendanceNow,
   isMovableAppointmentStatus,
 } from "@/lib/waybook/appointment-lifecycle";
@@ -176,6 +177,7 @@ export async function getCalendarAppointment(bookingId: string) {
     endsAt: ownSegment?.endsAt ?? booking.endsAt.toISOString(),
     canManage: permissions.isManager,
     canManageSchedule,
+    canCheckIn: canBeginAppointmentAttendance(booking.startsAt, tenant.timezone),
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
     canUpdateStatus,
     canNotifyProviders,
@@ -855,7 +857,12 @@ export async function setAppointmentAttendanceStage(bookingId: string, stage: Ap
       const isStartService = previousStage === "waiting_room" && stage === "in_service";
       const isCheckout = previousStage === "in_service" && stage === "checking_out";
       if (!isCheckIn && !isStartService && !isCheckout) throw new Error("This appointment has changed. Reopen it before continuing.");
-      if (!canChangeAttendanceNow(current)) throw new Error("Attendance can be updated once the appointment starts.");
+      if (isCheckout && !canChangeAttendanceNow(current)) {
+        throw new Error("Checkout is available once the appointment starts.");
+      }
+      if (!isCheckout && !canBeginAppointmentAttendance(current.startsAt, tenant.timezone)) {
+        throw new Error("Check-in is available on the appointment date.");
+      }
       await connection`UPDATE bookings SET status = 'arrived', attendance_stage = ${stage}, updated_at = now()
         WHERE tenant_id = ${tenant.id} AND id = ${booking.id}`;
       const event = `booking.${stage}`;

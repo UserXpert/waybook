@@ -55,7 +55,9 @@ function AppointmentStatusPicker({ status, canChangeAttendanceNow, value, onChan
     const explanation = status === "cancelled"
       ? "This appointment has been cancelled. Its customer and audit history remain available, but it can no longer be edited, rescheduled, or paid."
       : options.length
-        ? status === "no_show" ? "Completion can be recorded after the appointment ends." : "Attendance can be updated once the appointment starts."
+        ? status === "no_show" ? "Completion can be recorded after the appointment ends."
+          : separateCheckIn ? "Completion and no-show options are available once the appointment starts."
+            : "Attendance can be updated once the appointment starts."
         : "This appointment’s status is final and cannot be changed.";
     return <section className="appointment-drawer__history"><h3>Appointment status</h3><p className="appointment-drawer__status-readonly">{label}</p><p className="appointment-drawer__readonly">{explanation}</p></section>;
   }
