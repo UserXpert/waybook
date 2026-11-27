@@ -426,6 +426,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {manager && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
                   amountCents={outstandingCents} pendingPayment={stripePending} verifyOnReturn={stripe === "return"} /> : null}
                 {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
+                  canFinishCheckout={selectedSale.status === "arrived" && selectedSale.attendanceStage === "checking_out"}
                   giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} /> : null}
               </>}
             </section> : null}

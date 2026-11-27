@@ -1094,9 +1094,13 @@ async function insertManualPaymentEntry(
 
 export async function recordPayment(formData: FormData): Promise<PaymentState> {
   const kind = String(formData.get("kind") ?? "");
+  const finishCheckout = formData.get("finishCheckout") === "true";
   try {
     if (kind !== "payment" && kind !== "refund") throw new Error("Select a payment action.");
     const expectedBalance = formData.get("expectedBalanceCents");
+    if (finishCheckout && (kind !== "payment" || expectedBalance === null)) {
+      throw new Error("Review the checkout balance before completing the appointment.");
+    }
     const entryId = String(formData.get("entryId") ?? "");
     const bookingId = String(formData.get("bookingId") ?? "");
     const method = String(formData.get("method") ?? "card");
@@ -1105,12 +1109,13 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
       throw new Error("Enter a valid positive amount and payment method.");
     }
     if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(entryId)) throw new Error("The payment entry could not be identified.");
-    const { tenant, db, booking, permissions } = await editableBooking(bookingId, kind === "payment" ? "checkout" : "manager");
+    const context = await editableBooking(bookingId, kind === "payment" ? "checkout" : "manager");
+    const { tenant, db, booking, permissions } = context;
     assertNoOperationalFreeText(formData, "notes");
     const identity = await requireIdentity();
     const amountCents = Math.round(amount * 100);
     await db.begin(async (transaction) => {
-      if (!permissions.isManager) {
+      if (finishCheckout || !permissions.isManager) {
         // Schedule edits take the same block lock before changing providers.
         await transaction.unsafe("SELECT id FROM booking_blocks WHERE tenant_id = $1 AND id = $2 FOR UPDATE", [tenant.id, booking.bookingBlockId]);
       }
@@ -1131,10 +1136,17 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
         if (existing.bookingId !== booking.id || existing.actorId !== identity.id || existing.kind !== kind || existing.method !== method || existing.amountCents !== amountCents) {
           throw new Error("The recorded payment entry does not match this request.");
         }
+        if (finishCheckout && locked.status !== "completed") {
+          throw new Error("This payment is already recorded. Review the checkout before finishing.");
+        }
         return;
       }
       if (kind === "payment") {
-        if (!permissions.isManager && (locked.status !== "arrived" || locked.stage !== "checking_out" || expectedBalance === null)) {
+        if (finishCheckout && locked.status === "completed") {
+          throw new Error("This checkout is already complete. Reopen the sale to see the receipt.");
+        }
+        if ((finishCheckout || !permissions.isManager) &&
+            (locked.status !== "arrived" || locked.stage !== "checking_out" || expectedBalance === null)) {
           throw new Error("Open checkout from the appointment before recording a payment.");
         }
         if (locked.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
@@ -1155,18 +1167,22 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
           }
           if (amountCents !== Number(cart.balance)) {
             if (payments.length > 0) throw new Error("Record the full balance remaining after the gift-card payment.");
-            if (!permissions.isManager) throw new Error("Record the full balance due for this appointment.");
+            if (finishCheckout || !permissions.isManager) throw new Error("Record the full balance due for this appointment.");
           }
         }
       }
       await insertManualPaymentEntry(transaction, tenant.id, booking.id, kind,
         { entryId, amountCents, method, actorId: identity.id });
+      if (finishCheckout) {
+        await persistBookingStatus(transaction, context, "completed", "arrived", identity.id, { finishCheckout: true });
+      }
     });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Could not record this payment.", success: null };
   }
   revalidateCalendars();
-  return { error: null, success: kind === "refund" ? "Refund recorded." : "Payment recorded." };
+  const success = kind === "refund" ? "Refund recorded." : "Payment recorded.";
+  return { error: null, success: finishCheckout ? "Payment recorded and checkout completed." : success };
 }
 
 /** Corrects a manually recorded receipt without changing original transactions. */

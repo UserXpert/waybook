@@ -18,12 +18,13 @@ export function PaymentMethodOptions() {
   return <>{paymentMethods.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</>;
 }
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, requireFullBalance = false, giftCardHref }: {
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, requireFullBalance = false, canFinishCheckout = false, giftCardHref }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
   checkout?: boolean;
   requireFullBalance?: boolean;
+  canFinishCheckout?: boolean;
   giftCardHref?: string;
 }) {
   const router = useRouter();
@@ -42,6 +43,8 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   const remainingAmount = kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "";
   const fixedAmount = settlingGiftCard || requireFullBalance;
   const amount = fixedAmount ? remainingAmount : draftAmount ?? remainingAmount;
+  const finishCheckout = canFinishCheckout && canAddPayment && Number(amount) === Number(remainingAmount);
+  const recordLabel = finishCheckout ? "Record payment and finish checkout" : checkout ? "Record payment" : "Record entry";
   const editingDisabled = pending || retryRequired;
   const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Boolean(method) && Number(amount) > 0;
 
@@ -81,6 +84,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
 
   return <form className="tenant-drawer-form appointment-payment-form" onSubmit={saveEntry}>
     <input type="hidden" name="bookingId" value={bookingId} />
+    {finishCheckout ? <input type="hidden" name="finishCheckout" value="true" /> : null}
     {settlingGiftCard ? <p className="sale-detail__note">Gift card applied. Record the remaining balance.</p> : null}
     <div className={`tenant-drawer-form__grid${checkout ? " appointment-payment-form__amount" : ""}`}>
       {checkout ? <><input type="hidden" name="kind" value="payment" /><input type="hidden" name="expectedBalanceCents" value={outstandingCents} /></> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
@@ -108,7 +112,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
     <button type="submit" disabled={pending || (!retryRequired && !canRecord)}>
-      {pending ? "Recording…" : retryRequired ? "Retry entry" : checkout ? "Record payment" : "Record entry"}
+      {pending ? "Recording…" : retryRequired ? "Retry entry" : recordLabel}
     </button>
   </form>;
 }

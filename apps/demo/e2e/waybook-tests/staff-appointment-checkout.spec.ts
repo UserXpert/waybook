@@ -169,14 +169,31 @@ test("staff checkout settles the assigned appointment without opening workspace 
         event.formData.set("amountDkk", "649.99");
       }, { once: true });
     });
-    await checkout.getByRole("button", { name: "Record payment" }).click();
+    const settle = checkout.getByRole("button", { name: "Record payment and finish checkout", exact: true });
+    await settle.click();
     await expect(checkout.getByRole("alert")).toContainText("Record the full balance due");
     expect(await paymentRows()).toHaveLength(0);
-    await checkout.getByRole("button", { name: "Record payment" }).click();
-    await expect(checkout.getByRole("button", { name: "Finish checkout" })).toBeVisible();
-    await checkout.getByRole("button", { name: "Finish checkout" }).click();
+    expect((await db`SELECT status FROM bookings WHERE id=${own.id}`)[0].status).toBe("arrived");
+
+    const actionRoute = `**${new URL(page.url()).pathname}**`;
+    await page.route(actionRoute, async (route) => {
+      const request = route.request();
+      if (request.method() === "POST" && request.headers()["next-action"]) {
+        await route.fetch();
+        await route.abort("failed");
+      } else {
+        await route.continue();
+      }
+    });
+    await settle.click();
+    const retry = checkout.getByRole("button", { name: "Retry entry", exact: true });
+    await expect(retry).toBeVisible();
     await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id=${own.id}`)[0].status).toBe("completed");
+    await page.unroute(actionRoute);
+    await retry.click();
+    await expect(checkout.getByText("Paid SALE", { exact: true })).toBeVisible();
     expect(await paymentRows()).toEqual([{ amount_cents: 65000, method: "cash", recorded_by_identity_id: identity.id }]);
+    expect(await db`SELECT id FROM booking_events WHERE booking_id=${own.id} AND event_type='booking.completed'`).toHaveLength(1);
     await expect(checkout.getByRole("link", { name: "View receipt" })).toHaveCount(0);
     await checkout.getByRole("link", { name: "Open appointment" }).click();
     await expect(appointment.getByRole("link", { name: "View sale" })).toBeVisible();
