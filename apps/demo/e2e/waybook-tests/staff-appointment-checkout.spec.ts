@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("staff checkout settles the assigned appointment without opening workspace sales", async ({ browser, baseURL, ignoreHTTPSErrors, page }, testInfo) => {
+test("staff checkout settles the assigned appointment without opening workspace sales", { tag: "@smoke" }, async ({ browser, baseURL, ignoreHTTPSErrors, page }, testInfo) => {
   const options = { max: 1, ssl: false } as const;
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, options);
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, options);
@@ -146,28 +146,27 @@ test("staff checkout settles the assigned appointment without opening workspace 
     await expect(checkout.getByRole("button", { name: "Record partial payment", exact: true })).toHaveCount(0);
     await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
 
-    const stripeOrigin = process.env.WAYBOOK_STRIPE_SANDBOX_ORIGIN;
-    if (stripeOrigin) {
-      const [attempt] = await db<{ id: string }[]>`
-        INSERT INTO stripe_sandbox_checkout_attempts
-          (tenant_id,booking_id,account_id,amount_cents,return_path,return_origin,created_by_identity_id,expires_at_seconds,session_id)
-        VALUES (${tenant.id},${own.id},'acct_staffCheckoutFixture',65000,${salePath},${stripeOrigin},
-          ${identity.id}, extract(epoch FROM now() + interval '1 hour')::int,${`cs_test_staffcheckout${tag}`})
-        RETURNING id
-      `;
-      await checkout.getByRole("button", { name: "Record payment" }).click();
-      await expect(checkout.getByRole("alert")).toContainText("Resolve the open Stripe sandbox payment before changing checkout.");
-      expect(await paymentRows()).toHaveLength(0);
+    if (!baseURL) throw new Error("Waybook checkout tests require a base URL.");
+    const stripeOrigin = new URL(baseURL).origin;
+    const [attempt] = await db<{ id: string }[]>`
+      INSERT INTO stripe_sandbox_checkout_attempts
+        (tenant_id,booking_id,account_id,amount_cents,return_path,return_origin,created_by_identity_id,expires_at_seconds,session_id)
+      VALUES (${tenant.id},${own.id},'acct_staffCheckoutFixture',65000,${salePath},${stripeOrigin},
+        ${identity.id}, extract(epoch FROM now() + interval '1 hour')::int,${`cs_test_staffcheckout${tag}`})
+      RETURNING id
+    `;
+    await checkout.getByRole("button", { name: "Record payment" }).click();
+    await expect(checkout.getByRole("alert")).toContainText("Resolve the open Stripe sandbox payment before changing checkout.");
+    expect(await paymentRows()).toHaveLength(0);
 
-      const paymentPath = `${salePath}?booking=${own.id}&step=payment`;
-      await page.goto(paymentPath);
-      await expect(checkout.getByText("A card payment is in progress.", { exact: false })).toBeVisible();
-      await expect(checkout.getByRole("button", { name: "Record payment" })).toHaveCount(0);
-      await expect(checkout.getByRole("button", { name: "Finish checkout" })).toHaveCount(0);
-      await db`UPDATE stripe_sandbox_checkout_attempts SET state='expired' WHERE id=${attempt.id}`;
-      await page.goto(paymentPath);
-      await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
-    }
+    const paymentPath = `${salePath}?booking=${own.id}&step=payment`;
+    await page.goto(paymentPath);
+    await expect(checkout.getByText("A card payment is in progress.", { exact: false })).toBeVisible();
+    await expect(checkout.getByRole("button", { name: "Record payment" })).toHaveCount(0);
+    await expect(checkout.getByRole("button", { name: "Finish checkout" })).toHaveCount(0);
+    await db`UPDATE stripe_sandbox_checkout_attempts SET state='expired' WHERE id=${attempt.id}`;
+    await page.goto(paymentPath);
+    await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
 
     await amount.evaluate((input) => {
       (input as HTMLInputElement).form?.addEventListener("formdata", (event) => {
