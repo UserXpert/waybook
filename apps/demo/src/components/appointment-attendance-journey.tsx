@@ -8,13 +8,13 @@ import { finishAppointmentCheckout, notifyWaitingRoomProviders, setAppointmentAt
 import { activeAppointmentStage, type AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
-export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpdateStatus, canCheckIn, canManage, canNotifyProviders, checkoutPath, onChange }: {
+export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpdateStatus, canCheckIn, canCheckout, canNotifyProviders, checkoutPath, onChange }: {
   bookingId: string;
   status: string;
   stage: AppointmentAttendanceStage | null;
   canUpdateStatus: boolean;
   canCheckIn: boolean;
-  canManage: boolean;
+  canCheckout: boolean;
   canNotifyProviders: boolean;
   checkoutPath: string;
   onChange: (bookingId: string) => Promise<void>;
@@ -31,7 +31,7 @@ export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpda
   const current = activeAppointmentStage(status, stage);
   const canChoose = status === "confirmed" && canUpdateStatus && canCheckIn;
   const canStart = current === "waiting_room" && canUpdateStatus && canCheckIn;
-  const canCheckout = current === "in_service" && canManage;
+  const canStartCheckout = current === "in_service" && canCheckout;
 
   async function advance(next: AppointmentAttendanceStage) {
     if (pending) return;
@@ -66,9 +66,9 @@ export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpda
     }
   }
 
-  if (canManage && status === "completed") return <Link className="waybook-primary-link" href={checkoutHref}>View sale</Link>;
-  if (canManage && current === "checking_out") return <Link className="waybook-primary-link" href={checkoutHref}>Continue checkout</Link>;
-  if (!canChoose && !canStart && !canCheckout) return null;
+  if (canCheckout && status === "completed") return <Link className="waybook-primary-link" href={checkoutHref}>View sale</Link>;
+  if (canCheckout && current === "checking_out") return <Link className="waybook-primary-link" href={checkoutHref}>Continue checkout</Link>;
+  if (!canChoose && !canStart && !canStartCheckout) return null;
   return <section aria-label="Front desk" className="appointment-attendance">
     <div className="appointment-drawer__status-actions">
       {canChoose ? <div className="appointment-attendance__picker" onBlur={(event) => {
@@ -91,7 +91,7 @@ export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpda
       </div> : null}
       {canStart ? <button type="button" disabled={pending || notifying} onClick={() => void advance("in_service")}>Start service</button> : null}
       {canStart && canNotifyProviders ? <button type="button" disabled={pending || notifying} onClick={() => void notifyProviders()}>{notifying ? "Notifying…" : "Notify providers"}</button> : null}
-      {canCheckout ? <button type="button" className="waybook-action" disabled={pending} onClick={() => void advance("checking_out")}>Checkout</button> : null}
+      {canStartCheckout ? <button type="button" className="waybook-action" disabled={pending} onClick={() => void advance("checking_out")}>Checkout</button> : null}
     </div>
     {error ? <p className="manual-appointment__message is-error" role="alert">{error}</p> : null}
   </section>;

@@ -472,6 +472,7 @@ export async function saveStaffPermissions(formData: FormData) {
     canManageOwnTimeOff: String(formData.get("canManageOwnTimeOff") ?? "") === "on",
     canManageTeamTimeOff: String(formData.get("canManageTeamTimeOff") ?? "") === "on",
     canManageWaitlist: String(formData.get("canManageWaitlist") ?? "") === "on",
+    canCheckoutAppointments: false,
     canViewClients: String(formData.get("canViewClients") ?? "") === "on",
     canManageClients: String(formData.get("canManageClients") ?? "") === "on",
     canAccessReports: String(formData.get("canAccessReports") ?? "") === "on",

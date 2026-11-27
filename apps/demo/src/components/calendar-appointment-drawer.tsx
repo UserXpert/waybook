@@ -154,7 +154,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           {detail && capabilities ? <>
             <AppointmentAttendanceJourney key={detail.id} bookingId={detail.id} status={detail.status}
               stage={detail.attendanceStage} canUpdateStatus={capabilities.canUpdateStatus}
-              canCheckIn={detail.canCheckIn} canManage={detail.canManage}
+              canCheckIn={detail.canCheckIn} canCheckout={detail.canCheckout}
               canNotifyProviders={detail.canNotifyProviders} checkoutPath={checkoutPath} onChange={refreshAppointment} />
             {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
               bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
