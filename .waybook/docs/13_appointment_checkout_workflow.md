@@ -42,9 +42,9 @@ The top-right pencil opens appointment details, attendance and rescheduling for 
 
 For a No show, the pencil opens payment method and amount in the same drawer, including when the current service balance is zero. The operator can select Completed and submit once. If required payment details are missing, show a compact inline message and keep the draft. Commit the no-show payment and completion atomically.
 
-In Chrome, **Check-in** offered **Waiting Room** or **In Service**. Waiting Room showed **Notify** and **In Service**. Moving the demo appointment into service revealed **Checkout**. The future appointment showed a confirmation before checkout. The playground card test used a separate appointment with checkout already in progress.
+In Chrome, **Check-in** offered **Waiting Room** or **In Service**. Waiting Room showed **Notify** and **In Service**. A 4:30 PM demo appointment was checked in shortly after 2 PM the same day. Moving it to In Service enabled **Checkout** immediately. Checkout showed the $80 service, and **Go to payments** opened the available payment methods before the booked start. The test reached Payments without posting a tender.
 
-Waybook uses the workspace time zone to make Check in available on the appointment date. Authorized staff can choose Waiting room or In service before the booked start.
+Waybook uses the workspace time zone to make Check in available on the appointment date. Once an appointment is In service, a user with checkout access can open the sale, record payment, and complete a settled checkout before the scheduled start.
 
 ## Review checkout
 

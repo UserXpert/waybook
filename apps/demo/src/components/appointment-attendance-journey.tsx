@@ -8,13 +8,12 @@ import { finishAppointmentCheckout, notifyWaitingRoomProviders, setAppointmentAt
 import { activeAppointmentStage, type AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { showSuccessToast } from "@/lib/waybook/toast";
 
-export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpdateStatus, canCheckIn, canOpenCheckout, canManage, canNotifyProviders, checkoutPath, onChange }: {
+export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpdateStatus, canCheckIn, canManage, canNotifyProviders, checkoutPath, onChange }: {
   bookingId: string;
   status: string;
   stage: AppointmentAttendanceStage | null;
   canUpdateStatus: boolean;
   canCheckIn: boolean;
-  canOpenCheckout: boolean;
   canManage: boolean;
   canNotifyProviders: boolean;
   checkoutPath: string;
@@ -32,7 +31,7 @@ export function AppointmentAttendanceJourney({ bookingId, status, stage, canUpda
   const current = activeAppointmentStage(status, stage);
   const canChoose = status === "confirmed" && canUpdateStatus && canCheckIn;
   const canStart = current === "waiting_room" && canUpdateStatus && canCheckIn;
-  const canCheckout = current === "in_service" && canManage && canOpenCheckout;
+  const canCheckout = current === "in_service" && canManage;
 
   async function advance(next: AppointmentAttendanceStage) {
     if (pending) return;

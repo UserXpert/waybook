@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Ellipsis, Pencil, X } from "lucide-react";
+import { ArrowUpRight, Ellipsis, Mail, Pencil, Phone, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
@@ -154,7 +154,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           {detail && capabilities ? <>
             <AppointmentAttendanceJourney key={detail.id} bookingId={detail.id} status={detail.status}
               stage={detail.attendanceStage} canUpdateStatus={capabilities.canUpdateStatus}
-              canCheckIn={detail.canCheckIn} canOpenCheckout={detail.canChangeAttendanceNow} canManage={detail.canManage}
+              canCheckIn={detail.canCheckIn} canManage={detail.canManage}
               canNotifyProviders={detail.canNotifyProviders} checkoutPath={checkoutPath} onChange={refreshAppointment} />
             {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
               bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
@@ -180,9 +180,17 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
                 Open {clientLabel.toLowerCase()} <ArrowUpRight size={14} aria-hidden="true" />
               </Link> : null}
             </div>
-            {detail.clientRecord && (detail.customerPhone || detail.customerEmail) ? <dl>
-              {detail.customerPhone ? <div><dt>Phone</dt><dd><a href={`tel:${detail.customerPhone.replace(/[^+0-9]/g, "")}`}>{detail.customerPhone}</a></dd></div> : null}
-              {detail.customerEmail ? <div><dt>Email</dt><dd><a href={`mailto:${encodeURIComponent(detail.customerEmail)}`}>{detail.customerEmail}</a></dd></div> : null}
+            {detail.clientRecord ? <dl>
+              <div>
+                <dt><Phone size={16} aria-hidden="true" /><span className="sr-only">Phone</span></dt>
+                <dd>{detail.customerPhone
+                  ? <a href={`tel:${detail.customerPhone.replace(/[^+0-9]/g, "")}`}>{detail.customerPhone}</a>
+                  : <Link href={`${clientPath}?customer=${encodeURIComponent(detail.clientRecord.id)}&edit=1`}>Add phone</Link>}</dd>
+              </div>
+              {detail.customerEmail ? <div>
+                <dt><Mail size={16} aria-hidden="true" /><span className="sr-only">Email</span></dt>
+                <dd><a href={`mailto:${encodeURIComponent(detail.customerEmail)}`}>{detail.customerEmail}</a></dd>
+              </div> : null}
             </dl> : null}
           </section>
           <section className="calendar-appointment-drawer__services" aria-label="Booked services">
