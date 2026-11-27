@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { hasNonGiftCardPayment } from "@/lib/waybook/appointment-payment-records";
 import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { recordPayment, type PaymentState } from "@/app/app/calendars/actions";
 
@@ -31,12 +32,14 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   const submitting = useRef(false);
   const interrupted = useRef<FormData | null>(null);
   const { outstandingCents, refundableCents, payments } = balance;
-  const canAddPayment = payments.length === 0 && outstandingCents > 0;
+  const canAddPayment = !hasNonGiftCardPayment(payments) && outstandingCents > 0;
   const [entryKind, setKind] = useState("");
   const kind = checkout ? "payment" : entryKind;
   const [method, setMethod] = useState(checkout ? "" : "card");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
-  const amount = draftAmount ?? (kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "");
+  const settlingGiftCard = kind === "payment" && canAddPayment && payments.length > 0;
+  const remainingAmount = kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "";
+  const amount = settlingGiftCard ? remainingAmount : draftAmount ?? remainingAmount;
   const editingDisabled = pending || retryRequired;
   const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Boolean(method) && Number(amount) > 0;
 
@@ -76,6 +79,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
 
   return <form className="tenant-drawer-form appointment-payment-form" onSubmit={saveEntry}>
     <input type="hidden" name="bookingId" value={bookingId} />
+    {settlingGiftCard ? <p className="sale-detail__note">Gift card applied. Record the remaining balance.</p> : null}
     {checkout ? <fieldset className="appointment-payment-methods" disabled={editingDisabled}>
       <legend>Payment method</legend>
       <div className="appointment-payment-methods__choices">
@@ -97,7 +101,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
       {!checkout ? <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
         <PaymentMethodOptions />
       </select></label> : null}
-      <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
+      <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} readOnly={settlingGiftCard} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
     </div>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}

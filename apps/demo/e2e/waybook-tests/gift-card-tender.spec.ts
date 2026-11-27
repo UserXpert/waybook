@@ -2,7 +2,8 @@ import { createHmac, randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("gift-card tender returns to the same card on cancellation", async ({ page, browser, baseURL, ignoreHTTPSErrors }, testInfo) => {
+for (const settleRemainder of [false, true]) test(
+  settleRemainder ? "partial gift-card tender leaves one manual remainder on the same sale" : "gift-card tender returns to the same card on cancellation", async ({ page, browser, baseURL, ignoreHTTPSErrors }, testInfo) => {
   test.setTimeout(180_000);
   const raw = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
   const url = new URL(raw);
@@ -27,6 +28,10 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
       const [client] = await tx<{ id: string }[]>`INSERT INTO customers (tenant_id,name,email) VALUES (${settings.tenantId},${`Synthetic Gift ${unique}`},${email}) RETURNING id`;
       const [block] = await tx<{ id: string }[]>`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state) VALUES (${settings.tenantId},${member.id},${member.locationId},${`${day}T09:00:00Z`},${`${day}T10:00:00Z`},'confirmed') RETURNING id`;
       const [booking] = await tx<{ id: string; number: string }[]>`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,source,booked_price_cents) VALUES (${settings.tenantId},${block.id},${service.id},${member.id},${member.locationId},${client.id},${`${day}T09:00:00Z`},${`${day}T10:00:00Z`},'confirmed','tenant',65000) RETURNING id,booking_number AS number`;
+      if (settleRemainder) {
+        await tx`UPDATE bookings SET status='arrived', attendance_stage='in_service' WHERE tenant_id=${settings.tenantId} AND id=${booking.id}`;
+        await tx`UPDATE bookings SET attendance_stage='checking_out' WHERE tenant_id=${settings.tenantId} AND id=${booking.id}`;
+      }
       const [sale] = await tx<{ id: string }[]>`SELECT id FROM commerce_sales WHERE tenant_id=${settings.tenantId} AND booking_id=${booking.id}`;
       const [card] = await tx<{ id: string }[]>`INSERT INTO commerce_gift_cards (tenant_id,issued_to_customer_id,code_hash,code_hash_version,code_last_four,currency) VALUES (${settings.tenantId},${client.id},${digest},2,${unique.slice(-4)},${settings.currency}) RETURNING id`;
       await tx`INSERT INTO commerce_gift_card_entries (tenant_id,gift_card_id,kind,direction,amount_cents,currency,reason) VALUES (${settings.tenantId},${card.id},'issue','credit',50000,${settings.currency},'Synthetic test issue')`;
@@ -87,18 +92,55 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
         await page.request.post(request.url(), { headers, data: body, maxRedirects: 0 });
         const [afterOwner] = await db<{ count: number }[]>`SELECT count(*)::int AS count FROM commerce_gift_card_entries WHERE booking_id=${fixture.booking.id} AND kind='redeem'`;
         expect(afterOwner.count).toBe(1);
-        await page.goto(`/nordic/app/sales?sale=${fixture.sale.id}`);
+        await page.goto(`/nordic/app/sales?sale=${fixture.sale.id}&step=payment`);
       } finally { await readContext.close(); }
     } else {
       await page.getByRole("button", { name: "Use gift card" }).click();
     }
-    await expect(page.getByText("A gift card has been used for this appointment.", { exact: false })).toBeVisible({ timeout: 30_000 });
+    const checkout = page.getByRole("dialog", { name: "Appointment checkout" });
+    await expect(checkout.getByText("Gift card applied. Record the remaining balance.")).toBeVisible();
+    await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("550.00");
+    await expect(checkout.getByLabel("Amount (DKK)")).not.toBeEditable();
+    await expect(checkout.getByRole("link", { name: "Gift card", exact: true })).toHaveCount(0);
+    await expect(checkout.getByRole("button", { name: "Finish checkout" })).toHaveCount(0);
     const [afterPay] = await db<{ debits: number; payments: number; transactions: number }[]>`
       SELECT (SELECT count(*)::int FROM commerce_gift_card_entries WHERE booking_id=${fixture.booking.id} AND kind='redeem') AS debits,
         (SELECT count(*)::int FROM payment_records WHERE booking_id=${fixture.booking.id} AND method='gift_card' AND kind='payment') AS payments,
         (SELECT count(*)::int FROM commerce_sale_transactions WHERE sale_id=${fixture.sale.id} AND method='gift_card' AND kind='payment') AS transactions
     `;
     expect(afterPay).toMatchObject({ debits: 1, payments: 1, transactions: 1 });
+
+    if (settleRemainder) {
+      await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
+      await checkout.getByLabel("Amount (DKK)").evaluate((input: HTMLInputElement) => { input.value = "549.99"; });
+      await checkout.getByRole("button", { name: "Record payment" }).click();
+      await expect(checkout.getByRole("alert")).toContainText("Record the full balance remaining after the gift-card payment.");
+      expect(await db`SELECT id FROM payment_records WHERE booking_id=${fixture.booking.id} AND method='cash'`).toEqual([]);
+      await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("550.00");
+
+      const stalePage = await page.context().newPage();
+      try {
+        await stalePage.goto(page.url());
+        await stalePage.getByRole("radio", { name: "Cash", exact: true }).check();
+        await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
+        await checkout.getByRole("button", { name: "Record payment" }).click();
+        await expect(checkout.getByText("Paid SALE", { exact: true })).toBeVisible();
+        await stalePage.getByRole("button", { name: "Record payment", exact: true }).click();
+        await expect(stalePage.getByRole("dialog", { name: "Appointment checkout" }).getByRole("alert"))
+          .toContainText("A payment is already recorded.");
+      } finally {
+        await stalePage.close();
+      }
+      expect(await db`SELECT method, amount_cents FROM payment_records WHERE booking_id=${fixture.booking.id} ORDER BY method`)
+        .toEqual([{ method: "cash", amount_cents: 55000 }, { method: "gift_card", amount_cents: 10000 }]);
+      await checkout.getByRole("button", { name: "Finish checkout" }).click();
+      await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id=${fixture.booking.id}`)[0].status).toBe("completed");
+      expect(await db`SELECT id FROM commerce_sales WHERE booking_id=${fixture.booking.id}`).toEqual([fixture.sale]);
+      return;
+    }
+
+    await checkout.getByRole("link", { name: "Back to checkout" }).click();
+    await expect(checkout.getByText("A gift card has been used for this appointment.")).toBeVisible();
 
     await db`UPDATE commerce_gift_cards SET status='void',expires_at=now()-interval '1 day' WHERE id=${fixture.card.id} AND tenant_id=${settings.tenantId}`;
     if (testInfo.project.name === "mobile") {
