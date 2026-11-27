@@ -1285,6 +1285,7 @@ export default async function CalendarsPage({
                 timezone={tenant.timezone}
                 canLookupClients={canViewClientDirectory}
                 initialClient={directCustomer}
+                autofillLatestService={display.autofillLatestService}
                 waitlistEntryId={waitlistCustomer ? waitlistEntryId : undefined}
                 waitlistUnavailable={Boolean(waitlistEntryId && !waitlistCustomer)}
                 customerName={selectedCustomer?.name}
