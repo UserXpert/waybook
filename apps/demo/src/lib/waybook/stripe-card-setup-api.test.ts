@@ -28,6 +28,8 @@ test("creates a setup-only session with an existing connected-account customer",
     assert.equal(request.headers.get("Idempotency-Key"), setup.id);
     const body = new URLSearchParams(await request.text());
     assert.equal(body.get("mode"), "setup");
+    assert.equal(body.get("allowed_payment_method_types[0]"), "card");
+    assert.equal(body.has("payment_method_types[0]"), false);
     assert.equal(body.get("customer"), setup.customer);
     assert.equal(body.get("cancel_url"), `${config.origin}/nordic/app/calendars?booking=example`);
     assert.equal([...body.keys()].some((key) => key.startsWith("line_items") || key.startsWith("payment_intent_data")), false);

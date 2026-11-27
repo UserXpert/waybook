@@ -98,7 +98,7 @@ export function stripeCardSetupSandbox(config: StripeSandboxConfig, accountId: s
         currency: "dkk",
         customer: setup.customer,
         client_reference_id: setup.id,
-        "payment_method_types[0]": "card",
+        "allowed_payment_method_types[0]": "card",
         "expand[0]": "setup_intent.payment_method",
         expires_at: String(setup.expiresAt),
         success_url: success.href,
