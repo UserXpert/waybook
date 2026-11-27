@@ -1,5 +1,74 @@
 import { expect, test } from "@playwright/test";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { randomUUID } from "node:crypto";
+
+test("alternate calendar time zone preserves the exact booking instant across midnight", async ({ page }, testInfo) => {
+  const workspaceTimezone = "Europe/Copenhagen";
+  const calendarTimezone = "Pacific/Honolulu";
+  const calendar = "/nordic/app/calendars?view=team";
+  const settings = "/nordic/app/settings?tab=calendar";
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/nordic\/app/);
+
+  const upcoming = new Date(Date.now() + (testInfo.project.name === "mobile" ? 14 : 7) * 86_400_000);
+  upcoming.setUTCHours(12, 0, 0, 0);
+  upcoming.setUTCDate(upcoming.getUTCDate() + ((8 - upcoming.getUTCDay()) % 7));
+  const workspaceDate = formatInTimeZone(upcoming, workspaceTimezone, "yyyy-MM-dd");
+  await page.goto(`${calendar}&day=${workspaceDate}`);
+  const workspaceSlot = page.locator(".team-day-calendar__grid a[data-calendar-starts-at$='T09:00']").first();
+  await expect(workspaceSlot).toBeVisible();
+  const workspaceTime = await workspaceSlot.getAttribute("data-calendar-starts-at");
+  const provider = await workspaceSlot.getAttribute("data-calendar-team-member-id");
+  const date = fromZonedTime(workspaceTime!, workspaceTimezone);
+  const displayDate = formatInTimeZone(date, calendarTimezone, "yyyy-MM-dd");
+  const displayTime = formatInTimeZone(date, calendarTimezone, "HH:mm");
+  expect(displayDate).not.toBe(workspaceDate);
+
+  await page.goto(settings);
+  const timezone = page.getByRole("combobox", { name: "Calendar time zone", exact: true });
+  await expect(timezone).toHaveValue("");
+  await timezone.selectOption(calendarTimezone);
+  await page.getByRole("button", { name: "Save calendar preferences" }).click();
+  await expect(page.getByText("Calendar preferences saved.", { exact: true })).toBeVisible();
+  await page.goto(`${calendar}&day=${displayDate}`);
+  const displaySlot = page.locator(`.team-day-calendar__grid a[data-calendar-starts-at="${workspaceTime}"][data-calendar-team-member-id="${provider}"]`);
+  await expect(displaySlot).toHaveAccessibleName(new RegExp(`${displayDate} ${displayTime}$`));
+  await displaySlot.press("Enter");
+  const drawer = page.getByRole("complementary", { name: "New appointment" });
+  const summary = drawer.getByRole("region", { name: "Selected calendar slot" });
+  await expect(summary).toContainText(displayTime);
+  await expect(summary).toContainText(calendarTimezone);
+  const tag = randomUUID().slice(0, 8);
+  const clientName = `Time zone QA ${tag}`;
+  await drawer.getByRole("combobox", { name: /^Find a / }).fill(clientName);
+  await drawer.getByRole("option", { name: /^Add .* “Time zone QA/ }).click();
+  await drawer.getByLabel("Email", { exact: true }).fill(`timezone-${tag}@example.test`);
+  await drawer.getByLabel("Phone", { exact: true }).fill("+4512345678");
+  await drawer.getByRole("button", { name: "Confirm appointment" }).click();
+  await drawer.getByRole("link", { name: "View appointment" }).click();
+  await expect(page).toHaveURL((url) => url.searchParams.get("day") === displayDate && Boolean(url.searchParams.get("booking")));
+  await expect(page.getByRole("region", { name: "Schedule", exact: true })).toContainText(displayTime);
+  await page.getByRole("button", { name: "More appointment actions" }).click();
+  await page.getByRole("button", { name: "Reschedule", exact: true }).click();
+  await expect(page.getByText(`Choose a time in ${workspaceTimezone}.`, { exact: true })).toBeVisible();
+  await page.goto(`/nordic/app/calendars?view=staff&day=${displayDate}&employee=${provider}`);
+  await expect(page.locator(".staff-week-calendar__grid .is-booking").filter({ hasText: clientName })).toContainText(displayTime);
+  await page.goto(`/nordic/app/calendars?view=month&day=${displayDate}`);
+  const monthDay = page.locator(`.waybook-month-calendar__day-link[href*="day=${displayDate}"]`).locator("..");
+  await expect(monthDay.locator(".waybook-month-calendar__appointment").filter({ hasText: clientName })).toContainText(displayTime);
+
+  await page.goto(settings);
+  await expect(timezone).toHaveValue(calendarTimezone);
+  await timezone.selectOption("");
+  await page.getByRole("button", { name: "Save calendar preferences" }).click();
+  await expect(page.getByText("Calendar preferences saved.", { exact: true })).toBeVisible();
+  await page.goto(`${calendar}&day=${workspaceDate}`);
+  const booking = page.locator(".team-day-calendar__grid .is-booking").filter({ hasText: clientName });
+  await expect(booking).toContainText("09:00");
+});
 
 test("holiday preferences add labels to Day, Week and Month", async ({ page }) => {
   const christmas = `${formatInTimeZone(new Date(), "Europe/Copenhagen", "yyyy")}-12-25`;

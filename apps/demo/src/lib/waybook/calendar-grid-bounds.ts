@@ -1,4 +1,5 @@
 import { calendarBookingInterval } from "./calendar-slot-time";
+import { formatInTimeZone } from "date-fns-tz";
 
 type CalendarInterval = { startTime: string; endTime: string };
 
@@ -34,7 +35,11 @@ export function calendarGridBounds(
     const endTime = new Date(entry.endTime);
     const startMinutes = localMinutes(startTime, timezone);
     const endMinutes = localMinutes(endTime, timezone);
-    return endMinutes < startMinutes && endTime > startTime ? 24 * 60 : endMinutes;
+    if (endMinutes <= startMinutes && endTime > startTime) {
+      if (formatInTimeZone(startTime, timezone, "yyyy-MM-dd") !== formatInTimeZone(endTime, timezone, "yyyy-MM-dd")) return 24 * 60;
+      return startMinutes + interval;
+    }
+    return endMinutes;
   };
   const closingTimes = intervals.map(endMinute);
   const automaticStart = Math.floor(Math.min(...openingTimes, workingIntervals.length ? Infinity : 9 * 60) / 60) * 60;

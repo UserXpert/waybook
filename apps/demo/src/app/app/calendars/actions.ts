@@ -1174,7 +1174,7 @@ export async function correctAppointmentPayment(formData: FormData): Promise<Pay
 export type ManualBookingState = {
   error: string | null;
   success: string | null;
-  booking?: { id: string; date: string; locationId: string };
+  booking?: { id: string; date: string; locationId: string; startsAt: string };
 };
 
 type AdditionalServiceInput = { serviceId: string; teamMemberId: string; time: string; segmentId?: string };
@@ -1534,7 +1534,7 @@ async function createManualBookingRecord(formData: FormData) {
   }
   revalidateCalendars();
   if (waitlistEntryId) revalidatePath("/app/waitlist");
-  return { id: bookingId, date: localDate, locationId };
+  return { id: bookingId, date: localDate, locationId, startsAt: startsAt.toISOString() };
 }
 
 /** Expected validation and availability failures stay inside the calendar form rather than becoming a page error. */
