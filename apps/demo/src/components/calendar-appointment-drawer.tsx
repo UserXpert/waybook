@@ -99,7 +99,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
           <AppointmentAttendanceJourney key={detail.id} bookingId={detail.id} status={detail.status}
             stage={detail.attendanceStage} canUpdateStatus={capabilities.canUpdateStatus}
-            canCheckIn={detail.canChangeAttendanceNow} canManage={detail.canManage}
+            canCheckIn={detail.canCheckIn} canOpenCheckout={detail.canChangeAttendanceNow} canManage={detail.canManage}
             canNotifyProviders={detail.canNotifyProviders} checkoutPath={checkoutPath} onChange={refreshAppointment} />
           {detail.additionalServices.length > 0 ? <section className="appointment-drawer__details">
             <h3>Additional services</h3>

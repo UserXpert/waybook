@@ -17,13 +17,15 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
   const control = postgres(controlDatabase, { max: 1, ssl: false });
   try {
     const tag = randomUUID().slice(0, 8);
-    const [{ tenantId }] = await db<{ tenantId: string }[]>`SELECT tenant_id AS "tenantId" FROM tenant_settings LIMIT 1`;
+    const [{ tenantId, timezone }] = await db<{ tenantId: string; timezone: string }[]>`
+      SELECT tenant_id AS "tenantId", timezone FROM tenant_settings LIMIT 1
+    `;
     const [location] = await db`INSERT INTO locations (tenant_id, slug, name)
       VALUES (${tenantId}, ${`zz-check-in-${tag}`}, ${`Check-in studio ${tag}`}) RETURNING id`;
     const [service] = await db`INSERT INTO services (tenant_id, slug, title, duration_minutes, price_cents)
       VALUES (${tenantId}, ${`check-in-${tag}`}, ${`Check-in treatment ${tag}`}, 45, 6500) RETURNING id, title`;
     await db`INSERT INTO service_locations (tenant_id, service_id, location_id) VALUES (${tenantId}, ${service.id}, ${location.id})`;
-    const schedule = await Promise.all(["Waiting", "Direct", "Upcoming"].map(async (kind) => {
+    const schedule = await Promise.all(["Waiting", "Direct", "Upcoming", "Early"].map(async (kind) => {
       const key = `${kind.toLowerCase()}-${tag}`;
       const [member] = await db`INSERT INTO team_members (tenant_id, name, email, role)
         VALUES (${tenantId}, ${`Provider ${key}`}, ${`provider-${key}@example.test`}, 'staff') RETURNING id`;
@@ -32,8 +34,12 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
       const [client] = await db`INSERT INTO customers (tenant_id, name, email)
         VALUES (${tenantId}, ${`Client ${key}`}, ${`client-${key}@example.test`}) RETURNING id, name`;
       const [block] = await db`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
-        VALUES (${tenantId}, ${member.id}, ${location.id}, now() + ${kind === "Upcoming" ? "1 day" : "-5 minutes"}::interval,
-          now() + ${kind === "Upcoming" ? "1 day 40 minutes" : "40 minutes"}::interval, 'confirmed')
+        SELECT ${tenantId}, ${member.id}, ${location.id}, starts_at, starts_at + interval '45 minutes', 'confirmed'
+        FROM (SELECT CASE
+          WHEN ${kind} = 'Upcoming' THEN now() + interval '1 day'
+          WHEN ${kind} = 'Early' THEN LEAST(now() + interval '30 minutes',
+            ((date_trunc('day', now() AT TIME ZONE ${timezone}) + interval '1 day') AT TIME ZONE ${timezone}) - interval '1 second')
+          ELSE now() - interval '5 minutes' END AS starts_at) schedule
         RETURNING id, starts_at, ends_at`;
       const [booking] = await db`INSERT INTO bookings (tenant_id, booking_block_id, service_id, location_id, team_member_id, customer_id,
         starts_at, ends_at, booked_price_cents, status, source) VALUES (${tenantId}, ${block.id}, ${service.id}, ${location.id},
@@ -47,7 +53,7 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/nordic\/app/);
 
-    const [waiting, direct, upcoming] = schedule;
+    const [waiting, direct, upcoming, early] = schedule;
     const [segmentService] = await db`INSERT INTO services (tenant_id, slug, title, duration_minutes)
       VALUES (${tenantId}, ${`follow-up-${tag}`}, ${`Follow-up ${tag}`}, 15) RETURNING id, title`;
     await db`INSERT INTO service_locations (tenant_id, service_id, location_id)
@@ -67,6 +73,13 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     const stageLabel = (drawer: Awaited<ReturnType<typeof open>>) => drawer.locator(".appointment-drawer__detail--status dd");
     const futureDrawer = await open(upcoming);
     await expect(futureDrawer.getByRole("button", { name: "Check in", exact: true })).toHaveCount(0);
+    const earlyDrawer = await open(early);
+    await earlyDrawer.getByRole("button", { name: "Check in", exact: true }).click();
+    await earlyDrawer.getByRole("button", { name: "Waiting room", exact: true }).click();
+    await expect(stageLabel(earlyDrawer)).toHaveText("Waiting room");
+    await earlyDrawer.getByRole("button", { name: "Start service", exact: true }).click();
+    await expect(stageLabel(earlyDrawer)).toHaveText("In service");
+    await expect(earlyDrawer.getByRole("button", { name: "Checkout", exact: true })).toHaveCount(0);
     const providerEmail = `arrival-staff-${tag}@example.test`;
     const [identity] = await control`INSERT INTO identities (email, password_hash, display_name)
       SELECT ${providerEmail}, password_hash, 'Check-in staff' FROM identities WHERE email='owner@nordic.local' RETURNING id`;

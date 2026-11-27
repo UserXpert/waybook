@@ -38,6 +38,8 @@ Treat those front-desk actions as explicit transitions, gated by the operator’
 
 In Chrome, **Check-in** offered **Waiting Room** or **In Service**. Waiting Room showed **Notify** and **In Service**. Moving the demo appointment into service revealed **Checkout**. The future appointment showed a confirmation before checkout. The playground card test used a separate appointment with checkout already in progress.
 
+In the same-day early-arrival test, a confirmed 11:00 appointment entered Waiting Room before 11:00. Waybook uses the workspace time zone to make Check in available on the appointment date. Authorized staff can choose Waiting room or In service before the booked start.
+
 ## Review checkout
 
 1. Open checkout for the existing appointment with the client and editable sale lines in view. Show each booked service with its provider, quantity where relevant, and booked price. Display added products separately. Group secondary options such as adjustments and eligible redemptions under an accessible secondary action.

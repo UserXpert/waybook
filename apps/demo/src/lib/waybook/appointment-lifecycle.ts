@@ -1,3 +1,5 @@
+import { formatInTimeZone } from "date-fns-tz";
+
 /** Statuses that still represent a live appointment on the calendar. */
 export function isMovableAppointmentStatus(status: string) {
   return status === "confirmed" || status === "arrived";
@@ -17,6 +19,12 @@ export function canChangeAttendanceNow(
   const eligibleAt = booking.status === "no_show" ? booking.endsAt : booking.startsAt;
   return eligibleAt.getTime() <= now;
 }
+
+export function canBeginAppointmentAttendance(startsAt: Date, timezone: string, now = Date.now()) {
+  return startsAt.getTime() <= now ||
+    formatInTimeZone(startsAt, timezone, "yyyy-MM-dd") === formatInTimeZone(now, timezone, "yyyy-MM-dd");
+}
+
 export type AppointmentAttendanceStage = "waiting_room" | "in_service" | "checking_out";
 
 export const appointmentStageLabels: Record<AppointmentAttendanceStage, string> = {
