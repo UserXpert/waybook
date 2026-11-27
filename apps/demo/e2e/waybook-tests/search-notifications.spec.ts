@@ -83,7 +83,8 @@ for (const tenant of [
     const appointment = page.getByRole("row").filter({ hasText: email }).filter({ hasText: "arrived" });
     await appointment.getByRole("link").click();
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("booking") === fixture.booking.id);
-    await expect(page.getByText("Current: arrived", { exact: true })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: `Appointment with ${clientName}` })
+      .locator(".appointment-drawer__detail--status dd")).toHaveText(/^arrived$/i);
     await page.getByRole("complementary", { name: `Appointment with ${clientName}` })
       .getByRole("button", { name: "Close appointment" }).click();
 

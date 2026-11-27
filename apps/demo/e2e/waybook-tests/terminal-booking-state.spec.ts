@@ -89,6 +89,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
       await page.goto(`${board}&booking=${completedBookingId}`);
       const completedCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${completedBookingId}"]`);
       await expect(completedCard).toHaveAttribute("draggable", "false");
+      await page.getByRole("button", { name: "Edit appointment" }).click();
       await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
       await expect(page.getByRole("heading", { name: "Edit" })).toBeVisible();
       return;
@@ -160,6 +161,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
     await page.goto(`${board}&booking=${completedBookingId}`);
     const completedCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${completedBookingId}"]`);
     await expect(completedCard).toHaveAttribute("draggable", "false");
+    await page.getByRole("button", { name: "Edit appointment" }).click();
     await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
     // Completed appointments retain their existing edit and payment workflow.
     await expect(page.getByRole("heading", { name: "Edit" })).toBeVisible();
