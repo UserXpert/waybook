@@ -192,8 +192,8 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
                 <dt><Mail size={16} aria-hidden="true" /><span className="sr-only">Email</span></dt>
                 <dd><a href={`mailto:${encodeURIComponent(detail.customerEmail)}`}>{detail.customerEmail}</a></dd>
               </div> : null}
+              {detail.clientCard ? <AppointmentClientCard key={detail.id} bookingId={detail.id} card={detail.clientCard} /> : null}
             </dl> : null}
-            {detail.clientCard ? <AppointmentClientCard key={detail.id} bookingId={detail.id} card={detail.clientCard} /> : null}
           </section>
           <section className="calendar-appointment-drawer__services" aria-label="Booked services">
             <h3>Services</h3>

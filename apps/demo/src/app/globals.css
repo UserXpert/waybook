@@ -5073,10 +5073,8 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 
 .appointment-client-card,
 .appointment-client-card__consent { display: grid; gap: .45rem; justify-items: start; }
-.appointment-client-card { margin-top: .55rem; }
 .appointment-client-card__consent label,
-.appointment-client-card__line,
-.appointment-client-card > button {
+.appointment-client-card__line {
   display: flex;
   align-items: center;
   gap: .45rem;

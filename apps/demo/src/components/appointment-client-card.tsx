@@ -25,25 +25,26 @@ export function AppointmentClientCard({ bookingId, card }: {
     startTransition(() => submit(form));
   }, [bookingId, card.pending, submit]);
 
-  if (card.brand && card.last4) return <div className="appointment-client-card__line">
-    <CreditCard size={16} aria-hidden="true" />
-    <span>{cardBrands[card.brand] ?? "Card"} ending in {card.last4}</span>
-  </div>;
-
-  return <div className="appointment-client-card">
-    {!showConsent ? <button className="waybook-action waybook-action--secondary" type="button"
-      disabled={submitting} onClick={() => setShowConsent(true)}>
-      <CreditCard size={16} aria-hidden="true" /> {submitting ? "Checking Stripe…" : card.pending ? "Resume card setup" : "Add credit card"}
-    </button> : <form action={submit} className="appointment-client-card__consent">
-      <input type="hidden" name="bookingId" value={bookingId} />
-      <input type="hidden" name="action" value="open" />
-      <label><input type="checkbox" name="clientConsent" required /> The client agrees to save this card for future checkouts.</label>
-      <small>Card details are entered on Stripe. No payment is taken.</small>
-      <div className="appointment-client-card__line">
-        <button className="waybook-primary-link" disabled={submitting}>{submitting ? "Opening Stripe…" : "Continue to Stripe"}</button>
-        <button className="waybook-action waybook-action--secondary" type="button" disabled={submitting} onClick={() => setShowConsent(false)}>Cancel</button>
-      </div>
-    </form>}
-    {state.error ? <small role="alert">{state.error}</small> : null}
+  return <div>
+    <dt><CreditCard size={16} aria-hidden="true" /><span className="sr-only">Card on file</span></dt>
+    <dd className="appointment-client-card">{card.brand && card.last4
+      ? <span>{cardBrands[card.brand] ?? "Card"} ending in {card.last4}</span>
+      : <>
+        {!showConsent ? <button className="waybook-action waybook-action--secondary" type="button"
+          disabled={submitting} onClick={() => setShowConsent(true)}>
+          {submitting ? "Checking Stripe…" : card.pending ? "Resume card setup" : "Add credit card"}
+        </button> : <form action={submit} className="appointment-client-card__consent">
+          <input type="hidden" name="bookingId" value={bookingId} />
+          <input type="hidden" name="action" value="open" />
+          <label><input type="checkbox" name="clientConsent" required /> The client agrees to save this card for future checkouts.</label>
+          <small>Card details are entered on Stripe. No payment is taken.</small>
+          <div className="appointment-client-card__line">
+            <button className="waybook-primary-link" disabled={submitting}>{submitting ? "Opening Stripe…" : "Continue to Stripe"}</button>
+            <button className="waybook-action waybook-action--secondary" type="button" disabled={submitting} onClick={() => setShowConsent(false)}>Cancel</button>
+          </div>
+        </form>}
+        {state.error ? <small role="alert">{state.error}</small> : null}
+      </>}
+    </dd>
   </div>;
 }

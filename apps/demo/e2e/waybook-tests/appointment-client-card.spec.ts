@@ -8,14 +8,20 @@ test("appointment card setup resumes, returns a mask, and leaves the appointment
   const [{ id: tenantId }] = await control`SELECT id FROM tenants WHERE slug = 'nordic-studio'`;
   const marker = randomUUID().slice(0, 8);
   const name = `Card setup QA ${marker}`;
+  const staffEmail = `card-staff-${marker}@example.test`;
   try {
     await control`INSERT INTO waybook_stripe_sandbox_connections (tenant_id, account_id) VALUES (${tenantId}, 'acct_checkoutFixture')`;
+    const [staff] = await control`INSERT INTO identities (email, password_hash, display_name)
+      SELECT ${staffEmail}, password_hash, ${name} FROM identities WHERE email = 'owner@nordic.local' RETURNING id`;
+    await control`INSERT INTO tenant_memberships (tenant_id, identity_id, role) VALUES (${tenantId}, ${staff.id}, 'staff')`;
     const { booking, customer } = await db.begin(async (tx) => {
       const [location] = await tx`INSERT INTO locations (tenant_id, slug, name, timezone)
         VALUES (${tenantId}, ${`qa-card-${marker}`}, ${name}, 'Europe/Copenhagen') RETURNING id`;
       const [service] = await tx`SELECT id FROM services WHERE tenant_id = ${tenantId} AND title = 'Studio session'`;
-      const [member] = await tx`INSERT INTO team_members (tenant_id, name, email, role)
-        VALUES (${tenantId}, ${name}, ${`card-staff-${marker}@example.test`}, 'staff') RETURNING id`;
+      const [member] = await tx`INSERT INTO team_members (tenant_id, identity_id, name, email, role)
+        VALUES (${tenantId}, ${staff.id}, ${name}, ${staffEmail}, 'staff') RETURNING id`;
+      await tx`INSERT INTO staff_permissions (tenant_id, team_member_id, can_manage_own_appointments)
+        VALUES (${tenantId}, ${member.id}, TRUE)`;
       const [customer] = await tx`INSERT INTO customers (tenant_id, name, email, phone)
         VALUES (${tenantId}, ${name}, ${`card-client-${marker}@example.test`}, '+4512345678') RETURNING id`;
       const [block] = await tx`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
@@ -67,6 +73,17 @@ test("appointment card setup resumes, returns a mask, and leaves the appointment
       .toEqual([{ card_last4: "4242", setup_id: null }]);
     expect(await db`SELECT id FROM payment_records WHERE booking_id = ${booking.id}`).toEqual([]);
     expect(await db`SELECT status FROM bookings WHERE id = ${booking.id}`).toEqual([{ status: "confirmed" }]);
+
+    await page.context().clearCookies();
+    await page.goto("/login");
+    await page.getByLabel("Work email").fill(staffEmail);
+    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/nordic\/app/);
+    await page.goto(bookingPath);
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText("Visa ending in 4242")).toHaveCount(0);
+    await expect(drawer.getByRole("button", { name: "Add credit card" })).toHaveCount(0);
   } finally {
     await control`DELETE FROM waybook_stripe_sandbox_connections WHERE tenant_id = ${tenantId} AND account_id = 'acct_checkoutFixture'`;
     await db.end();
