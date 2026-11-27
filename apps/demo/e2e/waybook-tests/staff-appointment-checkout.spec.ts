@@ -177,6 +177,7 @@ test("staff checkout settles the assigned appointment without opening workspace 
     await checkout.getByRole("button", { name: "Finish checkout" }).click();
     await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id=${own.id}`)[0].status).toBe("completed");
     expect(await paymentRows()).toEqual([{ amount_cents: 65000, method: "cash", recorded_by_identity_id: identity.id }]);
+    await expect(checkout.getByRole("link", { name: "View receipt" })).toHaveCount(0);
     await checkout.getByRole("link", { name: "Open appointment" }).click();
     await expect(appointment.getByRole("link", { name: "View sale" })).toBeVisible();
   } finally {
