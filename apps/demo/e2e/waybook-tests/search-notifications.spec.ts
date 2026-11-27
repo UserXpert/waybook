@@ -122,6 +122,7 @@ for (const tenant of [
     const review = page.getByRole("row").filter({ hasText: clientName });
     await review.getByRole("link", { name: "Review booking" }).click();
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("booking") === fixture.booking.id);
+    await page.getByRole("button", { name: "Edit appointment" }).click();
     await page.getByRole("button", { name: "Completed", exact: true }).click();
     await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByText("This appointment’s status is final and cannot be changed.")).toBeVisible();

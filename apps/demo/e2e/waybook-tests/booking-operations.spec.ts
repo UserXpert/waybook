@@ -188,14 +188,16 @@ for (const workspace of workspaces) {
       await firstCard.focus();
       await firstCard.press("Enter");
       await expect(firstDrawer.getByRole("button", { name: "Close appointment" })).toBeFocused();
-      await expect(firstNameField).toHaveValue(first.name);
+      await expect(firstNameField).toHaveCount(0);
+      await expect(firstDrawer.getByRole("button", { name: "Edit appointment" })).toBeVisible();
       await page.keyboard.press("Shift+Tab");
-      await expect(firstDrawer.getByRole("button", { name: "Cancel appointment" })).toBeFocused();
+      await expect(firstDrawer.getByRole("button", { name: "Edit appointment" })).toBeFocused();
       await page.keyboard.press("Escape");
       await expect(firstDrawer).toHaveCount(0);
       await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
       await expect(firstCard).toBeFocused();
       await firstCard.press("Enter");
+      await firstDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(firstNameField).toHaveValue(first.name);
       await firstNameField.fill("Unsaved calendar name");
       await expect(firstDrawer.getByRole("button", { name: "Save changes" })).toBeEnabled();
@@ -203,10 +205,13 @@ for (const workspace of workspaces) {
       await expect(firstDrawer).toHaveCount(0);
       await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
       await page.goForward();
+      await expect(firstNameField).toHaveCount(0);
+      await firstDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(firstNameField).toHaveValue(first.name);
       await firstNameField.fill("Unsaved before reload");
       await page.reload();
       await expect(page).toHaveURL((url) => url.searchParams.get("booking") === first.id);
+      await firstDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(firstNameField).toHaveValue(first.name);
       const drawerDocument = await page.evaluate(() => performance.timeOrigin);
       await firstDrawer.getByRole("button", { name: "Close appointment", exact: true }).click();
@@ -214,6 +219,7 @@ for (const workspace of workspaces) {
       await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
       expect(await page.evaluate(() => performance.timeOrigin)).toBe(drawerDocument);
       await page.goto(`${calendar}&booking=${second.id}`);
+      await secondDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(secondDrawer.getByLabel("Customer name")).toHaveValue(second.name);
       await expect(secondDrawer.getByRole("button", { name: "Save changes" })).toBeDisabled();
       await expect(firstDrawer).toHaveCount(0);
@@ -225,6 +231,7 @@ for (const workspace of workspaces) {
           ? `${calendar}&booking=${booking.id}`
           : `/${workspace.route}/app/bookings?booking=${booking.id}`);
         const panel = drawer(browserPage, bookings[index]);
+        if (index === 0) await panel.getByRole("button", { name: "Edit appointment" }).click();
         await expect(panel.getByRole("button", { name: "Completed", exact: true })).toHaveCount(0);
         await panel.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
         await panel.getByLabel("Phone", { exact: true }).fill(`+451010100${index}`);
@@ -249,7 +256,12 @@ for (const workspace of workspaces) {
       `;
       expect(contact?.phone).toBe(moving.name === customerNames[1] ? "+4512345678" : null);
 
-      await drawer(pages[winnerIndex], winner).getByRole("button", { name: "Cancel appointment" }).click();
+      const winningDrawer = drawer(pages[winnerIndex], winner);
+      if (winnerIndex === 0) {
+        await winningDrawer.getByRole("button", { name: "More appointment actions" }).click();
+        await winningDrawer.getByRole("button", { name: "Cancellation options" }).click();
+      }
+      await winningDrawer.getByRole("button", { name: "Cancel appointment" }).click();
       await expect(drawer(pages[winnerIndex], winner).getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
       await expect.poll(async () => (await assignments()).length).toBe(0);
       expect(await availableAt(winner.memberId, "10:00")).toBe(true);
@@ -264,6 +276,7 @@ for (const workspace of workspaces) {
       };
       await page.goto(`${calendar}&booking=${moving.id}`);
       const pendingMove = drawer(page, moving);
+      await pendingMove.getByRole("button", { name: "Edit appointment" }).click();
       await pendingMove.getByRole("combobox", { name: "Resource", exact: true }).selectOption(resource.id);
       await pendingMove.getByRole("button", { name: "Save changes" }).click();
       await expect.poll(assignments).toEqual([{ bookingId: moving.id }]);
@@ -315,6 +328,8 @@ for (const workspace of workspaces) {
       } else {
         await page.goto(`${calendar}&booking=${moving.id}`);
         const panel = drawer(page, moving);
+        await panel.getByRole("button", { name: "More appointment actions" }).click();
+        await panel.getByRole("button", { name: "Reschedule", exact: true }).click();
         const date = panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) });
         const slot = panel.getByRole("button", { name: "11:30", exact: true });
         const reschedule = panel.getByRole("button", { name: "Reschedule appointment" });
@@ -357,6 +372,8 @@ for (const workspace of workspaces) {
 
       await page.goto(`${calendar}&booking=${moving.id}`);
       const panel = drawer(page, moving);
+      await panel.getByRole("button", { name: "More appointment actions" }).click();
+      await panel.getByRole("button", { name: "Cancellation options" }).click();
       await panel.getByRole("button", { name: "Cancel appointment" }).click();
       await expect(panel.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
       await expect.poll(readBooking).toMatchObject({ state: "cancelled", status: "cancelled" });

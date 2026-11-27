@@ -90,6 +90,8 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await expect(page).toHaveURL((url) => url.searchParams.get("booking") === booking.id && !url.searchParams.has("create"));
     const saved = page.getByRole("complementary", { name: `Appointment with ${clientName}` });
     await expect(saved.getByText(second.title, { exact: true })).toBeVisible();
+    await saved.getByRole("button", { name: "More appointment actions" }).click();
+    await saved.getByRole("button", { name: "Reschedule", exact: true }).click();
     const schedule = saved.locator("section").filter({ has: page.getByRole("heading", { name: "Reschedule", exact: true }) });
     await expect(schedule.getByText("All services move together with their assigned providers.")).toBeVisible();
     await schedule.locator(".appointment-reschedule-picker__day").filter({ hasText: new RegExp(`${day.slice(-2)}$`) }).click();
@@ -118,10 +120,12 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     const currentService = async () => (await sql`SELECT service_id FROM bookings WHERE tenant_id=${tenantId} AND id=${booking.id}`)[0]?.service_id;
     await sql`UPDATE services SET price_cents=3500 WHERE tenant_id=${tenantId} AND id=${second.id}`;
     await edit.click();
+    await editor.getByRole("button", { name: /^Edit service 1/ }).click();
     await editor.getByRole("combobox", { name: "Choose service 1" }).fill(replacement.title);
     await editor.getByRole("option", { name: new RegExp(replacement.title) }).click();
     await editor.getByRole("combobox", { name: "Provider for service 1" }).fill(primary.name);
     await editor.getByRole("option", { name: primary.name, exact: true }).click();
+    await editor.getByRole("button", { name: /^Edit service 2/ }).click();
     await editor.getByLabel(/Start time for service 2/).fill("12:15");
     const [editBlock] = await sql`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
       VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("12:15")}, ${time("12:45")}, 'confirmed') RETURNING id`;
@@ -137,12 +141,14 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     expect((await sql`SELECT booked_price_cents FROM booking_service_segments WHERE tenant_id=${tenantId} AND booking_id=${booking.id}`)[0]?.booked_price_cents).toBe(3000);
 
     await edit.click();
+    await editor.getByRole("button", { name: /^Edit service 2/ }).click();
     await editor.getByRole("button", { name: "Remove service 2" }).click();
     await save.click();
     await expect(saved.getByText(second.title, { exact: true })).toHaveCount(0);
     expect(await positions()).toHaveLength(0);
     await edit.click();
     await editor.getByRole("button", { name: "Add service", exact: true }).click();
+    await expect(editor.getByRole("combobox", { name: "Choose service 2" })).toBeFocused();
     await editor.getByRole("combobox", { name: "Choose service 2" }).fill(second.title);
     await editor.getByRole("option", { name: new RegExp(second.title) }).click();
     await editor.getByRole("combobox", { name: "Provider for service 2" }).fill(secondary.name);
@@ -158,6 +164,7 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await staleEditorPage.goto(`/nordic/app/calendars?day=${day}&booking=${booking.id}`);
     await staleEditorPage.getByRole("button", { name: "Edit services", exact: true }).click();
     const staleEditor = staleEditorPage.getByRole("region", { name: "Appointment services" });
+    await staleEditor.getByRole("button", { name: /^Edit service 2/ }).click();
     await staleEditor.getByLabel(/Start time for service 2/).fill("12:30");
 
     await page.goto(`/nordic/app/sales?booking=${booking.id}`);

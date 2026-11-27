@@ -74,7 +74,17 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     const futureDrawer = await open(upcoming);
     await expect(futureDrawer.getByRole("button", { name: "Check in", exact: true })).toHaveCount(0);
     const earlyDrawer = await open(early);
-    await earlyDrawer.getByRole("button", { name: "Check in", exact: true }).click();
+    const checkIn = earlyDrawer.getByRole("button", { name: "Check in", exact: true });
+    const editServices = earlyDrawer.getByRole("button", { name: "Edit services", exact: true });
+    await expect(editServices).toBeVisible();
+    const [checkInBounds, editBounds] = await Promise.all([checkIn.boundingBox(), editServices.boundingBox()]);
+    expect(Math.abs(checkInBounds!.y - editBounds!.y)).toBeLessThan(2);
+    await checkIn.click();
+    await expect(checkIn).toHaveAttribute("aria-expanded", "true");
+    await earlyDrawer.getByRole("button", { name: "Waiting room", exact: true }).press("Escape");
+    await expect(checkIn).toBeFocused();
+    await expect(checkIn).toHaveAttribute("aria-expanded", "false");
+    await checkIn.click();
     await earlyDrawer.getByRole("button", { name: "Waiting room", exact: true }).click();
     await expect(stageLabel(earlyDrawer)).toHaveText("Waiting room");
     await earlyDrawer.getByRole("button", { name: "Start service", exact: true }).click();

@@ -70,6 +70,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
       await db.unsafe("UPDATE bookings SET status='cancelled' WHERE id=$1 AND tenant_id=$2", [editBookingId, settings.tenantId]);
       await route.continue();
     });
+    await page.getByRole("button", { name: "Edit appointment" }).click();
     await page.getByLabel("Customer name").fill(attemptedName);
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Cancelled appointments cannot be edited." })).toBeVisible();

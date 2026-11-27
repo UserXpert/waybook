@@ -1,5 +1,6 @@
 "use client";
 
+import { Ellipsis, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
@@ -18,6 +19,10 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   const [selected, setSelected] = useState<CalendarAppointmentSummary | null>(initialDetail);
   const [detail, setDetail] = useState<Detail | null>(initialDetail);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState<"edit" | "reschedule" | "cancel" | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const actionPanel = useRef<HTMLDivElement>(null);
   const request = useRef(0);
   const summariesRef = useRef(summaries);
   summariesRef.current = summaries;
@@ -28,7 +33,13 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     }
   }, [initialDetail]);
 
+  useEffect(() => {
+    if (mode) actionPanel.current?.focus();
+  }, [mode]);
+
   const load = useCallback((id: string) => {
+    setMode(null);
+    setMenuOpen(false);
     const serial = ++request.current;
     setError("");
     setDetail(null);
@@ -50,6 +61,8 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   };
 
   const close = useCallback(() => {
+    setMode(null);
+    setMenuOpen(false);
     ++request.current;
     setSelected(null); setDetail(null); setError("");
     const url = new URL(window.location.href); url.searchParams.delete("booking");
@@ -71,7 +84,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     };
     const onPopState = () => {
       const id = new URL(window.location.href).searchParams.get("booking");
-      if (id) load(id); else { ++request.current; setSelected(null); setDetail(null); setError(""); }
+      if (id) load(id); else { ++request.current; setSelected(null); setDetail(null); setError(""); setMode(null); setMenuOpen(false); }
     };
     document.addEventListener("click", onClick, true);
     window.addEventListener("popstate", onPopState);
@@ -81,14 +94,49 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   if (!selected) return null;
   const attendanceLabel = selected.attendanceStage ? appointmentStageLabels[selected.attendanceStage] : undefined;
   const capabilities = detail ? appointmentDrawerCapabilities(detail) : null;
+  const movable = detail && isMovableAppointmentStatus(detail.status);
+  const canReschedule = Boolean(movable && capabilities?.canReschedule && detail.days.length);
+  const canCancel = Boolean(movable && capabilities?.canCancel);
+  const canEdit = Boolean(detail?.status !== "cancelled" && (capabilities?.canEdit || capabilities?.canUpdateStatus || canReschedule));
+  const rescheduleOptions = canReschedule && detail ? <AppointmentRescheduleActions key={detail.id}
+    bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots}
+    currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} reschedule={rescheduleBooking} /> : null;
   const date = selected.startsAt ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" }).format(new Date(selected.startsAt)) : "";
   const clock = (value: string) => value ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "";
   return <TenantEditorDialog title={`Appointment with ${selected.customerName}`} onDismiss={close} cycleFocus>
     <aside className="tenant-drawer appointment-drawer manual-appointment-drawer calendar-appointment-drawer" aria-label={`Appointment with ${selected.customerName}`}>
-      <header><div><p>APPOINTMENT</p><h2>{selected.customerName}</h2></div><div className="appointment-drawer__header-actions tenant-drawer-header-actions"><span data-appointment-save-action style={{ display: "contents" }} /><button type="button" className="tenant-drawer-close" aria-label="Close appointment" onClick={(event) => {
-        event.currentTarget.closest("dialog")?.close();
-        close();
-      }}>×</button></div></header>
+      <header>
+        <div><p>APPOINTMENT</p><h2>{selected.customerName}</h2></div>
+        <div className="appointment-drawer__header-actions tenant-drawer-header-actions">
+          {mode === "edit" ? <span data-appointment-save-action style={{ display: "contents" }} /> : null}
+          {canReschedule || canCancel ? <div className="appointment-action-popover"
+            onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false); }}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape" || !menuOpen) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setMenuOpen(false);
+              menuButton.current?.focus();
+            }}>
+            <button ref={menuButton} type="button" className="calendar-drawer-icon" aria-label="More appointment actions"
+              aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+              <Ellipsis size={19} aria-hidden="true" />
+            </button>
+            {menuOpen ? <div className="appointment-action-popover__panel" role="group" aria-label="More appointment actions">
+              {canReschedule ? <button type="button" onClick={() => { setMode("reschedule"); setMenuOpen(false); actionPanel.current?.focus(); }}>Reschedule</button> : null}
+              {canCancel ? <button type="button" onClick={() => { setMode("cancel"); setMenuOpen(false); actionPanel.current?.focus(); }}>Cancellation options</button> : null}
+            </div> : null}
+          </div> : null}
+          {canEdit ? <button type="button" className="calendar-drawer-icon" aria-label={mode ? "Close editing" : "Edit appointment"}
+            aria-expanded={Boolean(mode)} onClick={() => setMode(mode ? null : "edit")}>
+            {mode ? <X size={17} aria-hidden="true" /> : <Pencil size={17} aria-hidden="true" />}
+          </button> : null}
+          <button type="button" className="tenant-drawer-close" aria-label="Close appointment" onClick={(event) => {
+            event.currentTarget.closest("dialog")?.close();
+            close();
+          }}>×</button>
+        </div>
+      </header>
       <div className="appointment-drawer__body">
         <section className="appointment-drawer__details"><dl>
           <div className="appointment-drawer__detail--status"><dt>Status</dt><dd>{attendanceLabel ?? selected.status.replace("_", " ")}</dd></div>
@@ -97,10 +145,14 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>{staffLabel}</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
-          <AppointmentAttendanceJourney key={detail.id} bookingId={detail.id} status={detail.status}
-            stage={detail.attendanceStage} canUpdateStatus={capabilities.canUpdateStatus}
-            canCheckIn={detail.canCheckIn} canOpenCheckout={detail.canChangeAttendanceNow} canManage={detail.canManage}
-            canNotifyProviders={detail.canNotifyProviders} checkoutPath={checkoutPath} onChange={refreshAppointment} />
+          <div className="calendar-appointment-drawer__actions">
+            <AppointmentAttendanceJourney key={detail.id} bookingId={detail.id} status={detail.status}
+              stage={detail.attendanceStage} canUpdateStatus={capabilities.canUpdateStatus}
+              canCheckIn={detail.canCheckIn} canOpenCheckout={detail.canChangeAttendanceNow} canManage={detail.canManage}
+              canNotifyProviders={detail.canNotifyProviders} checkoutPath={checkoutPath} onChange={refreshAppointment} />
+            {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
+              bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
+          </div>
           {detail.additionalServices.length > 0 ? <section className="appointment-drawer__details">
             <h3>Additional services</h3>
             <dl>{detail.additionalServices.map((service) => <div key={service.id}>
@@ -108,16 +160,26 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
               <dd>{clock(service.startsAt)}–{clock(service.endsAt)}{service.provider ? ` · ${service.provider}` : ""}</dd>
             </div>)}</dl>
           </section> : null}
-          {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
-            bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
-          {capabilities.canEdit ? (
-            <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance} onPaymentRecorded={refreshAppointment} customerName={detail.customerName} customerEmail={detail.customerEmail} customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} separateCheckIn attendanceLabel={attendanceLabel} onStatusSaved={refreshAppointment} timezone={detail.timezone} days={detail.days} slots={detail.slots} currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} saveDetails={updateBookingDetails} reschedule={rescheduleBooking} resourceId={detail.resourceId} resources={detail.resources} />
-          ) : <>
-            {capabilities.canUpdateStatus || (capabilities.canCancel && detail.status === "cancelled") ? <AppointmentStatusActions bookingId={detail.id} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow} separateCheckIn attendanceLabel={attendanceLabel} onStatusSaved={refreshAppointment} updateStatus={saveAppointmentAttendance} /> : null}
-            {capabilities.canReschedule ? <AppointmentRescheduleActions key={detail.id} bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots} currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} reschedule={rescheduleBooking} /> : null}
-            {!capabilities.canUpdateStatus && !capabilities.canReschedule ? <p className="tenant-drawer-note">You have view-only access to this appointment.</p> : null}
-          </>}
-          {capabilities.canCancel && isMovableAppointmentStatus(detail.status) ? <CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /> : null}
+          {detail.status === "cancelled" && capabilities.canCancel ? <AppointmentStatusActions
+            bookingId={detail.id} status={detail.status} canChangeAttendanceNow={false} updateStatus={saveAppointmentAttendance} /> : null}
+          {mode && detail.status !== "cancelled" ? <div className="calendar-appointment-drawer__edit" ref={actionPanel} tabIndex={-1}>
+            {mode === "edit" && (capabilities.canEdit ? (
+              <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance}
+                onPaymentRecorded={refreshAppointment} customerName={detail.customerName} customerEmail={detail.customerEmail}
+                customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow}
+                separateCheckIn attendanceLabel={attendanceLabel} onStatusSaved={refreshAppointment} timezone={detail.timezone} days={detail.days}
+                slots={detail.slots} currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0}
+                saveDetails={updateBookingDetails} reschedule={rescheduleBooking} resourceId={detail.resourceId} resources={detail.resources} />
+            ) : <>
+              {capabilities.canUpdateStatus ? <AppointmentStatusActions bookingId={detail.id} status={detail.status}
+                canChangeAttendanceNow={detail.canChangeAttendanceNow} separateCheckIn attendanceLabel={attendanceLabel}
+                onStatusSaved={refreshAppointment} updateStatus={saveAppointmentAttendance} /> : null}
+              {rescheduleOptions}
+            </>)}
+            {mode === "reschedule" ? rescheduleOptions : null}
+            {mode === "cancel" && canCancel ? <section><h3>Cancel this appointment?</h3><CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /></section> : null}
+          </div> : null}
+          {!canEdit && !canCancel && !capabilities.canCancel ? <p className="tenant-drawer-note">You have view-only access to this appointment.</p> : null}
         </>}
       </div>
     </aside>

@@ -21,11 +21,11 @@ export type SearchPickerProps<T extends { id: string }> = {
   onPick: (item: T) => void;
   onClear?: () => void;
   hintId?: string;
+  browseOnFocus?: boolean;
   createOption?: { label: string; onPick: (query: string) => void };
 };
 
-/** A bounded, keyboard-friendly async picker. It never renders a tenant-wide
- * directory: result rows appear only after an intentional two-character search. */
+/** A bounded async picker that searches after two characters by default. */
 export function SearchPicker<T extends { id: string }>({
   label,
   selectedLabel,
@@ -36,6 +36,7 @@ export function SearchPicker<T extends { id: string }>({
   onClear,
   hintId,
   createOption,
+  browseOnFocus = false,
 }: SearchPickerProps<T>) {
   const listId = useId();
   const [query, setQuery] = useState(selectedLabel);
@@ -44,7 +45,7 @@ export function SearchPicker<T extends { id: string }>({
   const [hasTyped, setHasTyped] = useState(false);
   const blurTimer = useRef<number | undefined>(undefined);
   const normalizedQuery = query.trim();
-  const isSearching = isFocused && hasTyped && normalizedQuery.length >= 2;
+  const isSearching = isFocused && (browseOnFocus && !selectedLabel || hasTyped && normalizedQuery.length >= 2);
   const activeUrl = isSearching ? searchUrl(normalizedQuery) : null;
   const matchingResult = result?.url === activeUrl ? result : null;
   const results = matchingResult?.items ?? [];
@@ -84,6 +85,8 @@ export function SearchPicker<T extends { id: string }>({
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape" && isSearching) {
       event.preventDefault();
+      event.stopPropagation();
+      setIsFocused(false);
       setHasTyped(false);
       setQuery(selectedLabel);
       setResult(null);
@@ -108,6 +111,7 @@ export function SearchPicker<T extends { id: string }>({
         aria-expanded={isSearching}
         aria-describedby={hintId}
         autoComplete="off"
+        autoFocus={browseOnFocus && !selectedLabel}
         onFocus={(event) => {
           window.clearTimeout(blurTimer.current);
           setIsFocused(true);

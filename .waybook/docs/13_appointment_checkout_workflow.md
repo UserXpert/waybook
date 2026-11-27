@@ -34,11 +34,15 @@ In the playground, the past-date entry showed preferences without a booking acti
 | Checking out | Continue checkout | Resume the same sale with its items, discounts, and any posted transactions. |
 | Completed | View sale or Rebook | Open the historical sale or start a new draft with the relevant client and services. |
 
-Treat those front-desk actions as explicit transitions, gated by the operator’s permissions. Preserve the separate **Save changes** behaviour for edits within the appointment drawer. For a No show, show payment method and amount directly in that drawer, including when the current service balance is zero. The operator can select Completed and submit once. If required payment details are missing, show a compact inline message and keep the draft. Commit the no-show payment and completion atomically.
+Keep front-desk actions visible in the calendar appointment summary according to the operator’s permissions. **Check in** opens a compact Waiting room or In service menu beside **Edit services**.
+
+The top-right pencil opens appointment details, attendance and rescheduling for authorized staff. **Save changes** appears in edit mode. The three-dot menu opens Reschedule directly or shows a cancellation confirmation. Editing services starts with compact rows showing service, provider, time and price. **Add service** focuses a searchable list and uses the previous provider when eligible. The next service starts after the previous service unless staff enter a different time.
+
+For a No show, the pencil opens payment method and amount in the same drawer, including when the current service balance is zero. The operator can select Completed and submit once. If required payment details are missing, show a compact inline message and keep the draft. Commit the no-show payment and completion atomically.
 
 In Chrome, **Check-in** offered **Waiting Room** or **In Service**. Waiting Room showed **Notify** and **In Service**. Moving the demo appointment into service revealed **Checkout**. The future appointment showed a confirmation before checkout. The playground card test used a separate appointment with checkout already in progress.
 
-In the same-day early-arrival test, a confirmed 11:00 appointment entered Waiting Room before 11:00. Waybook uses the workspace time zone to make Check in available on the appointment date. Authorized staff can choose Waiting room or In service before the booked start.
+Waybook uses the workspace time zone to make Check in available on the appointment date. Authorized staff can choose Waiting room or In service before the booked start.
 
 ## Review checkout
 
