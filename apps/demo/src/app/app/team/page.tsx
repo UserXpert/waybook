@@ -227,7 +227,8 @@ function ProfileFacts({ terms, member }: { terms: Awaited<ReturnType<typeof getT
 function StaffPermissionsForm({ memberId, role, initial, workspacePermissionsAvailable }: { memberId: string; role: string; initial: StaffPermissions | undefined; workspacePermissionsAvailable: boolean }) {
   const sections = staffPermissionSections.flatMap(({ title, items }) => {
     if (!workspacePermissionsAvailable && title !== "Calendar" && title !== "Operations") return [];
-    const applicable = items.filter(([key]) => canConfigureStaffPermission(role, key));
+    const applicable = items.filter((item): item is Exclude<typeof item, readonly ["canCheckoutAppointments", string, string]> =>
+      item[0] !== "canCheckoutAppointments" && canConfigureStaffPermission(role, item[0]));
     return applicable.length ? [{ title, items: applicable }] : [];
   });
   return <form action={saveStaffPermissions} className="staff-permissions-form">
