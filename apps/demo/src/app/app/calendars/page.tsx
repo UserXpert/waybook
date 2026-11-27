@@ -705,6 +705,11 @@ export default async function CalendarsPage({
     `
     : services;
   const manualService = createServices.find((item) => item.id === selectedService?.id) ?? createServices[0];
+  const calendarSlotInstant = requestedAppointment && fromSlot === "1" && !waitlistEntryId
+    ? fromZonedTime(requestedAppointment, bookingTimezone) : null;
+  const initialCalendarSlotStart = calendarSlotInstant && Number.isFinite(+calendarSlotInstant) && createMember && manualService &&
+    servicesForBookableSlot.get(`${createMember.id}|${localDateTimeKey(calendarSlotInstant, calendarTimezone)}`)?.has(manualService.id)
+    ? calendarSlotInstant.toISOString() : undefined;
   const teamDayOpenPeriods = mergeSlots(
     availability
       .flatMap((item) => item.slots as Slot[])
@@ -1325,6 +1330,7 @@ export default async function CalendarsPage({
                 initialService={manualService ?? null}
                 fixedStaff={!canManage && !permissions.canManageTeamAppointments}
                 fromCalendarSlot={fromSlot === "1" && !waitlistEntryId}
+                initialCalendarSlotStart={initialCalendarSlotStart}
                 defaultDate={requestedAppointment.slice(0, 10)}
                 defaultTime={requestedAppointment.slice(11)}
                 timezone={bookingTimezone}
