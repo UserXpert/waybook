@@ -18,6 +18,7 @@ export type StaffPermissionContext = {
   canManageOwnTimeOff: boolean;
   canManageTeamTimeOff: boolean;
   canManageWaitlist: boolean;
+  canCheckoutAppointments: boolean;
   canViewClients: boolean;
   canManageClients: boolean;
   canAccessReports: boolean;
@@ -40,6 +41,7 @@ const denied: Omit<StaffPermissionContext, "isManager" | "teamMemberId"> = {
   canManageOwnTimeOff: false,
   canManageTeamTimeOff: false,
   canManageWaitlist: false,
+  canCheckoutAppointments: false,
   canViewClients: false,
   canManageClients: false,
   canAccessReports: false,
@@ -58,7 +60,7 @@ type ExtendedWorkspacePermissions = Pick<
 
 type BaseStaffPermissionContext = Omit<
   StaffPermissionContext,
-  keyof ExtendedWorkspacePermissions | "isManager"
+  keyof ExtendedWorkspacePermissions | "isManager" | "canCheckoutAppointments"
 >;
 
 const deniedWorkspacePermissions: ExtendedWorkspacePermissions = {
@@ -126,8 +128,9 @@ export const staffPermissionContext = cache(async function staffPermissionContex
     for (const key of Object.keys(denied) as StaffPermissionKey[]) permissions[key] = rolePermissions[key] === true;
     return { isManager: false, teamMemberId: staff.teamMemberId, ...permissions };
   }
+  const legacyPermissions = { ...individualPermissions, canCheckoutAppointments: false };
   if (!await staffWorkspacePermissionsAvailable(tenant)) {
-    return enforceReadOnlyPermissions(membership.role, { isManager: false, ...individualPermissions, ...deniedWorkspacePermissions });
+    return enforceReadOnlyPermissions(membership.role, { isManager: false, ...legacyPermissions, ...deniedWorkspacePermissions });
   }
   const [workspace] = await db<ExtendedWorkspacePermissions[]>`
     SELECT can_view_clients AS "canViewClients",
@@ -139,7 +142,7 @@ export const staffPermissionContext = cache(async function staffPermissionContex
     WHERE tenant_id = ${tenant.id} AND team_member_id = ${staff.teamMemberId}
     LIMIT 1
   `;
-  return enforceReadOnlyPermissions(membership.role, { isManager: false, ...individualPermissions, ...(workspace ?? deniedWorkspacePermissions) });
+  return enforceReadOnlyPermissions(membership.role, { isManager: false, ...legacyPermissions, ...(workspace ?? deniedWorkspacePermissions) });
 });
 
 export function canManageAppointment(

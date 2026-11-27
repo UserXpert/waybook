@@ -191,6 +191,10 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await expect(saved.getByText(new RegExp(`11:45–12:15 · ${secondary.name}`))).toBeVisible();
     expect((await positions())[0]).toEqual({ starts_at: time("11:00"), added_start: time("11:45"), added_provider: secondary.id });
 
+    await saved.getByRole("button", { name: "Close rescheduling", exact: true }).click();
+    await expect(schedule).toHaveCount(0);
+    await expect(saved.getByRole("button", { name: "Close appointment", exact: true })).toBeVisible();
+
     const edit = saved.getByRole("button", { name: "Edit services", exact: true });
     const editor = saved.getByRole("region", { name: "Appointment services" });
     const save = editor.getByRole("button", { name: "Save services", exact: true });

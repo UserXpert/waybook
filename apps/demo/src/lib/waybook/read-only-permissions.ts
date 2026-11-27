@@ -5,6 +5,7 @@ const readOnlyWritePermissions = {
   canManageOwnTimeOff: false,
   canManageTeamTimeOff: false,
   canManageWaitlist: false,
+  canCheckoutAppointments: false,
   canManageClients: false,
   canManageResources: false,
   canManageServiceSettings: false,

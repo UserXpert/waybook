@@ -8,7 +8,7 @@ test("read-only role cannot retain write permissions after a role change", () =>
     canManageTeamAppointments: true, canManageOwnTimeOff: true,
     canManageTeamTimeOff: true, canManageWaitlist: true,
     canManageClients: true, canManageResources: true,
-    canManageServiceSettings: true, canViewTeamCalendar: true,
+    canCheckoutAppointments: true, canManageServiceSettings: true, canViewTeamCalendar: true,
     canViewClients: true, canAccessReports: true,
   };
   const readonly = enforceReadOnlyPermissions("read-only", previouslyGranted);

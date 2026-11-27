@@ -7,6 +7,10 @@ export const paymentMethodLabels: Record<string, string> = {
 
 export type RecordedAppointmentPayment = { id: string; amountCents: number; method: string; revision: string | null; stripeSandbox?: boolean };
 
+export function hasNonGiftCardPayment(payments: RecordedAppointmentPayment[]) {
+  return payments.some(({ method }) => method !== "gift_card");
+}
+
 /** Payment corrections are recorded in booking history and linked to any ledger adjustment. */
 export function activeAppointmentPayments(db: Pick<ReturnType<typeof tenantDb>, "unsafe">, tenantId: string, bookingId: string) {
   return db.unsafe<RecordedAppointmentPayment[]>(`
