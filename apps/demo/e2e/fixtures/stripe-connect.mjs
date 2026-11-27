@@ -113,7 +113,7 @@ globalThis.fetch = async (input, init) => {
       }
       const amount = Number(body.get("line_items[0][price_data][unit_amount]"));
       const customer = body.get("customer");
-      if ((customer && !redisplayCustomers.has(customer)) || (amount === 65000 && !customer)) return error(400);
+      if (customer && !redisplayCustomers.has(customer)) return error(400);
       if (!key || body.get("client_reference_id") !== key || body.get("mode") !== "payment" ||
           body.get("line_items[0][price_data][currency]") !== "dkk" ||
           body.get("payment_method_types[0]") !== "card" || body.get("adaptive_pricing[enabled]") !== "false" ||
@@ -148,7 +148,9 @@ globalThis.fetch = async (input, init) => {
       Object.assign(session.checkout, { status: "expired", url: null });
     } else if (request.method === "GET" && !expiration) {
       session.reads++;
-      if ([6501, 6503, 65000].includes(session.checkout.amount_total) && session.reads >= 2 && session.checkout.status === "open") {
+      const completesPayment = [6501, 6503].includes(session.checkout.amount_total) ||
+        redisplayCustomers.has(session.checkout.customer);
+      if (completesPayment && session.reads >= 2 && session.checkout.status === "open") {
         Object.assign(session.checkout, { status: "complete", payment_status: "paid", payment_intent: `pi_${id.slice(8)}`, url: null });
       }
       if (session.checkout.amount_total === 6504) Object.assign(session.checkout, { status: "expired", url: null });
