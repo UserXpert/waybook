@@ -4,13 +4,14 @@ import type { StripeSandboxConfig } from "./stripe-connect-api";
 const sessions = "/v1/checkout/sessions";
 const sessionIdPattern = /^cs_test_[A-Za-z0-9]+$/;
 const customerIdPattern = /^cus_[A-Za-z0-9]+$/;
+const paymentMethodIdPattern = /^pm_[A-Za-z0-9]+$/;
 
 type CardSetup = { id: string; customer: string; expiresAt: number; returnUrl: string };
 type SavedCard = { brand: string; last4: string };
 type SetupOutcome =
   | { id: string; state: "open"; url: string }
   | { id: string; state: "expired" | "processing" }
-  | { id: string; state: "saved"; card: SavedCard };
+  | { id: string; state: "saved"; card: SavedCard; paymentMethodId: string };
 
 type SetupResponse = {
   id?: string;
@@ -65,10 +66,10 @@ function verifySetup(session: SetupResponse | null, setup: CardSetup, expectedId
     const brand = method?.card?.brand;
     const last4 = method?.card?.last4;
     if (intent.status === "succeeded" && method?.type === "card" && method.livemode === false &&
-        method.customer === setup.customer && /^pm_[A-Za-z0-9]+$/.test(method.id ?? "") &&
+        method.customer === setup.customer && typeof method.id === "string" && paymentMethodIdPattern.test(method.id) &&
         typeof brand === "string" && /^[a-z0-9_]{1,32}$/.test(brand) &&
         typeof last4 === "string" && /^\d{4}$/.test(last4)) {
-      return { id, state: "saved", card: { brand, last4 } };
+      return { id, state: "saved", card: { brand, last4 }, paymentMethodId: method.id };
     }
   }
   throw new Error("Stripe returned an unexpected card setup result.");
@@ -105,6 +106,16 @@ export function stripeCardSetupSandbox(config: StripeSandboxConfig, accountId: s
         cancel_url: cancel.href,
       }), setup.id);
       return verifySetup(await response.json(), setup);
+    },
+    async allowCardRedisplay(setup: CardSetup, paymentMethodId: string) {
+      if (!paymentMethodIdPattern.test(paymentMethodId)) throw new Error("Invalid Stripe card.");
+      const response = await stripeSandboxRequest(config, request, accountId, `/v1/payment_methods/${paymentMethodId}`, "POST",
+        new URLSearchParams({ allow_redisplay: "always" }), `${setup.id}-redisplay`);
+      const method = await response.json();
+      if (method?.object !== "payment_method" || method.livemode !== false || method.type !== "card" ||
+          method.id !== paymentMethodId || method.customer !== setup.customer || method.allow_redisplay !== "always") {
+        throw new Error("Stripe could not confirm this client's saved card for checkout.");
+      }
     },
     async retrieve(setup: CardSetup, sessionId: string) {
       if (!sessionIdPattern.test(sessionId)) throw new Error("Invalid Stripe card setup session.");

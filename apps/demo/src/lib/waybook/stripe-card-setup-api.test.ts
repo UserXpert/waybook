@@ -47,7 +47,7 @@ test("exposes only the card mask and rejects cross-client, live, and payment ses
     return Response.json(body);
   });
   assert.deepEqual(await apiFor(session).retrieve(setup, session.id), {
-    id: session.id, state: "saved", card: { brand: "visa", last4: "4242" },
+    id: session.id, state: "saved", card: { brand: "visa", last4: "4242" }, paymentMethodId: "pm_expected",
   });
   const invalid = [
     { ...session, customer: "cus_unrelated" },
@@ -60,4 +60,20 @@ test("exposes only the card mask and rejects cross-client, live, and payment ses
   for (const result of invalid) {
     await assert.rejects(apiFor(result).retrieve(setup, session.id), /Stripe/);
   }
+});
+
+test("confirms redisplay only for the expected sandbox card and connected account", async () => {
+  const method = { object: "payment_method", id: "pm_expected", type: "card",
+    customer: setup.customer, livemode: false, allow_redisplay: "always" };
+  const sandbox = (response: object) => stripeCardSetupSandbox(config, "acct_expected", async (url, init) => {
+    assert.equal(url, "https://api.stripe.com/v1/payment_methods/pm_expected");
+    const request = new Request(url, init);
+    assert.equal(request.headers.get("Stripe-Account"), "acct_expected");
+    assert.equal(request.headers.get("Idempotency-Key"), `${setup.id}-redisplay`);
+    assert.equal(new URLSearchParams(await request.text()).get("allow_redisplay"), "always");
+    return Response.json(response);
+  });
+  await sandbox(method).allowCardRedisplay(setup, method.id);
+  await assert.rejects(sandbox({ ...method, customer: "cus_unrelated" }).allowCardRedisplay(setup, method.id), /saved card/);
+  await assert.rejects(sandbox({ ...method, livemode: true }).allowCardRedisplay(setup, method.id), /saved card/);
 });

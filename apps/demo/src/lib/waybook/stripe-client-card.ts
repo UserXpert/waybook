@@ -106,6 +106,7 @@ export async function runClientCardSetup(
   }
 
   const saved = outcome?.state === "saved";
+  if (saved) await provider.allowCardRedisplay(setup, outcome.paymentMethodId);
   const card = saved ? outcome.card : null;
   const [updated] = await db<{ brand: string | null }[]>`
     UPDATE stripe_sandbox_client_cards SET card_brand = ${card?.brand ?? null}, card_last4 = ${card?.last4 ?? null},

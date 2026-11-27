@@ -10,6 +10,7 @@ export type SandboxCheckoutAttempt = {
   amountCents: number;
   expiresAtSeconds: number;
   returnPath: string;
+  stripeCustomerId?: string | null;
 };
 
 export type SandboxCheckoutSession =
@@ -23,6 +24,7 @@ type SessionResponse = {
   livemode?: unknown;
   mode?: unknown;
   client_reference_id?: unknown;
+  customer?: unknown;
   amount_total?: unknown;
   currency?: unknown;
   expires_at?: unknown;
@@ -42,6 +44,7 @@ function verifySession(
       (expectedId !== undefined && session.id !== expectedId) ||
       session.object !== "checkout.session" || session.livemode !== false || session.mode !== "payment" ||
       session.client_reference_id !== attempt.id || session.amount_total !== attempt.amountCents ||
+      (attempt.stripeCustomerId != null && session.customer !== attempt.stripeCustomerId) ||
       session.currency !== "dkk" || session.expires_at !== attempt.expiresAtSeconds ||
       !Array.isArray(session.payment_method_types) || session.payment_method_types.length !== 1 ||
       session.payment_method_types[0] !== "card") {
@@ -132,7 +135,10 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       // Existing attempts retain the exact callback URLs sent with their original retry key.
       const cancelUrl = new URL(returnUrl);
       if (cancelUrl.searchParams.get("stripe") === "return") cancelUrl.searchParams.delete("stripe");
-      return call(attempt, "create", undefined, new URLSearchParams({
+      if (attempt.stripeCustomerId != null && !/^cus_[A-Za-z0-9]+$/.test(attempt.stripeCustomerId)) {
+        throw new Error("Invalid Stripe checkout customer.");
+      }
+      const params = new URLSearchParams({
         mode: "payment",
         "payment_method_types[0]": "card",
         "adaptive_pricing[enabled]": "false",
@@ -144,7 +150,9 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
         "line_items[0][price_data][unit_amount]": String(attempt.amountCents),
         "line_items[0][price_data][product_data][name]": "Appointment checkout",
         "line_items[0][quantity]": "1",
-      }));
+      });
+      if (attempt.stripeCustomerId) params.set("customer", attempt.stripeCustomerId);
+      return call(attempt, "create", undefined, params);
     },
     retrieve(attempt: SandboxCheckoutAttempt, sessionId: string) {
       return call(attempt, "retrieve", sessionId);

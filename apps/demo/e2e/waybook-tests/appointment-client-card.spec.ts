@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("appointment card setup resumes, returns a mask, and leaves the appointment unpaid", async ({ page }) => {
+test("saved card setup stays unpaid until the client confirms Stripe checkout", async ({ page }) => {
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const [{ id: tenantId }] = await control`SELECT id FROM tenants WHERE slug = 'nordic-studio'`;
@@ -25,7 +25,8 @@ test("appointment card setup resumes, returns a mask, and leaves the appointment
       const [customer] = await tx`INSERT INTO customers (tenant_id, name, email, phone)
         VALUES (${tenantId}, ${name}, ${`card-client-${marker}@example.test`}, '+4512345678') RETURNING id`;
       const [block] = await tx`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
-        VALUES (${tenantId}, ${member.id}, ${location.id}, now() + interval '2 hours', now() + interval '3 hours', 'confirmed')
+        VALUES (${tenantId}, ${member.id}, ${location.id}, (date_trunc('day', now() AT TIME ZONE 'Europe/Copenhagen') + interval '12 hours') AT TIME ZONE 'Europe/Copenhagen',
+          (date_trunc('day', now() AT TIME ZONE 'Europe/Copenhagen') + interval '13 hours') AT TIME ZONE 'Europe/Copenhagen', 'confirmed')
         RETURNING id, starts_at, ends_at`;
       const [booking] = await tx`INSERT INTO bookings
         (tenant_id, booking_block_id, service_id, team_member_id, location_id, customer_id, starts_at, ends_at, status, booked_price_cents)
@@ -73,6 +74,29 @@ test("appointment card setup resumes, returns a mask, and leaves the appointment
       .toEqual([{ card_last4: "4242", setup_id: null }]);
     expect(await db`SELECT id FROM payment_records WHERE booking_id = ${booking.id}`).toEqual([]);
     expect(await db`SELECT status FROM bookings WHERE id = ${booking.id}`).toEqual([{ status: "confirmed" }]);
+
+    const [card] = await db`SELECT stripe_customer_id FROM stripe_sandbox_client_cards
+      WHERE tenant_id = ${tenantId} AND customer_id = ${customer.id}`;
+    await drawer.getByRole("button", { name: "Check in", exact: true }).click();
+    await drawer.getByRole("button", { name: "In service", exact: true }).click();
+    await drawer.getByRole("button", { name: "Checkout", exact: true }).click();
+    const sale = page.getByRole("dialog", { name: "Appointment checkout" });
+    await sale.getByRole("link", { name: "Go to payments" }).click();
+    await sale.getByRole("button", { name: "Pay by card in Stripe sandbox" }).click();
+    await expect(sale.getByRole("alert")).toContainText("Stripe sandbox checkout is temporarily unavailable.");
+    const [attempt] = await db`SELECT id, stripe_customer_id, return_path, state
+      FROM stripe_sandbox_checkout_attempts WHERE booking_id = ${booking.id}`;
+    expect(attempt.stripe_customer_id).toBe(card.stripe_customer_id);
+    expect(attempt.state).toBe("pending");
+    expect(await db`SELECT id FROM payment_records WHERE booking_id = ${booking.id}`).toEqual([]);
+
+    await sale.getByRole("button", { name: "Continue in Stripe", exact: true }).click();
+    await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_/);
+    await page.goto(attempt.return_path);
+    await sale.getByRole("button", { name: "Finish checkout" }).click();
+    await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id = ${booking.id}`)[0].status).toBe("completed");
+    expect(await db`SELECT id,method,amount_cents FROM payment_records WHERE booking_id = ${booking.id}`)
+      .toEqual([{ id: attempt.id, method: "card", amount_cents: 65000 }]);
 
     await page.context().clearCookies();
     await page.goto("/login");
