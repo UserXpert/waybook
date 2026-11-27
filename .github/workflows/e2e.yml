@@ -1,8 +1,6 @@
-name: E2E Tests
+name: PR Browser Smoke Tests
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
@@ -16,7 +14,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'Draft browser tests (deferred)' || 'e2e' }}
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
       WAYBOOK_CONTROL_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_control
       WAYBOOK_NORDIC_STUDIO_DATABASE_URL: postgresql://waybook:waybook@127.0.0.1:5432/waybook_e2e_nordic
@@ -56,13 +54,13 @@ jobs:
           node --import tsx scripts/seed-waybook-e2e.mts
           node --import tsx scripts/verify-waybook-transaction-conflicts.mts
 
-      - name: Run Waybook E2E tests
+      - name: Run Waybook browser smoke tests
         run: |
           docker run --rm --network host --ipc=host \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE/apps/demo" \
             -e CI -e WAYBOOK_CONTROL_DATABASE_URL -e WAYBOOK_NORDIC_STUDIO_DATABASE_URL \
             -e WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL -e WAYBOOK_GIFT_CARD_CODE_SECRET \
-            mcr.microsoft.com/playwright:v1.59.1-noble npm run e2e
+            mcr.microsoft.com/playwright:v1.59.1-noble npm run e2e:smoke
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v7

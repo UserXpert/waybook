@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("appointment payment and refund limits preserve exact amounts in Reports", async ({ page }) => {
+test("appointment payment and refund limits preserve exact amounts in Reports", { tag: "@smoke" }, async ({ page }) => {
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const marker = randomUUID().slice(0, 8);
   const customerName = `Payment QA ${marker}`;
