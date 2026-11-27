@@ -181,8 +181,6 @@ export async function getCalendarAppointment(bookingId: string) {
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
     : [];
-  const slots = canManageSchedule && isMovableAppointmentStatus(booking.status)
-    ? (await getRescheduleBookingAvailability({ bookingId, startDate: today })).slots : [];
   return {
     ...detail,
     // Status-only staff need the appointment identity and current state, but
@@ -211,7 +209,6 @@ export async function getCalendarAppointment(bookingId: string) {
     resources,
     paymentBalance,
     days,
-    slots,
     primaryServicePriceCents: permissions.isManager ? priceCents : null,
     additionalServices: visibleAdditionalServices,
     serviceEditor: permissions.isManager && !hasSettlement && isMovableAppointmentStatus(booking.status)

@@ -127,6 +127,7 @@ for (const workspace of workspaces) {
         await expect(bookingCard(ownBooking.id)).toHaveAttribute("draggable", "true");
         await bookingCard(ownBooking.id).click();
         await ownPanel.getByRole("button", { name: "Edit appointment" }).click();
+        await ownPanel.getByRole("button", { name: "Reschedule", exact: true }).click();
         await ownPanel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) }).click();
         await ownPanel.getByRole("button", { name: "11:30", exact: true }).click();
         await ownPanel.getByRole("button", { name: "Reschedule appointment" }).click();

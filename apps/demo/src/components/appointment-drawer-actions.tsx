@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import type { AttendanceResult, BookingDetailsResult } from "@/app/app/calendars/actions";
+import { getRescheduleBookingAvailability, type AttendanceResult, type BookingDetailsResult } from "@/app/app/calendars/actions";
 import { useRouter } from "next/navigation";
 import { showSuccessToast } from "@/lib/waybook/toast";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
@@ -16,7 +16,8 @@ import styles from "./appointment-drawer-actions.module.css";
 type Slot = { startTime: string; endTime: string };
 type Props = {
   bookingId: string; customerName: string; customerEmail: string; customerPhone: string | null; status: string;
-  timezone: string; days: string[]; slots: Slot[];
+  timezone: string; days: string[]; slots?: Slot[];
+  onOpenReschedule?: () => void;
   currentStartsAt?: string; linkedServices?: boolean;
   canChangeAttendanceNow: boolean;
   separateCheckIn?: boolean;
@@ -33,6 +34,35 @@ type StatusActionProps = Pick<Props, "bookingId" | "status" | "canChangeAttendan
   updateStatus: (formData: FormData) => Promise<AttendanceResult>;
 };
 type RescheduleProps = Pick<Props, "bookingId" | "status" | "timezone" | "days" | "slots" | "reschedule" | "currentStartsAt" | "linkedServices"> & { showTimezone?: boolean };
+
+function DeferredRescheduleSlotPicker({ bookingId, timezone, days, onSelectionChange }: {
+  bookingId: string; timezone: string; days: string[]; onSelectionChange: (hasSelection: boolean) => void;
+}) {
+  const startDate = days[0];
+  const [slots, setSlots] = useState<Slot[] | "failed" | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    onSelectionChange(false);
+    void getRescheduleBookingAvailability({ bookingId, startDate }).then(({ slots }) => {
+      if (active) setSlots(slots);
+    }, () => {
+      if (active) setSlots("failed");
+    });
+    return () => { active = false; };
+  }, [bookingId, startDate, attempt, onSelectionChange]);
+
+  if (slots === null) return <p role="status">Checking availability…</p>;
+  if (slots === "failed") return <div>
+    <p role="alert">Could not load availability.</p>
+    <button type="button" className="waybook-action waybook-action--secondary" onClick={() => {
+      setSlots(null);
+      setAttempt((previous) => previous + 1);
+    }}>Try again</button>
+  </div>;
+  return <RescheduleSlotPicker bookingId={bookingId} timezone={timezone} days={days} slots={slots} onSelectionChange={onSelectionChange} />;
+}
 
 function attendanceOptions(status: string, separateCheckIn?: boolean) {
   if (status === "confirmed" && !separateCheckIn) return [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const;
@@ -159,14 +189,15 @@ export function AppointmentRescheduleActions({ bookingId, status, timezone, days
     <form action={saveSchedule} className="tenant-drawer-form">
       <input type="hidden" name="bookingId" value={bookingId} />
       {currentStartsAt ? <input type="hidden" name="expectedStartsAt" value={currentStartsAt} /> : null}
-      <RescheduleSlotPicker bookingId={bookingId} timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} />
+      {slots === undefined ? <DeferredRescheduleSlotPicker key={days[0]} bookingId={bookingId} timezone={timezone} days={days} onSelectionChange={setHasNewTime} /> :
+        <RescheduleSlotPicker bookingId={bookingId} timezone={timezone} days={days} slots={slots} onSelectionChange={setHasNewTime} />}
       {error ? <p className={`${styles.saveNotice} ${styles.error}`} role="alert">{error}</p> : null}
       <button type="submit" disabled={!hasNewTime || pending}>{pending ? "Rescheduling…" : "Reschedule appointment"}</button>
     </form>
   </section>;
 }
 
-export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, currentStartsAt, linkedServices, canChangeAttendanceNow, saveDetails, reschedule, resourceId, resources, paymentBalance, onPaymentRecorded, onStatusSaved, separateCheckIn, attendanceLabel }: Props) {
+export function AppointmentDrawerActions({ bookingId, customerName, customerEmail, customerPhone, status, timezone, days, slots, currentStartsAt, linkedServices, canChangeAttendanceNow, saveDetails, reschedule, resourceId, resources, paymentBalance, onPaymentRecorded, onStatusSaved, separateCheckIn, attendanceLabel, onOpenReschedule }: Props) {
   const router = useRouter();
   const detailsFormId = useId();
   const detailsFormRef = useRef<HTMLFormElement>(null);
@@ -270,7 +301,8 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
           pending={savingDetails} skipValidation={!detailsChanged && !paymentEntered} />
       </form>
     </section>
-    <AppointmentRescheduleActions bookingId={bookingId} status={status} timezone={timezone} days={days} slots={slots} reschedule={reschedule} currentStartsAt={currentStartsAt} linkedServices={linkedServices} />
+    {onOpenReschedule ? <button type="button" className="waybook-action waybook-action--secondary" onClick={onOpenReschedule}>Reschedule</button> :
+      <AppointmentRescheduleActions bookingId={bookingId} status={status} timezone={timezone} days={days} slots={slots} reschedule={reschedule} currentStartsAt={currentStartsAt} linkedServices={linkedServices} />}
     {status !== "no_show" ? payment : null}
   </>;
 }
