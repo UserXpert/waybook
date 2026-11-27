@@ -98,7 +98,8 @@ globalThis.fetch = async (input, init) => {
       if (body.get("mode") === "setup") {
         const customer = body.get("customer");
         if (!key || body.get("client_reference_id") !== key || !cardCustomers.has(customer) || body.get("currency") !== "dkk" ||
-            body.get("payment_method_types[0]") !== "card" || [...body.keys()].some((field) => field.startsWith("line_items")) ||
+            body.get("allowed_payment_method_types[0]") !== "card" || body.has("payment_method_types[0]") ||
+            [...body.keys()].some((field) => field.startsWith("line_items")) ||
             !body.get("success_url")?.startsWith(origin + "/nordic/app/calendars?booking=") ||
             !body.get("success_url")?.endsWith("&cardSetup=return") ||
             body.get("cancel_url") !== body.get("success_url").replace("&cardSetup=return", "")) return error(400);
