@@ -18,7 +18,7 @@ type Service = { id: string; title: string; durationMinutes: number; priceCents:
 type Client = { id: string; name: string; email: string; phone: string | null };
 type Slot = { teamMemberId: string; startTime: string };
 type ServiceDraft = { id: string; service: Service | null; member: Member | null; time: string; providerPending?: boolean; editingDetails?: boolean };
-type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; autofillLatestService?: boolean; fromCalendarSlot?: boolean; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; calendarTimezone?: string; calendarPath: string; terminology?: TenantTerminology };
+type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; autofillLatestService?: boolean; fromCalendarSlot?: boolean; initialCalendarSlotStart?: string; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; calendarTimezone?: string; calendarPath: string; terminology?: TenantTerminology };
 
 const servicePrice = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
 
@@ -28,7 +28,7 @@ function localDateKey(timezone: string) { const parts = new Intl.DateTimeFormat(
 function dateLabel(value: string) { const date = new Date(`${value}T12:00:00Z`); return { weekday: new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" }).format(date), day: new Intl.DateTimeFormat("en-GB", { day: "2-digit", timeZone: "UTC" }).format(date), full: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(date) }; }
 
 /** Selection lists are searched in bounded windows; availability and writes stay server-authoritative. */
-export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, autofillLatestService = false, fromCalendarSlot = false, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, calendarTimezone = timezone, calendarPath, terminology = defaultTenantTerminology }: Props) {
+export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, autofillLatestService = false, fromCalendarSlot = false, initialCalendarSlotStart, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, calendarTimezone = timezone, calendarPath, terminology = defaultTenantTerminology }: Props) {
   const [state, formAction, pending] = useActionState(createManualBooking, { error: null, success: null });
   const [location, setLocation] = useState(initialLocation);
   const [member, setMember] = useState<Member | null>(initialMember);
@@ -40,11 +40,10 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   const [date, setDate] = useState(defaultDate);
   const [dateWindowStart, setDateWindowStart] = useState(defaultDate);
   const [time, setTime] = useState(defaultTime ?? "");
-  const [slots, setSlots] = useState<Slot[]>([]);
+  const [availability, setAvailability] = useState<{ key: string; slots: Slot[] }>();
   const [client, setClient] = useState({ name: customerName ?? "", email: customerEmail ?? "", phone: customerPhone ?? "" });
   const [selectedClient, setSelectedClient] = useState(initialClient);
   const [showNewClient, setShowNewClient] = useState(false);
-  const [checking, setChecking] = useState(true);
   const today = useMemo(() => localDateKey(timezone), [timezone]);
   const dates = useMemo(() => Array.from({ length: 7 }, (_, index) => dateAt(dateWindowStart, index)), [dateWindowStart]);
   const locationId = location.id;
@@ -57,14 +56,29 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   const service = appliedSuggestion ?? chosenService;
   const serviceId = service?.id ?? "";
   const loadingSuggestion = Boolean(suggestionKey && suggestion?.key !== suggestionKey);
-  const timeSlots = slots.filter((slot) => slot.teamMemberId === teamMemberId);
+  const availabilityKey = JSON.stringify([locationId, serviceId, date]);
+  const currentAvailability = availability?.key === availabilityKey ? availability : undefined;
+  const calendarSlot = initialCalendarSlotStart && locationId === initialLocation.id && teamMemberId === initialMember.id &&
+    serviceId === initialService?.id && date === defaultDate && time === defaultTime ? initialCalendarSlotStart : null;
+  const needsAvailability = Boolean(locationId && serviceId && (!calendarSlot || editingSchedule));
+  const checking = needsAvailability && !currentAvailability;
+  const timeSlots = useMemo(() => currentAvailability?.slots.filter((slot) => slot.teamMemberId === teamMemberId) ?? [], [currentAvailability, teamMemberId]);
   const locationSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/locations?q=${encodeURIComponent(query)}&limit=8`, []);
   const clientSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/clients?purpose=appointment&q=${encodeURIComponent(query)}&limit=8`, []);
   const serviceSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
   const staffSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/staff?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
   useEffect(() => { setLocation(initialLocation); setMember(initialMember); setChosenService(initialService); const safeDate = defaultDate < today ? today : defaultDate; setDate(safeDate); setDateWindowStart(safeDate); setTime(defaultTime ?? ""); }, [defaultDate, defaultTime, initialLocation, initialMember, initialService, today]);
   useEffect(() => { setClient({ name: customerName ?? "", email: customerEmail ?? "", phone: customerPhone ?? "" }); }, [customerEmail, customerName, customerPhone]);
-  useEffect(() => { let cancelled = false; if (!locationId || !serviceId) { setSlots([]); setChecking(false); return; } setChecking(true); getManualBookingAvailability({ locationId, serviceId, date }).then((result) => { if (!cancelled) setSlots(result.slots); }).catch(() => { if (!cancelled) setSlots([]); }).finally(() => { if (!cancelled) setChecking(false); }); return () => { cancelled = true; }; }, [date, locationId, serviceId]);
+  useEffect(() => {
+    if (!needsAvailability) return;
+    let current = true;
+    void getManualBookingAvailability({ locationId, serviceId, date }).then(({ slots }) => {
+      if (current) setAvailability({ key: availabilityKey, slots });
+    }, () => {
+      if (current) setAvailability({ key: availabilityKey, slots: [] });
+    });
+    return () => { current = false; };
+  }, [availabilityKey, date, locationId, needsAvailability, serviceId]);
   useEffect(() => { if (!fromCalendarSlot && !checking && !timeSlots.some((slot) => clock(slot.startTime, timezone) === time)) setTime(!waitlistEntryId && timeSlots[0] ? clock(timeSlots[0].startTime, timezone) : ""); }, [checking, fromCalendarSlot, time, timeSlots, timezone, waitlistEntryId]);
   useEffect(() => {
     if (!suggestionKey || !customerId) return;
@@ -99,8 +113,9 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
         ? { ...entry, providerPending: false, member: entry.member ?? eligible ?? null } : entry,
     ));
   }
-  const selectedSlot = timeSlots.find((slot) => clock(slot.startTime, timezone) === time);
-  let precedingEnd = selectedSlot && service ? new Date(new Date(selectedSlot.startTime).getTime() + service.durationMinutes * 60_000) : null;
+  const selectedSlotStart = currentAvailability || needsAvailability
+    ? timeSlots.find((slot) => clock(slot.startTime, timezone) === time)?.startTime : calendarSlot;
+  let precedingEnd = selectedSlotStart && service ? new Date(new Date(selectedSlotStart).getTime() + service.durationMinutes * 60_000) : null;
   const suggestedStarts = additionalServices.map((row) => {
     const defaultStart = precedingEnd;
     const start = row.time ? fromZonedTime(`${date}T${row.time}`, timezone) : defaultStart;
@@ -111,7 +126,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   const clientReady = Boolean(selectedClient || (hasClientFields && client.name.trim() && client.email.includes("@")
     && (waitlistEntryId || client.phone.trim())));
 
-  const slotSelected = Boolean(selectedSlot);
+  const slotSelected = Boolean(selectedSlotStart);
   const compactDraft = !waitlistEntryId;
   const showSchedule = !compactDraft || editingSchedule;
   const slotUnavailable = fromCalendarSlot && !checking && Boolean(time && service) && !slotSelected;
