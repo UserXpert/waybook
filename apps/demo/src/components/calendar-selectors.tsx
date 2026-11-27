@@ -21,7 +21,9 @@ export type SearchPickerProps<T extends { id: string }> = {
   onPick: (item: T) => void;
   onClear?: () => void;
   hintId?: string;
+  minimumQueryLength?: number;
   browseOnFocus?: boolean;
+  autoFocus?: boolean;
   createOption?: { label: string; onPick: (query: string) => void };
 };
 
@@ -36,19 +38,24 @@ export function SearchPicker<T extends { id: string }>({
   onClear,
   hintId,
   createOption,
+  minimumQueryLength = 2,
   browseOnFocus = false,
+  autoFocus = browseOnFocus,
 }: SearchPickerProps<T>) {
   const listId = useId();
   const [query, setQuery] = useState(selectedLabel);
   const [result, setResult] = useState<{ url: string; items: T[] | null } | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [hasTyped, setHasTyped] = useState(false);
+  const [navigation, setNavigation] = useState<{ url: string; index: number } | null>(null);
   const blurTimer = useRef<number | undefined>(undefined);
   const normalizedQuery = query.trim();
-  const isSearching = isFocused && (browseOnFocus && !selectedLabel || hasTyped && normalizedQuery.length >= 2);
+  const isSearching = isFocused && (browseOnFocus && !selectedLabel || hasTyped && normalizedQuery.length >= minimumQueryLength);
   const activeUrl = isSearching ? searchUrl(normalizedQuery) : null;
   const matchingResult = result?.url === activeUrl ? result : null;
   const results = matchingResult?.items ?? [];
+  const activeIndex = navigation?.url === activeUrl && navigation.index < results.length ? navigation.index : -1;
+  const activeOption = activeIndex >= 0 ? results[activeIndex] : undefined;
   const canCreate = matchingResult?.items != null && createOption;
 
   useEffect(() => () => window.clearTimeout(blurTimer.current), []);
@@ -79,27 +86,44 @@ export function SearchPicker<T extends { id: string }>({
 
   const choose = (item: T) => {
     setIsFocused(false);
+    setQuery(selectedLabel);
     setResult(null);
+    setNavigation(null);
     onPick(item);
   };
+  useEffect(() => {
+    if (activeOption) document.getElementById(`${listId}-option-${activeOption.id}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeOption, listId]);
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (browseOnFocus && (event.key === "ArrowDown" || event.key === "ArrowUp") && (isSearching || !selectedLabel)) {
+      event.preventDefault();
+      if (!isSearching) setIsFocused(true);
+      if (activeUrl && results.length) {
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        const index = activeIndex < 0 ? (step > 0 ? 0 : results.length - 1)
+          : (activeIndex + step + results.length) % results.length;
+        setNavigation({ url: activeUrl, index });
+      }
+    }
     if (event.key === "Escape" && isSearching) {
       event.preventDefault();
       event.stopPropagation();
       setIsFocused(false);
       setHasTyped(false);
+      setNavigation(null);
       setQuery(selectedLabel);
       setResult(null);
     }
     if (event.key === "Enter" && isSearching) {
       event.preventDefault();
-      if (results[0]) choose(results[0]);
+      if (activeOption ?? results[0]) choose(activeOption ?? results[0]);
       else if (canCreate) canCreate.onPick(normalizedQuery);
     }
   };
 
   return (
-    <div className="calendar-search-picker">
+    <div className={browseOnFocus ? "calendar-search-picker calendar-search-picker--browse" : "calendar-search-picker"}>
       <label htmlFor={listId}>{label}</label>
       <input
         id={listId}
@@ -109,19 +133,23 @@ export function SearchPicker<T extends { id: string }>({
         aria-autocomplete="list"
         aria-controls={`${listId}-results`}
         aria-expanded={isSearching}
+        aria-activedescendant={activeOption ? `${listId}-option-${activeOption.id}` : undefined}
         aria-describedby={hintId}
         autoComplete="off"
-        autoFocus={browseOnFocus && !selectedLabel}
+        autoFocus={autoFocus && !selectedLabel}
         onFocus={(event) => {
           window.clearTimeout(blurTimer.current);
           setIsFocused(true);
           event.currentTarget.select();
         }}
+        onClick={browseOnFocus && !selectedLabel ? () => setIsFocused(true) : undefined}
         onBlur={() => {
           blurTimer.current = window.setTimeout(() => setIsFocused(false), 120);
         }}
         onChange={(event) => {
           setHasTyped(true);
+          setIsFocused(true);
+          setNavigation(null);
           setQuery(event.target.value);
         }}
         onKeyDown={handleKeyDown}
@@ -130,7 +158,8 @@ export function SearchPicker<T extends { id: string }>({
       {isSearching ? (
         <div className="calendar-search-picker__results" id={`${listId}-results`} role="listbox" aria-label={`${label} results`}>
           {!matchingResult ? <p role="status">Searching…</p> : matchingResult.items === null ? <p role="status">Search unavailable. Change the search to try again.</p> : results.length ? results.map((item) => (
-            <button key={item.id} type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(item)}>
+            <button key={item.id} id={`${listId}-option-${item.id}`} type="button" role="option"
+              aria-selected={activeOption?.id === item.id} tabIndex={browseOnFocus ? -1 : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(item)}>
               {resultsLabel(item)}
             </button>
           )) : <p>No matches found.</p>}
@@ -141,6 +170,19 @@ export function SearchPicker<T extends { id: string }>({
       ) : null}
     </div>
   );
+}
+
+export async function findEligibleProvider(locationId: string, serviceId: string, candidate: Member) {
+  const query = new URLSearchParams({ locationId, serviceId, q: candidate.name, limit: "50" });
+  try {
+    const response = await fetch(`${tenantApiPrefix()}/api/app/staff?${query}`);
+    if (!response.ok) return undefined;
+    const { items } = await response.json() as SearchResult<Member>;
+    return items.find((item) => item.id === candidate.id);
+  } catch {
+    // Staff can still choose a provider explicitly.
+    return undefined;
+  }
 }
 
 /** Calendar filters use compact async search instead of serialising large

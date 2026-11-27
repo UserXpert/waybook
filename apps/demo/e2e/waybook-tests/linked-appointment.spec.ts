@@ -62,13 +62,43 @@ test("book, move, pay, and scope the provider view of linked services", async ({
       createStaff: primary.id, create: `${day}T10:00`,
     })}`);
     const drawer = page.getByRole("complementary", { name: "New appointment" });
+    const clientSearch = drawer.getByRole("combobox", { name: /^Find a / });
+    const clientLetter = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith("/api/app/clients") && url.searchParams.get("q") === "a" && response.ok();
+    });
+    await clientSearch.fill("a");
+    await clientLetter;
+    await expect(clientSearch).toHaveAttribute("aria-expanded", "true");
+    await clientSearch.press("Escape");
     await drawer.getByRole("button", { name: "Add client", exact: true }).click();
     await drawer.getByLabel("Client name").fill(clientName);
     await drawer.getByLabel("Email", { exact: true }).fill(clientEmail);
     await drawer.getByRole("button", { name: "Add service", exact: true }).click();
-    await drawer.getByRole("combobox", { name: "Service 2", exact: true }).fill(second.title);
+    const nextService = drawer.getByRole("combobox", { name: "Service 2", exact: true });
+    const nextProvider = drawer.getByRole("combobox", { name: "Provider for service 2" });
+    await expect(nextService).toBeFocused();
+    await expect(drawer.getByRole("option", { name: new RegExp(replacement.title) })).toBeVisible();
+    await nextService.fill("o");
+    await expect(drawer.getByRole("option", { name: new RegExp(second.title) })).toBeVisible();
+    await expect(drawer.getByRole("option", { name: new RegExp(replacement.title) })).toHaveCount(0);
+    await nextService.fill(replacement.title);
+    const replacementOption = drawer.getByRole("option", { name: new RegExp(replacement.title) });
+    await expect(replacementOption).toBeVisible();
+    await nextService.press("ArrowDown");
+    await expect(replacementOption).toHaveAttribute("aria-selected", "true");
+    await nextService.press("Enter");
+    await expect(nextProvider).toHaveValue(primary.name);
+    await nextService.fill(replacement.title[0]);
+    await expect(replacementOption).toBeVisible();
+    await replacementOption.click();
+    await expect(nextService).toHaveValue(`${replacement.title} · 45 min`);
+    await expect(nextProvider).toHaveValue(primary.name);
+
+    await nextService.fill(second.title);
     await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
-    await drawer.getByRole("combobox", { name: "Provider for service 2" }).fill(secondary.name);
+    await expect(nextProvider).toHaveValue("");
+    await nextProvider.fill(secondary.name);
     await drawer.getByRole("option", { name: secondary.name, exact: true }).click();
     await expect(drawer.getByText("Defaults to 10:45")).toBeVisible();
     await expect(drawer.getByText(/75 min/)).toBeVisible();

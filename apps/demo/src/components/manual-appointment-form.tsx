@@ -8,7 +8,7 @@ import { useActionState, useCallback, useEffect, useMemo, useState } from "react
 import { fromZonedTime } from "date-fns-tz";
 import Link from "next/link";
 import { createManualBooking, getManualBookingAvailability } from "@/app/app/calendars/actions";
-import { SearchPicker } from "@/components/calendar-selectors";
+import { findEligibleProvider, SearchPicker } from "@/components/calendar-selectors";
 
 type Location = { id: string; name: string };
 type Member = { id: string; name: string };
@@ -61,6 +61,17 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   const editAdditionalService = (id: string, update: Partial<ServiceDraft>) => setAdditionalServices(
     (current) => current.map((row) => row.id === id ? { ...row, ...update } : row),
   );
+  async function pickAdditionalService(row: ServiceDraft, index: number, item: Service) {
+    if (row.service?.id === item.id) return;
+    editAdditionalService(row.id, { service: item, member: fixedStaff ? initialMember : null });
+    const previousProvider = index === 0 ? member : additionalServices[index - 1]?.member;
+    if (fixedStaff || !previousProvider) return;
+    const eligible = await findEligibleProvider(locationId, item.id, previousProvider);
+    if (!eligible) return;
+    setAdditionalServices((current) => current.map((entry) =>
+      entry.id === row.id && entry.service?.id === item.id && !entry.member ? { ...entry, member: eligible } : entry,
+    ));
+  }
   const selectedSlot = timeSlots.find((slot) => clock(slot.startTime, timezone) === time);
   let precedingEnd = selectedSlot && service ? new Date(new Date(selectedSlot.startTime).getTime() + service.durationMinutes * 60_000) : null;
   const suggestedStarts = additionalServices.map((row) => {
@@ -90,7 +101,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
       ) : canLookupClients && !waitlistEntryId && !showNewClient ? (
         <>
           <SearchPicker<Client>
-            label={`Find a ${terminology.client}`}
+            label={`Find a ${terminology.client}`} minimumQueryLength={1}
             selectedLabel=""
             placeholder="Search by name, email, or phone"
             searchUrl={clientSearchUrl}
@@ -125,15 +136,15 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
         <SearchPicker<Member> label={titleTerminology(terminology.staffPlural)} selectedLabel={member?.name ?? ""} placeholder={locationId ? `Search ${terminology.staffPlural}` : "Choose a location first"} searchUrl={staffSearchUrl} resultsLabel={(item) => item.name} onPick={setMember} onClear={member ? () => setMember(null) : undefined} />
       )}
     </div>
-    <div className="manual-appointment__selectors">{waitlistEntryId ? <label>Service<input value={service?.title ?? ""} readOnly /></label> : <SearchPicker<Service> label="Service" selectedLabel={service ? `${service.title} · ${service.durationMinutes} min` : ""} placeholder="Search services" searchUrl={serviceSearchUrl} resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${servicePrice.format(item.priceCents / 100)}`} onPick={setService} onClear={service ? () => setService(null) : undefined} />}</div>
+    <div className="manual-appointment__selectors">{waitlistEntryId ? <label>Service<input value={service?.title ?? ""} readOnly /></label> : <SearchPicker<Service> label="Service" minimumQueryLength={1} browseOnFocus autoFocus={false} selectedLabel={service ? `${service.title} · ${service.durationMinutes} min` : ""} placeholder="Search services" searchUrl={serviceSearchUrl} resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${servicePrice.format(item.priceCents / 100)}`} onPick={setService} onClear={service ? () => setService(null) : undefined} />}</div>
     {service ? <section className="manual-appointment__step" aria-label="Additional services">
       {additionalServices.map((row, index) => <fieldset className="manual-appointment__step" key={row.id}>
         <legend>Service {index + 2}</legend>
         <SearchPicker<Service>
-          label={`Service ${index + 2}`} selectedLabel={row.service ? `${row.service.title} · ${row.service.durationMinutes} min` : ""}
+          label={`Service ${index + 2}`} minimumQueryLength={1} browseOnFocus selectedLabel={row.service ? `${row.service.title} · ${row.service.durationMinutes} min` : ""}
           placeholder="Search services" searchUrl={serviceSearchUrl}
           resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${servicePrice.format(item.priceCents / 100)}`}
-          onPick={(item) => editAdditionalService(row.id, { service: item, member: fixedStaff ? initialMember : null })}
+          onPick={(item) => void pickAdditionalService(row, index, item)}
         />
         <div className="tenant-drawer-form__grid">
           {fixedStaff || !row.service ? <label>{`Provider for service ${index + 2}`}<input readOnly disabled={!fixedStaff} value={fixedStaff ? initialMember.name : ""} placeholder="Choose a service first" /></label> : <SearchPicker<Member>

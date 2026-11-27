@@ -4877,10 +4877,26 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   border-top: 1px solid var(--appointment-action-border);
 }
 .appointment-service-editor__fields > button { justify-self: start; }
-.tenant-dashboard-page .calendar-appointment-drawer .appointment-service-editor .calendar-search-picker__results {
+:root[data-waybook-theme] .tenant-dashboard-page .appointment-drawer .manual-appointment .calendar-search-picker__results button[role="option"] {
+  border-color: var(--ice-edge, var(--wb-dark-border, #dedee3));
+  background: transparent;
+  color: var(--ice-ink, var(--wb-dark-text, #222228));
+}
+:root[data-waybook-theme] .tenant-dashboard-page .appointment-drawer .manual-appointment .calendar-search-picker__results button[role="option"]:is(:hover, :focus-visible, [aria-selected="true"]) {
+  background: var(--ice-field, var(--wb-dark-hover, #edf0f3));
+}
+.tenant-dashboard-page .manual-appointment .calendar-search-picker--browse .calendar-search-picker__results {
   position: static;
   margin-top: .35rem;
   box-shadow: none;
+}
+.tenant-dashboard-page .manual-appointment .calendar-search-picker--browse .calendar-search-picker__clear {
+  grid-row: 2 / 3;
+  top: 50%;
+}
+.tenant-dashboard-page .manual-appointment .calendar-search-picker--browse [role="option"][aria-selected="true"] {
+  outline: 1px solid var(--ice-focus, var(--waybook-accent));
+  outline-offset: -1px;
 }
 :root[data-waybook-theme] .tenant-dashboard-page .appointment-drawer.calendar-appointment-drawer .tenant-drawer-form.appointment-service-editor button.waybook-action--secondary:not(:disabled) {
   border-color: var(--appointment-action-border);

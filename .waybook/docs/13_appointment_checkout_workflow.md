@@ -5,14 +5,16 @@ This specification defines the front-desk workflow for Waybook. It uses the Mang
 ## Book from the calendar
 
 1. Select an open slot. Open the booking drawer alongside the calendar and carry in the date, start time, location, and staff member. For the general New appointment action, provide an editable starting date and location.
-2. Focus client search. Search by name, email, or phone according to the operator’s directory permissions. Show identifying contact details per result so staff can distinguish similar names. Selecting a result displays a compact client summary with a Change action.
+2. Focus client search. Start searching after one character by name, email, or phone according to the operator’s directory permissions. Show identifying contact details per result so staff can distinguish similar names. Selecting a result displays a compact client summary with a Change action.
 3. Offer **Add client** from the search, including when there are no matches. Seed the name from the search and collect the contact fields inline. Return the newly created client to the same draft. Cancelling inline creation restores search and preserves the appointment choices.
-4. Open a searchable service catalogue. Group services under their existing categories where available. Show name, price, and duration on each result. Keep the selection surface usable with keyboard, pointer, and touch. Restrict choices to the selected location and make any staff eligibility conflict clear before confirmation.
-5. Show each selected service as an editable row with its staff member, start time, duration, and price. **Add service** appends another row after the preceding service by default. Staff can change the assigned provider or timing where eligible. Show all segments on the calendar as one linked appointment and update the combined duration and price as the draft changes.
+4. Open a searchable service catalogue that can be browsed immediately and filters after one character. Group services under their existing categories where available. Show name, price, and duration on each result. Keep the selection surface usable with keyboard, pointer, and touch. Restrict choices to the selected location and make any staff eligibility conflict clear before confirmation.
+5. Show each selected service as an editable row with its staff member, start time, duration, and price. **Add service** focuses the catalogue, uses the previous provider when eligible, and defaults to starting after the preceding service. Staff can change the assigned provider or timing where eligible. Show all segments on the calendar as one linked appointment and update the combined duration and price as the draft changes.
 6. Keep the send-confirmation choice where supported by tenant settings. Preserve the workspace’s operations-only boundary for notes. Provide one primary **Book appointment** action. The server must recheck all segments and create the appointment atomically. If a slot changes, preserve the draft and identify the affected segment so staff can select another time.
 7. After saving, open the confirmed appointment in the same calendar context. Display the client, booking time, all service rows, and the next action. Apply the same review and atomic save rules when adding or changing services on an existing appointment.
 
 In the playground, a 2:00 PM Signature Facial with Harriet saved as Confirmed. Editing it and adding an Express Facial created consecutive linked blocks from 2:00–3:30 PM and 3:30–4:15 PM. The rows retained their individual prices of $100 and $80. The notification option was off for the edit.
+
+A read-only playground check on 27 November confirmed that typing one letter returns matching clients with their contact details. Opening the service catalogue shows grouped results before typing, and one letter filters the catalogue. The test used an unsaved draft and was discarded.
 
 ## Book a waitlist opening
 

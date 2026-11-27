@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { SearchPicker } from "@/components/calendar-selectors";
+import { findEligibleProvider, SearchPicker } from "@/components/calendar-selectors";
 import { updateAppointmentServices, type getCalendarAppointment } from "@/app/app/calendars/actions";
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 import { showSuccessToast } from "@/lib/waybook/toast";
@@ -53,18 +53,10 @@ export function AppointmentServiceEditor({ bookingId, locationId, timezone, edit
     editRow(row.key, { service: original?.serviceId === service.id ? bookedService(original) : service, provider: null });
     const previousProvider = !row.service && draft?.[index - 1]?.provider;
     if (!previousProvider) return;
-    try {
-      const query = new URLSearchParams({ locationId, serviceId: service.id, q: previousProvider.name, limit: "50" });
-      const response = await fetch(`${tenantApiPrefix()}/api/app/staff?${query}`);
-      if (!response.ok) return;
-      const { items } = await response.json() as { items: Provider[] };
-      const provider = items.find((item) => item.id === previousProvider.id);
-      if (!provider) return;
-      setDraft((rows) => rows?.map((item) => item.key === row.key && item.service?.id === service.id && !item.provider
-        ? { ...item, provider } : item) ?? null);
-    } catch {
-      // Staff can still choose a provider explicitly.
-    }
+    const provider = await findEligibleProvider(locationId, service.id, previousProvider);
+    if (!provider) return;
+    setDraft((rows) => rows?.map((item) => item.key === row.key && item.service?.id === service.id && !item.provider
+      ? { ...item, provider } : item) ?? null);
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -112,7 +104,7 @@ export function AppointmentServiceEditor({ bookingId, locationId, timezone, edit
           <SearchPicker<Service> label={`Choose service ${index + 1}`} selectedLabel={row.service?.title ?? ""}
             placeholder="Search services" searchUrl={(q) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId, q, limit: "8" })}`}
             resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${money.format(item.priceCents / 100)}`}
-            browseOnFocus={!row.service} onPick={(service) => void pickService(row, index, service)} />
+            minimumQueryLength={1} browseOnFocus onPick={(service) => void pickService(row, index, service)} />
           <div className="tenant-drawer-form__grid">
             {row.service ? <SearchPicker<Provider> label={`Provider for service ${index + 1}`} selectedLabel={row.provider?.name ?? ""}
               placeholder="Search eligible staff"
