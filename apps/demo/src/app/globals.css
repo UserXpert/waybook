@@ -5041,11 +5041,15 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .calendar-appointment-drawer__status-dot[data-stage="waiting_room"] { background: #9a73cc; }
 .calendar-appointment-drawer__status-dot[data-stage="in_service"] { background: #19845d; }
 .calendar-appointment-drawer__status-dot:is([data-stage="cancelled"], [data-stage="no_show"]) { background: #9b7778; }
+.calendar-appointment-drawer__client {
+  --client-avatar-size: 2.45rem;
+  --client-detail-gap: .65rem;
+}
 .calendar-appointment-drawer__client-heading {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: var(--client-avatar-size) minmax(0, 1fr) auto;
   align-items: center;
-  gap: .65rem;
+  gap: var(--client-detail-gap);
 }
 .calendar-appointment-drawer__client-heading h3,
 .calendar-appointment-drawer__client-heading p { margin: 0; overflow-wrap: anywhere; }
@@ -5058,8 +5062,8 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .calendar-appointment-drawer__avatar {
   display: grid;
   place-items: center;
-  width: 2.45rem;
-  height: 2.45rem;
+  width: var(--client-avatar-size);
+  height: var(--client-avatar-size);
   border-radius: 50%;
   background: var(--appointment-action-hover);
   color: var(--appointment-action-text);
@@ -5086,10 +5090,21 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   margin: .65rem 0 0;
   font-size: .8rem;
 }
-.calendar-appointment-drawer :is(.calendar-appointment-drawer__client, .calendar-appointment-drawer__booking) dl > div {
+.calendar-appointment-drawer__client dl > div,
+.calendar-appointment-drawer__booking dl > div {
   display: grid;
   grid-template-columns: 7rem minmax(0, 1fr);
   gap: .5rem;
+}
+.calendar-appointment-drawer__client dl > div {
+  grid-template-columns: var(--client-avatar-size) minmax(0, 1fr);
+  gap: var(--client-detail-gap);
+}
+.calendar-appointment-drawer__client dt {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding-block-start: .15rem;
 }
 .calendar-appointment-drawer :is(.calendar-appointment-drawer__client, .calendar-appointment-drawer__booking) dt {
   color: var(--ice-muted, var(--wb-dark-muted, #606065));
@@ -5105,7 +5120,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .calendar-appointment-drawer__client dd a { color: inherit; text-underline-offset: .15em; }
 @media (max-width: 420px) {
   .calendar-appointment-drawer__state { flex-basis: 100%; }
-  .calendar-appointment-drawer__client-heading { grid-template-columns: auto minmax(0, 1fr); }
+  .calendar-appointment-drawer__client-heading { grid-template-columns: var(--client-avatar-size) minmax(0, 1fr); }
   .calendar-appointment-drawer__client-heading a { grid-column: 2; justify-self: start; }
 }
 

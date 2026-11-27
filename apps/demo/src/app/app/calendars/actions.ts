@@ -560,7 +560,7 @@ export async function updateBookingDetails(formData: FormData): Promise<BookingD
     const payment = parseDrawerPayment(formData);
     await withSerializableRetry(() => db.begin(async (transaction) => {
       if (status || payment) await persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), null,
-        payment ? { ...payment, actorId: identity.id } : undefined);
+        { noShowPayment: payment ? { ...payment, actorId: identity.id } : undefined });
 
       if (!editDetails) return;
       const [customer] = await transaction.unsafe<{ id: string; status: string }[]>("SELECT customer_id AS id, status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
@@ -720,7 +720,7 @@ async function persistBookingStatus(
   status: string,
   expectedStatus: FormDataEntryValue | null,
   actorId: string | null,
-  noShowPayment?: ManualPayment,
+  { noShowPayment, finishCheckout }: { noShowPayment?: ManualPayment; finishCheckout?: boolean } = {},
 ) {
   // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
   const [block] = await transaction.unsafe<{ state: string }[]>(
@@ -742,7 +742,8 @@ async function persistBookingStatus(
   if (["completed", "cancelled"].includes(current.status)) {
     throw new Error("This appointment has a final status and cannot be changed.");
   }
-  if (status !== "cancelled" && !canChangeAttendanceNow(current)) {
+  const completingCheckout = current.stage === "checking_out" && status === "completed";
+  if (status !== "cancelled" && !(completingCheckout && finishCheckout) && !canChangeAttendanceNow(current)) {
     throw new Error("Attendance cannot be updated before the appointment is eligible.");
   }
   const allowedTransitions: Record<string, string[]> = {
@@ -774,7 +775,7 @@ async function persistBookingStatus(
   if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
     throw new NoShowPaymentRequired();
   }
-  if (current.stage === "checking_out" && status === "completed") {
+  if (completingCheckout) {
     const [settlement] = await transaction.unsafe<{ paid: boolean }[]>(`
       SELECT cart.chargeable_cents = coalesce((
         SELECT sum(CASE WHEN kind = 'payment' THEN amount_cents ELSE -amount_cents END)
@@ -876,8 +877,8 @@ export async function setAppointmentAttendanceStage(bookingId: string, stage: Ap
       const connection = transaction as unknown as typeof db;
       await connection`SELECT id FROM booking_blocks WHERE tenant_id = ${tenant.id} AND id = ${booking.bookingBlockId} FOR UPDATE`;
       const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
-      const [current] = await connection<{ status: string; startsAt: Date; endsAt: Date; attendanceStage: AppointmentAttendanceStage | null }[]>`
-        SELECT b.status, b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.attendance_stage AS "attendanceStage"
+      const [current] = await connection<{ status: string; startsAt: Date; attendanceStage: AppointmentAttendanceStage | null }[]>`
+        SELECT b.status, b.starts_at AS "startsAt", b.attendance_stage AS "attendanceStage"
         FROM bookings b WHERE b.tenant_id = ${tenant.id} AND b.id = ${booking.id}
           AND ${calendarBookingVisibility(connection, canViewTeam, permissions.teamMemberId ?? null)}
         FOR UPDATE
@@ -895,9 +896,6 @@ export async function setAppointmentAttendanceStage(bookingId: string, stage: Ap
       const isStartService = previousStage === "waiting_room" && stage === "in_service";
       const isCheckout = previousStage === "in_service" && stage === "checking_out";
       if (!isCheckIn && !isStartService && !isCheckout) throw new Error("This appointment has changed. Reopen it before continuing.");
-      if (isCheckout && !canChangeAttendanceNow(current)) {
-        throw new Error("Checkout is available once the appointment starts.");
-      }
       if (!isCheckout && !canBeginAppointmentAttendance(current.startsAt, tenant.timezone)) {
         throw new Error("Check-in is available on the appointment date.");
       }
@@ -930,7 +928,7 @@ export async function finishAppointmentCheckout(bookingId: string): Promise<Atte
       );
       if (current?.status === "completed") return;
       if (current?.status !== "arrived" || current.stage !== "checking_out") throw new Error("Open checkout from the appointment before finishing it.");
-      await persistBookingStatus(transaction, context, "completed", "arrived", actor.id);
+      await persistBookingStatus(transaction, context, "completed", "arrived", actor.id, { finishCheckout: true });
     }));
     revalidateCalendars();
     return { error: null };
