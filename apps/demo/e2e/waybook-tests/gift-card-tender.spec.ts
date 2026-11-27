@@ -101,9 +101,12 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
         && url.searchParams.get("booking") === fixture.booking.id);
       if (new URL(page.url()).pathname.endsWith("/calendars")) {
         await page.getByRole("button", { name: "More appointment actions" }).click();
-        await page.getByRole("button", { name: "Cancellation options" }).click();
+        await page.getByRole("button", { name: "Cancel appointment", exact: true }).click();
+        await page.getByRole("alertdialog", { name: "Cancel this appointment?" })
+          .getByRole("button", { name: "Cancel appointment" }).click();
+      } else {
+        await page.getByRole("button", { name: "Cancel appointment" }).click({ timeout: 30_000 });
       }
-      await page.getByRole("button", { name: "Cancel appointment" }).click({ timeout: 30_000 });
       await expect(page.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible({ timeout: 30_000 });
     } else {
       await page.goto("/nordic/book");

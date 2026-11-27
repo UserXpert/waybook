@@ -5234,3 +5234,35 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
     border-color: var(--waybook-field-focus-border) !important;
   }
 }
+
+.appointment-cancel-confirmation {
+  position: fixed;
+  inset: 0;
+  height: fit-content;
+  width: min(27rem, calc(100% - 1.5rem));
+  margin: auto;
+  padding: 0;
+}
+.appointment-cancel-confirmation::backdrop { background: rgb(0 0 0 / 44%); }
+.appointment-cancel-confirmation .client-form-modal__body > p {
+  margin: 0;
+  font-size: .875rem;
+}
+.appointment-cancel-confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: .5rem;
+}
+.appointment-cancel-confirmation__actions button[type="submit"] {
+  border: 1px solid #a63e3e;
+  border-radius: .45rem;
+  padding: .6rem .75rem;
+  background: #a63e3e;
+  color: white;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.appointment-cancel-confirmation__actions button:disabled { opacity: .7; cursor: default; }
