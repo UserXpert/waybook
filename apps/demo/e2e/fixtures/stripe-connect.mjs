@@ -15,6 +15,9 @@ for (const name of ["CONTROL", "NORDIC_STUDIO", "COPENHAGEN_PHYSIO"]) {
 const originalFetch = globalThis.fetch;
 const accounts = new Map();
 const sessions = new Map();
+const cardCustomers = new Set();
+const cardSetups = new Map();
+const redisplayCustomers = new Set();
 const refunds = new Map();
 const refundReads = new Map();
 const error = (status) => Response.json({ error: "stripe fixture error" }, { status });
@@ -63,6 +66,23 @@ globalThis.fetch = async (input, init) => {
     if (refund.amount === 1303 && reads >= 4) refund.failure_balance_transaction = `txn_${refundId.slice(3)}`;
     return Response.json(refund);
   }
+  if (url.pathname === "/v1/customers" && request.method === "POST") {
+    const key = request.headers.get("Idempotency-Key");
+    if (request.headers.get("Stripe-Account") !== "acct_checkoutFixture" || !key) return error(400);
+    const id = `cus_${key.replaceAll("-", "")}`;
+    cardCustomers.add(id);
+    return Response.json({ id, object: "customer", livemode: false });
+  }
+  if (url.pathname.startsWith("/v1/payment_methods/") && request.method === "POST") {
+    const methodId = url.pathname.split("/").at(-1);
+    const setup = [...cardSetups.values()].find(({ session }) => session.setup_intent?.payment_method?.id === methodId);
+    const body = new URLSearchParams(await request.text());
+    if (!setup || request.headers.get("Stripe-Account") !== "acct_checkoutFixture" ||
+        request.headers.get("Idempotency-Key") !== `${setup.session.client_reference_id}-redisplay` ||
+        body.get("allow_redisplay") !== "always") return error(400);
+    redisplayCustomers.add(setup.session.customer);
+    return Response.json({ ...setup.session.setup_intent.payment_method, object: "payment_method", allow_redisplay: "always" });
+  }
   if (url.pathname.startsWith("/v1/checkout/sessions")) {
     const account = request.headers.get("Stripe-Account");
     if (account !== "acct_checkoutFixture") return error(403);
@@ -75,7 +95,25 @@ globalThis.fetch = async (input, init) => {
     if (url.pathname === "/v1/checkout/sessions" && request.method === "POST") {
       const body = new URLSearchParams(await request.text());
       const key = request.headers.get("Idempotency-Key");
+      if (body.get("mode") === "setup") {
+        const customer = body.get("customer");
+        if (!key || body.get("client_reference_id") !== key || !cardCustomers.has(customer) || body.get("currency") !== "dkk" ||
+            body.get("payment_method_types[0]") !== "card" || [...body.keys()].some((field) => field.startsWith("line_items")) ||
+            !body.get("success_url")?.startsWith(origin + "/nordic/app/calendars?booking=") ||
+            !body.get("success_url")?.endsWith("&cardSetup=return") ||
+            body.get("cancel_url") !== body.get("success_url").replace("&cardSetup=return", "")) return error(400);
+        const id = `cs_test_card${key.replaceAll("-", "")}`;
+        const existing = cardSetups.get(id);
+        if (existing) return existing.request === body.toString() ? Response.json(existing.session) : error(409);
+        const session = { id, object: "checkout.session", livemode: false, mode: "setup", status: "open", customer,
+          client_reference_id: key, expires_at: Number(body.get("expires_at")), url: `https://checkout.stripe.com/c/pay/${id}`,
+          payment_intent: null, amount_total: null };
+        cardSetups.set(id, { request: body.toString(), reads: 0, session });
+        return Response.json(session);
+      }
       const amount = Number(body.get("line_items[0][price_data][unit_amount]"));
+      const customer = body.get("customer");
+      if (customer && !redisplayCustomers.has(customer)) return error(400);
       if (!key || body.get("client_reference_id") !== key || body.get("mode") !== "payment" ||
           body.get("line_items[0][price_data][currency]") !== "dkk" ||
           body.get("allowed_payment_method_types[0]") !== "card" || body.get("adaptive_pricing[enabled]") !== "false" ||
@@ -86,7 +124,7 @@ globalThis.fetch = async (input, init) => {
       sessions.set(id, {
         request: body.toString(), reads: 0, checkout: {
           id, object: "checkout.session", livemode: false, mode: "payment",
-          client_reference_id: key, amount_total: amount, currency: "dkk",
+          client_reference_id: key, amount_total: amount, currency: "dkk", customer,
           expires_at: Number(body.get("expires_at")), payment_method_types: ["card"],
           status: "open", payment_status: "unpaid", url: `https://checkout.stripe.com/c/pay/${id}`,
         },
@@ -94,13 +132,25 @@ globalThis.fetch = async (input, init) => {
       return error(503);
     }
     const [, id, expiration] = url.pathname.match(/^\/v1\/checkout\/sessions\/(cs_test_[A-Za-z0-9]+)(\/expire)?$/) ?? [];
+    const setup = cardSetups.get(id);
+    if (setup && request.method === "GET" && !expiration) {
+      if (url.searchParams.get("expand[0]") !== "setup_intent.payment_method") return error(400);
+      if (++setup.reads >= 2) Object.assign(setup.session, { status: "complete", url: null, setup_intent: {
+        id: `seti_${id.slice(8)}`, object: "setup_intent", livemode: false, status: "succeeded", customer: setup.session.customer,
+        payment_method: { id: `pm_${id.slice(8)}`, type: "card", customer: setup.session.customer, livemode: false,
+          card: { brand: "visa", last4: "4242" } },
+      } });
+      return Response.json(setup.session);
+    }
     const session = sessions.get(id);
     if (!session) return error(404);
     if (request.method === "POST" && expiration && session.checkout.status === "open") {
       Object.assign(session.checkout, { status: "expired", url: null });
     } else if (request.method === "GET" && !expiration) {
       session.reads++;
-      if ([6501, 6503].includes(session.checkout.amount_total) && session.reads >= 2 && session.checkout.status === "open") {
+      const completesPayment = [6501, 6503].includes(session.checkout.amount_total) ||
+        redisplayCustomers.has(session.checkout.customer);
+      if (completesPayment && session.reads >= 2 && session.checkout.status === "open") {
         Object.assign(session.checkout, { status: "complete", payment_status: "paid", payment_intent: `pi_${id.slice(8)}`, url: null });
       }
       if (session.checkout.amount_total === 6504) Object.assign(session.checkout, { status: "expired", url: null });

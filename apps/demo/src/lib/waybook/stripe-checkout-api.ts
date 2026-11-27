@@ -1,6 +1,6 @@
 import type { StripeSandboxConfig } from "./stripe-connect-api";
 
-const checkoutSessions = "https://api.stripe.com/v1/checkout/sessions";
+const checkoutSessions = "/v1/checkout/sessions";
 const sessionIdPattern = /^cs_test_[A-Za-z0-9]+$/;
 const attemptIdPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 export const stripeCheckoutLifetimeSeconds = 2 * 60 * 60;
@@ -11,6 +11,7 @@ export type SandboxCheckoutAttempt = {
   amountCents: number;
   expiresAtSeconds: number;
   returnPath: string;
+  stripeCustomerId?: string | null;
 };
 
 export type SandboxCheckoutSession =
@@ -24,6 +25,7 @@ type SessionResponse = {
   livemode?: unknown;
   mode?: unknown;
   client_reference_id?: unknown;
+  customer?: unknown;
   amount_total?: unknown;
   currency?: unknown;
   expires_at?: unknown;
@@ -34,6 +36,13 @@ type SessionResponse = {
   url?: unknown;
 };
 
+export function stripeHostedCheckoutUrl(value: unknown, sessionId: string) {
+  if (typeof value !== "string" || !URL.canParse(value)) return null;
+  const url = new URL(value);
+  if (url.origin !== "https://checkout.stripe.com" || url.username || url.password) return null;
+  return url.pathname === `/c/pay/${sessionId}` || url.pathname === `/g/pay/${sessionId}` ? url.href : null;
+}
+
 function verifySession(
   session: SessionResponse | null,
   attempt: SandboxCheckoutAttempt,
@@ -43,6 +52,7 @@ function verifySession(
       (expectedId !== undefined && session.id !== expectedId) ||
       session.object !== "checkout.session" || session.livemode !== false || session.mode !== "payment" ||
       session.client_reference_id !== attempt.id || session.amount_total !== attempt.amountCents ||
+      (attempt.stripeCustomerId != null && session.customer !== attempt.stripeCustomerId) ||
       session.currency !== "dkk" || session.expires_at !== attempt.expiresAtSeconds ||
       !Array.isArray(session.payment_method_types) || session.payment_method_types.length !== 1 ||
       session.payment_method_types[0] !== "card") {
@@ -56,37 +66,37 @@ function verifySession(
   if (session.payment_status === "unpaid") {
     if (session.status === "complete") return { id, state: "processing" };
     if (session.status === "expired") return { id, state: "expired" };
-    if (session.status === "open" && typeof session.url === "string" && URL.canParse(session.url)) {
-      const url = new URL(session.url);
-      if (url.origin === "https://checkout.stripe.com" && !url.username && !url.password &&
-          (url.pathname === `/c/pay/${id}` || url.pathname === `/g/pay/${id}`)) return { id, state: "open", url: url.href };
+    if (session.status === "open") {
+      const url = stripeHostedCheckoutUrl(session.url, id);
+      if (url) return { id, state: "open", url };
     }
   }
   throw new Error("Stripe returned an unexpected checkout outcome.");
 }
 
-export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: typeof fetch = fetch) {
-  async function stripeRequest(accountId: string, url: string, method: "GET" | "POST", body?: URLSearchParams, key?: string) {
-    if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(config.secretKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
-      throw new Error("Invalid Stripe sandbox checkout context.");
-    }
-    const response = await request(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${config.secretKey}`,
-        "Stripe-Version": "2026-11-18.endive",
-        "Stripe-Account": accountId,
-        ...(key ? { "Idempotency-Key": key } : {}),
-      },
-      body,
-      redirect: "error",
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error("Stripe sandbox checkout is temporarily unavailable.");
-    return response;
+export async function stripeSandboxRequest(config: StripeSandboxConfig, request: typeof fetch, accountId: string, path: string, method: "GET" | "POST", body?: URLSearchParams, key?: string) {
+  if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(config.secretKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
+    throw new Error("Invalid Stripe sandbox checkout context.");
   }
+  if (!path.startsWith("/v1/")) throw new Error("Invalid Stripe sandbox API path.");
+  const response = await request("https://api.stripe.com" + path, {
+    method,
+    headers: {
+      Authorization: `Bearer ${config.secretKey}`,
+      "Stripe-Version": "2026-11-18.endive",
+      "Stripe-Account": accountId,
+      ...(key ? { "Idempotency-Key": key } : {}),
+    },
+    body,
+    redirect: "error",
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error("Stripe sandbox checkout is temporarily unavailable.");
+  return response;
+}
 
+export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: typeof fetch = fetch) {
   async function call(
     attempt: SandboxCheckoutAttempt,
     operation: "create" | "retrieve" | "expire",
@@ -100,7 +110,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       throw new Error("Invalid Stripe sandbox checkout context.");
     }
     const sessionPath = sessionId ? `${checkoutSessions}/${sessionId}` : checkoutSessions;
-    const response = await stripeRequest(attempt.accountId, operation === "expire" ? `${sessionPath}/expire` : sessionPath,
+    const response = await stripeSandboxRequest(config, request, attempt.accountId, operation === "expire" ? `${sessionPath}/expire` : sessionPath,
       operation === "retrieve" ? "GET" : "POST", body, operation === "create" ? attempt.id : undefined);
     return verifySession(await response.json(), attempt, sessionId);
   }
@@ -116,7 +126,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       let found: SandboxCheckoutSession | null = null;
       // Never release a reservation based on a partial or inconsistent list.
       for (let pageNumber = 0; pageNumber < 5; pageNumber++) {
-        const response = await stripeRequest(attempt.accountId, `${checkoutSessions}?${query}`, "GET");
+        const response = await stripeSandboxRequest(config, request, attempt.accountId, `${checkoutSessions}?${query}`, "GET");
         const page = await response.json() as { object?: unknown; has_more?: unknown; data?: SessionResponse[] } | null;
         if (page?.object !== "list" || typeof page.has_more !== "boolean" || !Array.isArray(page.data)) break;
         for (const session of page.data) {
@@ -134,7 +144,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
     async findByPaymentIntent(accountId: string, paymentIntentId: string) {
       if (!/^pi_[A-Za-z0-9]+$/.test(paymentIntentId)) throw new Error("Invalid Stripe payment intent.");
       const query = new URLSearchParams({ payment_intent: paymentIntentId, limit: "2" });
-      const response = await stripeRequest(accountId, `${checkoutSessions}?${query}`, "GET");
+      const response = await stripeSandboxRequest(config, request, accountId, `${checkoutSessions}?${query}`, "GET");
       const page = await response.json() as { object?: unknown; has_more?: unknown; data?: SessionResponse[] } | null;
       if (page?.object !== "list" || page.has_more !== false || !Array.isArray(page.data) || page.data.length > 1) {
         throw new Error("Stripe did not confirm a unique checkout session for the payment.");
@@ -157,7 +167,10 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       // Existing attempts retain the exact callback URLs sent with their original retry key.
       const cancelUrl = new URL(returnUrl);
       if (cancelUrl.searchParams.get("stripe") === "return") cancelUrl.searchParams.delete("stripe");
-      return call(attempt, "create", undefined, new URLSearchParams({
+      if (attempt.stripeCustomerId != null && !/^cus_[A-Za-z0-9]+$/.test(attempt.stripeCustomerId)) {
+        throw new Error("Invalid Stripe checkout customer.");
+      }
+      const params = new URLSearchParams({
         mode: "payment",
         "allowed_payment_method_types[0]": "card",
         "adaptive_pricing[enabled]": "false",
@@ -169,7 +182,9 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
         "line_items[0][price_data][unit_amount]": String(attempt.amountCents),
         "line_items[0][price_data][product_data][name]": "Appointment checkout",
         "line_items[0][quantity]": "1",
-      }));
+      });
+      if (attempt.stripeCustomerId) params.set("customer", attempt.stripeCustomerId);
+      return call(attempt, "create", undefined, params);
     },
     retrieve(attempt: SandboxCheckoutAttempt, sessionId: string) {
       return call(attempt, "retrieve", sessionId);

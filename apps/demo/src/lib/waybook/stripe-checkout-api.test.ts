@@ -199,3 +199,24 @@ test("expiration needs provider confirmation before it can release the balance",
     Response.json(init?.method === "POST" ? { ...open, status: "expired", url: null } : open));
   assert.deepEqual(await confirmed.expire(attempt, sessionId), { id: sessionId, state: "expired" });
 });
+
+test("saved-card checkout binds the customer on create and on reconciliation", async () => {
+  const savedAttempt = { ...attempt, stripeCustomerId: "cus_expected" };
+  const requests: Request[] = [];
+  const stripe = stripeCheckoutSandbox(config, async (url, init) => {
+    const request = new Request(url, init);
+    requests.push(request);
+    if (request.method === "POST") {
+      const body = new URLSearchParams(await request.text());
+      assert.equal(body.get("customer"), savedAttempt.stripeCustomerId);
+      assert.equal(request.headers.get("Idempotency-Key"), savedAttempt.id);
+      assert.equal(request.headers.get("Stripe-Account"), savedAttempt.accountId);
+      assert.equal(body.has("saved_payment_method_options[allow_redisplay_filters][0]"), false);
+      return Response.json({ ...open, customer: savedAttempt.stripeCustomerId });
+    }
+    return Response.json({ ...open, customer: "cus_unrelated" });
+  });
+  assert.equal((await stripe.create(savedAttempt)).state, "open");
+  await assert.rejects(stripe.retrieve(savedAttempt, sessionId), /expected sandbox checkout session/);
+  assert.equal(requests.length, 2);
+});

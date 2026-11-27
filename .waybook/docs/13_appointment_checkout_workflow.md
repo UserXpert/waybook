@@ -66,6 +66,12 @@ Staff checkout shows the selected appointment and payment record. Workspace sale
 
 **Verified in the playground.** Checkout showed a $100 service subtotal with Add service, Add product, and More. Go to payments displayed optional tip, a $100 total, and an editable $100 charge amount. Available choices were Front Desk, Self Checkout, Credit Card, Cash, Gift Card, Account Balance, and Other. Credit Card opened a confirmation view with the amount and card selection. Mangomint supplied a test card in playground mode. Submitting it opened Sale #18 (Closed), with a $100 card transaction and Rebook appointment. The test did not move real funds.
 
+### Card on file
+
+Mangomint puts **Add Credit Card** in the appointment’s client section and shows a masked card once one is saved. Waybook’s sandbox drawer offers **Add credit card** to owners and managers in a connected workspace. After the client consents, staff open Stripe’s hosted setup page. Returning to the appointment verifies the setup under that workspace’s Stripe account and displays the card brand and last four digits. Cancel returns to the appointment, where staff can resume an open setup. Saving a card takes no payment and leaves the appointment state and balance unchanged. [Mangomint card-on-file guide](https://www.mangomint.com/learn/managing-cards-on-file/) · [Stripe hosted setup guide](https://docs.stripe.com/payments/checkout/save-and-reuse)
+
+A subsequent sandbox checkout can offer the saved card on Stripe’s hosted payment page. Waybook pins the consented client’s Stripe customer to that sale’s payment attempt and verifies it again on return. The customer can confirm the saved card or enter a new card on Stripe. The payment ledger updates only after Stripe confirms settlement. [Stripe hosted checkout for existing customers](https://docs.stripe.com/payments/existing-customers?platform=web&ui=stripe-hosted)
+
 ### Additional tender paths documented by Mangomint
 
 | Path | Front-desk behaviour |

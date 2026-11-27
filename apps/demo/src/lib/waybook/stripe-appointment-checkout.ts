@@ -19,7 +19,7 @@ type AttemptQuery = Pick<TenantDatabase, "unsafe">;
 const selectAttempt = `
   SELECT id, booking_id AS "bookingId", account_id AS "accountId", amount_cents AS "amountCents",
          created_by_identity_id AS "actorId", expires_at_seconds AS "expiresAtSeconds", return_path AS "returnPath",
-         return_origin AS "returnOrigin", session_id AS "sessionId", state
+         return_origin AS "returnOrigin", session_id AS "sessionId", stripe_customer_id AS "stripeCustomerId", state
   FROM stripe_sandbox_checkout_attempts
 `;
 
@@ -68,21 +68,27 @@ async function reserveAttempt(
     if (!accountId || booking.status !== "arrived" || booking.stage !== "checking_out") {
       throw new Error("Open appointment checkout with a connected Stripe sandbox account first.");
     }
-    const [cart] = await sql.unsafe<{ total: number; currency: string; alreadyRecorded: boolean }[]>(`
+    const [cart] = await sql.unsafe<{ total: number; currency: string; alreadyRecorded: boolean; stripeCustomerId: string | null }[]>(`
       SELECT cart.chargeable_cents::int AS total, sale.currency,
-             EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = $1 AND booking_id = $2) AS "alreadyRecorded"
+             EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = $1 AND booking_id = $2) AS "alreadyRecorded",
+             saved.stripe_customer_id AS "stripeCustomerId"
       FROM appointment_checkout_amounts($1, $2) cart
       JOIN commerce_sales sale ON sale.tenant_id = $1 AND sale.booking_id = $2
-    `, [tenantId, bookingId]);
+      JOIN bookings booking ON booking.tenant_id = sale.tenant_id AND booking.id = sale.booking_id
+      LEFT JOIN stripe_sandbox_client_cards saved
+        ON saved.tenant_id = booking.tenant_id AND saved.customer_id = booking.customer_id
+        AND saved.account_id = $3 AND saved.consented_at IS NOT NULL AND saved.card_brand IS NOT NULL
+    `, [tenantId, bookingId, accountId]);
     if (!cart || cart.currency !== "DKK" || cart.alreadyRecorded || cart.total <= 0 ||
         cart.total > 10_000_000 || cart.total !== input.expectedCents) {
       throw new Error("Review the current checkout total before opening a Stripe sandbox payment.");
     }
     await sql.unsafe(`
       INSERT INTO stripe_sandbox_checkout_attempts
-        (tenant_id, booking_id, account_id, amount_cents, return_path, return_origin, created_by_identity_id, expires_at_seconds)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + $8::int)
-    `, [tenantId, bookingId, accountId, cart.total, input.returnPath, config.origin, input.actorId, stripeCheckoutLifetimeSeconds]);
+        (tenant_id, booking_id, account_id, amount_cents, return_path, return_origin, created_by_identity_id, expires_at_seconds, stripe_customer_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + $8::int, $9)
+    `, [tenantId, bookingId, accountId, cart.total, input.returnPath, config.origin, input.actorId,
+      stripeCheckoutLifetimeSeconds, cart.stripeCustomerId]);
     return currentAttempt(sql, tenantId, bookingId);
   });
 }
