@@ -5395,3 +5395,14 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   font-size: .65rem;
   font-variant-numeric: tabular-nums;
 }
+
+.calendar-range-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.calendar-range-actions > .calendar-view-toggle,
+.calendar-range-actions > .calendar-today-link { height: 2.5rem; min-height: 2.5rem; }
+.calendar-range-actions > .calendar-today-link { padding-block: 0; }
+@media (max-width: 760px) {
+  .team-day-calendar .calendar-range-actions { grid-column: 1 / -1; }
+}
+.tenant-dashboard-page a.team-day-calendar__staff { color: inherit; text-decoration: none; }
+.tenant-dashboard-page a.team-day-calendar__staff:hover strong { text-decoration: underline; }
+.tenant-dashboard-page a.team-day-calendar__staff:focus-visible { outline-offset: -2px; }
