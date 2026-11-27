@@ -60,6 +60,10 @@ Waybook uses the workspace time zone to make Check in available on the appointme
 4. After settlement, show a closed sale with services, totals, and transaction history. Expose the transaction method and amount, receipt actions where configured, and Rebook appointment. Waybook’s existing one-payment rule applies to manual receipts. Once a manual receipt exists, show the recorded payment with Edit and Delete where permitted. Enable recording a replacement after deletion. Preserve corrections and refunds in the ledger.
 5. Honour explicit refund and adjustment permissions. Reconcile package and gift card activity with the sale record. Keep payment restrictions consistent between the appointment drawer and Sales.
 
+Owners and managers can grant **Can check out appointments** under **Settings → Roles & permissions**. Staff with that grant open checkout from an appointment in service, review the items, record the full outstanding amount using an offline payment method, and finish the appointment. The grant covers appointments whose services are all assigned to that staff member. Checking out other providers’ appointments also requires both team calendar visibility and team appointment management.
+
+Staff checkout shows the selected appointment and payment record. Workspace sales, payment corrections and refunds, product and package changes, and gift-card redemption retain their manager permissions.
+
 **Verified in the playground.** Checkout showed a $100 service subtotal with Add service, Add product, and More. Go to payments displayed optional tip, a $100 total, and an editable $100 charge amount. Available choices were Front Desk, Self Checkout, Credit Card, Cash, Gift Card, Account Balance, and Other. Credit Card opened a confirmation view with the amount and card selection. Mangomint supplied a test card in playground mode. Submitting it opened Sale #18 (Closed), with a $100 card transaction and Rebook appointment. The test did not move real funds.
 
 ### Additional tender paths documented by Mangomint
