@@ -128,6 +128,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await saleDrawer.getByRole("link", { name: "Go to payments" }).click();
     await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("250.50");
     await expect(salePayment.getByRole("button", { name: "Record payment" })).toBeDisabled();
+    await expect(salePayment.getByRole("button", { name: "Record payment" })).toBeInViewport({ ratio: 1 });
     await saleDrawer.getByRole("link", { name: "Back to checkout" }).click();
     await expect(salePayment).toHaveCount(0);
     await saleDrawer.getByRole("link", { name: "Go to payments" }).click();

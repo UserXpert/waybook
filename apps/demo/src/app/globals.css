@@ -5171,6 +5171,31 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 .appointment-checkout__items li b { flex-shrink: 0; }
 .sale-detail__totals + .sale-detail__action { margin-top: .5rem; }
+.appointment-sale-drawer--payment .appointment-drawer__body {
+  gap: .75rem;
+}
+.appointment-checkout__back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: inherit;
+  font-size: .85rem;
+  text-underline-offset: .18em;
+}
+.appointment-checkout__balance { margin: 0 0 .75rem; }
+.appointment-checkout__balance > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 600;
+}
+.appointment-checkout__balance dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.appointment-checkout__payment .appointment-payment-form > button { width: 100%; }
 
 
 .manual-appointment__service-row,
@@ -5249,6 +5274,9 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   margin: 0;
   padding: 0;
   border: 0;
+}
+.appointment-payment-form__amount {
+  grid-template-columns: minmax(0, 1fr);
 }
 .appointment-payment-methods legend {
   margin-block-end: .5rem;

@@ -376,10 +376,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         startsAt: selectedSale.startsAt, endsAt: selectedSale.endsAt, priceCents: selectedSale.bookedPriceCents,
       }, ...additionalServiceLines];
       return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
-        <aside className="tenant-drawer appointment-drawer sale-detail appointment-sale-drawer" data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
+        <aside className={`tenant-drawer appointment-drawer sale-detail appointment-sale-drawer${paymentStep ? " appointment-sale-drawer--payment" : ""}`} data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
           <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose></header>
           <div className="appointment-drawer__body">
-            {paymentStep ? <Link className="waybook-action waybook-action--secondary sale-detail__action" href={reviewHref}>Back to checkout</Link> : null}
+            {paymentStep ? <Link className="appointment-checkout__back" href={reviewHref}>Back to checkout</Link> : null}
             <section className="appointment-checkout__client" aria-label={clientLabel}>
               <div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong></div>
               {selectedSale.locationName ? <small>{selectedSale.locationName}</small> : null}
@@ -401,7 +401,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 </li>)}
               </ul>
             </section> : null}
-            <section aria-label="Checkout totals"><h3>Totals</h3><dl className="sale-detail__totals">
+            {!paymentStep ? <section aria-label="Checkout totals"><h3>Totals</h3><dl className="sale-detail__totals">
               {selectedSale.packageRedeemed ? <div><dt>Package coverage</dt><dd>−{money(selectedSale.bookedPriceCents)}</dd></div> : null}
               <div><dt>Checkout total</dt><dd>{money(selectedSale.chargeableCents)}</dd></div>
               <div><dt>Net payments</dt><dd>{money(selectedSale.paidCents)}</dd></div>
@@ -413,11 +413,13 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               {!manager && stripePending ? <p className="sale-detail__note" role="status">
                 A card payment is in progress. Ask a manager to review it before taking another payment.
               </p> : null}
-              {!paymentStep && canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={paymentHref}>Go to payments</Link> : null}
-              {!paymentStep && selectedSale.attendanceStage === "checking_out" && !stripePending && (balance === 0 || (manager && selectedSale.stripeRefundedCents > 0)) ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
-            </section>
-            {paymentStep && paymentBalance ? <section><h3>{giftCardStep ? "Gift card" : "Payments"}</h3>
+              {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={paymentHref}>Go to payments</Link> : null}
+              {selectedSale.attendanceStage === "checking_out" && !stripePending && (balance === 0 || (manager && selectedSale.stripeRefundedCents > 0)) ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
+            </section> : null}
+            {paymentStep && paymentBalance ? <section aria-label={giftCardStep ? "Gift card payment" : "Record payment"} className="appointment-checkout__payment">
+              <dl className="appointment-checkout__balance"><div><dt>Balance due</dt><dd>{money(outstandingCents)}</dd></div></dl>
               {giftCardStep ? <>
+                <h3>Gift card</h3>
                 <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />
                 <Link className="waybook-action waybook-action--secondary sale-detail__action" href={paymentHref}>Other payment methods</Link>
               </> : <>
@@ -432,9 +434,6 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               {stripeRefund ? <StripeAppointmentRefund bookingId={selectedSale.bookingId} requestId={crypto.randomUUID()} {...stripeRefund} /> : null}
             </section> : null}
             {!paymentStep ? <>
-              {manager && selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
-                <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
-              </section> : null}
               {canChangeProducts && (availableProducts.length > 0 || saleLines.length > 0) ? <section><h3>Products</h3>
                 {saleLines.map((line) => <form key={line.id} action={removeProductFromAppointmentSale} className="tenant-drawer-form">
                   <input type="hidden" name="saleId" value={selectedSale.id} />
@@ -458,6 +457,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               </section> : null}
               {selectedSale.giftCardRedeemed ? <section><h3>Gift card</h3>
                 <p className="sale-detail__note">A gift card has been used for this appointment.</p>
+              </section> : null}
+              {manager && selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
+                <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
               </section> : null}
               {manager && selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment") ?
                 <Link className="waybook-action waybook-action--secondary sale-detail__action"
