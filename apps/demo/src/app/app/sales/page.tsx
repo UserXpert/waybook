@@ -387,6 +387,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               <div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong></div>
               {selectedSale.locationName ? <small>{selectedSale.locationName}</small> : null}
             </section>
+            {manager && selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment") ?
+              <Link className="waybook-action waybook-action--secondary sale-detail__action"
+                href={tenantPath(tenantSlug, `/app/sales/receipt?sale=${selectedSale.id}`)}>View receipt</Link> : null}
             {!paymentStep ? <section aria-label="Checkout items" className="appointment-checkout__items">
               <h3>Checkout items</h3>
               <ul>
@@ -474,9 +477,6 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               {manager && selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
                 <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
               </section> : null}
-              {manager && selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment") ?
-                <Link className="waybook-action waybook-action--secondary sale-detail__action"
-                  href={tenantPath(tenantSlug, `/app/sales/receipt?sale=${selectedSale.id}`)}>View receipt</Link> : null}
               <Link className="waybook-action waybook-action--secondary sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>
               {manager ? <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section> : null}
               {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.providerRecorded ? "Stripe sandbox" : event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}

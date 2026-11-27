@@ -106,7 +106,9 @@ test("saved card setup stays unpaid until the client confirms Stripe checkout", 
     expect(await db`SELECT id,method,amount_cents FROM payment_records WHERE booking_id = ${booking.id}`)
       .toEqual([{ id: attempt.id, method: "card", amount_cents: 65000 }]);
     const [appointmentSale] = await db`SELECT id FROM commerce_sales WHERE tenant_id = ${tenantId} AND booking_id = ${booking.id}`;
-    await sale.getByRole("link", { name: "View receipt", exact: true }).click();
+    const receiptLink = sale.getByRole("link", { name: "View receipt", exact: true });
+    await expect(receiptLink).toBeInViewport({ ratio: 1 });
+    await receiptLink.click();
     await expect(page.getByRole("heading", { name: "Appointment receipt" })).toBeVisible();
     expect(new URL(page.url()).searchParams.get("sale")).toBe(appointmentSale.id);
     const receiptPayments = page.getByRole("table", { name: "Payments and refunds" });
