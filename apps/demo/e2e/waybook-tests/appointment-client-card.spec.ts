@@ -9,12 +9,13 @@ test("saved card setup stays unpaid until the client confirms Stripe checkout", 
   const marker = randomUUID().slice(0, 8);
   const name = `Card setup QA ${marker}`;
   const staffEmail = `card-staff-${marker}@example.test`;
+  let fixtureLocationId: string | undefined;
   try {
     await control`INSERT INTO waybook_stripe_sandbox_connections (tenant_id, account_id) VALUES (${tenantId}, 'acct_checkoutFixture')`;
     const [staff] = await control`INSERT INTO identities (email, password_hash, display_name)
       SELECT ${staffEmail}, password_hash, ${name} FROM identities WHERE email = 'owner@nordic.local' RETURNING id`;
     await control`INSERT INTO tenant_memberships (tenant_id, identity_id, role) VALUES (${tenantId}, ${staff.id}, 'staff')`;
-    const { booking, customer } = await db.begin(async (tx) => {
+    const { booking, customer, locationId } = await db.begin(async (tx) => {
       const [location] = await tx`INSERT INTO locations (tenant_id, slug, name, timezone)
         VALUES (${tenantId}, ${`qa-card-${marker}`}, ${name}, 'Europe/Copenhagen') RETURNING id`;
       const [service] = await tx`SELECT id FROM services WHERE tenant_id = ${tenantId} AND title = 'Studio session'`;
@@ -25,15 +26,19 @@ test("saved card setup stays unpaid until the client confirms Stripe checkout", 
       const [customer] = await tx`INSERT INTO customers (tenant_id, name, email, phone)
         VALUES (${tenantId}, ${name}, ${`card-client-${marker}@example.test`}, '+4512345678') RETURNING id`;
       const [block] = await tx`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
-        VALUES (${tenantId}, ${member.id}, ${location.id}, (date_trunc('day', now() AT TIME ZONE 'Europe/Copenhagen') + interval '12 hours') AT TIME ZONE 'Europe/Copenhagen',
-          (date_trunc('day', now() AT TIME ZONE 'Europe/Copenhagen') + interval '13 hours') AT TIME ZONE 'Europe/Copenhagen', 'confirmed')
+        SELECT ${tenantId}, ${member.id}, ${location.id}, starts_at, starts_at + interval '1 hour', 'confirmed'
+        FROM (SELECT GREATEST(
+          (date_trunc('day', now() AT TIME ZONE 'Europe/Copenhagen') + interval '12 hours') AT TIME ZONE 'Europe/Copenhagen',
+          date_trunc('minute', now())
+        ) AS starts_at) schedule
         RETURNING id, starts_at, ends_at`;
       const [booking] = await tx`INSERT INTO bookings
         (tenant_id, booking_block_id, service_id, team_member_id, location_id, customer_id, starts_at, ends_at, status, booked_price_cents)
         VALUES (${tenantId}, ${block.id}, ${service.id}, ${member.id}, ${location.id}, ${customer.id},
           ${block.starts_at}, ${block.ends_at}, 'confirmed', 65000) RETURNING id`;
-      return { booking, customer };
+      return { booking, customer, locationId: location.id };
     });
+    fixtureLocationId = locationId;
 
     await page.route("https://checkout.stripe.com/**", (route) => route.fulfill({ body: "Stripe hosted setup fixture" }));
     await page.goto("/login");
@@ -116,6 +121,7 @@ test("saved card setup stays unpaid until the client confirms Stripe checkout", 
     await expect(drawer.getByText("Visa ending in 4242")).toHaveCount(0);
     await expect(drawer.getByRole("button", { name: "Add credit card" })).toHaveCount(0);
   } finally {
+    if (fixtureLocationId) await db`UPDATE locations SET is_active=false WHERE tenant_id=${tenantId} AND id=${fixtureLocationId}`;
     await control`DELETE FROM waybook_stripe_sandbox_connections WHERE tenant_id = ${tenantId} AND account_id = 'acct_checkoutFixture'`;
     await db.end();
     await control.end();
