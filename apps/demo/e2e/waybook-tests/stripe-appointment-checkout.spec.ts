@@ -172,6 +172,11 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
                 await expect(sale.getByText("Refund returned · card", { exact: true })).toBeVisible();
                 await expect(sale.getByRole("alert")).toContainText("Stripe returned the last refund");
                 await expect(refundAmount).toHaveValue("60.00");
+                await sale.getByRole("link", { name: "View receipt", exact: true }).click();
+                await expect(page.getByRole("heading", { name: "Appointment receipt" })).toBeVisible();
+                const receiptPayments = page.getByRole("table", { name: "Payments and refunds" });
+                await expect(receiptPayments.getByRole("row", { name: /Refund returned · Card/ })).toContainText("13,03");
+                await expect(receiptPayments.getByRole("row", { name: /Net payments/ })).toContainText("60,00");
                 await page.goto("/nordic/app/reports?range=7&sort=newest");
                 await expect(page.getByRole("row").filter({ hasText: name }).getByText("refund returned", { exact: true })).toBeVisible();
               }
