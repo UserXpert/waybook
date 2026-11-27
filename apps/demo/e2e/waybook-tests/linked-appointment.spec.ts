@@ -57,6 +57,13 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/nordic\/app/);
+    let primaryAvailabilityRequests = 0;
+    page.on("request", (request) => {
+      const body = request.postData() ?? "";
+      if (request.headers()["next-action"] && body.includes('"serviceId"') && body.includes('"date"') && body.includes(first.id)) {
+        primaryAvailabilityRequests++;
+      }
+    });
     await page.goto(`/nordic/app/calendars?${new URLSearchParams({
       view: "team", location: location.id, day, service: first.id, employee: primary.id,
       createStaff: primary.id, create: `${day}T10:00`, fromSlot: "1",
@@ -75,6 +82,21 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByLabel("Client name").fill(clientName);
     await drawer.getByLabel("Email", { exact: true }).fill(clientEmail);
     await drawer.getByLabel("Phone", { exact: true }).fill("+4511223344");
+    const confirm = drawer.getByRole("button", { name: "Confirm appointment" });
+    await expect(confirm).toBeEnabled();
+    expect(primaryAvailabilityRequests).toBe(0);
+    const [occupiedPrimary] = await sql`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
+      VALUES (${tenantId}, ${primary.id}, ${location.id}, ${time("10:00")}, ${time("10:45")}, 'confirmed') RETURNING id`;
+    try {
+      await confirm.click();
+      await expect(drawer.getByRole("alert")).toHaveText("That staff member is not available at the selected time.");
+    } finally {
+      await sql`UPDATE booking_blocks SET state='released' WHERE tenant_id=${tenantId} AND id=${occupiedPrimary.id}`;
+    }
+    await drawer.getByRole("button", { name: "Change slot" }).click();
+    await expect(drawer.getByRole("button", { name: "10:00", exact: true })).toHaveAttribute("aria-pressed", "true");
+    expect(primaryAvailabilityRequests).toBe(1);
+    await drawer.getByRole("button", { name: "Hide slot options" }).click();
     const originalService = drawer.getByRole("combobox", { name: "Service", exact: true });
     await originalService.fill(second.title);
     await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
@@ -124,7 +146,6 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("option", { name: secondary.name, exact: true }).click();
     await expect(drawer.getByText(`${secondary.name} · 10:45 · 30 min`, { exact: true })).toBeVisible();
     await expect(drawer.getByText(/75 min/)).toBeVisible();
-    const confirm = drawer.getByRole("button", { name: "Confirm appointment" });
     await drawer.locator("form").evaluate((form) => {
       form.addEventListener("formdata", (event) => event.formData.delete("customerPhone"), { once: true });
     });
