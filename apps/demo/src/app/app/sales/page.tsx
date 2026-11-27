@@ -392,6 +392,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />
                 <Link className="waybook-action waybook-action--secondary sale-detail__action" href={paymentHref}>Other payment methods</Link>
               </> : <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
+                canFinishCheckout={selectedSale.status === "arrived" && selectedSale.attendanceStage === "checking_out"}
                 giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} />}
             </section> : null}
             {!paymentStep && recorded.length > 0 ? <section><h3>Payment details</h3>
