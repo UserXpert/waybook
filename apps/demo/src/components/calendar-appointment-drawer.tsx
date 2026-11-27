@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
 import { AppointmentServiceEditor } from "@/components/appointment-service-editor";
+import { AppointmentClientCard } from "@/components/appointment-client-card";
 import { AppointmentAttendanceJourney } from "@/components/appointment-attendance-journey";
 import { CancelAppointmentForm } from "@/components/cancel-appointment-form";
 import { TenantEditorDialog } from "@/components/tenant-editor-dialog";
@@ -184,6 +185,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
               {detail.customerPhone ? <div><dt>Phone</dt><dd><a href={`tel:${detail.customerPhone.replace(/[^+0-9]/g, "")}`}>{detail.customerPhone}</a></dd></div> : null}
               {detail.customerEmail ? <div><dt>Email</dt><dd><a href={`mailto:${encodeURIComponent(detail.customerEmail)}`}>{detail.customerEmail}</a></dd></div> : null}
             </dl> : null}
+            {detail.clientCard ? <AppointmentClientCard key={detail.id} bookingId={detail.id} card={detail.clientCard} /> : null}
           </section>
           <section className="calendar-appointment-drawer__services" aria-label="Booked services">
             <h3>Services</h3>

@@ -5066,6 +5066,19 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   font-size: .8rem;
   font-weight: 600;
 }
+
+.appointment-client-card,
+.appointment-client-card__consent { display: grid; gap: .45rem; justify-items: start; }
+.appointment-client-card { margin-top: .55rem; }
+.appointment-client-card__consent label,
+.appointment-client-card__line,
+.appointment-client-card > button {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  flex-wrap: wrap;
+}
+.appointment-client-card__line { margin-top: .4rem; }
 .calendar-appointment-drawer__client dl,
 .calendar-appointment-drawer__booking dl {
   display: grid;

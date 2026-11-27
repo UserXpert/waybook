@@ -62,6 +62,10 @@ Waybook uses the workspace time zone to make Check in available on the appointme
 
 **Verified in the playground.** Checkout showed a $100 service subtotal with Add service, Add product, and More. Go to payments displayed optional tip, a $100 total, and an editable $100 charge amount. Available choices were Front Desk, Self Checkout, Credit Card, Cash, Gift Card, Account Balance, and Other. Credit Card opened a confirmation view with the amount and card selection. Mangomint supplied a test card in playground mode. Submitting it opened Sale #18 (Closed), with a $100 card transaction and Rebook appointment. The test did not move real funds.
 
+### Card on file
+
+Mangomint puts **Add Credit Card** in the appointment’s client section and shows a masked card once one is saved. Waybook’s sandbox drawer offers **Add credit card** to owners and managers in a connected workspace. After the client consents, staff open Stripe’s hosted setup page. Returning to the appointment verifies the setup under that workspace’s Stripe account and displays the card brand and last four digits. Cancel returns to the appointment, where staff can resume an open setup. Saving a card takes no payment and leaves the appointment state and balance unchanged. [Mangomint card-on-file guide](https://www.mangomint.com/learn/managing-cards-on-file/) · [Stripe hosted setup guide](https://docs.stripe.com/payments/checkout/save-and-reuse)
+
 ### Additional tender paths documented by Mangomint
 
 | Path | Front-desk behaviour |

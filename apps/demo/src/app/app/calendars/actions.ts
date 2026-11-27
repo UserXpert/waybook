@@ -17,7 +17,8 @@ import { tenantDb } from "@/lib/waybook/database";
 import { arrivalAlertsEnabled, unnotifiedArrivalProviders } from "@/lib/waybook/provider-arrival-alerts";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { appointmentStripeConfig, runAppointmentStripeCheckout } from "@/lib/waybook/stripe-appointment-checkout";
+import { appointmentClientCard, runClientCardSetup } from "@/lib/waybook/stripe-client-card";
+import { appointmentStripeAccount, appointmentStripeConfig, runAppointmentStripeCheckout } from "@/lib/waybook/stripe-appointment-checkout";
 import { runStripeAppointmentRefund } from "@/lib/waybook/stripe-appointment-refunds";
 import { requireFeature } from "@/lib/waybook/features";
 import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
@@ -139,7 +140,7 @@ export async function getCalendarAppointment(bookingId: string) {
   `;
   if (!booking) return null;
   const { teamMemberId, revision, priceCents, hasSettlement, customerId, customerCreatedAt, createdAt, updatedAt, source, ...detail } = booking;
-  const [resources, paymentBalance, additionalServices, bookingActors] = await Promise.all([
+  const [resources, paymentBalance, additionalServices, bookingActors, clientCard] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -160,6 +161,7 @@ export async function getCalendarAppointment(bookingId: string) {
           OR (e.event_type LIKE 'booking.%' AND e.created_at::text = ${revision}))
       ORDER BY activity.event, e.created_at DESC, e.id, member.id
     ` : [],
+    permissions.isManager ? appointmentClientCard({ db, tenantId: tenant.id, customerId }) : null,
   ]);
   const providers = [teamMemberId, ...additionalServices.map((item) => item.teamMemberId)];
   const ownSegment = !canViewTeam && teamMemberId !== permissions.teamMemberId
@@ -189,6 +191,7 @@ export async function getCalendarAppointment(bookingId: string) {
     // never contact or resource data used by the manager editing surface.
     customerEmail: permissions.isManager ? booking.customerEmail : "",
     customerPhone: permissions.isManager ? booking.customerPhone : null,
+    clientCard,
     clientRecord: permissions.isManager ? { id: customerId, createdAt: customerCreatedAt.toISOString() } : null,
     activity: permissions.isManager ? {
       source, createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString(),
@@ -339,9 +342,9 @@ async function editableBooking(bookingId: string, purpose: "appointment" | "stat
     : await calendarPermissionContext();
   const db = tenantDb(tenant);
   const [booking] = await db<{
-    id: string; bookingBlockId: string; teamMemberId: string | null; resourceId: string | null; serviceId: string; locationId: string; customerEmail: string; status: string; startsAt: Date; endsAt: Date; durationMinutes: number; hasLinkedServices: boolean;
+    id: string; bookingBlockId: string; teamMemberId: string | null; resourceId: string | null; serviceId: string; locationId: string; customerId: string; customerEmail: string; status: string; startsAt: Date; endsAt: Date; durationMinutes: number; hasLinkedServices: boolean;
   }[]>`
-    SELECT b.id, b.booking_block_id AS "bookingBlockId", b.team_member_id AS "teamMemberId", b.resource_id AS "resourceId", b.service_id AS "serviceId", b.location_id AS "locationId", c.email AS "customerEmail", b.status, b.starts_at AS "startsAt", b.ends_at AS "endsAt",
+    SELECT b.id, b.booking_block_id AS "bookingBlockId", b.team_member_id AS "teamMemberId", b.resource_id AS "resourceId", b.service_id AS "serviceId", b.location_id AS "locationId", c.id AS "customerId", c.email AS "customerEmail", b.status, b.starts_at AS "startsAt", b.ends_at AS "endsAt",
       s.duration_minutes AS "durationMinutes",
       EXISTS (SELECT 1 FROM booking_service_segments segment WHERE segment.tenant_id = b.tenant_id AND segment.booking_id = b.id) AS "hasLinkedServices"
     FROM bookings b JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
@@ -994,6 +997,51 @@ export async function updateStripeAppointmentRefund(_state: PaymentState, formDa
     revalidateCalendars();
     return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not verify the Stripe refund. Check its status before trying again.", success: null };
   }
+}
+
+export async function updateAppointmentClientCard(_state: PaymentState, formData: FormData): Promise<PaymentState> {
+  let destination: string | null = null;
+  try {
+    const config = appointmentStripeConfig();
+    if (!config) throw new Error("Stripe card setup is unavailable.");
+    const bookingId = String(formData.get("bookingId") ?? "");
+    if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) throw new Error("Appointment is unavailable.");
+    const action = formData.get("action");
+    if (action !== "open" && action !== "return") throw new Error("Choose a card setup action.");
+    if (action === "open" && formData.get("clientConsent") !== "on") {
+      throw new Error("Confirm the client agreed to save this card.");
+    }
+    const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+    await requireFeature(tenant.id, "booking-essentials");
+    const [identity, slug, accountId] = await Promise.all([
+      requireIdentity(), currentTenantRouteSlug(tenant.slug), appointmentStripeAccount(tenant.id),
+    ]);
+    if (!accountId) throw new Error("Connect Stripe in Settings before adding a credit card.");
+    const search = new URLSearchParams({ booking: booking.id, day: localDateKey(booking.startsAt, tenant.timezone) });
+    const appointmentUrl = new URL(tenantPath(slug, `/app/calendars?${search}`), config.origin);
+    const returnUrl = new URL(appointmentUrl);
+    returnUrl.searchParams.set("cardSetup", "return");
+
+    const outcome = await runClientCardSetup({ db, tenantId: tenant.id, customerId: booking.customerId, accountId }, config, {
+      action, actorId: identity.id, returnUrl: returnUrl.href,
+    });
+    if (outcome.state === "saved") {
+      revalidateCalendars();
+      destination = appointmentUrl.href;
+    } else if (outcome.state === "open" && action === "open") {
+      destination = outcome.url;
+    } else {
+      return {
+        error: outcome.state === "expired" ? "This card setup expired. Open a new setup to try again." : "Stripe has not confirmed a saved card. Try checking again shortly.",
+        success: null,
+      };
+    }
+  } catch (error) {
+    return { error: error instanceof Error && !(error instanceof TypeError) && !("severity" in error)
+      ? error.message : "Could not verify card setup. Please try again.", success: null };
+  }
+  if (destination) redirect(destination);
+  return { error: null, success: null };
 }
 
 export async function updateStripeAppointmentPayment(_state: PaymentState, formData: FormData): Promise<PaymentState> {

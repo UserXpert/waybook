@@ -1,6 +1,6 @@
 import type { StripeSandboxConfig } from "./stripe-connect-api";
 
-const checkoutSessions = "https://api.stripe.com/v1/checkout/sessions";
+const checkoutSessions = "/v1/checkout/sessions";
 const sessionIdPattern = /^cs_test_[A-Za-z0-9]+$/;
 const attemptIdPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
@@ -64,28 +64,29 @@ function verifySession(
   throw new Error("Stripe returned an unexpected checkout outcome.");
 }
 
-export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: typeof fetch = fetch) {
-  async function stripeRequest(accountId: string, url: string, method: "GET" | "POST", body?: URLSearchParams, key?: string) {
-    if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(config.secretKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
-      throw new Error("Invalid Stripe sandbox checkout context.");
-    }
-    const response = await request(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${config.secretKey}`,
-        "Stripe-Version": "2026-11-18.endive",
-        "Stripe-Account": accountId,
-        ...(key ? { "Idempotency-Key": key } : {}),
-      },
-      body,
-      redirect: "error",
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error("Stripe sandbox checkout is temporarily unavailable.");
-    return response;
+export async function stripeSandboxRequest(config: StripeSandboxConfig, request: typeof fetch, accountId: string, path: string, method: "GET" | "POST", body?: URLSearchParams, key?: string) {
+  if (!/^(sk|rk)_test_[A-Za-z0-9]+$/.test(config.secretKey) || !/^acct_[A-Za-z0-9]+$/.test(accountId)) {
+    throw new Error("Invalid Stripe sandbox checkout context.");
   }
+  if (!path.startsWith("/v1/")) throw new Error("Invalid Stripe sandbox API path.");
+  const response = await request("https://api.stripe.com" + path, {
+    method,
+    headers: {
+      Authorization: `Bearer ${config.secretKey}`,
+      "Stripe-Version": "2026-11-18.endive",
+      "Stripe-Account": accountId,
+      ...(key ? { "Idempotency-Key": key } : {}),
+    },
+    body,
+    redirect: "error",
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error("Stripe sandbox checkout is temporarily unavailable.");
+  return response;
+}
 
+export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: typeof fetch = fetch) {
   async function call(
     attempt: SandboxCheckoutAttempt,
     operation: "create" | "retrieve" | "expire",
@@ -99,7 +100,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       throw new Error("Invalid Stripe sandbox checkout context.");
     }
     const sessionPath = sessionId ? `${checkoutSessions}/${sessionId}` : checkoutSessions;
-    const response = await stripeRequest(attempt.accountId, operation === "expire" ? `${sessionPath}/expire` : sessionPath,
+    const response = await stripeSandboxRequest(config, request, attempt.accountId, operation === "expire" ? `${sessionPath}/expire` : sessionPath,
       operation === "retrieve" ? "GET" : "POST", body, operation === "create" ? attempt.id : undefined);
     return verifySession(await response.json(), attempt, sessionId);
   }
@@ -108,7 +109,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
     async findByPaymentIntent(accountId: string, paymentIntentId: string) {
       if (!/^pi_[A-Za-z0-9]+$/.test(paymentIntentId)) throw new Error("Invalid Stripe payment intent.");
       const query = new URLSearchParams({ payment_intent: paymentIntentId, limit: "2" });
-      const response = await stripeRequest(accountId, `${checkoutSessions}?${query}`, "GET");
+      const response = await stripeSandboxRequest(config, request, accountId, `${checkoutSessions}?${query}`, "GET");
       const page = await response.json() as { object?: unknown; has_more?: unknown; data?: SessionResponse[] } | null;
       if (page?.object !== "list" || page.has_more !== false || !Array.isArray(page.data) || page.data.length > 1) {
         throw new Error("Stripe did not confirm a unique checkout session for the payment.");
