@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { calendarHolidayRegions, type CalendarHolidayRegion } from "./calendar-holidays";
 
 const oneYear = 365 * 24 * 60 * 60;
 export const calendarDisplayIntervals = [15, 30] as const;
@@ -9,6 +10,7 @@ type CalendarDisplay = {
   end: number | null;
   showNow: boolean;
   showWeekends: boolean;
+  holidayRegion: CalendarHolidayRegion | null;
   autofillLatestService: boolean;
 };
 
@@ -31,6 +33,8 @@ function readDisplay(value: unknown): CalendarDisplay {
     end: invalidHours ? null : end,
     showNow: data.showNow !== false,
     showWeekends: data.showWeekends !== false,
+    holidayRegion: typeof data.holidayRegion === "string" && Object.hasOwn(calendarHolidayRegions, data.holidayRegion)
+      ? data.holidayRegion as CalendarHolidayRegion : null,
     autofillLatestService: data.autofillLatestService === true,
   };
 }
@@ -54,6 +58,7 @@ export async function setCalendarDisplay(tenantId: string, form: FormData) {
     end: end ? Number(end) : null,
     showNow: form.has("showNow"),
     showWeekends: form.has("showWeekends"),
+    holidayRegion: form.get("holidayRegion"),
     autofillLatestService: form.has("autofillLatestService"),
   });
   (await cookies()).set(cookieName(tenantId), JSON.stringify(settings), {

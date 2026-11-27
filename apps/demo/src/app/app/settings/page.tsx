@@ -15,6 +15,7 @@ import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { terminologyLabels, titleTerminology } from "@/lib/waybook/terminology-labels";
 import { calendarDisplayIntervals, getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
+import { calendarHolidayRegions } from "@/lib/waybook/calendar-holidays";
 import { saveCalendarDisplay } from "./calendar-actions";
 import { StaffRolesPanel } from "./roles/panel";
 
@@ -90,6 +91,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <label>Calendar interval <select name="interval" defaultValue={calendar.interval}>
                 {calendarDisplayIntervals.map((interval) => <option key={interval} value={interval}>{interval} minutes</option>)}
               </select></label>
+              <div className="calendar-display-form__holiday">
+                <label>Public holidays <select name="holidayRegion" defaultValue={calendar.holidayRegion ?? ""} aria-describedby="calendar-holiday-help">
+                  <option value="">Hidden</option>
+                  {Object.entries(calendarHolidayRegions).map(([region, name]) => <option key={region} value={region}>{name}</option>)}
+                </select></label>
+                <small id="calendar-holiday-help">Holiday labels are for reference. Booking availability follows your work schedule.</small>
+              </div>
               <label className="calendar-display-form__check"><input type="checkbox" name="showNow" defaultChecked={calendar.showNow} /> Show current time</label>
               <label className="calendar-display-form__check"><input type="checkbox" name="showWeekends" defaultChecked={calendar.showWeekends} /> Show weekends in Week and Month views</label>
               <label className="calendar-display-form__check"><input type="checkbox" name="autofillLatestService" defaultChecked={calendar.autofillLatestService} /> Autofill service from the latest completed appointment</label>
