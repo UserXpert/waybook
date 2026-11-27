@@ -254,9 +254,10 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await checkout.getByRole("link", { name: "Go to payments" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
     await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("125.00");
-    const method = checkout.getByRole("combobox", { name: "Method", exact: true });
-    await method.selectOption("cash");
-    await expect(method).toHaveValue("cash");
+    const method = checkout.getByRole("radio", { name: "Cash", exact: true });
+    await method.focus();
+    await method.press("Space");
+    await expect(method).toBeChecked();
     await checkout.getByRole("button", { name: "Record payment" }).click();
     await expect(checkout.getByText("Paid SALE", { exact: true })).toBeVisible();
     const [settled] = await sql`SELECT
