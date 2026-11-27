@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
 import { TenantBusinessProfileForm } from "@/components/tenant-business-profile-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { TenantTerminologyForm } from "@/components/tenant-terminology-form";
 import { StripeOnboardingButton } from "@/components/stripe-onboarding-button";
+import { TenantTerminologyForm } from "@/components/tenant-terminology-form";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-page-media";
 import { parseBusinessProfile } from "@/lib/waybook/business-profile";
@@ -34,21 +34,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     getTenantTerminologySettings(tenant),
   ]);
   const labels = terminologyLabels(terminology.preferences.clientTerm, terminology.preferences.staffTerm);
-  const canManageRoles = teamEnabled && membership.role === "owner";
+  const isOwner = membership.role === "owner";
+  const canManageRoles = teamEnabled && isOwner;
   const showingCalendar = params.tab === "calendar";
   const calendar = showingCalendar ? await getCalendarDisplay(tenant.id) : null;
   const hours = Array.from({ length: 25 }, (_, index) => index);
   const showingRoles = params.tab === "roles";
   const showingBusiness = params.tab === "business";
   const showingPayments = params.tab === "payments";
-  const sandbox = membership.role === "owner" ? stripeSandboxConfig(process.env) : null;
   if (showingRoles && !canManageRoles) notFound();
-  if (showingPayments && !sandbox) notFound();
+  if (showingPayments && !isOwner) notFound();
   const settingsHref = tenantPath(slug, "/app/settings");
   const rolesHref = `${settingsHref}?tab=roles`;
   const businessHref = `${settingsHref}?tab=business`;
   const paymentsHref = `${settingsHref}?tab=payments`;
-  const merchantStatus = showingPayments && sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
+  const sandbox = showingPayments && isOwner ? stripeSandboxConfig(process.env) : null;
+  const merchantStatus = sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -60,10 +61,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     ...(resourcesEnabled && (permissions.isManager || permissions.canManageResources) ? [{ title: "Resources", description: "Rooms, equipment and availability", href: "/app/resources", Icon: Wrench }] : []),
     ...(emailsEnabled && permissions.isManager ? [{ title: "Email", description: "Sender connection, templates and reminders", href: "/app/emails?view=connection", Icon: Mail }] : []),
   ];
-  const canEditBusiness = membership.role === "owner";
-  const canViewBusiness = canEditBusiness || links.length > 0;
+  const canViewBusiness = isOwner || links.length > 0;
   if (showingBusiness && !canViewBusiness) notFound();
-  const [business] = showingBusiness && canEditBusiness ? await tenantDb(tenant)<{
+  const [business] = showingBusiness && isOwner ? await tenantDb(tenant)<{
     name: string; profile: unknown; bookingPage: { logoUrl?: unknown } | string; available: boolean;
   }[]>`
     SELECT name, to_jsonb(ts)->'business_profile' AS profile, booking_page AS "bookingPage",
@@ -79,7 +79,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <Link href={settingsHref} aria-current={!showingRoles && !showingBusiness && !showingCalendar && !showingPayments ? "page" : undefined}>Appearance</Link>
           <Link href={`${settingsHref}?tab=calendar`} aria-current={showingCalendar ? "page" : undefined}>Calendar</Link>
           {canViewBusiness ? <Link href={businessHref} aria-current={showingBusiness ? "page" : undefined}>Business setup</Link> : null}
-          {sandbox ? <Link href={paymentsHref} aria-current={showingPayments ? "page" : undefined}>Payments</Link> : null}
+          {isOwner ? <Link href={paymentsHref} aria-current={showingPayments ? "page" : undefined}>Payments</Link> : null}
           {canManageRoles ? <Link href={rolesHref} aria-current={showingRoles ? "page" : undefined}>Roles &amp; permissions</Link> : null}
         </nav>
         <div className="workspace-settings__content">
@@ -118,32 +118,43 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <label className="calendar-display-form__check"><input type="checkbox" name="autofillLatestService" defaultChecked={calendar.autofillLatestService} /> Autofill service from the latest completed appointment</label>
               <button type="submit" className="waybook-action">Save calendar preferences</button>
             </form>
-          </section> : merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
-            <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
-            {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
-            {params.stripe === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
-            <p role={params.stripe === "returned" || params.stripe === "checked" ? "status" : undefined}>{{
-              unconnected: "Set up a Danish sandbox merchant to test card payments.",
-              pending: "Stripe setup is incomplete or awaiting verification.",
-              ready: "Stripe has verified your sandbox account for card payments.",
-              restricted: "Stripe has restricted card payments on this sandbox account.",
-              disconnected: "Stripe could not find this sandbox account. Review the account in Stripe.",
-              unresolved: "An earlier setup attempt needs to be reconciled before you can continue.",
-              unavailable: "Stripe status is temporarily unavailable. Try refreshing the status.",
-            }[merchantStatus]}</p>
-            {merchantStatus === "unconnected" || merchantStatus === "pending" ? <p>
-              Already use Stripe? Sign in with your Stripe login and select your existing business if Stripe offers it.
-            </p> : null}
-            <div className="workspace-settings__payment-actions">
-              {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
-                <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : "Continue Stripe setup"} />
-              </form> : null}
-              {merchantStatus !== "unconnected" ? <form action={checkStripeSandboxStatus}>
-                <StripeOnboardingButton label="Check Stripe status" checkStatus />
-              </form> : null}
-            </div>
-          </section> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
-            {canEditBusiness ? <section className="workspace-settings__panel" id="business-settings">
+          </section> : showingPayments ? <>
+            {merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
+              <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
+              {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
+              {params.stripe === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
+              <p role={params.stripe === "returned" || params.stripe === "checked" ? "status" : undefined}>{{
+                unconnected: "Set up a Danish sandbox merchant to test card payments.",
+                pending: "Stripe setup is incomplete or awaiting verification.",
+                ready: "Stripe has verified your sandbox account for card payments.",
+                restricted: "Stripe has restricted card payments on this sandbox account.",
+                disconnected: "Stripe could not find this sandbox account. Review the account in Stripe.",
+                unresolved: "An earlier setup attempt needs to be reconciled before you can continue.",
+                unavailable: "Stripe status is temporarily unavailable. Try refreshing the status.",
+              }[merchantStatus]}</p>
+              {merchantStatus === "unconnected" || merchantStatus === "pending" ? <p>
+                Already use Stripe? Sign in with your Stripe login and select your existing business if Stripe offers it.
+              </p> : null}
+              <div className="workspace-settings__payment-actions">
+                {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
+                  <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : "Continue Stripe setup"} />
+                </form> : null}
+                {merchantStatus !== "unconnected" ? <form action={checkStripeSandboxStatus}>
+                  <StripeOnboardingButton label="Check Stripe status" checkStatus />
+                </form> : null}
+              </div>
+            </section> : <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
+              <h2 id="stripe-settings-title">Stripe</h2>
+              <p><strong>Setup unavailable</strong></p>
+              <p>You’ll be able to connect your Stripe account here when Waybook enables card processing for this workspace.</p>
+            </section>}
+            <section className="workspace-settings__panel" aria-labelledby="record-payments-title">
+              <h2 id="record-payments-title">Record payments</h2>
+              <p>Record cash, bank transfers, and card payments taken elsewhere from appointment checkout in Sales.</p>
+              <Link className="waybook-primary-link" href={tenantPath(slug, "/app/sales")}>Open Sales</Link>
+            </section>
+          </> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
+            {isOwner ? <section className="workspace-settings__panel" id="business-settings">
               <h2>Business details</h2>
               <p>Manage your branding, registration and contact details.</p>
               {business?.available ? <TenantBusinessProfileForm key={tenant.id} name={business.name}
@@ -151,7 +162,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 logo={publicBookingImageUrl(parseBookingPage(business.bookingPage).logoUrl)} />
                 : <p>Update the workspace database to edit business details.</p>}
             </section> : null}
-            {membership.role === "owner" ? <section className="workspace-settings__panel" id="terminology">
+            {isOwner ? <section className="workspace-settings__panel" id="terminology">
               <h2>Terminology</h2>
               <p>Choose the terms used in your workspace and online booking.</p>
               {terminology.available ? <TenantTerminologyForm preferences={terminology.preferences} /> : <p>Update the workspace database to change terminology.</p>}

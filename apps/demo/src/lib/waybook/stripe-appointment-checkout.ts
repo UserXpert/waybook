@@ -24,7 +24,7 @@ const selectAttempt = `
 `;
 
 export function appointmentStripeConfig() {
-  return process.env.VERCEL_ENV === "production" ? null : stripeSandboxConfig(process.env);
+  return stripeSandboxConfig(process.env);
 }
 
 export async function appointmentStripeAccount(tenantId: string) {

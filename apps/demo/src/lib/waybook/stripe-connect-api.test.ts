@@ -12,6 +12,7 @@ test("Stripe setup rejects live keys and unsafe callback origins", () => {
     assert.equal(stripeSandboxConfig({ WAYBOOK_STRIPE_SANDBOX_SECRET_KEY: config.secretKey, WAYBOOK_STRIPE_SANDBOX_ORIGIN: origin }), null);
   }
   assert.equal(stripeSandboxConfig({ WAYBOOK_STRIPE_SANDBOX_SECRET_KEY: "sk_live_fixtureKey", WAYBOOK_STRIPE_SANDBOX_ORIGIN: config.origin }), null);
+  assert.equal(stripeSandboxConfig({ VERCEL_ENV: "production", WAYBOOK_STRIPE_SANDBOX_SECRET_KEY: config.secretKey, WAYBOOK_STRIPE_SANDBOX_ORIGIN: config.origin }), null);
   assert.deepEqual(stripeSandboxConfig({ WAYBOOK_STRIPE_SANDBOX_SECRET_KEY: config.secretKey, WAYBOOK_STRIPE_SANDBOX_ORIGIN: config.origin }), config);
 });
 

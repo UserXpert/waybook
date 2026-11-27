@@ -7,6 +7,7 @@ export type StripeSandboxConfig = { secretKey: string; origin: string };
 export type StripeMerchantStatus = "pending" | "ready" | "restricted" | "disconnected";
 
 export function stripeSandboxConfig(env: NodeJS.ProcessEnv): StripeSandboxConfig | null {
+  if (env.VERCEL_ENV === "production") return null;
   const secretKey = env.WAYBOOK_STRIPE_SANDBOX_SECRET_KEY?.trim();
   const origin = env.WAYBOOK_STRIPE_SANDBOX_ORIGIN?.trim();
   if (!secretKey || !/^(sk|rk)_test_[a-zA-Z0-9]+$/.test(secretKey) || !origin) return null;
