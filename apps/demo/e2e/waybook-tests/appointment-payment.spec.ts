@@ -89,6 +89,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await page.goto(`/nordic/app/sales?sale=${sale.id}`);
     await page.getByRole("link", { name: "Open appointment", exact: true }).click();
     await expect(drawer).toBeVisible();
+    await drawer.getByRole("button", { name: "Edit appointment" }).click();
     await expect(payment).toHaveValue("");
     await expect(submit).toBeDisabled();
     expect(new URL(page.url()).searchParams.get("booking")).toBe(booking.id);

@@ -70,6 +70,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
       await db.unsafe("UPDATE bookings SET status='cancelled' WHERE id=$1 AND tenant_id=$2", [editBookingId, settings.tenantId]);
       await route.continue();
     });
+    await page.getByRole("button", { name: "Edit appointment" }).click();
     await page.getByLabel("Customer name").fill(attemptedName);
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Cancelled appointments cannot be edited." })).toBeVisible();
@@ -88,6 +89,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
       await page.goto(`${board}&booking=${completedBookingId}`);
       const completedCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${completedBookingId}"]`);
       await expect(completedCard).toHaveAttribute("draggable", "false");
+      await page.getByRole("button", { name: "Edit appointment" }).click();
       await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
       await expect(page.getByRole("heading", { name: "Edit" })).toBeVisible();
       return;
@@ -159,6 +161,7 @@ test("a terminal status committed after preflight cannot be moved or dragged", a
     await page.goto(`${board}&booking=${completedBookingId}`);
     const completedCard = page.locator(`a.waybook-week-calendar__entry[href*="booking=${completedBookingId}"]`);
     await expect(completedCard).toHaveAttribute("draggable", "false");
+    await page.getByRole("button", { name: "Edit appointment" }).click();
     await expect(page.getByRole("heading", { name: "Reschedule" })).toHaveCount(0);
     // Completed appointments retain their existing edit and payment workflow.
     await expect(page.getByRole("heading", { name: "Edit" })).toBeVisible();

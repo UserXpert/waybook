@@ -31,8 +31,8 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
         VALUES (${tenantId}, ${`Provider ${key}`}, ${`provider-${key}@example.test`}, 'staff') RETURNING id`;
       await db`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) VALUES (${tenantId}, ${member.id}, ${location.id})`;
       await db`INSERT INTO service_team_members (tenant_id, service_id, team_member_id) VALUES (${tenantId}, ${service.id}, ${member.id})`;
-      const [client] = await db`INSERT INTO customers (tenant_id, name, email)
-        VALUES (${tenantId}, ${`Client ${key}`}, ${`client-${key}@example.test`}) RETURNING id, name`;
+      const [client] = await db`INSERT INTO customers (tenant_id, name, email, phone)
+        VALUES (${tenantId}, ${`Client ${key}`}, ${`client-${key}@example.test`}, ${kind === "Early" ? "+4511223344" : null}) RETURNING id, name`;
       const [block] = await db`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
         SELECT ${tenantId}, ${member.id}, ${location.id}, starts_at, starts_at + interval '45 minutes', 'confirmed'
         FROM (SELECT CASE
@@ -73,13 +73,44 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     const stageLabel = (drawer: Awaited<ReturnType<typeof open>>) => drawer.locator(".appointment-drawer__detail--status dd");
     const futureDrawer = await open(upcoming);
     await expect(futureDrawer.getByRole("button", { name: "Check in", exact: true })).toHaveCount(0);
+    await expect(futureDrawer.getByRole("link", { name: "Add phone" })).toHaveAttribute("href", /customer=.*&edit=1$/);
     const earlyDrawer = await open(early);
-    await earlyDrawer.getByRole("button", { name: "Check in", exact: true }).click();
+    const clientDetails = earlyDrawer.getByRole("region", { name: "Client", exact: true });
+    const clientName = clientDetails.getByRole("heading", { name: early.name, exact: true });
+    const emailLink = clientDetails.locator('a[href^="mailto:"]');
+    await expect(clientDetails.getByRole("link", { name: "+4511223344", exact: true })).toHaveAttribute("href", "tel:+4511223344");
+    await expect(emailLink).toBeVisible();
+    await expect(clientDetails.locator("dt svg")).toHaveCount(2);
+    const [nameBounds, emailBounds] = await Promise.all([clientName.boundingBox(), emailLink.boundingBox()]);
+    expect(Math.abs(nameBounds!.x - emailBounds!.x)).toBeLessThan(2);
+    const checkIn = earlyDrawer.getByRole("button", { name: "Check in", exact: true });
+    const editServices = earlyDrawer.getByRole("button", { name: "Edit services", exact: true });
+    await expect(editServices).toBeVisible();
+    const [checkInBounds, editBounds] = await Promise.all([checkIn.boundingBox(), editServices.boundingBox()]);
+    expect(Math.abs(checkInBounds!.y - editBounds!.y)).toBeLessThan(2);
+    await checkIn.click();
+    await expect(checkIn).toHaveAttribute("aria-expanded", "true");
+    await earlyDrawer.getByRole("button", { name: "Waiting room", exact: true }).press("Escape");
+    await expect(checkIn).toBeFocused();
+    await expect(checkIn).toHaveAttribute("aria-expanded", "false");
+    await checkIn.click();
     await earlyDrawer.getByRole("button", { name: "Waiting room", exact: true }).click();
     await expect(stageLabel(earlyDrawer)).toHaveText("Waiting room");
+    await expect(earlyDrawer.getByRole("button", { name: "Checkout", exact: true })).toHaveCount(0);
     await earlyDrawer.getByRole("button", { name: "Start service", exact: true }).click();
     await expect(stageLabel(earlyDrawer)).toHaveText("In service");
-    await expect(earlyDrawer.getByRole("button", { name: "Checkout", exact: true })).toHaveCount(0);
+    await earlyDrawer.getByRole("button", { name: "Checkout", exact: true }).click();
+    const earlySale = page.getByRole("dialog", { name: "Appointment checkout" });
+    await expect(earlySale).toContainText(service.title);
+    await expect(earlySale.getByRole("button", { name: "Finish checkout" })).toHaveCount(0);
+    await earlySale.getByRole("link", { name: "Go to payments" }).click();
+    await expect(earlySale.getByLabel("Amount (DKK)")).toHaveValue("65.00");
+    await earlySale.getByRole("combobox", { name: "Method", exact: true }).selectOption("cash");
+    await earlySale.getByRole("button", { name: "Record payment" }).click();
+    await earlySale.getByRole("button", { name: "Finish checkout" }).click();
+    await expect.poll(() => state(early.id)).toEqual({ status: "completed", attendance_stage: null });
+    expect((await db`SELECT starts_at > now() AS early FROM bookings WHERE id=${early.id}`)[0].early).toBe(true);
+    expect(await db`SELECT amount_cents FROM payment_records WHERE tenant_id=${tenantId} AND booking_id=${early.id}`).toEqual([{ amount_cents: 6500 }]);
     const providerEmail = `arrival-staff-${tag}@example.test`;
     const [identity] = await control`INSERT INTO identities (email, password_hash, display_name)
       SELECT ${providerEmail}, password_hash, 'Check-in staff' FROM identities WHERE email='owner@nordic.local' RETURNING id`;
@@ -171,6 +202,9 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await segmentAlert.getByRole("link", { name: "Open appointment" }).click();
     const segmentDrawer = segmentPage.getByRole("complementary", { name: `Appointment with ${waiting.name}` });
     await expect(segmentDrawer.getByText(segmentService.title, { exact: true })).toBeVisible();
+    await expect(segmentDrawer.getByRole("link", { name: "Open client" })).toHaveCount(0);
+    await expect(segmentDrawer.getByRole("link", { name: /@/ })).toHaveCount(0);
+    await expect(segmentDrawer.getByText("Booked by", { exact: true })).toHaveCount(0);
     await segmentContext.close();
     await open(waiting);
     await expect(drawer.getByRole("button", { name: "Start service" })).toBeVisible();

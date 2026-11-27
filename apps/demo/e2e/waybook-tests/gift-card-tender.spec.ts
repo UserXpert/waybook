@@ -97,6 +97,12 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
     await db`UPDATE commerce_gift_cards SET status='void',expires_at=now()-interval '1 day' WHERE id=${fixture.card.id} AND tenant_id=${settings.tenantId}`;
     if (testInfo.project.name === "mobile") {
       await page.getByRole("link", { name: "Open appointment" }).click();
+      await expect(page).toHaveURL((url) => /\/app\/(calendars|bookings)$/.test(url.pathname)
+        && url.searchParams.get("booking") === fixture.booking.id);
+      if (new URL(page.url()).pathname.endsWith("/calendars")) {
+        await page.getByRole("button", { name: "More appointment actions" }).click();
+        await page.getByRole("button", { name: "Cancellation options" }).click();
+      }
       await page.getByRole("button", { name: "Cancel appointment" }).click({ timeout: 30_000 });
       await expect(page.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible({ timeout: 30_000 });
     } else {

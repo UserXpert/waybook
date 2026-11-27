@@ -59,21 +59,88 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await expect(page).toHaveURL(/\/nordic\/app/);
     await page.goto(`/nordic/app/calendars?${new URLSearchParams({
       view: "team", location: location.id, day, service: first.id, employee: primary.id,
-      createStaff: primary.id, create: `${day}T10:00`,
+      createStaff: primary.id, create: `${day}T10:00`, fromSlot: "1",
     })}`);
     const drawer = page.getByRole("complementary", { name: "New appointment" });
+    const clientSearch = drawer.getByRole("combobox", { name: /^Find a / });
+    const clientLetter = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname.endsWith("/api/app/clients") && url.searchParams.get("q") === "a" && response.ok();
+    });
+    await clientSearch.fill("a");
+    await clientLetter;
+    await expect(clientSearch).toHaveAttribute("aria-expanded", "true");
+    await clientSearch.press("Escape");
     await drawer.getByRole("button", { name: "Add client", exact: true }).click();
     await drawer.getByLabel("Client name").fill(clientName);
     await drawer.getByLabel("Email", { exact: true }).fill(clientEmail);
-    await drawer.getByRole("button", { name: "Add service", exact: true }).click();
-    await drawer.getByRole("combobox", { name: "Service 2", exact: true }).fill(second.title);
+    await drawer.getByLabel("Phone", { exact: true }).fill("+4511223344");
+    const originalService = drawer.getByRole("combobox", { name: "Service", exact: true });
+    await originalService.fill(second.title);
     await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
-    await drawer.getByRole("combobox", { name: "Provider for service 2" }).fill(secondary.name);
+    await expect(drawer.getByText(/selected time is unavailable/)).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
+    await expect(drawer.getByRole("region", { name: "Selected calendar slot" })).toContainText("10:00");
+    await originalService.fill(first.title);
+    await drawer.getByRole("option", { name: new RegExp(first.title) }).click();
+    await drawer.getByRole("button", { name: "Add service", exact: true }).click();
+    const nextService = drawer.getByRole("combobox", { name: "Service 2", exact: true });
+    const nextProvider = drawer.getByRole("combobox", { name: "Provider for service 2" });
+    await expect(nextService).toBeFocused();
+    await expect(drawer.getByRole("option", { name: new RegExp(replacement.title) })).toBeVisible();
+    await nextService.fill("o");
+    await expect(drawer.getByRole("option", { name: new RegExp(second.title) })).toBeVisible();
+    await expect(drawer.getByRole("option", { name: new RegExp(replacement.title) })).toHaveCount(0);
+    await nextService.fill(replacement.title);
+    const replacementOption = drawer.getByRole("option", { name: new RegExp(replacement.title) });
+    await expect(replacementOption).toBeVisible();
+    await nextService.press("ArrowDown");
+    await expect(replacementOption).toHaveAttribute("aria-selected", "true");
+    await nextService.press("Enter");
+    await expect(drawer.getByText(`${primary.name} · 10:45 · 45 min`, { exact: true })).toBeVisible();
+    await expect(nextProvider).toHaveCount(0);
+    await nextService.fill(replacement.title[0]);
+    await expect(replacementOption).toBeVisible();
+    await replacementOption.click();
+    await expect(nextService).toHaveValue(`${replacement.title} · 45 min`);
+    await expect(drawer.getByText(`${primary.name} · 10:45 · 45 min`, { exact: true })).toBeVisible();
+    await expect(nextProvider).toHaveCount(0);
+    await drawer.getByRole("button", { name: "Change provider or time for service 2" }).click();
+    const startTime = drawer.getByRole("combobox", { name: "Start time", exact: true });
+    await expect(startTime).toBeEnabled();
+    await expect(startTime.locator("option:checked")).toHaveText("10:45");
+    await expect(startTime.getByRole("option", { name: "10:50", exact: true })).toHaveCount(0);
+    await startTime.selectOption("11:00");
+    await expect(startTime).toHaveValue("11:00");
+    await startTime.selectOption("");
+    await expect(startTime.locator("option:checked")).toHaveText("10:45");
+    await expect(drawer.getByRole("button", { name: "Remove service 2" })).toBeVisible();
+    await drawer.getByRole("button", { name: "Change provider or time for service 2" }).click();
+
+    await nextService.fill(second.title);
+    await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
+    await expect(nextProvider).toHaveValue("");
+    await nextProvider.fill(secondary.name);
     await drawer.getByRole("option", { name: secondary.name, exact: true }).click();
-    await expect(drawer.getByText("Defaults to 10:45")).toBeVisible();
+    await expect(drawer.getByText(`${secondary.name} · 10:45 · 30 min`, { exact: true })).toBeVisible();
     await expect(drawer.getByText(/75 min/)).toBeVisible();
-    await drawer.getByRole("button", { name: "Confirm appointment" }).click();
-    await expect(drawer.getByRole("alert")).toContainText(`${second.title} is unavailable`);
+    const confirm = drawer.getByRole("button", { name: "Confirm appointment" });
+    await drawer.locator("form").evaluate((form) => {
+      form.addEventListener("formdata", (event) => event.formData.delete("customerPhone"), { once: true });
+    });
+    await confirm.click();
+    await expect(drawer.getByRole("alert")).toHaveText("Enter a phone number for the new client.");
+    await drawer.locator("form").evaluate((form) => {
+      form.addEventListener("formdata", (event) => {
+        const rows = JSON.parse(String(event.formData.get("additionalServices")));
+        rows[0].time = "13:07";
+        event.formData.set("additionalServices", JSON.stringify(rows));
+      }, { once: true });
+    });
+    await confirm.click();
+    await expect(drawer.getByRole("alert")).toContainText("at 13:07");
+    await confirm.click();
+    await expect(drawer.getByRole("alert")).toContainText("at 10:45");
     const [existing] = await sql`SELECT count(*)::int AS count FROM bookings b JOIN customers c ON c.id=b.customer_id
       WHERE b.tenant_id=${tenantId} AND c.email=${clientEmail}`;
     expect(existing.count).toBe(0);
@@ -89,7 +156,19 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("link", { name: "View appointment" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("booking") === booking.id && !url.searchParams.has("create"));
     const saved = page.getByRole("complementary", { name: `Appointment with ${clientName}` });
-    await expect(saved.getByText(second.title, { exact: true })).toBeVisible();
+    const clientSummary = saved.getByRole("region", { name: "Client", exact: true });
+    await expect(clientSummary.getByRole("link", { name: clientEmail })).toBeVisible();
+    await expect(clientSummary.getByRole("link", { name: "Open client" })).toHaveAttribute("href", /\/app\/customers\?customer=/);
+    const bookingDetails = saved.getByRole("region", { name: "Booking details" });
+    await expect(bookingDetails).toContainText("Booked on");
+    await expect(bookingDetails).toContainText("Workspace");
+    const bookedServices = saved.getByRole("region", { name: "Booked services" });
+    await expect(bookedServices.getByRole("listitem")).toHaveCount(2);
+    const secondService = bookedServices.getByRole("listitem").filter({ hasText: second.title });
+    await expect(secondService).toContainText(`10:45–11:15 · ${secondary.name}`);
+    await expect(secondService).toContainText("30 min");
+    await saved.getByRole("button", { name: "More appointment actions" }).click();
+    await saved.getByRole("button", { name: "Reschedule", exact: true }).click();
     const schedule = saved.locator("section").filter({ has: page.getByRole("heading", { name: "Reschedule", exact: true }) });
     await expect(schedule.getByText("All services move together with their assigned providers.")).toBeVisible();
     await schedule.locator(".appointment-reschedule-picker__day").filter({ hasText: new RegExp(`${day.slice(-2)}$`) }).click();
@@ -118,13 +197,17 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     const currentService = async () => (await sql`SELECT service_id FROM bookings WHERE tenant_id=${tenantId} AND id=${booking.id}`)[0]?.service_id;
     await sql`UPDATE services SET price_cents=3500 WHERE tenant_id=${tenantId} AND id=${second.id}`;
     await edit.click();
+    await editor.getByRole("button", { name: /^Edit service 1/ }).click();
     await editor.getByRole("combobox", { name: "Choose service 1" }).fill(replacement.title);
     await editor.getByRole("option", { name: new RegExp(replacement.title) }).click();
     await editor.getByRole("combobox", { name: "Provider for service 1" }).fill(primary.name);
     await editor.getByRole("option", { name: primary.name, exact: true }).click();
-    await editor.getByLabel(/Start time for service 2/).fill("12:15");
+    await editor.getByRole("button", { name: /^Edit service 2/ }).click();
+    const editStart = editor.getByLabel(/Start time for service 2/);
+    await expect(editStart.getByRole("option", { name: "12:30", exact: true })).toHaveCount(1);
+    await editStart.selectOption("12:30");
     const [editBlock] = await sql`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
-      VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("12:15")}, ${time("12:45")}, 'confirmed') RETURNING id`;
+      VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("12:30")}, ${time("13:00")}, 'confirmed') RETURNING id`;
     await save.click();
     await expect(editor.getByRole("alert")).toContainText(`${second.title} is unavailable`);
     expect(await currentService()).toBe(first.id);
@@ -132,17 +215,19 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await sql`UPDATE booking_blocks SET state='released' WHERE tenant_id=${tenantId} AND id=${editBlock.id}`;
     await save.click();
     await expect(saved.getByText(replacement.title, { exact: true })).toBeVisible();
-    await expect(saved.getByText(new RegExp(`12:15–12:45 · ${secondary.name}`))).toBeVisible();
+    await expect(saved.getByText(new RegExp(`12:30–13:00 · ${secondary.name}`))).toBeVisible();
     expect(await currentService()).toBe(replacement.id);
     expect((await sql`SELECT booked_price_cents FROM booking_service_segments WHERE tenant_id=${tenantId} AND booking_id=${booking.id}`)[0]?.booked_price_cents).toBe(3000);
 
     await edit.click();
+    await editor.getByRole("button", { name: /^Edit service 2/ }).click();
     await editor.getByRole("button", { name: "Remove service 2" }).click();
     await save.click();
     await expect(saved.getByText(second.title, { exact: true })).toHaveCount(0);
     expect(await positions()).toHaveLength(0);
     await edit.click();
     await editor.getByRole("button", { name: "Add service", exact: true }).click();
+    await expect(editor.getByRole("combobox", { name: "Choose service 2" })).toBeFocused();
     await editor.getByRole("combobox", { name: "Choose service 2" }).fill(second.title);
     await editor.getByRole("option", { name: new RegExp(second.title) }).click();
     await editor.getByRole("combobox", { name: "Provider for service 2" }).fill(secondary.name);
@@ -158,11 +243,14 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await staleEditorPage.goto(`/nordic/app/calendars?day=${day}&booking=${booking.id}`);
     await staleEditorPage.getByRole("button", { name: "Edit services", exact: true }).click();
     const staleEditor = staleEditorPage.getByRole("region", { name: "Appointment services" });
-    await staleEditor.getByLabel(/Start time for service 2/).fill("12:30");
+    await staleEditor.getByRole("button", { name: /^Edit service 2/ }).click();
+    await staleEditor.getByLabel(/Start time for service 2/).selectOption("12:30");
 
     await page.goto(`/nordic/app/sales?booking=${booking.id}`);
     const checkout = page.getByRole("complementary", { name: `Sale details for ${clientName}` });
     await expect(checkout.getByText(second.title, { exact: false })).toBeVisible();
+    const reviewItems = checkout.getByRole("region", { name: "Checkout items" });
+    await expect(reviewItems.getByRole("listitem").filter({ hasText: second.title })).toContainText(`11:45–12:15 · ${secondary.name}`);
     await checkout.getByRole("link", { name: "Go to payments" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
     await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("125.00");
