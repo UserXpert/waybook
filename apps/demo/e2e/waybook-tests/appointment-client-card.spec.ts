@@ -98,8 +98,11 @@ test("saved card setup stays unpaid until the client confirms Stripe checkout", 
     await sale.getByRole("button", { name: "Continue in Stripe", exact: true }).click();
     await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_/);
     await page.goto(attempt.return_path);
-    await sale.getByRole("button", { name: "Finish checkout" }).click();
-    await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id = ${booking.id}`)[0].status).toBe("completed");
+    await expect.poll(async () => (await db`SELECT status, attendance_stage FROM bookings
+      WHERE tenant_id = ${tenantId} AND id = ${booking.id}`)[0]).toEqual({ status: "completed", attendance_stage: null });
+    expect(await db`SELECT id FROM booking_events
+      WHERE tenant_id = ${tenantId} AND booking_id = ${booking.id} AND event_type = 'booking.completed'`).toHaveLength(1);
+    await expect(sale.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
     expect(await db`SELECT id,method,amount_cents FROM payment_records WHERE booking_id = ${booking.id}`)
       .toEqual([{ id: attempt.id, method: "card", amount_cents: 65000 }]);
     const [appointmentSale] = await db`SELECT id FROM commerce_sales WHERE tenant_id = ${tenantId} AND booking_id = ${booking.id}`;

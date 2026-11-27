@@ -1,5 +1,6 @@
 import "server-only";
 
+import { completeSettledAppointment } from "./appointment-checkout-completion";
 import { controlDb, tenantDb } from "./database";
 import { stripeConnectSandbox, stripeSandboxConfig, type StripeSandboxConfig } from "./stripe-connect-api";
 import { stripeCheckoutLifetimeSeconds, stripeCheckoutSandbox, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
@@ -99,7 +100,15 @@ async function reconcileAttempt(
   session: SandboxCheckoutSession,
 ) {
   return db.begin(async (sql) => {
-    await lockAppointment(sql, tenantId, bookingId);
+    if (session.state === "paid") {
+      // Attendance edits lock the reservation before locking the appointment.
+      await sql.unsafe(`
+        SELECT block.id FROM bookings booking
+        JOIN booking_blocks block ON block.tenant_id = booking.tenant_id AND block.id = booking.booking_block_id
+        WHERE booking.tenant_id = $1 AND booking.id = $2 FOR UPDATE OF block
+      `, [tenantId, bookingId]);
+    }
+    const booking = await lockAppointment(sql, tenantId, bookingId);
     const stored = await currentAttempt(sql, tenantId, bookingId);
     if (!stored || stored.id !== attempt.id) return { state: "expired" as const };
     if (stored.state === "settled") return { state: "paid" as const };
@@ -126,6 +135,12 @@ async function reconcileAttempt(
       INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata)
       VALUES ($1, $2, 'payment.payment_recorded', 'payment_record', $3, $4::text::jsonb)
     `, [tenantId, stored.actorId, stored.id, metadata]);
+    if (booking.status === "arrived" && booking.stage === "checking_out") {
+      const [cart] = await sql.unsafe<{ exact: boolean }[]>(`
+        SELECT chargeable_cents = $3 AS exact FROM appointment_checkout_amounts($1, $2)
+      `, [tenantId, bookingId, stored.amountCents]);
+      if (cart?.exact) await completeSettledAppointment(sql, tenantId, bookingId, stored.actorId);
+    }
     return { state: "paid" as const };
   });
 }

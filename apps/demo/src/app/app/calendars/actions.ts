@@ -4,6 +4,7 @@ import { getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
 import { calendarBookingInterval, maxCalendarMoveTargets } from "@/lib/waybook/calendar-slot-time";
 import { activeAppointmentPayments, hasNonGiftCardPayment, hasOnlyManualAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
+import { completeSettledAppointment } from "@/lib/waybook/appointment-checkout-completion";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { TransactionSql } from "postgres";
@@ -835,6 +836,8 @@ async function persistBookingStatus(
       ) AS paid FROM appointment_checkout_amounts($1, $2) cart
     `, [tenant.id, booking.id]);
     if (!settlement?.paid) throw new Error("Settle the checkout balance before completing the appointment.");
+    await completeSettledAppointment(transaction, tenant.id, booking.id, actorId);
+    return null;
   }
 
   await transaction.unsafe("UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3", [status, booking.id, tenant.id]);

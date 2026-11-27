@@ -53,6 +53,18 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
     const receipts = (id: string) => db`SELECT id, amount_cents, method FROM payment_records WHERE booking_id = ${id}
       ORDER BY recorded_at, id`;
     const attempts = (id: string) => db`SELECT id, state, session_id FROM stripe_sandbox_checkout_attempts WHERE booking_id = ${id}`;
+    const expectCompleted = async (id: string) => {
+      await expect.poll(async () => (await db`SELECT status, attendance_stage FROM bookings
+        WHERE tenant_id = ${tenantId} AND id = ${id}`)[0]).toEqual({ status: "completed", attendance_stage: null });
+      expect(await db`SELECT id FROM booking_events
+        WHERE tenant_id = ${tenantId} AND booking_id = ${id} AND event_type = 'booking.completed'`).toHaveLength(1);
+      const [attempt] = await db`SELECT created_by_identity_id AS actor_identity_id FROM stripe_sandbox_checkout_attempts
+        WHERE tenant_id = ${tenantId} AND booking_id = ${id}`;
+      expect(attempt.actor_identity_id).toBeTruthy();
+      expect(await db`SELECT actor_identity_id FROM tenant_audit_events
+        WHERE tenant_id = ${tenantId} AND target_type = 'booking' AND target_id = ${id}
+          AND action = 'booking.completed'`).toEqual([attempt]);
+    };
 
     for (const [index, id] of appointments.entries()) {
       const paymentPath = `/nordic/app/sales?booking=${id}&step=payment`;
@@ -117,10 +129,11 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
             expect(await receipts(id)).toEqual([receipt, importedReceipt]);
             expect(await Promise.all([deliver(), deliver()])).toEqual([204, 204]);
             expect(await receipts(id)).toEqual([receipt, importedReceipt]);
+            await expectCompleted(id);
             await page.reload();
             await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
             await expect(sale.getByText("Refund recorded", { exact: true }).locator("..")).toContainText("Stripe sandbox");
-            await sale.getByRole("button", { name: "Finish checkout" }).click();
+            await expect(sale.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
             const refundAmount = sale.getByLabel("Refund amount (DKK)");
             const refundButton = sale.getByRole("button", { name: "Refund in Stripe sandbox" });
             for (const [amount, status] of [["12.02", "failed"], ["13.03", "succeeded"]]) {
@@ -216,8 +229,8 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
         expect(await receipts(id)).toEqual(receipt);
         await expect(db`INSERT INTO payment_records (tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id)
           VALUES (${tenantId}, ${id}, 'refund', 100, 'cash', ${actor.id})`).rejects.toThrow("must be reconciled through Stripe");
-        await sale.getByRole("button", { name: "Finish checkout" }).click();
-        await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id = ${id}`)[0].status).toBe("completed");
+        await expectCompleted(id);
+        await expect(sale.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
         const refundAmount = sale.getByLabel("Refund amount (DKK)");
         const submitRefund = sale.getByRole("button", { name: "Refund in Stripe sandbox" });
         const checkRefund = sale.getByRole("button", { name: "Check refund status" });
