@@ -18,11 +18,12 @@ export function PaymentMethodOptions() {
   return <>{paymentMethods.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</>;
 }
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, giftCardHref }: {
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, requireFullBalance = false, giftCardHref }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
   checkout?: boolean;
+  requireFullBalance?: boolean;
   giftCardHref?: string;
 }) {
   const router = useRouter();
@@ -39,7 +40,8 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const settlingGiftCard = kind === "payment" && canAddPayment && payments.length > 0;
   const remainingAmount = kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "";
-  const amount = settlingGiftCard ? remainingAmount : draftAmount ?? remainingAmount;
+  const fixedAmount = settlingGiftCard || requireFullBalance;
+  const amount = fixedAmount ? remainingAmount : draftAmount ?? remainingAmount;
   const editingDisabled = pending || retryRequired;
   const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Boolean(method) && Number(amount) > 0;
 
@@ -101,7 +103,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
       {!checkout ? <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
         <PaymentMethodOptions />
       </select></label> : null}
-      <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} readOnly={settlingGiftCard} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
+      <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} readOnly={fixedAmount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
     </div>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}

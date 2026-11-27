@@ -131,6 +131,11 @@ for (const [bookedCents, productCents] of [[25050, 0], [0, 0], [0, 3750]]) test(
     } finally {
       await staleTab.close();
     }
+    const editClose = drawer.getByRole("button", { name: "Close editing", exact: true });
+    await expect(close).toHaveCount(0);
+    await editClose.click();
+    await expect(drawer.getByRole("button", { name: "Save changes" })).toHaveCount(0);
+    await expect(drawer.getByRole("button", { name: "Edit appointment" })).toBeVisible();
     await close.click();
     await expect(drawer).toHaveCount(0);
   } finally {

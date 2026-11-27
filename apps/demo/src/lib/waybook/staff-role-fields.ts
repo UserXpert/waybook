@@ -10,7 +10,10 @@ export const staffPermissionSections = [{
   ],
 }, {
   title: "Operations",
-  items: [["canManageWaitlist", "Can manage waitlist", "Add, change, and progress waitlist entries."]],
+  items: [
+    ["canManageWaitlist", "Can manage waitlist", "Add, change, and progress waitlist entries."],
+    ["canCheckoutAppointments", "Can check out appointments", "Review assigned appointments, record payments received, and finish checkout. Access to other staff appointments requires team calendar and appointment management permissions."],
+  ],
 }, {
   title: "Clients",
   items: [
