@@ -111,6 +111,25 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await expect.poll(() => state(early.id)).toEqual({ status: "completed", attendance_stage: null });
     expect((await db`SELECT starts_at > now() AS early FROM bookings WHERE id=${early.id}`)[0].early).toBe(true);
     expect(await db`SELECT amount_cents FROM payment_records WHERE tenant_id=${tenantId} AND booking_id=${early.id}`).toEqual([{ amount_cents: 6500 }]);
+    const viewReceipt = earlySale.getByRole("link", { name: "View receipt", exact: true });
+    await viewReceipt.click();
+    const receiptUrl = page.url();
+    await expect(page.getByRole("heading", { name: "Appointment receipt" })).toBeVisible();
+    await expect(page.getByRole("table", { name: "Items" }).getByRole("row", { name: /Checkout total/ })).toContainText("65,00");
+    await expect(page.getByRole("table", { name: "Payments and refunds" }).getByRole("row", { name: /Payment · Cash/ })).toContainText("65,00");
+    await expect(page.getByText(early.name, { exact: true })).toBeVisible();
+    await page.evaluate(() => { window.print = () => { document.body.dataset.receiptPrinted = "yes"; }; });
+    await page.getByRole("button", { name: "Print receipt" }).click();
+    await expect(page.locator("body")).toHaveAttribute("data-receipt-printed", "yes");
+    await page.emulateMedia({ media: "print" });
+    await expect(page.getByRole("navigation", { name: "Receipt actions" })).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Appointment receipt" })).toBeVisible();
+    const pdf = await page.pdf();
+    expect(pdf.subarray(0, 4).toString()).toBe("%PDF");
+    await page.emulateMedia({ media: "screen" });
+    await page.getByRole("link", { name: "Back to sale" }).click();
+    await expect(viewReceipt).toBeVisible();
+    expect((await page.request.get(receiptUrl.replace("/nordic/", "/copenhagen/"))).status()).toBe(404);
     const providerEmail = `arrival-staff-${tag}@example.test`;
     const [identity] = await control`INSERT INTO identities (email, password_hash, display_name)
       SELECT ${providerEmail}, password_hash, 'Check-in staff' FROM identities WHERE email='owner@nordic.local' RETURNING id`;
@@ -123,6 +142,9 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await staffPage.getByPlaceholder("Enter your password").fill("waybook-local-only");
     await staffPage.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(staffPage).toHaveURL(/\/nordic\/app\/calendars/);
+    await staffPage.goto(receiptUrl);
+    await expect(staffPage).not.toHaveURL(/\/sales\/receipt/);
+    await expect(staffPage.getByRole("heading", { name: "Appointment receipt" })).toHaveCount(0);
     const directUrl = new URL(`/nordic/app/calendars?booking=${direct.id}`, page.url()).href;
     await staffPage.goto(directUrl);
     const directDrawer = staffPage.getByRole("complementary", { name: `Appointment with ${direct.name}` });

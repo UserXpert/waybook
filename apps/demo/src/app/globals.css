@@ -5234,3 +5234,59 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
     border-color: var(--waybook-field-focus-border) !important;
   }
 }
+
+.appointment-receipt {
+  width: min(calc(100% - 2rem), 42rem);
+  margin: 2rem auto;
+  color: var(--ice-ink, var(--wb-dark-text, #202125));
+}
+.appointment-receipt nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+.appointment-receipt nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .6rem .8rem;
+  border: 1px solid var(--ice-edge, var(--wb-dark-border, #dadbe0));
+  border-radius: .45rem;
+  color: inherit;
+  background: var(--wb-dark-raised, #fff);
+  font: inherit;
+  cursor: pointer;
+}
+.appointment-receipt nav a { color: inherit; }
+.appointment-receipt article {
+  padding: clamp(1rem, 4vw, 2.25rem);
+  border: 1px solid var(--ice-edge, var(--wb-dark-border, #dadbe0));
+  background: var(--wb-dark-raised, #fff);
+  border-radius: .9rem;
+}
+.appointment-receipt header p,
+.appointment-receipt h1 { margin: 0; }
+.appointment-receipt h1 { margin-top: .25rem; font-size: clamp(1.4rem, 5vw, 2rem); }
+.appointment-receipt dl { display: grid; gap: .45rem; margin: 1.25rem 0; }
+.appointment-receipt dl div { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: .5rem; }
+.appointment-receipt dd { margin: 0; overflow-wrap: anywhere; }
+.appointment-receipt table { width: 100%; border-collapse: collapse; margin: 1.5rem 0 0; font-size: .9rem; }
+.appointment-receipt caption { margin-bottom: .5rem; text-align: left; font-size: 1rem; font-weight: 600; }
+.appointment-receipt :is(th, td) {
+  padding: .55rem 0;
+  border-bottom: 1px solid var(--ice-edge, var(--wb-dark-border, #dadbe0));
+  text-align: left;
+}
+.appointment-receipt :is(th, td):last-child { padding-inline-start: .65rem; text-align: right; white-space: nowrap; }
+.appointment-receipt tfoot { font-weight: 600; }
+.appointment-receipt td small { display: block; margin-top: .15rem; }
+
+@media print {
+  body:has(.appointment-receipt) { background: white; }
+  .appointment-receipt { width: 100%; margin: 0; color: #171717; }
+  .appointment-receipt nav { display: none; }
+  .appointment-receipt article { background: white; border: 0; padding: 0; }
+  .appointment-receipt tr { break-inside: avoid; }
+}
