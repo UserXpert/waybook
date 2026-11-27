@@ -248,8 +248,9 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
         expect(await attempts(id)).toEqual([{ id: reserved.id, state: "expired", session_id: sessionId }]);
         expect(await receipts(id)).toEqual([]);
         await sale.getByRole("radio", { name: "Cash", exact: true }).check();
-        await sale.getByRole("button", { name: "Record payment" }).click();
-        await expect(sale.getByRole("button", { name: "Finish checkout" })).toBeVisible();
+        await sale.getByRole("button", { name: "Record payment and finish checkout", exact: true }).click();
+        await expect(sale.getByText("Paid SALE", { exact: true })).toBeVisible();
+        expect((await db`SELECT status FROM bookings WHERE id=${id}`)[0].status).toBe("completed");
         expect(await receipts(id)).toEqual([{ id: expect.any(String), amount_cents: 6502, method: "cash" }]);
       }
     }
