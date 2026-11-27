@@ -156,6 +156,8 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("link", { name: "View appointment" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("booking") === booking.id && !url.searchParams.has("create"));
     const saved = page.getByRole("complementary", { name: `Appointment with ${clientName}` });
+    const scheduleSummary = saved.getByRole("region", { name: "Schedule", exact: true });
+    await expect(scheduleSummary).toContainText("10:00–11:15");
     const clientSummary = saved.getByRole("region", { name: "Client", exact: true });
     await expect(clientSummary.getByRole("link", { name: clientEmail })).toBeVisible();
     await expect(clientSummary.getByRole("link", { name: "Open client" })).toHaveAttribute("href", /\/app\/customers\?customer=/);
@@ -189,6 +191,7 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await sql`UPDATE booking_blocks SET state='released' WHERE tenant_id=${tenantId} AND id=${laterBlock.id}`;
     await move.click();
     await expect(saved.getByText(new RegExp(`11:45–12:15 · ${secondary.name}`))).toBeVisible();
+    await expect(scheduleSummary).toContainText("11:00–12:15");
     expect((await positions())[0]).toEqual({ starts_at: time("11:00"), added_start: time("11:45"), added_provider: secondary.id });
 
     await saved.getByRole("button", { name: "Close rescheduling", exact: true }).click();
@@ -282,9 +285,9 @@ test("book, move, pay, and scope the provider view of linked services", async ({
       VALUES (${tenantId}, ${`Unassigned provider ${tag}`}, ${`unassigned-${tag}@example.test`}, 'staff') RETURNING id`;
     await sql`INSERT INTO team_member_locations (tenant_id, team_member_id, location_id) VALUES (${tenantId}, ${other.id}, ${location.id})`;
     const roleCases = [
-      { provider: primary.id, email: `primary-login-${tag}@example.test`, own: replacement.title, peer: second.title },
-      { provider: secondary.id, email: `secondary-login-${tag}@example.test`, own: second.title, peer: replacement.title },
-      { provider: other.id, email: `unassigned-login-${tag}@example.test`, own: null, peer: null },
+      { provider: primary.id, email: `primary-login-${tag}@example.test`, own: replacement.title, peer: second.title, time: "11:00–11:45" },
+      { provider: secondary.id, email: `secondary-login-${tag}@example.test`, own: second.title, peer: replacement.title, time: "11:45–12:15" },
+      { provider: other.id, email: `unassigned-login-${tag}@example.test`, own: null, peer: null, time: "" },
     ];
     for (const staff of roleCases) {
       const [identity] = await control`INSERT INTO identities (email, password_hash, display_name)
@@ -311,6 +314,7 @@ test("book, move, pay, and scope the provider view of linked services", async ({
         // Hard navigation must use the same permissions and service projection.
         await page.goto(`/nordic/app/calendars?day=${day}&booking=${booking.id}`);
         await expect(saved.getByText(staff.own, { exact: true })).toBeVisible();
+        await expect(scheduleSummary).toContainText(staff.time);
         await expect(saved.getByText(staff.peer!, { exact: true })).toHaveCount(0);
         await expect(saved.getByText(clientEmail)).toHaveCount(0);
         await expect(saved.getByText("You have view-only access to this appointment.")).toBeVisible();
