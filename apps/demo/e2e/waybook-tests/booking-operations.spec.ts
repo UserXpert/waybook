@@ -32,9 +32,9 @@ for (const workspace of workspaces) {
       SELECT is_enabled FROM tenant_feature_states WHERE tenant_id=${tenantId} AND feature_key='resources'
     `;
     const [primary] = await sql<{ id: string }[]>`SELECT id FROM locations WHERE tenant_id=${tenantId} AND slug='primary'`;
-    const [location] = await sql<{ id: string }[]>`
+    const [location] = await sql<{ id: string; name: string }[]>`
       INSERT INTO locations (tenant_id, slug, name, timezone)
-      VALUES (${tenantId}, ${`qa-${tag}`}, ${`Z QA branch ${tag}`}, ${timezone}) RETURNING id
+      VALUES (${tenantId}, ${`qa-${tag}`}, ${`Z QA branch ${tag}`}, ${timezone}) RETURNING id, name
     `;
     const [service] = await sql<{ id: string }[]>`
       INSERT INTO services (tenant_id, slug, title, duration_minutes)
@@ -108,11 +108,23 @@ for (const workspace of workspaces) {
         await slot.focus();
         await slot.press("Enter");
         const form = page.getByRole("complementary", { name: "New appointment" });
+        const clientLookup = form.getByRole("combobox", { name: /^Find a / });
+        await expect(clientLookup).toBeFocused();
+        const selectedSlot = form.getByRole("region", { name: "Selected calendar slot" });
+        const changeSlot = selectedSlot.getByRole("button", { name: "Change slot" });
+        await expect(selectedSlot).toContainText(member.name);
+        await expect(selectedSlot).toContainText("10:00");
+        await expect(form.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
+        await page.keyboard.press("Shift+Tab");
+        await expect(changeSlot).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
         await expect(form.getByRole("link", { name: "Close new appointment" })).toBeFocused();
         for (let step = 0; step < 8; step += 1) {
           await page.keyboard.press("Tab");
           await expect(form.locator(":focus")).toHaveCount(1);
         }
+        await changeSlot.click();
+        await expect(form.getByRole("region", { name: "Appointment schedule" })).toBeVisible();
         const locationPicker = form.getByRole("combobox", { name: "Location" });
         await locationPicker.fill("Unmatched location");
         await expect(locationPicker).toHaveAttribute("aria-expanded", "true");
@@ -128,13 +140,26 @@ for (const workspace of workspaces) {
           await form.getByRole("combobox", { name: /^Find a / }).fill(customerNames[index]);
           await form.getByRole("option", { name: new RegExp(`^Add .* “${customerNames[index]}`) }).click();
           await expect(form.getByLabel(/^(Client|Patient) name$/)).toHaveValue(customerNames[index]);
+          await expect(form.getByLabel("Email", { exact: true })).toBeFocused();
+          await form.getByRole("button", { name: "Back to search" }).click();
+          await expect(clientLookup).toBeFocused();
+          await expect(selectedSlot).toContainText(location.name);
+          await expect(selectedSlot).toContainText("10:00");
+          await form.getByRole("button", { name: /^Add (client|patient)$/i }).click();
+          await expect(form.getByLabel("Email", { exact: true })).toBeFocused();
           await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
         } else {
           await form.getByRole("combobox", { name: /^Find a / }).fill(existingEmail);
           await form.getByRole("option", { name: new RegExp(`^${customerNames[index]}`) }).click();
-          await expect(form.getByRole("button", { name: "Change", exact: true })).toBeVisible();
+          const change = form.getByRole("button", { name: "Change", exact: true });
+          await expect(change).toBeFocused();
+          await change.click();
+          await expect(clientLookup).toBeFocused();
+          await clientLookup.fill(existingEmail);
+          await form.getByRole("option", { name: new RegExp(`^${customerNames[index]}`) }).click();
+          await expect(change).toBeVisible();
         }
-        await form.getByRole("button", { name: "10:00", exact: true }).click();
+        await expect(form.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
         await form.getByRole("button", { name: "Confirm appointment" }).click();
         await expect(form.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
         expect(await availableAt(member.id, "10:00")).toBe(false);

@@ -59,7 +59,7 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await expect(page).toHaveURL(/\/nordic\/app/);
     await page.goto(`/nordic/app/calendars?${new URLSearchParams({
       view: "team", location: location.id, day, service: first.id, employee: primary.id,
-      createStaff: primary.id, create: `${day}T10:00`,
+      createStaff: primary.id, create: `${day}T10:00`, fromSlot: "1",
     })}`);
     const drawer = page.getByRole("complementary", { name: "New appointment" });
     const clientSearch = drawer.getByRole("combobox", { name: /^Find a / });
@@ -74,6 +74,14 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("button", { name: "Add client", exact: true }).click();
     await drawer.getByLabel("Client name").fill(clientName);
     await drawer.getByLabel("Email", { exact: true }).fill(clientEmail);
+    const originalService = drawer.getByRole("combobox", { name: "Service", exact: true });
+    await originalService.fill(second.title);
+    await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
+    await expect(drawer.getByText(/selected time is unavailable/)).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
+    await expect(drawer.getByRole("region", { name: "Selected calendar slot" })).toContainText("10:00");
+    await originalService.fill(first.title);
+    await drawer.getByRole("option", { name: new RegExp(first.title) }).click();
     await drawer.getByRole("button", { name: "Add service", exact: true }).click();
     const nextService = drawer.getByRole("combobox", { name: "Service 2", exact: true });
     const nextProvider = drawer.getByRole("combobox", { name: "Provider for service 2" });
@@ -88,19 +96,21 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await nextService.press("ArrowDown");
     await expect(replacementOption).toHaveAttribute("aria-selected", "true");
     await nextService.press("Enter");
-    await expect(nextProvider).toHaveValue(primary.name);
+    await expect(drawer.getByText(`${primary.name} · 10:45 · 45 min`, { exact: true })).toBeVisible();
+    await expect(nextProvider).toHaveCount(0);
     await nextService.fill(replacement.title[0]);
     await expect(replacementOption).toBeVisible();
     await replacementOption.click();
     await expect(nextService).toHaveValue(`${replacement.title} · 45 min`);
-    await expect(nextProvider).toHaveValue(primary.name);
+    await expect(drawer.getByText(`${primary.name} · 10:45 · 45 min`, { exact: true })).toBeVisible();
+    await expect(nextProvider).toHaveCount(0);
 
     await nextService.fill(second.title);
     await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
     await expect(nextProvider).toHaveValue("");
     await nextProvider.fill(secondary.name);
     await drawer.getByRole("option", { name: secondary.name, exact: true }).click();
-    await expect(drawer.getByText("Defaults to 10:45")).toBeVisible();
+    await expect(drawer.getByText(`${secondary.name} · 10:45 · 30 min`, { exact: true })).toBeVisible();
     await expect(drawer.getByText(/75 min/)).toBeVisible();
     await drawer.getByRole("button", { name: "Confirm appointment" }).click();
     await expect(drawer.getByRole("alert")).toContainText(`${second.title} is unavailable`);

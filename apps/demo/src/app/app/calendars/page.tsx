@@ -230,6 +230,7 @@ export default async function CalendarsPage({
     after?: string;
     before?: string;
     createStaff?: string;
+    fromSlot?: string;
     showOffShift?: string;
     monthDay?: string;
   }>;
@@ -249,6 +250,7 @@ export default async function CalendarsPage({
     after,
     before,
     createStaff,
+    fromSlot,
     showOffShift,
   } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
@@ -606,6 +608,7 @@ export default async function CalendarsPage({
     after?: string;
     before?: string;
     createStaff?: string;
+    fromSlot?: boolean;
     monthDay?: string;
   }) => {
     const nextView = next.view ?? calendarView;
@@ -636,6 +639,7 @@ export default async function CalendarsPage({
     if (next.after) params.set("after", next.after);
     if (next.before) params.set("before", next.before);
     if (next.createStaff) params.set("createStaff", next.createStaff);
+    if (next.fromSlot) params.set("fromSlot", "1");
     return `${tenantPath(tenantSlug, "/app/calendars")}?${params.toString()}`;
   };
   // A selected staff member is read as a seven-row schedule: weekdays occupy
@@ -928,6 +932,7 @@ export default async function CalendarsPage({
                                 service: serviceForBookableSlot.get(slotKey),
                                 create: `${teamDay}T${time}`,
                                 createStaff: member.id,
+                                fromSlot: true,
                               })}
                               key={`${member.id}-${index}`}
                             />
@@ -1142,6 +1147,7 @@ export default async function CalendarsPage({
                                 day: undefined,
                                 service: serviceForBookableSlot.get(slotKey),
                                 create: `${day}T${time}`,
+                                fromSlot: true,
                               })}
                               key={`${day}-${index}`}
                             />
@@ -1227,7 +1233,7 @@ export default async function CalendarsPage({
         initialDetail={initialDetail}
       />
       {requestedAppointment && createMember && selectedLocation ? (
-        <TenantEditorDialog title="New appointment" closeHref={href({})} cycleFocus>
+        <TenantEditorDialog title="New appointment" closeHref={href({})} initialField="appointmentClientSearch" cycleFocus>
           <aside
             className="tenant-drawer appointment-drawer"
             aria-label="New appointment"
@@ -1235,10 +1241,10 @@ export default async function CalendarsPage({
             <header>
               <div>
                 <h2>New appointment</h2>
-                <span>
+                {fromSlot === "1" && !waitlistEntryId ? null : <span>
                   {createMember.name} · {selectedLocation.name} ·{" "}
                   {requestedAppointment.replace("T", " ")}
-                </span>
+                </span>}
               </div>
               <TenantEditorClose label="Close new appointment" href={href({})}>
                 ×
@@ -1251,6 +1257,7 @@ export default async function CalendarsPage({
                 initialMember={createMember}
                 initialService={manualService ?? null}
                 fixedStaff={!canManage && !permissions.canManageTeamAppointments}
+                fromCalendarSlot={fromSlot === "1" && !waitlistEntryId}
                 defaultDate={requestedAppointment.slice(0, 10)}
                 defaultTime={requestedAppointment.slice(11)}
                 timezone={tenant.timezone}

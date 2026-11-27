@@ -5034,3 +5034,31 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   .calendar-appointment-drawer__client-heading { grid-template-columns: auto minmax(0, 1fr); }
   .calendar-appointment-drawer__client-heading a { grid-column: 2; justify-self: start; }
 }
+
+.manual-appointment__slot-summary,
+.manual-appointment__service-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem .75rem;
+  font-size: .8rem;
+}
+.manual-appointment__slot-summary > div {
+  display: grid;
+  gap: .18rem;
+  min-width: 0;
+}
+.manual-appointment__slot-summary span,
+.manual-appointment__service-summary span {
+  color: var(--ice-muted, var(--wb-dark-muted, #606065));
+}
+
+:root[data-waybook-theme] .tenant-dashboard-page .appointment-drawer .tenant-drawer-form.manual-appointment--slot button.waybook-action--secondary[type="button"]:not(:disabled) {
+  border-color: var(--ice-edge, var(--wb-dark-border, #d4d4d4));
+  background: var(--wb-dark-raised, #fff);
+  color: var(--ice-ink, var(--wb-dark-text, #232329));
+}
+:root[data-waybook-theme] .tenant-dashboard-page .appointment-drawer .tenant-drawer-form.manual-appointment--slot button.waybook-action--secondary[type="button"]:not(:disabled):is(:hover, :focus-visible) {
+  background: var(--ice-field, var(--wb-dark-hover, #edf0f3));
+}

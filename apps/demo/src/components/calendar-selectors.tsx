@@ -14,6 +14,7 @@ type SearchResult<T> = { items: T[] };
 
 export type SearchPickerProps<T extends { id: string }> = {
   label: string;
+  name?: string;
   selectedLabel: string;
   placeholder: string;
   searchUrl: (query: string) => string;
@@ -30,6 +31,7 @@ export type SearchPickerProps<T extends { id: string }> = {
 /** A bounded async picker that searches after two characters by default. */
 export function SearchPicker<T extends { id: string }>({
   label,
+  name,
   selectedLabel,
   placeholder,
   searchUrl,
@@ -127,6 +129,7 @@ export function SearchPicker<T extends { id: string }>({
       <label htmlFor={listId}>{label}</label>
       <input
         id={listId}
+        name={name}
         value={query}
         placeholder={placeholder}
         role="combobox"

@@ -89,7 +89,7 @@ for (const workspace of workspaces) {
         const create = async (name: string, email: string, time: string) => {
           await createPanel.getByLabel(/^(client|patient) name$/i).fill(name);
           await createPanel.getByLabel("Email", { exact: true }).fill(email);
-          await createPanel.getByRole("button", { name: time, exact: true }).click();
+          await expect(createPanel.getByRole("region", { name: "Selected calendar slot" })).toContainText(time);
           await createPanel.getByRole("button", { name: "Confirm appointment" }).click();
           await expect(createPanel.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
         };
@@ -103,9 +103,12 @@ for (const workspace of workspaces) {
         await page.goto(board);
         await expect(slot(colleague.id, "10:00")).toHaveCount(0);
         await slot(own.id, "10:00").click();
+        await expect(createPanel.getByRole("region", { name: "Selected calendar slot" })).toContainText(own.name);
+        await createPanel.getByRole("button", { name: "Change slot" }).click();
         const fixedStaff = createPanel.getByRole("textbox").filter({ visible: true });
         await expect(createPanel.locator("input[readonly]")).toHaveValue(own.name);
         await expect(fixedStaff.and(createPanel.locator("input[readonly]"))).toBeVisible();
+        await createPanel.getByRole("button", { name: "Hide slot options" }).click();
         await create(ownCustomer, `calendar-own-${tag}@example.test`, "10:00");
         const ownBooking = await getBooking(ownCustomer);
         expect(ownBooking).toMatchObject({ memberId: own.id, startsAt: startsAt("10:00"), status: "confirmed" });
