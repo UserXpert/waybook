@@ -33,6 +33,8 @@ test("an owner can select a profile photo and oversized files are rejected", asy
   const photoControls = profile.getByRole("button", { name: /^Change photo for / });
 
   for (const name of ["Z E2E roster 01", "Z E2E roster 02", "Sofie Andersen"]) {
+    await directory.getByRole("searchbox").fill(name);
+    await directory.getByRole("button", { name: "Search", exact: true }).click();
     await directory.getByRole("link", { name: new RegExp(name) }).click();
     await expect(profile.getByRole("heading", { name, exact: true })).toBeVisible();
     await expect(photoControls).toHaveCount(1);
@@ -164,11 +166,13 @@ test("account menu photos stay with the owner across browser sessions", async ({
 test("switching staff profiles keeps exactly one avatar for the selected member", async ({ page }) => {
   const { default: postgres } = await import("postgres");
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
-  const members = await db<{ id: string; name: string; photoDataUrl: string | null }[]>`
-    SELECT id,name,photo_data_url AS "photoDataUrl" FROM team_members
-    WHERE email IN ('e2e-roster-1@example.test','e2e-roster-2@example.test','e2e-roster-3@example.test') ORDER BY name
-  `;
-  const originalPhotos = new Map(members.map((member) => [member.id, member.photoDataUrl]));
+  // Keep the three profiles on the first page even after the booking and checkout cases add staff.
+  const members = (await db<{ id: string; name: string; photoDataUrl: string | null }[]>`
+    INSERT INTO team_members (tenant_id, role, name, email)
+    SELECT tenant_id, 'staff', 'A0 Photo QA ' || suffix, 'photo-history-' || gen_random_uuid() || '@example.test'
+    FROM tenant_settings CROSS JOIN generate_series(1, 3) AS suffix
+    RETURNING id, name, photo_data_url AS "photoDataUrl"
+  `).sort((left, right) => left.name.localeCompare(right.name));
   try {
     expect(members).toHaveLength(3);
     await page.goto("/login");
@@ -209,9 +213,7 @@ test("switching staff profiles keeps exactly one avatar for the selected member"
     await expectProfile(members[2]);
   } finally {
     try {
-      for (const [id, photoDataUrl] of originalPhotos) {
-        await db`UPDATE team_members SET photo_data_url=${photoDataUrl} WHERE id=${id}`;
-      }
+      await db`DELETE FROM team_members WHERE id = ANY(${members.map((member) => member.id)}::uuid[])`;
     } finally {
       await db.end();
     }
