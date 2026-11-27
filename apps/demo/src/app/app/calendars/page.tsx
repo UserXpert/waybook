@@ -9,6 +9,7 @@ import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
 import { CalendarCurrentTime } from "@/components/calendar-current-time";
 import { getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
+import { calendarBookingTime } from "@/lib/waybook/calendar-timezones";
 import { calendarHolidays } from "@/lib/waybook/calendar-holidays";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
 import { CalendarActiveFilters } from "@/components/calendar-active-filters";
@@ -20,7 +21,7 @@ import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { staffAvailableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
-import { calendarBookingInterval, calendarRosterWindowSize, isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
+import { calendarBookingInterval, calendarRosterWindowSize } from "@/lib/waybook/calendar-slot-time";
 import { calendarGridBounds, calendarTimePosition } from "@/lib/waybook/calendar-grid-bounds";
 import { calculateStaffSlots, type ScheduleOverride, type ScheduleRule } from "@/lib/waybook/availability";
 import { tenantDb } from "@/lib/waybook/database";
@@ -41,7 +42,7 @@ type Member = {
   calendarColor: string;
 };
 type Service = { id: string; title: string; durationMinutes: number; priceCents: number };
-type Location = { id: string; name: string };
+type Location = { id: string; name: string; timezone: string };
 type ManualAssignment = {
   locationId: string;
   teamMemberId: string;
@@ -123,11 +124,10 @@ function dayOfWeek(dateKey: string) {
 /** Calendar day navigation follows the location's configured working days.
  * A direct URL may still show a closed day for historical review, but toolbar
  * navigation never strands reception on an empty schedule. */
-function nextWorkingDay(dateKey: string, direction: -1 | 1, workingDays: Set<number>) {
-  if (workingDays.size === 0) return addDays(dateKey, direction);
+function nextWorkingDay(dateKey: string, direction: -1 | 1, isWorkingDay: (day: string) => boolean) {
   for (let distance = 1; distance <= 7; distance += 1) {
     const candidate = addDays(dateKey, distance * direction);
-    if (workingDays.has(dayOfWeek(candidate))) return candidate;
+    if (isWorkingDay(candidate)) return candidate;
   }
   return addDays(dateKey, direction);
 }
@@ -162,6 +162,12 @@ function localMinutes(date: Date, timezone: string) {
 function localDateTimeKey(date: Date, timezone: string) {
   const minutes = localMinutes(date, timezone);
   return `${localDateKey(date, timezone)}T${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function clipSchedule(entry: ScheduleEntry, start: Date, end: Date): ScheduleEntry[] {
+  const from = Math.max(Date.parse(entry.startTime), +start);
+  const to = Math.min(Date.parse(entry.endTime), +end);
+  return from < to ? [{ startTime: new Date(from).toISOString(), endTime: new Date(to).toISOString() }] : [];
 }
 
 function overlapsScheduledAppointment(
@@ -259,6 +265,8 @@ export default async function CalendarsPage({
   const { tenant, membership } = await requireTenantWorkspace();
   const [terms, display] = await Promise.all([getTenantTerminology(tenant), getCalendarDisplay(tenant.id)]);
   const { interval } = display;
+  const bookingTimezone = tenant.timezone;
+  const calendarTimezone = display.timezone ?? bookingTimezone;
   const slotsPerHour = 60 / interval;
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requirePageFeature(tenant.id, "calendars");
@@ -276,19 +284,18 @@ export default async function CalendarsPage({
   const visibleBooking = calendarBookingVisibility(db, canViewTeam, permissions.teamMemberId);
   const requestedLocationId = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(location ?? "") ? location! : null;
   const requestedLocation = requestedLocationId
-    ? (await db<Location[]>`SELECT id,name FROM locations WHERE tenant_id=${tenant.id} AND id=${requestedLocationId} AND is_active=TRUE LIMIT 1`)[0]
+    ? (await db<Location[]>`SELECT id,name,timezone FROM locations WHERE tenant_id=${tenant.id} AND id=${requestedLocationId} AND is_active=TRUE LIMIT 1`)[0]
     : undefined;
   const bookingLocation = !requestedLocation && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId ?? "")
-    ? (await db<Location[]>`SELECT l.id,l.name FROM bookings b JOIN locations l ON l.id=b.location_id AND l.tenant_id=b.tenant_id WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId!} AND l.is_active=TRUE AND ${visibleBooking} LIMIT 1`)[0]
+    ? (await db<Location[]>`SELECT l.id,l.name,l.timezone FROM bookings b JOIN locations l ON l.id=b.location_id AND l.tenant_id=b.tenant_id WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId!} AND l.is_active=TRUE AND ${visibleBooking} LIMIT 1`)[0]
     : undefined;
-  const requestedDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : localDateKey(new Date(), tenant.timezone);
+  const requestedDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : localDateKey(new Date(), calendarTimezone);
   const selectedLocation = requestedLocation
     ?? bookingLocation
-    ?? (await db<Location[]>`SELECT l.id,l.name FROM locations l WHERE l.tenant_id=${tenant.id} AND l.is_active=TRUE ORDER BY CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.tenant_id=l.tenant_id AND b.location_id=l.id AND b.status <> 'cancelled' AND b.starts_at >= (${requestedDay}::date::timestamp AT TIME ZONE ${tenant.timezone}) AND b.starts_at < ((${requestedDay}::date + 1)::timestamp AT TIME ZONE ${tenant.timezone}) AND ${visibleBooking}) THEN 0 ELSE 1 END, CASE WHEN l.slug='primary' THEN 0 ELSE 1 END,l.name LIMIT 1`)[0];
+    ?? (await db<Location[]>`SELECT l.id,l.name,l.timezone FROM locations l WHERE l.tenant_id=${tenant.id} AND l.is_active=TRUE ORDER BY CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.tenant_id=l.tenant_id AND b.location_id=l.id AND b.status <> 'cancelled' AND b.starts_at >= ${fromZonedTime(requestedDay + 'T00:00', calendarTimezone)} AND b.starts_at < ${fromZonedTime(addDays(requestedDay, 1) + 'T00:00', calendarTimezone)} AND ${visibleBooking}) THEN 0 ELSE 1 END, CASE WHEN l.slug='primary' THEN 0 ELSE 1 END,l.name LIMIT 1`)[0];
   const locationHours = selectedLocation
     ? await db<LocationHours[]>`SELECT day_of_week AS "dayOfWeek",start_time AS "startTime",end_time AS "endTime" FROM location_hours WHERE tenant_id = ${tenant.id} AND location_id = ${selectedLocation.id} ORDER BY day_of_week`
     : [] as LocationHours[];
-  const locationWorkingDays = locationHours;
   const staffSearch = (staffFilter ?? "").trim().slice(0, 100);
   const isMemberId = (value: string | undefined) => /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value ?? "");
   const staffAfter = isMemberId(after) ? after! : null;
@@ -338,7 +345,7 @@ export default async function CalendarsPage({
     : [];
   const selectedCustomer = directCustomer ?? waitlistCustomer;
   const calendarNow = new Date();
-  const tenantToday = localDateKey(calendarNow, tenant.timezone);
+  const calendarToday = localDateKey(calendarNow, calendarTimezone);
   // A selected staff member can sit outside the bounded roster window. The
   // direct lookup above is authoritative for their own calendar scope.
   const hasSelectedEmployee = Boolean(
@@ -358,20 +365,20 @@ export default async function CalendarsPage({
     showOffShift: showOffShift === "0" ? "0" : undefined,
   };
   const calendarView = monthlyView ? "month" : teamView ? "team" : "staff";
-  const teamDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday;
+  const teamDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : calendarToday;
   // A team-day deep link can carry a day without a week. Query the week that
   // contains that day so the grid and booking data can never drift apart.
   const currentWeek = /^\d{4}-\d{2}-\d{2}$/.test(week ?? "")
     ? weekStartFor(week!)
-    : weekStartFor(teamView ? teamDay : (/^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday));
+    : weekStartFor(teamView ? teamDay : (/^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : calendarToday));
   const currentMonth = monthStartFor(
-    /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday,
+    /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : calendarToday,
   );
   const days = Array.from({ length: display.showWeekends ? 7 : 5 }, (_, index) =>
     addDays(currentWeek, index),
   );
-  const isHistoricalTeamDay = teamDay < tenantToday;
-  const hasCurrentOrFutureWeekDay = days.some((date) => date >= tenantToday);
+  const isHistoricalTeamDay = teamDay < calendarToday;
+  const hasCurrentOrFutureWeekDay = days.some((date) => date >= calendarToday);
   // Navigation must follow the week actually rendered by the grid. Keeping
   // these derived from `days[0]` prevents a stale query value from skipping or
   // repeating a week after a client-side calendar transition.
@@ -385,8 +392,23 @@ export default async function CalendarsPage({
   // individual planning surface deliberately keeps its week-sized range.
   const visibleRangeStart = monthlyView ? currentMonth : teamView ? teamDay : currentWeek;
   const visibleRangeEnd = monthlyView ? addMonths(currentMonth, 1) : addDays(visibleRangeStart, teamView ? 1 : 7);
-  const rangeStart = fromZonedTime(`${visibleRangeStart}T00:00:00`, tenant.timezone);
-  const rangeEnd = fromZonedTime(`${visibleRangeEnd}T00:00:00`, tenant.timezone);
+  const rangeStart = fromZonedTime(`${visibleRangeStart}T00:00:00`, calendarTimezone);
+  const rangeEnd = fromZonedTime(`${visibleRangeEnd}T00:00:00`, calendarTimezone);
+  const dayRange = (day: string): [Date, Date] => [fromZonedTime(`${day}T00:00:00`, calendarTimezone),
+    fromZonedTime(`${addDays(day, 1)}T00:00:00`, calendarTimezone)];
+  const slotTimes = new Map<string, { instant: Date; bookingTime: string | null }>();
+  const slotTime = (time: string) => {
+    let slot = slotTimes.get(time);
+    if (!slot) {
+      const instant = fromZonedTime(time, calendarTimezone);
+      const bookingTime = localDateTimeKey(instant, calendarTimezone) === time
+        ? calendarBookingTime(instant, bookingTimezone) : null;
+      slot = { instant, bookingTime };
+      slotTimes.set(time, slot);
+    }
+    return slot;
+  };
+  const defaultBookingStart = (day: string) => localDateTimeKey(fromZonedTime(`${day}T09:00`, calendarTimezone), bookingTimezone);
   const calendarReservations = db`
     SELECT b.id, b.booking_number AS "bookingNumber", reservation.block_id AS "bookingBlockId",
       reservation.service_id AS "serviceId", reservation.member_id AS "teamMemberId", b.location_id AS "locationId",
@@ -411,7 +433,8 @@ export default async function CalendarsPage({
     LEFT JOIN resources r ON r.id = bra.resource_id AND r.tenant_id = b.tenant_id
     WHERE b.tenant_id = ${tenant.id} AND b.location_id = ${selectedLocation?.id ?? null}
       AND (${canViewTeam} OR reservation.member_id = ${permissions.teamMemberId}::uuid)
-      AND reservation.starts_at >= ${rangeStart} AND reservation.starts_at < ${rangeEnd} AND b.status <> 'cancelled'
+      AND reservation.starts_at < ${rangeEnd} AND b.status <> 'cancelled'
+      AND CASE WHEN ${monthlyView} THEN reservation.starts_at >= ${rangeStart} ELSE reservation.ends_at > ${rangeStart} END
   `;
   const [services, calendarServices, bookings, teamBookings] =
     selected && selectedLocation
@@ -494,59 +517,44 @@ export default async function CalendarsPage({
   // Render availability with the page, rather than decorating every calendar
   // cell after hydration. The old client-side map only contained the team day,
   // which incorrectly disabled valid cells in a staff week.
-  const bookableSlotKeys = new Set(availability.flatMap((item) =>
-    item.slots
-      .filter(
-        (slot) =>
-          teamView
-            ? localDateKey(new Date(slot.startTime), tenant.timezone) === teamDay
-            : days.includes(localDateKey(new Date(slot.startTime), tenant.timezone)),
-      )
-      .map(
-        (slot) =>
-          `${item.teamMemberId}|${localDateTimeKey(new Date(slot.startTime), tenant.timezone)}`,
-      ),
-  ));
-  // The staff-week header uses the same server-computed candidates as its
-  // cells. This makes a day with no remaining capacity explicit instead of
-  // relying on a user to infer it from the hatch treatment alone.
-  const selectedBookableDays = new Set(
-    Array.from(bookableSlotKeys).flatMap((key) => {
-      const [memberId, startsAt] = key.split("|");
-      return memberId === selected?.id ? [startsAt.slice(0, 10)] : [];
-    }),
-  );
-  // “All services” is a union in the calendar, but a booking has exactly one
-  // service. Preserve every compatible service on each actionable cell: the
-  // first is used by a new appointment, while drag/drop uses the complete
-  // set to avoid presenting a target that cannot take the dragged service.
+  const visibleDays = new Set(teamView ? [teamDay] : days);
   const serviceForBookableSlot = new Map<string, string>();
   const servicesForBookableSlot = new Map<string, Set<string>>();
   for (const { serviceId, candidates } of availabilityByService) {
     for (const candidate of candidates) {
       for (const slot of candidate.slots) {
-        const date = localDateKey(new Date(slot.startTime), tenant.timezone);
-        if ((teamView ? date === teamDay : days.includes(date))) {
-          const key = `${candidate.teamMemberId}|${localDateTimeKey(new Date(slot.startTime), tenant.timezone)}`;
-          if (!serviceForBookableSlot.has(key)) serviceForBookableSlot.set(key, serviceId);
-          const compatibleServices = servicesForBookableSlot.get(key) ?? new Set<string>();
-          compatibleServices.add(serviceId);
-          servicesForBookableSlot.set(key, compatibleServices);
-        }
+        const time = localDateTimeKey(new Date(slot.startTime), calendarTimezone);
+        if (!visibleDays.has(time.slice(0, 10))) continue;
+        const { instant, bookingTime } = slotTime(time);
+        if (!bookingTime || +instant !== Date.parse(slot.startTime)) continue;
+        const key = `${candidate.teamMemberId}|${time}`;
+        if (!serviceForBookableSlot.has(key)) serviceForBookableSlot.set(key, serviceId);
+        const compatibleServices = servicesForBookableSlot.get(key) ?? new Set<string>();
+        compatibleServices.add(serviceId);
+        servicesForBookableSlot.set(key, compatibleServices);
       }
     }
   }
+  // The staff-week header uses the same server-computed candidates as its
+  // cells. This makes a day with no remaining capacity explicit instead of
+  // relying on a user to infer it from the hatch treatment alone.
+  const selectedBookableDays = new Set(
+    Array.from(serviceForBookableSlot.keys()).flatMap((key) => {
+      const [memberId, startsAt] = key.split("|");
+      return memberId === selected?.id ? [startsAt.slice(0, 10)] : [];
+    }),
+  );
   const slots = availability
     .filter((item) => item.teamMemberId === selected?.id)
     .flatMap((item) => item.slots as Slot[])
     .filter((slot) =>
-    days.includes(localDateKey(new Date(slot.startTime), tenant.timezone)),
+    days.includes(localDateKey(new Date(slot.startTime), calendarTimezone)),
   );
   const openPeriods = mergeSlots(slots);
   const [configuredStaffRules, configuredStaffOverrides] = hasSelectedEmployee && selected && selectedLocation
     ? await Promise.all([
         db<ScheduleRule[]>`SELECT rrule,start_time AS "startTime",end_time AS "endTime",timezone,valid_from AS "validFrom",valid_until AS "validUntil" FROM availability_rules WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id}`,
-        db<ScheduleOverride[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date,start_time AS "startTime",end_time AS "endTime",is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id} AND local_date >= ${visibleRangeStart}::date AND local_date < ${visibleRangeEnd}::date`,
+        db<ScheduleOverride[]>`SELECT (local_date::timestamp AT TIME ZONE 'UTC') AS date,start_time AS "startTime",end_time AS "endTime",is_unavailable AS "isUnavailable" FROM availability_overrides WHERE tenant_id=${tenant.id} AND team_member_id=${selected.id} AND local_date >= ${localDateKey(rangeStart, bookingTimezone)}::date - 2 AND local_date <= ${localDateKey(rangeEnd, bookingTimezone)}::date + 2`,
       ])
     : [[], []] as [ScheduleRule[], ScheduleOverride[]];
   // This expands the persisted recurring rules before occupancy is subtracted.
@@ -557,42 +565,61 @@ export default async function CalendarsPage({
         configuredStaffOverrides,
         [],
         { start: rangeStart, end: rangeEnd },
-        tenant.timezone,
+        bookingTimezone,
         { duration: calendarBookingInterval, slotInterval: calendarBookingInterval, alignToClock: true, now: new Date(0) },
       ).filter((slot) =>
-        days.includes(localDateKey(new Date(slot.startTime), tenant.timezone))
-        && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, tenant.timezone),
+        days.includes(localDateKey(new Date(slot.startTime), calendarTimezone))
+        && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, selectedLocation!.timezone),
       ))
     : [];
-  const bookingIntervals = bookings.map((booking) => ({
-    startTime: booking.startsAt.toISOString(), endTime: booking.endsAt.toISOString(),
-  }));
+  const weekDates = !teamView && !monthlyView ? days.map((day) => ({ day, range: dayRange(day) })) : [];
+  const weekSchedule = <T extends ScheduleEntry>(entries: T[]) => weekDates.flatMap(({ day, range }) =>
+    entries.flatMap((entry) => clipSchedule(entry, ...range).map((period) => ({ entry, day, ...period }))));
+  const weekBookings = weekSchedule(bookings.map((booking) => ({
+    booking, startTime: booking.startsAt.toISOString(), endTime: booking.endsAt.toISOString(),
+  })));
+  const weekOpenPeriods = weekSchedule(openPeriods);
   const { start: gridStart, end: gridEnd, rowCount } = calendarGridBounds(
-    configuredWorkingPeriods,
-    [...openPeriods, ...bookingIntervals],
-    tenant.timezone,
-    { ...display, bookings: bookingIntervals },
+    weekSchedule(configuredWorkingPeriods),
+    [...weekOpenPeriods, ...weekBookings],
+    calendarTimezone,
+    { ...display, bookings: weekBookings },
   );
   const calendarDate = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tenant.timezone,
+    timeZone: "UTC",
     weekday: "short",
     day: "numeric",
     month: "short",
   });
   const calendarRange = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tenant.timezone,
+    timeZone: "UTC",
     day: "numeric",
     month: "short",
   });
   const teamNavigationLabel = calendarDate.format(
     new Date(`${teamDay}T12:00:00Z`),
   );
-  const workingDays = new Set(locationWorkingDays.map((entry) => entry.dayOfWeek));
-  const previousWorkingDay = nextWorkingDay(teamDay, -1, workingDays);
-  const followingWorkingDay = nextWorkingDay(teamDay, 1, workingDays);
+  const locationTimezone = selectedLocation?.timezone ?? bookingTimezone;
+  const locationHoursOnCalendarDay = (day: string) => {
+    const range = dayRange(day);
+    const lastDay = localDateKey(new Date(+range[1] - 1), locationTimezone);
+    const periods: ScheduleEntry[] = [];
+    for (let localDay = localDateKey(range[0], locationTimezone); localDay <= lastDay; localDay = addDays(localDay, 1)) {
+      for (const hours of locationHours.filter((entry) => entry.dayOfWeek === dayOfWeek(localDay))) {
+        periods.push(...clipSchedule({
+          startTime: fromZonedTime(`${localDay}T${hours.startTime}`, locationTimezone).toISOString(),
+          endTime: fromZonedTime(`${localDay}T${hours.endTime}`, locationTimezone).toISOString(),
+        }, ...range));
+      }
+    }
+    return periods;
+  };
+  const isWorkingDay = (day: string) => locationHoursOnCalendarDay(day).length > 0;
+  const previousWorkingDay = nextWorkingDay(teamDay, -1, isWorkingDay);
+  const followingWorkingDay = nextWorkingDay(teamDay, 1, isWorkingDay);
   const staffNavigationLabel = `${calendarRange.format(new Date(`${currentWeek}T12:00:00Z`))} – ${calendarRange.format(new Date(`${addDays(currentWeek, 6)}T12:00:00Z`))}`;
   const clock = new Intl.DateTimeFormat("en-GB", {
-    timeZone: tenant.timezone,
+    timeZone: calendarTimezone,
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -646,24 +673,21 @@ export default async function CalendarsPage({
   };
   // A selected staff member is read as a seven-row schedule: weekdays occupy
   // the same rail used for staff in the team Day board and time runs across.
-  const staffWeekPosition = (entry: ScheduleEntry) => {
+  const staffWeekPosition = (entry: ScheduleEntry & { day: string }) => {
     const start = new Date(entry.startTime);
     const end = new Date(entry.endTime);
-    const dayIndex = days.indexOf(localDateKey(start, tenant.timezone));
-    const startMinutes = localMinutes(start, tenant.timezone);
-    const endMinutes = localDateKey(start, tenant.timezone) === localDateKey(end, tenant.timezone) ? localMinutes(end, tenant.timezone) : 24 * 60;
+    const dayIndex = days.indexOf(entry.day);
+    const startMinutes = localMinutes(start, calendarTimezone);
+    const endMinutes = localDateKey(start, calendarTimezone) === localDateKey(end, calendarTimezone) ? localMinutes(end, calendarTimezone) : 24 * 60;
     return {
-      ...calendarTimePosition(startMinutes, endMinutes, gridStart, gridEnd),
+      ...calendarTimePosition(startMinutes, Math.max(endMinutes, startMinutes + interval), gridStart, gridEnd),
       gridRow: dayIndex + 2,
     };
   };
-  const teamDayBookings = teamBookings.filter(
-    (booking) =>
-      localDateKey(booking.startsAt, tenant.timezone) === teamDay,
-  );
+  const teamDayBookings = teamView ? teamBookings : [];
   const visibleTeamMembers = showOffShift !== "0" ? members : members.filter((member) =>
     teamDayBookings.some((booking) => booking.teamMemberId === member.id)
-    || Array.from(bookableSlotKeys).some((key) => key.startsWith(`${member.id}|${teamDay}T`)),
+    || Array.from(serviceForBookableSlot.keys()).some((key) => key.startsWith(`${member.id}|${teamDay}T`)),
   );
   const teamCreateMember = canManageSelectedSchedule ? selected : visibleTeamMembers.find((member) => canManageSchedule(member.id));
   const createMember = createStaff
@@ -686,27 +710,21 @@ export default async function CalendarsPage({
       .flatMap((item) => item.slots as Slot[])
       .filter(
         (slot) =>
-          localDateKey(new Date(slot.startTime), tenant.timezone) === teamDay,
+          localDateKey(new Date(slot.startTime), calendarTimezone) === teamDay,
       ),
   );
-  const teamWeekday = new Date(`${teamDay}T12:00:00Z`).getUTCDay();
-  const teamDayWorkingHours = locationHours
-    .filter((hours) => hours.dayOfWeek === teamWeekday)
-    .map((hours) => ({
-      startTime: fromZonedTime(`${teamDay}T${hours.startTime}`, tenant.timezone).toISOString(),
-      endTime: fromZonedTime(`${teamDay}T${hours.endTime}`, tenant.timezone).toISOString(),
-    }));
-  const teamBookingIntervals = teamDayBookings.map((booking) => ({
+  const teamRange = dayRange(teamDay);
+  const teamDayWorkingHours = teamView ? locationHoursOnCalendarDay(teamDay) : [];
+  const teamBookingIntervals = teamDayBookings.flatMap((booking) => clipSchedule({
     startTime: booking.startsAt.toISOString(), endTime: booking.endsAt.toISOString(),
-  }));
+  }, ...teamRange));
   const { start: teamGridStart, end: teamGridEnd, rowCount: teamRowCount } = calendarGridBounds(
-    teamDayWorkingHours, [...teamDayOpenPeriods, ...teamBookingIntervals], tenant.timezone,
+    teamDayWorkingHours, [...teamDayOpenPeriods.flatMap((period) => clipSchedule(period, ...teamRange)), ...teamBookingIntervals], calendarTimezone,
     { ...display, bookings: teamBookingIntervals },
   );
   const teamPosition = (booking: TeamBooking) => ({
-    ...calendarTimePosition(localMinutes(booking.startsAt, tenant.timezone),
-      localDateKey(booking.endsAt, tenant.timezone) === teamDay ? localMinutes(booking.endsAt, tenant.timezone) : 24 * 60,
-      teamGridStart, teamGridEnd),
+    ...calendarTimePosition(booking.startsAt < teamRange[0] ? 0 : localMinutes(booking.startsAt, calendarTimezone),
+      booking.endsAt >= teamRange[1] ? 24 * 60 : localMinutes(booking.endsAt, calendarTimezone), teamGridStart, teamGridEnd),
     gridRow: visibleTeamMembers.findIndex((member) => member.id === booking.teamMemberId) + 2,
     borderLeftColor: booking.teamMemberColor,
   });
@@ -715,7 +733,7 @@ export default async function CalendarsPage({
   );
   const monthBookingsByDay = new Map<string, { appointments: Map<string, TeamBooking>; providers: Set<string | null> }>();
   for (const booking of monthlyBookings) {
-    const bookingDay = localDateKey(booking.startsAt, tenant.timezone);
+    const bookingDay = localDateKey(booking.startsAt, calendarTimezone);
     const daily = monthBookingsByDay.get(bookingDay) ?? { appointments: new Map(), providers: new Set<string | null>() };
     if (!daily.appointments.has(booking.id)) daily.appointments.set(booking.id, booking);
     daily.providers.add(booking.teamMemberId);
@@ -732,9 +750,9 @@ export default async function CalendarsPage({
   const weekMember = hasSelectedEmployee ? selected
     : visibleTeamMembers.find((member) => member.id === permissions.teamMemberId) ?? visibleTeamMembers[0] ?? selected;
   const selectedEmployee = hasSelectedEmployee ? selected?.id : "";
-  const todayLink = href({ view: calendarView, employee: selectedEmployee, day: tenantToday, week: weekStartFor(tenantToday) });
-  const viewingToday = monthlyView ? currentMonth === monthStartFor(tenantToday)
-    : teamView ? teamDay === tenantToday : currentWeek === weekStartFor(tenantToday);
+  const todayLink = href({ view: calendarView, employee: selectedEmployee, day: calendarToday, week: weekStartFor(calendarToday) });
+  const viewingToday = monthlyView ? currentMonth === monthStartFor(calendarToday)
+    : teamView ? teamDay === calendarToday : currentWeek === weekStartFor(calendarToday);
   const viewDay = calendarView === "staff" && weekStartFor(teamDay) !== currentWeek ? currentWeek : teamDay;
   const calendarRangeControls = <div className="calendar-range-actions">
     <div className="calendar-view-toggle" aria-label="Calendar range">
@@ -789,7 +807,7 @@ export default async function CalendarsPage({
                     <div>
                       <p>MONTHLY SCHEDULE</p>
                       <h2>{new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))}</h2>
-                      <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : `All ${terms.staffPlural}`} · {tenant.timezone}</span>
+                      <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : `All ${terms.staffPlural}`} · {calendarTimezone}</span>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
                       <details className="calendar-filter-panel">
@@ -849,7 +867,7 @@ export default async function CalendarsPage({
                   <div className="waybook-calendar-toolbar">
                     <div>
                       <p>
-                        <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible {terms.staffPlural}</span>
+                        <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible {terms.staffPlural}{display.timezone ? ` · ${calendarTimezone}` : ""}</span>
                       </p>
                       <h2>{calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}</h2>
                       {dayHoliday ? <span className="calendar-holiday">{dayHoliday}</span> : null}
@@ -906,7 +924,7 @@ export default async function CalendarsPage({
                             view: "team",
                             week: weekStartFor(teamDay),
                             day: teamDay,
-                            create: `${teamDay}T09:00`,
+                            create: defaultBookingStart(teamDay),
                           })}
                         >
                           New appointment
@@ -926,7 +944,7 @@ export default async function CalendarsPage({
                     >
                       <div className="waybook-week-calendar__corner">{titleTerminology(terms.staffPlural)}</div>
                       {Array.from({ length: teamRowCount }, (_, index) => <div className="team-day-calendar__time-header" key={`team-time-${index}`} style={{ gridColumn: index + 2, gridRow: 1 }}>{index % slotsPerHour === 0 ? `${String(Math.floor((teamGridStart + index * interval) / 60)).padStart(2, "0")}:00` : ""}</div>)}
-                      {display.showNow ? <CalendarCurrentTime now={calendarNow.getTime()} timezone={tenant.timezone}
+                      {display.showNow ? <CalendarCurrentTime now={calendarNow.getTime()} timezone={calendarTimezone}
                         dates={[teamDay]} start={teamGridStart} end={teamGridEnd} team /> : null}
                       {visibleTeamMembers.flatMap((member, memberIndex) => [
                         <Link key={`staff-${member.id}`} className="team-day-calendar__staff" aria-label={`View week for ${member.name}`}
@@ -937,21 +955,22 @@ export default async function CalendarsPage({
                         ...Array.from({ length: teamRowCount }, (_, index) => {
                           const time = `${String(Math.floor((teamGridStart + index * interval) / 60)).padStart(2, "0")}:${String((teamGridStart + index * interval) % 60).padStart(2, "0")}`;
                           const slotKey = `${member.id}|${teamDay}T${time}`;
-                          const isPastDate = isPastCalendarSlot(teamDay, time, tenant.timezone, calendarNow);
-                          const isBookable = !isPastDate && bookableSlotKeys.has(slotKey);
+                          const { instant, bookingTime } = slotTime(`${teamDay}T${time}`);
+                          const isPastDate = instant <= calendarNow;
+                          const isBookable = bookingTime && !isPastDate && serviceForBookableSlot.has(slotKey);
                           // Historical schedules remain visible, but never
                           // masquerade as a staff/service availability error.
                           // The slot engine correctly refuses starts in the
                           // past; represent that as a quiet, read-only cell.
                           const isAppointmentConflict = Boolean(
-                            !isBookable &&
+                            bookingTime && !isBookable &&
                               !isPastDate &&
                               overlapsAnyScheduledAppointment(
                                 teamDayBookings.filter((booking) => booking.teamMemberId === member.id),
                                 teamDay,
                                 time,
                                 visibleServiceDurations,
-                                tenant.timezone,
+                                calendarTimezone,
                               ),
                           );
                           const canManageMember = canManageSchedule(member.id);
@@ -962,7 +981,7 @@ export default async function CalendarsPage({
                               data-availability-state="bookable"
                               data-calendar-drop-cell="true"
                               data-calendar-team-member-id={member.id}
-                              data-calendar-starts-at={`${teamDay}T${time}`}
+                              data-calendar-starts-at={bookingTime}
                               data-calendar-service-ids={Array.from(servicesForBookableSlot.get(slotKey) ?? []).join(",")}
                               data-hour-start={index % slotsPerHour === 0 || undefined}
                               style={{ gridColumn: index + 2, gridRow: memberIndex + 2 }}
@@ -973,7 +992,7 @@ export default async function CalendarsPage({
                                 week: weekStartFor(teamDay),
                                 day: teamDay,
                                 service: serviceForBookableSlot.get(slotKey),
-                                create: `${teamDay}T${time}`,
+                                create: bookingTime,
                                 createStaff: member.id,
                                 fromSlot: true,
                               })}
@@ -983,11 +1002,11 @@ export default async function CalendarsPage({
                             <div
                               className={`waybook-week-calendar__cell ${isPastDate ? "is-past" : isAppointmentConflict ? "is-appointment-conflict" : "is-unavailable"}`}
                               data-availability-state={isPastDate ? "past" : isAppointmentConflict ? "appointment-overlap" : "unavailable"}
-                              {...(canManageMember && !isPastDate
+                              {...(canManageMember && bookingTime && !isPastDate
                                 ? {
                                     "data-calendar-drop-cell": "true",
                                     "data-calendar-team-member-id": member.id,
-                                    "data-calendar-starts-at": `${teamDay}T${time}`,
+                                    "data-calendar-starts-at": bookingTime,
                                   }
                                 : {})}
                               aria-label={isPastDate ? "Past time" : isAppointmentConflict ? "Overlaps an existing appointment" : "Unavailable"}
@@ -1038,7 +1057,7 @@ export default async function CalendarsPage({
                           <span><i className="is-past" aria-hidden="true" /> Past</span>
                         </div>
                       ) : null}
-                      {isHistoricalTeamDay ? <p className="waybook-calendar-history-notice">Historical schedule · appointments cannot be added before {calendarDate.format(new Date(`${tenantToday}T12:00:00Z`))}.</p> : null}
+                      {isHistoricalTeamDay ? <p className="waybook-calendar-history-notice">Historical schedule · appointments cannot be added before {calendarDate.format(new Date(`${calendarToday}T12:00:00Z`))}.</p> : null}
                     </div>
                   ) : null}
                     </>
@@ -1057,7 +1076,7 @@ export default async function CalendarsPage({
                       <h2>{selected.name}</h2>
                       <span>
                         Confirmed bookings and live bookable periods in{" "}
-                        {selectedLocation?.name} · {tenant.timezone}.
+                        {selectedLocation?.name} · {calendarTimezone}.
                       </span>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
@@ -1110,7 +1129,7 @@ export default async function CalendarsPage({
                           href={href({
                             view: "staff",
                             day: undefined,
-                            create: `${days.includes(tenantToday) ? tenantToday : days[0]}T09:00`,
+                            create: defaultBookingStart(days.includes(calendarToday) ? calendarToday : days[0]),
                           })}
                         >
                           New appointment
@@ -1143,7 +1162,7 @@ export default async function CalendarsPage({
                           {index % slotsPerHour === 0 ? time : ""}
                         </div>;
                       })}
-                      {display.showNow ? <CalendarCurrentTime now={calendarNow.getTime()} timezone={tenant.timezone}
+                      {display.showNow ? <CalendarCurrentTime now={calendarNow.getTime()} timezone={calendarTimezone}
                         dates={days} start={gridStart} end={gridEnd} /> : null}
                       {days.map((day, dayIndex) => (
                         <div
@@ -1154,7 +1173,7 @@ export default async function CalendarsPage({
                         >
                           <span>{calendarDate.format(new Date(`${day}T12:00:00Z`))}</span>
                           {holidays.has(day) ? <span className="calendar-holiday">{holidays.get(day)}</span> : null}
-                          {day >= tenantToday && !selectedBookableDays.has(day) ? (
+                          {day >= calendarToday && !selectedBookableDays.has(day) ? (
                             <small>No availability</small>
                           ) : null}
                         </div>
@@ -1163,17 +1182,18 @@ export default async function CalendarsPage({
                         Array.from({ length: rowCount }, (_, index) => {
                           const time = `${String(Math.floor((gridStart + index * interval) / 60)).padStart(2, "0")}:${String((gridStart + index * interval) % 60).padStart(2, "0")}`;
                           const slotKey = `${selected?.id}|${day}T${time}`;
-                          const isPastDate = isPastCalendarSlot(day, time, tenant.timezone, calendarNow);
-                          const isBookable = !isPastDate && bookableSlotKeys.has(slotKey);
+                          const { instant, bookingTime } = slotTime(`${day}T${time}`);
+                          const isPastDate = instant <= calendarNow;
+                          const isBookable = bookingTime && !isPastDate && serviceForBookableSlot.has(slotKey);
                           const isAppointmentConflict = Boolean(
-                            !isBookable &&
+                            bookingTime && !isBookable &&
                               !isPastDate &&
                               overlapsAnyScheduledAppointment(
                                 bookings,
                                 day,
                                 time,
                                 visibleServiceDurations,
-                                tenant.timezone,
+                                calendarTimezone,
                               ),
                           );
                           return canManageSelectedSchedule && services.length && isBookable ? (
@@ -1183,7 +1203,7 @@ export default async function CalendarsPage({
                               data-availability-state="bookable"
                               data-calendar-drop-cell="true"
                               data-calendar-team-member-id={selected!.id}
-                              data-calendar-starts-at={`${day}T${time}`}
+                              data-calendar-starts-at={bookingTime}
                               data-calendar-service-ids={Array.from(servicesForBookableSlot.get(slotKey) ?? []).join(",")}
                               data-hour-start={index % slotsPerHour === 0 || undefined}
                               style={{ gridColumn: index + 2, gridRow: dayIndex + 2 }}
@@ -1192,7 +1212,7 @@ export default async function CalendarsPage({
                                 view: "staff",
                                 day: undefined,
                                 service: serviceForBookableSlot.get(slotKey),
-                                create: `${day}T${time}`,
+                                create: bookingTime,
                                 fromSlot: true,
                               })}
                               key={`${day}-${index}`}
@@ -1201,11 +1221,11 @@ export default async function CalendarsPage({
                             <div
                               className={`waybook-week-calendar__cell ${isPastDate ? "is-past" : isAppointmentConflict ? "is-appointment-conflict" : "is-unavailable"}`}
                               data-availability-state={isPastDate ? "past" : isAppointmentConflict ? "appointment-overlap" : "unavailable"}
-                              {...(canManageSelectedSchedule && !isPastDate
+                              {...(canManageSelectedSchedule && bookingTime && !isPastDate
                                 ? {
                                     "data-calendar-drop-cell": "true",
                                     "data-calendar-team-member-id": selected!.id,
-                                    "data-calendar-starts-at": `${day}T${time}`,
+                                    "data-calendar-starts-at": bookingTime,
                                   }
                                 : {})}
                               aria-label={isPastDate ? "Past time" : isAppointmentConflict ? "Overlaps an existing appointment" : "Unavailable"}
@@ -1216,9 +1236,9 @@ export default async function CalendarsPage({
                           );
                         }),
                       )}
-                      {openPeriods.map((period) => (
+                      {weekOpenPeriods.map((period) => (
                         <div
-                          key={period.startTime}
+                          key={`${period.day}|${period.startTime}`}
                           className="waybook-week-calendar__entry is-open"
                           style={staffWeekPosition(period)}
                         >
@@ -1229,9 +1249,11 @@ export default async function CalendarsPage({
                           </span>
                         </div>
                       ))}
-                      {bookings.map((booking) => (
+                      {weekBookings.map((period) => {
+                        const { booking } = period.entry;
+                        return (
                         <Link
-                          key={booking.bookingBlockId}
+                          key={`${booking.bookingBlockId}|${period.day}`}
                           href={href({
                             view: "staff",
                             day: undefined,
@@ -1240,10 +1262,7 @@ export default async function CalendarsPage({
                           className={`waybook-week-calendar__entry is-booking is-booking--${booking.status}`}
                           data-calendar-service-id={booking.serviceId}
                           draggable={!booking.hasLinkedServices && canManageSchedule(booking.teamMemberId) && isMovableAppointmentStatus(booking.status)}
-                          style={staffWeekPosition({
-                            startTime: booking.startsAt.toISOString(),
-                            endTime: booking.endsAt.toISOString(),
-                          })}
+                          style={staffWeekPosition(period)}
                         >
                           <strong>{booking.customerName}</strong>
                           <span className="waybook-calendar-entry__meta">
@@ -1252,7 +1271,8 @@ export default async function CalendarsPage({
                           </span>
                           <CalendarBookingService service={booking.serviceTitle} resource={showResources ? booking.resourceName : null} />
                         </Link>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                   {services.length ? (
@@ -1271,7 +1291,7 @@ export default async function CalendarsPage({
       )}
       <CalendarAppointmentDrawer checkoutPath={tenantPath(tenantSlug, "/app/sales")}
         clientPath={tenantPath(tenantSlug, "/app/customers")} clientLabel={titleTerminology(terms.client)} staffLabel={titleTerminology(terms.staffPlural)}
-        timezone={tenant.timezone}
+        timezone={calendarTimezone}
         summaries={[...bookings, ...teamBookings, ...monthScopedBookings].map((item) => ({
           id: item.id, bookingNumber: item.bookingNumber, customerName: item.customerName,
           serviceTitle: item.serviceTitle, teamMemberName: "teamMemberName" in item && typeof item.teamMemberName === "string" ? item.teamMemberName : members.find((member) => member.id === item.teamMemberId)?.name ?? "",
@@ -1307,7 +1327,8 @@ export default async function CalendarsPage({
                 fromCalendarSlot={fromSlot === "1" && !waitlistEntryId}
                 defaultDate={requestedAppointment.slice(0, 10)}
                 defaultTime={requestedAppointment.slice(11)}
-                timezone={tenant.timezone}
+                timezone={bookingTimezone}
+                calendarTimezone={calendarTimezone}
                 canLookupClients={canViewClientDirectory}
                 initialClient={directCustomer}
                 autofillLatestService={display.autofillLatestService}

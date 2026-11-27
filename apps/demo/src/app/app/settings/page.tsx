@@ -16,6 +16,7 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { terminologyLabels, titleTerminology } from "@/lib/waybook/terminology-labels";
 import { calendarDisplayIntervals, getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
 import { calendarHolidayRegions } from "@/lib/waybook/calendar-holidays";
+import { calendarTimezones } from "@/lib/waybook/calendar-timezones";
 import { saveCalendarDisplay } from "./calendar-actions";
 import { StaffRolesPanel } from "./roles/panel";
 
@@ -74,7 +75,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <div className="workspace-settings__content">
           {calendar ? <section className="workspace-settings__panel">
             <h2>Calendar</h2>
-            <p>Choose how the calendar appears on this browser. Times use {tenant.timezone}. Booked appointments stay visible outside your chosen hours.</p>
+            <p>Choose how the calendar appears on this browser. Booked appointments stay visible outside your chosen hours.</p>
             {params.calendarStatus === "saved" ? <p role="status">Calendar preferences saved.</p> : null}
             {params.calendarStatus === "hours" ? <p role="alert">The calendar end time must be later than the start time.</p> : null}
             <form action={saveCalendarDisplay} className="tenant-drawer-form calendar-display-form">
@@ -90,6 +91,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </div>
               <label>Calendar interval <select name="interval" defaultValue={calendar.interval}>
                 {calendarDisplayIntervals.map((interval) => <option key={interval} value={interval}>{interval} minutes</option>)}
+              </select></label>
+              <label>Calendar time zone <select name="timezone" defaultValue={calendar.timezone ?? ""}>
+                <option value="">Workspace time ({tenant.timezone})</option>
+                {calendarTimezones.filter((timezone) => timezone !== tenant.timezone).map((timezone) => <option key={timezone} value={timezone}>{timezone.replaceAll("_", " ")}</option>)}
               </select></label>
               <div className="calendar-display-form__holiday">
                 <label>Public holidays <select name="holidayRegion" defaultValue={calendar.holidayRegion ?? ""} aria-describedby="calendar-holiday-help">

@@ -5,7 +5,7 @@ import { defaultTenantTerminology, titleTerminology, type TenantTerminology } fr
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 
 import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
-import { fromZonedTime } from "date-fns-tz";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import Link from "next/link";
 import { ArrowLeft, X } from "lucide-react";
 import { createManualBooking, getLatestAppointmentService, getManualBookingAvailability } from "@/app/app/calendars/actions";
@@ -18,17 +18,17 @@ type Service = { id: string; title: string; durationMinutes: number; priceCents:
 type Client = { id: string; name: string; email: string; phone: string | null };
 type Slot = { teamMemberId: string; startTime: string };
 type ServiceDraft = { id: string; service: Service | null; member: Member | null; time: string; providerPending?: boolean; editingDetails?: boolean };
-type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; autofillLatestService?: boolean; fromCalendarSlot?: boolean; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; calendarPath: string; terminology?: TenantTerminology };
+type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; autofillLatestService?: boolean; fromCalendarSlot?: boolean; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; calendarTimezone?: string; calendarPath: string; terminology?: TenantTerminology };
 
 const servicePrice = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
 
 function clock(value: string, timezone: string) { return new Intl.DateTimeFormat("sv-SE", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value)); }
 function dateAt(date: string, offset: number) { const result = new Date(`${date}T12:00:00Z`); result.setUTCDate(result.getUTCDate() + offset); return result.toISOString().slice(0, 10); }
 function localDateKey(timezone: string) { const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()); const value = (name: string) => parts.find((part) => part.type === name)?.value ?? ""; return `${value("year")}-${value("month")}-${value("day")}`; }
-function dateLabel(value: string) { const date = new Date(`${value}T12:00:00Z`); return { weekday: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date), day: new Intl.DateTimeFormat("en-GB", { day: "2-digit" }).format(date), full: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(date) }; }
+function dateLabel(value: string) { const date = new Date(`${value}T12:00:00Z`); return { weekday: new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" }).format(date), day: new Intl.DateTimeFormat("en-GB", { day: "2-digit", timeZone: "UTC" }).format(date), full: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(date) }; }
 
 /** Selection lists are searched in bounded windows; availability and writes stay server-authoritative. */
-export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, autofillLatestService = false, fromCalendarSlot = false, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, calendarPath, terminology = defaultTenantTerminology }: Props) {
+export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, autofillLatestService = false, fromCalendarSlot = false, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, calendarTimezone = timezone, calendarPath, terminology = defaultTenantTerminology }: Props) {
   const [state, formAction, pending] = useActionState(createManualBooking, { error: null, success: null });
   const [location, setLocation] = useState(initialLocation);
   const [member, setMember] = useState<Member | null>(initialMember);
@@ -116,6 +116,10 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   const showSchedule = !compactDraft || editingSchedule;
   const slotUnavailable = fromCalendarSlot && !checking && Boolean(time && service) && !slotSelected;
   const originalOpeningUnavailable = waitlistEntryId && defaultTime && !checking && !time && date === defaultDate;
+  const alternateCalendarTimezone = calendarTimezone !== timezone;
+  const calendarStart = alternateCalendarTimezone && time ? fromZonedTime(`${date}T${time}`, timezone) : null;
+  const summaryDate = calendarStart ? formatInTimeZone(calendarStart, calendarTimezone, "yyyy-MM-dd") : date;
+  const summaryTime = calendarStart ? formatInTimeZone(calendarStart, calendarTimezone, "HH:mm") : time;
   if (waitlistUnavailable && !state.success) return <p role="alert">This waitlist request is no longer available. Return to the waitlist to review it.</p>;
 
   return <form action={formAction} className="tenant-drawer-form manual-appointment">
@@ -125,8 +129,8 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
       {waitlistEntryId ? <input type="hidden" name="waitlistEntryId" value={waitlistEntryId} /> : null}
       {compactDraft ? <section className="manual-appointment__slot-summary" aria-label="Selected calendar slot">
         <div>
-          <strong>{dateLabel(date).full}{time ? ` at ${time}` : ""}</strong>
-          <span>{[member?.name, location.name].filter(Boolean).join(" · ")}</span>
+          <strong>{dateLabel(summaryDate).full}{summaryTime ? ` at ${summaryTime}` : ""}</strong>
+          <span>{[member?.name, location.name, calendarStart ? calendarTimezone : null].filter(Boolean).join(" · ")}</span>
         </div>
         <button type="button" className="waybook-action waybook-action--secondary" aria-expanded={editingSchedule}
           onClick={() => setEditingSchedule((editing) => !editing)}>{editingSchedule ? "Hide slot options" : time ? "Change slot" : "Choose slot"}</button>
@@ -238,7 +242,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
       <input type="hidden" name="appointmentDate" value={date} /><input type="hidden" name="appointmentTime" value={time} />
       {showSchedule ? <section className="appointment-reschedule-picker manual-appointment__slot-picker" aria-label="Appointment schedule">
         <div className="manual-appointment__slot-picker-heading">
-          <strong>Date</strong><span>{checking ? "Checking availability…" : service ? "Choose an available time" : "Choose a service first"}</span>
+          <strong>{alternateCalendarTimezone ? `Date · ${timezone}` : "Date"}</strong><span>{checking ? "Checking availability…" : service ? "Choose an available time" : "Choose a service first"}</span>
         </div>
         <div className="appointment-reschedule-picker__navigation" aria-label="Choose another week">
           <button type="button" className="waybook-action--secondary" aria-label="Previous week" disabled={dateAt(dateWindowStart, -7) < today}
@@ -278,7 +282,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
       {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
       {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
       {service ? <div><strong>{servicePrice.format(totalCents / 100)}</strong><span>{durationMinutes} min{!compactDraft && time ? ` · ${dateLabel(date).full}, ${time}` : ""}</span></div> : null}
-      {state.booking ? <Link className="waybook-primary-link" data-appointment-navigation href={`${calendarPath}?${new URLSearchParams({ view: "team", location: state.booking.locationId, day: state.booking.date, booking: state.booking.id })}`}>View appointment</Link> :
+      {state.booking ? <Link className="waybook-primary-link" data-appointment-navigation href={`${calendarPath}?${new URLSearchParams({ view: "team", location: state.booking.locationId, day: alternateCalendarTimezone ? formatInTimeZone(state.booking.startsAt, calendarTimezone, "yyyy-MM-dd") : state.booking.date, booking: state.booking.id })}`}>View appointment</Link> :
         <button type="submit" className="waybook-action" disabled={pending || checking || loadingSuggestion || !locationId || !serviceId || !teamMemberId || !slotSelected || !clientReady || !linkedReady || waitlistUnavailable}>{pending ? "Confirming…" : "Confirm appointment"}</button>}
     </div>
   </form>;

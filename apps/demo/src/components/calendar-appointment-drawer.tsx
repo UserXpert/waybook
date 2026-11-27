@@ -103,7 +103,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   const canEdit = Boolean(detail?.status !== "cancelled" && (capabilities?.canEdit || capabilities?.canUpdateStatus || canReschedule));
   const rescheduleOptions = canReschedule && detail ? <AppointmentRescheduleActions key={detail.id}
     bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots}
-    currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} reschedule={rescheduleBooking} /> : null;
+    currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} showTimezone={timezone !== detail.timezone} reschedule={rescheduleBooking} /> : null;
   const services = detail ? [{
     id: detail.id, title: detail.serviceTitle, provider: detail.teamMemberName,
     startsAt: detail.startsAt, endsAt: detail.endsAt, priceCents: detail.primaryServicePriceCents,
