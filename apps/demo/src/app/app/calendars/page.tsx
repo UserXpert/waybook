@@ -1235,16 +1235,16 @@ export default async function CalendarsPage({
       {requestedAppointment && createMember && selectedLocation ? (
         <TenantEditorDialog title="New appointment" closeHref={href({})} initialField="appointmentClientSearch" cycleFocus>
           <aside
-            className="tenant-drawer appointment-drawer"
+            className="tenant-drawer appointment-drawer appointment-create-drawer"
             aria-label="New appointment"
           >
             <header>
               <div>
                 <h2>New appointment</h2>
-                {fromSlot === "1" && !waitlistEntryId ? null : <span>
+                {waitlistEntryId ? <span>
                   {createMember.name} · {selectedLocation.name} ·{" "}
                   {requestedAppointment.replace("T", " ")}
-                </span>}
+                </span> : null}
               </div>
               <TenantEditorClose label="Close new appointment" href={href({})}>
                 ×

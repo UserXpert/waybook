@@ -415,6 +415,8 @@ for (const workspace of workspaces) {
       await page.goto(`/${workspace.route}/app/calendars?${staffWithoutService}`);
       const recoveryDrawer = page.getByRole("dialog", { name: "New appointment" });
       await expect(recoveryDrawer.getByRole("combobox", { name: "Service" })).toHaveValue("");
+      await expect(recoveryDrawer.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
+      await recoveryDrawer.getByRole("button", { name: "Choose slot", exact: true }).click();
       await expect(recoveryDrawer.getByText("Choose a service to see available times.")).toBeVisible();
       await expect(recoveryDrawer.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
     } finally {

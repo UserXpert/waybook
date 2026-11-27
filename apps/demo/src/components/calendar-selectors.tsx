@@ -17,9 +17,11 @@ export type SearchPickerProps<T extends { id: string }> = {
   hideLabel?: boolean;
   name?: string;
   selectedLabel: string;
+  selectedDetail?: string;
   placeholder: string;
   searchUrl: (query: string) => string;
   resultsLabel: (item: T) => string;
+  resultsDetail?: (item: T) => string;
   onPick: (item: T) => void;
   onClear?: () => void;
   hintId?: string;
@@ -35,9 +37,11 @@ export function SearchPicker<T extends { id: string }>({
   hideLabel,
   name,
   selectedLabel,
+  selectedDetail,
   placeholder,
   searchUrl,
   resultsLabel,
+  resultsDetail,
   onPick,
   onClear,
   hintId,
@@ -47,6 +51,7 @@ export function SearchPicker<T extends { id: string }>({
   autoFocus = browseOnFocus,
 }: SearchPickerProps<T>) {
   const listId = useId();
+  const detailId = selectedDetail ? `${listId}-selected-detail` : undefined;
   const [query, setQuery] = useState(selectedLabel);
   const [result, setResult] = useState<{ url: string; items: T[] | null } | null>(null);
   const [isFocused, setIsFocused] = useState(false);
@@ -127,8 +132,9 @@ export function SearchPicker<T extends { id: string }>({
   };
 
   return (
-    <div className={browseOnFocus ? "calendar-search-picker calendar-search-picker--browse" : "calendar-search-picker"}>
+    <div className={`calendar-search-picker${browseOnFocus ? " calendar-search-picker--browse" : ""}${selectedDetail ? " calendar-search-picker--with-detail" : ""}`}>
       <label htmlFor={listId} className={hideLabel ? "sr-only" : undefined}>{label}</label>
+      {selectedDetail ? <span id={detailId} className="calendar-search-picker__selected-detail">{selectedDetail}</span> : null}
       <input
         id={listId}
         name={name}
@@ -139,7 +145,7 @@ export function SearchPicker<T extends { id: string }>({
         aria-controls={`${listId}-results`}
         aria-expanded={isSearching}
         aria-activedescendant={activeOption ? `${listId}-option-${activeOption.id}` : undefined}
-        aria-describedby={hintId}
+        aria-describedby={[hintId, detailId].filter(Boolean).join(" ") || undefined}
         autoComplete="off"
         autoFocus={autoFocus && !selectedLabel}
         onFocus={(event) => {
@@ -165,7 +171,10 @@ export function SearchPicker<T extends { id: string }>({
           {!matchingResult ? <p role="status">Searching…</p> : matchingResult.items === null ? <p role="status">Search unavailable. Change the search to try again.</p> : results.length ? results.map((item) => (
             <button key={item.id} id={`${listId}-option-${item.id}`} type="button" role="option"
               aria-selected={activeOption?.id === item.id} tabIndex={browseOnFocus ? -1 : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(item)}>
-              {resultsLabel(item)}
+              {resultsDetail ? <span className="calendar-search-picker__option-detail">
+                <span>{resultsLabel(item)}</span>
+                <span>{resultsDetail(item)}</span>
+              </span> : resultsLabel(item)}
             </button>
           )) : <p>No matches found.</p>}
           {canCreate ? <button type="button" role="option" onMouseDown={(event) => event.preventDefault()} onClick={() => canCreate.onPick(normalizedQuery)}>

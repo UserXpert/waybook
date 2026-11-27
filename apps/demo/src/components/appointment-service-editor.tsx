@@ -124,7 +124,8 @@ export function AppointmentServiceEditor({ bookingId, locationId, timezone, edit
           }}><X size={16} aria-hidden="true" /></button> : null}
           <SearchPicker<Service> label={`Choose service ${index + 1}`} selectedLabel={row.service?.title ?? ""}
             placeholder="Search services" searchUrl={(q) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId, q, limit: "8" })}`}
-            resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${money.format(item.priceCents / 100)}`}
+            resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min`}
+            resultsDetail={(item) => money.format(item.priceCents / 100)}
             minimumQueryLength={1} browseOnFocus onPick={(service) => void pickService(row, index, service)} />
           <div className="tenant-drawer-form__grid">
             {row.service ? <SearchPicker<Provider> label={`Provider for service ${index + 1}`} selectedLabel={row.provider?.name ?? ""}
