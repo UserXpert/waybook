@@ -7,6 +7,8 @@ import { ChevronLeft, ChevronRight, Wrench } from "lucide-react";
 import type { CSSProperties } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
+import { CalendarCurrentTime } from "@/components/calendar-current-time";
+import { getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
 import { CalendarActiveFilters } from "@/components/calendar-active-filters";
 import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
@@ -17,8 +19,8 @@ import { ManualAppointmentForm } from "@/components/manual-appointment-form";
 import { TenantEditorClose, TenantEditorDialog } from "@/components/tenant-editor-dialog";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { staffAvailableSlots, isSlotWithinLocationHours } from "@/lib/waybook/booking";
-import { isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
-import { calendarGridBounds } from "@/lib/waybook/calendar-grid-bounds";
+import { calendarBookingInterval, calendarRosterWindowSize, isPastCalendarSlot } from "@/lib/waybook/calendar-slot-time";
+import { calendarGridBounds, calendarTimePosition } from "@/lib/waybook/calendar-grid-bounds";
 import { calculateStaffSlots, type ScheduleOverride, type ScheduleRule } from "@/lib/waybook/availability";
 import { tenantDb } from "@/lib/waybook/database";
 import {
@@ -178,7 +180,7 @@ function overlapsScheduledAppointment(
   );
 }
 
-/** A half-hour grid cell represents an appointment start, not occupied time.
+/** A calendar grid cell represents an appointment start, not occupied time.
  * When its full service interval overlaps an existing appointment, preserve
  * that protection but present it neutrally rather than as a phantom buffer. */
 function overlapsAnyScheduledAppointment(
@@ -254,7 +256,9 @@ export default async function CalendarsPage({
     showOffShift,
   } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
-  const terms = await getTenantTerminology(tenant);
+  const [terms, display] = await Promise.all([getTenantTerminology(tenant), getCalendarDisplay(tenant.id)]);
+  const { interval } = display;
+  const slotsPerHour = 60 / interval;
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   await requirePageFeature(tenant.id, "calendars");
   const permissions = await staffPermissionContext(tenant, membership);
@@ -291,7 +295,7 @@ export default async function CalendarsPage({
   // Keep the operational board bounded to the visible roster window. This
   // avoids serialising an entire large location into the browser while still
   // making every staff member reachable through stable keyset navigation.
-  const rosterWindowSize = 20;
+
   const memberRows = selectedLocation
     ? await db.unsafe<Member[]>(
       `SELECT tm.id,tm.name,tm.email,tm.calendar_color AS "calendarColor"
@@ -303,12 +307,12 @@ export default async function CalendarsPage({
          AND ($7::uuid IS NULL OR (tm.name,tm.id) > (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$7::uuid),''),$7::uuid))
          AND ($8::uuid IS NULL OR (tm.name,tm.id) < (coalesce((SELECT name FROM team_members WHERE tenant_id=$1 AND id=$8::uuid),''),$8::uuid))
        ORDER BY tm.name ${staffBefore ? "DESC" : "ASC"},tm.id ${staffBefore ? "DESC" : "ASC"}
-       LIMIT ${rosterWindowSize + 1}`,
+       LIMIT ${calendarRosterWindowSize + 1}`,
       [tenant.id, selectedLocation.id, canViewTeam, restrictedEmployeeId || null, staffSearch, `%${staffSearch}%`, staffAfter, staffBefore],
     )
     : [];
-  const hasMoreMembers = memberRows.length > rosterWindowSize;
-  const members = (staffBefore ? memberRows.slice(0, rosterWindowSize).reverse() : memberRows.slice(0, rosterWindowSize));
+  const hasMoreMembers = memberRows.length > calendarRosterWindowSize;
+  const members = (staffBefore ? memberRows.slice(0, calendarRosterWindowSize).reverse() : memberRows.slice(0, calendarRosterWindowSize));
   const selectedFromWindow = members.find((member) => member.id === effectiveEmployee);
   const selected = selectedFromWindow ?? (effectiveEmployee && selectedLocation
     ? (await db<Member[]>`SELECT tm.id,tm.name,tm.email,tm.calendar_color AS "calendarColor" FROM team_members tm JOIN team_member_locations tml ON tml.team_member_id=tm.id AND tml.tenant_id=tm.tenant_id WHERE tm.tenant_id=${tenant.id} AND tm.id=${effectiveEmployee} AND tm.is_active=TRUE AND tml.location_id=${selectedLocation.id} LIMIT 1`)[0]
@@ -362,7 +366,7 @@ export default async function CalendarsPage({
   const currentMonth = monthStartFor(
     /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day! : tenantToday,
   );
-  const days = Array.from({ length: 7 }, (_, index) =>
+  const days = Array.from({ length: display.showWeekends ? 7 : 5 }, (_, index) =>
     addDays(currentWeek, index),
   );
   const isHistoricalTeamDay = teamDay < tenantToday;
@@ -480,7 +484,7 @@ export default async function CalendarsPage({
             item.id,
             new Date(rangeStart.getTime() - 86_400_000),
             new Date(rangeEnd.getTime() + 86_400_000),
-            { locationId: selectedLocation.id, slotInterval: 30 },
+            { locationId: selectedLocation.id, slotInterval: calendarBookingInterval, alignToClock: true },
           ),
         })),
       )
@@ -553,23 +557,20 @@ export default async function CalendarsPage({
         [],
         { start: rangeStart, end: rangeEnd },
         tenant.timezone,
-        { duration: 30, slotInterval: 30, now: new Date(0) },
+        { duration: calendarBookingInterval, slotInterval: calendarBookingInterval, alignToClock: true, now: new Date(0) },
       ).filter((slot) =>
         days.includes(localDateKey(new Date(slot.startTime), tenant.timezone))
         && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, tenant.timezone),
       ))
     : [];
-  const allIntervals = [
-    ...openPeriods,
-    ...bookings.map((booking) => ({
-      startTime: booking.startsAt.toISOString(),
-      endTime: booking.endsAt.toISOString(),
-    })),
-  ];
-  const { start: gridStart, rowCount } = calendarGridBounds(
+  const bookingIntervals = bookings.map((booking) => ({
+    startTime: booking.startsAt.toISOString(), endTime: booking.endsAt.toISOString(),
+  }));
+  const { start: gridStart, end: gridEnd, rowCount } = calendarGridBounds(
     configuredWorkingPeriods,
-    allIntervals,
+    [...openPeriods, ...bookingIntervals],
     tenant.timezone,
+    { ...display, bookings: bookingIntervals },
   );
   const calendarDate = new Intl.DateTimeFormat("en-GB", {
     timeZone: tenant.timezone,
@@ -649,9 +650,9 @@ export default async function CalendarsPage({
     const end = new Date(entry.endTime);
     const dayIndex = days.indexOf(localDateKey(start, tenant.timezone));
     const startMinutes = localMinutes(start, tenant.timezone);
-    const endMinutes = localMinutes(end, tenant.timezone);
+    const endMinutes = localDateKey(start, tenant.timezone) === localDateKey(end, tenant.timezone) ? localMinutes(end, tenant.timezone) : 24 * 60;
     return {
-      gridColumn: `${2 + Math.floor((startMinutes - gridStart) / 30)} / span ${Math.max(1, Math.ceil((endMinutes - startMinutes) / 30))}`,
+      ...calendarTimePosition(startMinutes, endMinutes, gridStart, gridEnd),
       gridRow: dayIndex + 2,
     };
   };
@@ -687,17 +688,24 @@ export default async function CalendarsPage({
           localDateKey(new Date(slot.startTime), tenant.timezone) === teamDay,
       ),
   );
-  const teamIntervals = [
-    ...teamDayOpenPeriods,
-    ...teamDayBookings.map((booking) => ({
-      startTime: booking.startsAt.toISOString(),
-      endTime: booking.endsAt.toISOString(),
-    })),
-  ];
-  const { start: teamGridStart, rowCount: teamRowCount } =
-    calendarGridBounds(teamDayOpenPeriods, teamIntervals, tenant.timezone);
+  const teamWeekday = new Date(`${teamDay}T12:00:00Z`).getUTCDay();
+  const teamDayWorkingHours = locationHours
+    .filter((hours) => hours.dayOfWeek === teamWeekday)
+    .map((hours) => ({
+      startTime: fromZonedTime(`${teamDay}T${hours.startTime}`, tenant.timezone).toISOString(),
+      endTime: fromZonedTime(`${teamDay}T${hours.endTime}`, tenant.timezone).toISOString(),
+    }));
+  const teamBookingIntervals = teamDayBookings.map((booking) => ({
+    startTime: booking.startsAt.toISOString(), endTime: booking.endsAt.toISOString(),
+  }));
+  const { start: teamGridStart, end: teamGridEnd, rowCount: teamRowCount } = calendarGridBounds(
+    teamDayWorkingHours, [...teamDayOpenPeriods, ...teamBookingIntervals], tenant.timezone,
+    { ...display, bookings: teamBookingIntervals },
+  );
   const teamPosition = (booking: TeamBooking) => ({
-    gridColumn: `${2 + Math.floor((localMinutes(booking.startsAt, tenant.timezone) - teamGridStart) / 30)} / span ${Math.max(1, Math.ceil((localMinutes(booking.endsAt, tenant.timezone) - localMinutes(booking.startsAt, tenant.timezone)) / 30))}`,
+    ...calendarTimePosition(localMinutes(booking.startsAt, tenant.timezone),
+      localDateKey(booking.endsAt, tenant.timezone) === teamDay ? localMinutes(booking.endsAt, tenant.timezone) : 24 * 60,
+      teamGridStart, teamGridEnd),
     gridRow: visibleTeamMembers.findIndex((member) => member.id === booking.teamMemberId) + 2,
     borderLeftColor: booking.teamMemberColor,
   });
@@ -714,7 +722,10 @@ export default async function CalendarsPage({
   }
   const monthFirstWeekday = (new Date(`${currentMonth}T12:00:00Z`).getUTCDay() + 6) % 7;
   const monthDayCount = new Date(Date.UTC(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)), 0)).getUTCDate();
-  const monthDays = Array.from({ length: monthDayCount }, (_, index) => addDays(currentMonth, index));
+  const monthColumns = display.showWeekends ? 7 : 5;
+  const monthDays = Array.from({ length: monthDayCount }, (_, index) => addDays(currentMonth, index))
+    .filter((_, index) => (monthFirstWeekday + index) % 7 < monthColumns);
+  const monthPadding = monthFirstWeekday < monthColumns ? monthFirstWeekday : 0;
 
   return (
     <main className="waybook-data-page tenant-dashboard-page">
@@ -784,9 +795,10 @@ export default async function CalendarsPage({
                     </div>
                   </div>
                   <div className="waybook-month-calendar__layout">
-                    <div className="waybook-month-calendar__grid" aria-label={`Bookings for ${currentMonth.slice(0, 7)}`}>
-                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => <div key={label} className="waybook-month-calendar__weekday">{label}</div>)}
-                      {Array.from({ length: monthFirstWeekday }, (_, index) => <div className="waybook-month-calendar__blank" aria-hidden="true" key={`blank-${index}`} />)}
+                    <div className="waybook-month-calendar__grid" aria-label={`Bookings for ${currentMonth.slice(0, 7)}`}
+                      style={{ gridTemplateColumns: `repeat(${monthColumns}, minmax(0, 1fr))` }}>
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].slice(0, monthColumns).map((label) => <div key={label} className="waybook-month-calendar__weekday">{label}</div>)}
+                      {Array.from({ length: monthPadding }, (_, index) => <div className="waybook-month-calendar__blank" aria-hidden="true" key={`blank-${index}`} />)}
                       {monthDays.map((date) => {
                         const dayOverview = monthBookingsByDay.get(date);
                         const dayBookings = [...(dayOverview?.appointments.values() ?? [])];
@@ -885,16 +897,18 @@ export default async function CalendarsPage({
                     <div
                       className="waybook-week-calendar__grid team-day-calendar__grid"
                       style={{
-                        gridTemplateColumns: `var(--team-staff-rail, 12rem) repeat(${teamRowCount}, minmax(4.4rem, 1fr))`,
+                        gridTemplateColumns: `var(--team-staff-rail, 12rem) repeat(${teamRowCount}, minmax(${8.8 / slotsPerHour}rem, 1fr))`,
                         gridTemplateRows: `3rem repeat(${visibleTeamMembers.length}, 4.25rem)`,
                       }}
                     >
                       <div className="waybook-week-calendar__corner">{titleTerminology(terms.staffPlural)}</div>
-                      {Array.from({ length: teamRowCount }, (_, index) => <div className="team-day-calendar__time-header" key={`team-time-${index}`} style={{ gridColumn: index + 2, gridRow: 1 }}>{index % 2 === 0 ? `${String(Math.floor((teamGridStart + index * 30) / 60)).padStart(2, "0")}:00` : ""}</div>)}
+                      {Array.from({ length: teamRowCount }, (_, index) => <div className="team-day-calendar__time-header" key={`team-time-${index}`} style={{ gridColumn: index + 2, gridRow: 1 }}>{index % slotsPerHour === 0 ? `${String(Math.floor((teamGridStart + index * interval) / 60)).padStart(2, "0")}:00` : ""}</div>)}
+                      {display.showNow ? <CalendarCurrentTime now={calendarNow.getTime()} timezone={tenant.timezone}
+                        dates={[teamDay]} start={teamGridStart} end={teamGridEnd} team /> : null}
                       {visibleTeamMembers.flatMap((member, memberIndex) => [
                         <div key={`staff-${member.id}`} className="team-day-calendar__staff" aria-label={member.name} style={{ gridColumn: 1, gridRow: memberIndex + 2 }}><i aria-hidden>{member.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</i><strong>{member.name}</strong></div>,
                         ...Array.from({ length: teamRowCount }, (_, index) => {
-                          const time = `${String(Math.floor((teamGridStart + index * 30) / 60)).padStart(2, "0")}:${String((teamGridStart + index * 30) % 60).padStart(2, "0")}`;
+                          const time = `${String(Math.floor((teamGridStart + index * interval) / 60)).padStart(2, "0")}:${String((teamGridStart + index * interval) % 60).padStart(2, "0")}`;
                           const slotKey = `${member.id}|${teamDay}T${time}`;
                           const isPastDate = isPastCalendarSlot(teamDay, time, tenant.timezone, calendarNow);
                           const isBookable = !isPastDate && bookableSlotKeys.has(slotKey);
@@ -916,12 +930,14 @@ export default async function CalendarsPage({
                           const canManageMember = canManageSchedule(member.id);
                           return canManageMember && isBookable ? (
                             <Link
+                              prefetch={false}
                               className="waybook-week-calendar__cell is-actionable is-bookable"
                               data-availability-state="bookable"
                               data-calendar-drop-cell="true"
                               data-calendar-team-member-id={member.id}
                               data-calendar-starts-at={`${teamDay}T${time}`}
                               data-calendar-service-ids={Array.from(servicesForBookableSlot.get(slotKey) ?? []).join(",")}
+                              data-hour-start={index % slotsPerHour === 0 || undefined}
                               style={{ gridColumn: index + 2, gridRow: memberIndex + 2 }}
                               aria-label={`New appointment ${member.name} ${teamDay} ${time}`}
                               href={href({
@@ -949,6 +965,7 @@ export default async function CalendarsPage({
                                 : {})}
                               aria-label={isPastDate ? "Past time" : isAppointmentConflict ? "Overlaps an existing appointment" : "Unavailable"}
                               key={`${member.id}-${index}`}
+                              data-hour-start={index % slotsPerHour === 0 || undefined}
                               style={{ gridColumn: index + 2, gridRow: memberIndex + 2 }}
                             />
                           );
@@ -1087,21 +1104,23 @@ export default async function CalendarsPage({
                     <div
                       className="waybook-week-calendar__grid staff-week-calendar__grid"
                       style={{
-                        gridTemplateColumns: `var(--staff-week-rail, 12rem) repeat(${rowCount}, minmax(4.4rem, 1fr))`,
+                        gridTemplateColumns: `var(--staff-week-rail, 12rem) repeat(${rowCount}, minmax(${8.8 / slotsPerHour}rem, 1fr))`,
                         gridTemplateRows: "3rem repeat(7, 4.25rem)",
                       }}
                     >
                       <div className="waybook-week-calendar__corner" style={{ gridColumn: 1, gridRow: 1 }}>{selected.name}</div>
                       {Array.from({ length: rowCount }, (_, index) => {
-                        const time = `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:${String((gridStart + index * 30) % 60).padStart(2, "0")}`;
+                        const time = `${String(Math.floor((gridStart + index * interval) / 60)).padStart(2, "0")}:${String((gridStart + index * interval) % 60).padStart(2, "0")}`;
                         return <div
                           className="waybook-week-calendar__time"
                           key={`time-${index}`}
                           style={{ gridColumn: index + 2, gridRow: 1, "--staff-week-grid-column": index + 2 } as CSSProperties}
                         >
-                          {index % 2 === 0 ? time : ""}
+                          {index % slotsPerHour === 0 ? time : ""}
                         </div>;
                       })}
+                      {display.showNow ? <CalendarCurrentTime now={calendarNow.getTime()} timezone={tenant.timezone}
+                        dates={days} start={gridStart} end={gridEnd} /> : null}
                       {days.map((day, dayIndex) => (
                         <div
                           key={day}
@@ -1117,7 +1136,7 @@ export default async function CalendarsPage({
                       ))}
                       {days.flatMap((day, dayIndex) =>
                         Array.from({ length: rowCount }, (_, index) => {
-                          const time = `${String(Math.floor((gridStart + index * 30) / 60)).padStart(2, "0")}:${String((gridStart + index * 30) % 60).padStart(2, "0")}`;
+                          const time = `${String(Math.floor((gridStart + index * interval) / 60)).padStart(2, "0")}:${String((gridStart + index * interval) % 60).padStart(2, "0")}`;
                           const slotKey = `${selected?.id}|${day}T${time}`;
                           const isPastDate = isPastCalendarSlot(day, time, tenant.timezone, calendarNow);
                           const isBookable = !isPastDate && bookableSlotKeys.has(slotKey);
@@ -1134,12 +1153,14 @@ export default async function CalendarsPage({
                           );
                           return canManageSelectedSchedule && services.length && isBookable ? (
                             <Link
+                              prefetch={false}
                               className="waybook-week-calendar__cell is-actionable is-bookable"
                               data-availability-state="bookable"
                               data-calendar-drop-cell="true"
                               data-calendar-team-member-id={selected!.id}
                               data-calendar-starts-at={`${day}T${time}`}
                               data-calendar-service-ids={Array.from(servicesForBookableSlot.get(slotKey) ?? []).join(",")}
+                              data-hour-start={index % slotsPerHour === 0 || undefined}
                               style={{ gridColumn: index + 2, gridRow: dayIndex + 2 }}
                               aria-label={`New appointment ${day} ${time}`}
                               href={href({
@@ -1164,6 +1185,7 @@ export default async function CalendarsPage({
                                 : {})}
                               aria-label={isPastDate ? "Past time" : isAppointmentConflict ? "Overlaps an existing appointment" : "Unavailable"}
                               key={`${day}-${index}`}
+                              data-hour-start={index % slotsPerHour === 0 || undefined}
                               style={{ gridColumn: index + 2, gridRow: dayIndex + 2 }}
                             />
                           );

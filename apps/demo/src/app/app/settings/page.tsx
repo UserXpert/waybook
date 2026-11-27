@@ -14,9 +14,11 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { terminologyLabels, titleTerminology } from "@/lib/waybook/terminology-labels";
+import { calendarDisplayIntervals, getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
+import { saveCalendarDisplay } from "./calendar-actions";
 import { StaffRolesPanel } from "./roles/panel";
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; calendarStatus?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
   const [params, slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled, terminology] = await Promise.all([
     searchParams,
@@ -27,6 +29,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   ]);
   const labels = terminologyLabels(terminology.preferences.clientTerm, terminology.preferences.staffTerm);
   const canManageRoles = teamEnabled && membership.role === "owner";
+  const showingCalendar = params.tab === "calendar";
+  const calendar = showingCalendar ? await getCalendarDisplay(tenant.id) : null;
+  const hours = Array.from({ length: 25 }, (_, index) => index);
   const showingRoles = params.tab === "roles";
   const showingBusiness = params.tab === "business";
   if (showingRoles && !canManageRoles) notFound();
@@ -60,12 +65,36 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <header className="workspace-settings__heading"><p>WORKSPACE</p><h1>Settings</h1><span>Manage your preferences and business setup.</span></header>
       <div className="workspace-settings__layout">
         <nav className="workspace-settings__nav" aria-label="Settings sections">
-          <Link href={settingsHref} aria-current={!showingRoles && !showingBusiness ? "page" : undefined}>Appearance</Link>
+          <Link href={settingsHref} aria-current={!showingRoles && !showingBusiness && !showingCalendar ? "page" : undefined}>Appearance</Link>
+          <Link href={`${settingsHref}?tab=calendar`} aria-current={showingCalendar ? "page" : undefined}>Calendar</Link>
           {canViewBusiness ? <Link href={businessHref} aria-current={showingBusiness ? "page" : undefined}>Business setup</Link> : null}
           {canManageRoles ? <Link href={rolesHref} aria-current={showingRoles ? "page" : undefined}>Roles &amp; permissions</Link> : null}
         </nav>
         <div className="workspace-settings__content">
-          {showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
+          {calendar ? <section className="workspace-settings__panel">
+            <h2>Calendar</h2>
+            <p>Choose how the calendar appears on this browser. Times use {tenant.timezone}. Booked appointments stay visible outside your chosen hours.</p>
+            {params.calendarStatus === "saved" ? <p role="status">Calendar preferences saved.</p> : null}
+            {params.calendarStatus === "hours" ? <p role="alert">The calendar end time must be later than the start time.</p> : null}
+            <form action={saveCalendarDisplay} className="tenant-drawer-form calendar-display-form">
+              <div className="calendar-display-form__hours">
+                <label>Show from <select name="start" defaultValue={calendar.start ?? ""}>
+                  <option value="">Automatic</option>
+                  {hours.slice(0, -1).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}
+                </select></label>
+                <label>Show until <select name="end" defaultValue={calendar.end ?? ""}>
+                  <option value="">Automatic</option>
+                  {hours.slice(1).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}
+                </select></label>
+              </div>
+              <label>Calendar interval <select name="interval" defaultValue={calendar.interval}>
+                {calendarDisplayIntervals.map((interval) => <option key={interval} value={interval}>{interval} minutes</option>)}
+              </select></label>
+              <label className="calendar-display-form__check"><input type="checkbox" name="showNow" defaultChecked={calendar.showNow} /> Show current time</label>
+              <label className="calendar-display-form__check"><input type="checkbox" name="showWeekends" defaultChecked={calendar.showWeekends} /> Show weekends in Week and Month views</label>
+              <button type="submit" className="waybook-action">Save calendar preferences</button>
+            </form>
+          </section> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
             {canEditBusiness ? <section className="workspace-settings__panel" id="business-settings">
               <h2>Business details</h2>
               <p>Manage your branding, registration and contact details.</p>

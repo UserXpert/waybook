@@ -90,3 +90,10 @@ test("returns one candidate per instant when historical shifts overlap", () => {
   assert.deepEqual(localStarts(calculateStaffSlots([rule, overlap], [], [], range, timezone, options)),
     ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30"]);
 });
+
+test("calendar starts align with quarter-hour boundaries inside an off-grid shift", () => {
+  const slots = calculateStaffSlots([{ ...rule, startTime: "09:07", endTime: "10:15" }], [], [], range, timezone, {
+    ...options, duration: 30, slotInterval: 15, alignToClock: true,
+  });
+  assert.deepEqual(localStarts(slots), ["09:15", "09:30", "09:45"]);
+});

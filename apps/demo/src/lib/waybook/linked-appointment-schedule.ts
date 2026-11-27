@@ -42,7 +42,7 @@ export async function linkedAppointmentOpenings(
     const [provider] = await staffAvailableSlots(
       tenant, reservation.serviceId, new Date(from.getTime() + offset), new Date(until.getTime() + offset + duration),
       { locationId, teamMemberId: reservation.teamMemberId ?? undefined, durationMinutes: duration / 60_000,
-        slotInterval: reservation.position === 1 ? primaryInterval : 1, excludeBookingBlockIds: excludedBlocks },
+        slotInterval: reservation.position === 1 ? primaryInterval : 1, alignToClock: primaryInterval > 1, excludeBookingBlockIds: excludedBlocks },
       db,
     ).catch((error: unknown) => {
       if (error instanceof Error && ["Service not found.", "Location is unavailable."].includes(error.message)) return [];
