@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("staff checkout settles the assigned appointment without opening workspace sales", async ({ page }, testInfo) => {
+test("staff checkout settles the assigned appointment without opening workspace sales", async ({ browser, baseURL, ignoreHTTPSErrors, page }, testInfo) => {
   const options = { max: 1, ssl: false } as const;
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, options);
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, options);
@@ -103,7 +103,11 @@ test("staff checkout settles the assigned appointment without opening workspace 
       INSERT INTO booking_service_segments (tenant_id,booking_id,booking_block_id,service_id,position,booked_price_cents)
       VALUES (${tenant.id},${shared.id},${sharedBlock.id},${service.id},2,25000)
     `;
-    const paymentRows = () => db`SELECT amount_cents,method,recorded_by_identity_id FROM payment_records WHERE booking_id=${own.id}`;
+    const paymentRows = () => db`
+      SELECT amount_cents,method,recorded_by_identity_id FROM payment_records
+      WHERE booking_id=${own.id} ORDER BY recorded_at,id
+    `;
+    const bookingStatus = async () => (await db<{ status: string }[]>`SELECT status FROM bookings WHERE id=${own.id}`)[0].status;
     await page.emulateMedia({ colorScheme: testInfo.project.name === "mobile" ? "dark" : "light" });
     await page.goto("/nordic/login");
     await page.getByLabel("Work email").fill(email);
@@ -139,6 +143,7 @@ test("staff checkout settles the assigned appointment without opening workspace 
     const amount = checkout.getByLabel("Amount (DKK)");
     await expect(amount).toHaveValue("650.00");
     await expect(amount).toHaveAttribute("readonly", "");
+    await expect(checkout.getByRole("button", { name: "Record partial payment", exact: true })).toHaveCount(0);
     await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
 
     const stripeOrigin = process.env.WAYBOOK_STRIPE_SANDBOX_ORIGIN;
@@ -173,7 +178,34 @@ test("staff checkout settles the assigned appointment without opening workspace 
     await settle.click();
     await expect(checkout.getByRole("alert")).toContainText("Record the full balance due");
     expect(await paymentRows()).toHaveLength(0);
-    expect((await db`SELECT status FROM bookings WHERE id=${own.id}`)[0].status).toBe("arrived");
+    expect(await bookingStatus()).toBe("arrived");
+
+    const [manager] = await control<{ id: string }[]>`SELECT id FROM identities WHERE email='owner@nordic.local'`;
+    const managerContext = await browser.newContext({ baseURL, ignoreHTTPSErrors, viewport: page.viewportSize() });
+    try {
+      const managerPage = await managerContext.newPage();
+      await managerPage.goto("/nordic/login");
+      await managerPage.getByLabel("Work email").fill("owner@nordic.local");
+      await managerPage.getByPlaceholder("Enter your password").fill("waybook-local-only");
+      await managerPage.getByRole("button", { name: "Sign in", exact: true }).click();
+      await expect(managerPage).toHaveURL(/\/nordic\/app/);
+      await managerPage.goto(`${salePath}?booking=${own.id}&step=payment`);
+      const managerCheckout = managerPage.getByRole("dialog", { name: "Appointment checkout" });
+      await managerCheckout.getByLabel("Amount (DKK)").fill("200.00");
+      await managerCheckout.getByRole("radio", { name: "Bank transfer", exact: true }).check();
+      await managerCheckout.getByRole("button", { name: "Record partial payment", exact: true }).click();
+      await expect(managerCheckout.getByRole("region", { name: "Payments recorded", exact: true })).toBeVisible();
+      expect(await bookingStatus()).toBe("arrived");
+      expect(await paymentRows()).toEqual([{ amount_cents: 20000, method: "bank_transfer", recorded_by_identity_id: manager.id }]);
+    } finally {
+      await managerContext.close();
+    }
+
+    await page.reload();
+    await expect(amount).toHaveValue("450.00");
+    await expect(amount).toHaveAttribute("readonly", "");
+    await expect(checkout.getByRole("region", { name: "Payments recorded", exact: true })).toBeVisible();
+    await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
 
     const actionRoute = `**${new URL(page.url()).pathname}**`;
     await page.route(actionRoute, async (route) => {
@@ -188,11 +220,14 @@ test("staff checkout settles the assigned appointment without opening workspace 
     await settle.click();
     const retry = checkout.getByRole("button", { name: "Retry entry", exact: true });
     await expect(retry).toBeVisible();
-    await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id=${own.id}`)[0].status).toBe("completed");
+    await expect.poll(bookingStatus).toBe("completed");
     await page.unroute(actionRoute);
     await retry.click();
     await expect(checkout.getByText("Paid SALE", { exact: true })).toBeVisible();
-    expect(await paymentRows()).toEqual([{ amount_cents: 65000, method: "cash", recorded_by_identity_id: identity.id }]);
+    expect(await paymentRows()).toEqual([
+      { amount_cents: 20000, method: "bank_transfer", recorded_by_identity_id: manager.id },
+      { amount_cents: 45000, method: "cash", recorded_by_identity_id: identity.id },
+    ]);
     expect(await db`SELECT id FROM booking_events WHERE booking_id=${own.id} AND event_type='booking.completed'`).toHaveLength(1);
     await expect(checkout.getByRole("link", { name: "View receipt" })).toHaveCount(0);
     await checkout.getByRole("link", { name: "Open appointment" }).click();

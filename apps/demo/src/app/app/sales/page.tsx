@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { hasNonGiftCardPayment } from "@/lib/waybook/appointment-payment-records";
+import { hasNonGiftCardPayment, hasOnlyManualAppointmentPayments, paymentMethodLabels } from "@/lib/waybook/appointment-payment-records";
 import { getAppointmentSaleProducts, getAppointmentSalePayments } from "@/lib/waybook/appointment-sale-details";
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
@@ -362,7 +362,10 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const availableProducts = products.filter((product) => product.currency === selectedSale.currency);
       const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
       const recorded = paymentBalance?.payments ?? [];
-      const canRecordPayment = (manager || (selectedSale.attendanceStage === "checking_out" && !stripePending)) && paymentBalance && !hasNonGiftCardPayment(recorded) && outstandingCents > 0;
+      const activeCheckout = selectedSale.status === "arrived" && selectedSale.attendanceStage === "checking_out";
+      const manualSplit = activeCheckout && !stripePending && hasOnlyManualAppointmentPayments(recorded);
+      const canRecordPayment = (manager || (activeCheckout && !stripePending)) && paymentBalance &&
+        (manualSplit || !hasNonGiftCardPayment(recorded)) && outstandingCents > 0;
       const paymentStep = step === "payment" && Boolean(canRecordPayment);
       const reviewHref = saleHref(selectedSale);
       const paymentHref = `${reviewHref}&step=payment`;
@@ -418,6 +421,15 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
             </section> : null}
             {paymentStep && paymentBalance ? <section aria-label={giftCardStep ? "Gift card payment" : "Record payment"} className="appointment-checkout__payment">
               <dl className="appointment-checkout__balance"><div><dt>Balance due</dt><dd>{money(outstandingCents)}</dd></div></dl>
+              {manualSplit && recorded.length > 0 ? <section aria-label="Payments recorded">
+                <h3>Payments recorded</h3>
+                <ul className="client-record__ledger">
+                  {recorded.map((payment) => <li key={payment.id}>
+                    <span>{payment.method === "card" ? "Card paid elsewhere" : paymentMethodLabels[payment.method]}</span>
+                    <b>{money(payment.amountCents)}</b>
+                  </li>)}
+                </ul>
+              </section> : null}
               {giftCardStep ? <>
                 <h3>Gift card</h3>
                 <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />
@@ -426,7 +438,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {manager && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
                   amountCents={outstandingCents} pendingPayment={stripePending} verifyOnReturn={stripe === "return"} /> : null}
                 {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
-                  canFinishCheckout={selectedSale.status === "arrived" && selectedSale.attendanceStage === "checking_out"}
+                  canFinishCheckout={activeCheckout} manualSplit={manualSplit}
                   giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} /> : null}
               </>}
             </section> : null}

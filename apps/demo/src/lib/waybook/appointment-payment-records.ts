@@ -11,6 +11,11 @@ export function hasNonGiftCardPayment(payments: RecordedAppointmentPayment[]) {
   return payments.some(({ method }) => method !== "gift_card");
 }
 
+export function hasOnlyManualAppointmentPayments(payments: RecordedAppointmentPayment[]) {
+  return payments.every(({ method, stripeSandbox }) =>
+    !stripeSandbox && manualPaymentMethods.some((value) => value === method));
+}
+
 /** Payment corrections are recorded in booking history and linked to any ledger adjustment. */
 export function activeAppointmentPayments(db: Pick<ReturnType<typeof tenantDb>, "unsafe">, tenantId: string, bookingId: string) {
   return db.unsafe<RecordedAppointmentPayment[]>(`

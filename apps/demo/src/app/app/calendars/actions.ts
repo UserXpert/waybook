@@ -2,7 +2,7 @@
 
 import { getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
 import { calendarBookingInterval, maxCalendarMoveTargets } from "@/lib/waybook/calendar-slot-time";
-import { activeAppointmentPayments, hasNonGiftCardPayment, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
+import { activeAppointmentPayments, hasNonGiftCardPayment, hasOnlyManualAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -1092,6 +1092,14 @@ async function insertManualPaymentEntry(
   await transaction.unsafe("INSERT INTO tenant_audit_events (tenant_id, actor_identity_id, action, target_type, target_id, metadata) VALUES ($1, $2, $3, 'payment_record', $4, $5::jsonb)", [tenantId, actorId, `payment.${kind}_recorded`, payment.id, { bookingId: bookingId, amountCents, method }]);
 }
 
+async function manualTenderBalance(transaction: TransactionSql, tenantId: string, bookingId: string, method: string) {
+  const [balance] = await transaction.unsafe<{ available: number }[]>(`
+    SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)::int AS available
+    FROM payment_records WHERE tenant_id=$1 AND booking_id=$2 AND method=$3
+  `, [tenantId, bookingId, method]);
+  return balance.available;
+}
+
 export async function recordPayment(formData: FormData): Promise<PaymentState> {
   const kind = String(formData.get("kind") ?? "");
   const finishCheckout = formData.get("finishCheckout") === "true";
@@ -1115,7 +1123,7 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
     const identity = await requireIdentity();
     const amountCents = Math.round(amount * 100);
     await db.begin(async (transaction) => {
-      if (finishCheckout || !permissions.isManager) {
+      if (expectedBalance !== null || !permissions.isManager) {
         // Schedule edits take the same block lock before changing providers.
         await transaction.unsafe("SELECT id FROM booking_blocks WHERE tenant_id = $1 AND id = $2 FOR UPDATE", [tenant.id, booking.bookingBlockId]);
       }
@@ -1151,7 +1159,9 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
         }
         if (locked.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
         const payments = await activeAppointmentPayments(transaction, tenant.id, booking.id);
-        if (hasNonGiftCardPayment(payments)) {
+        const manualCheckout = expectedBalance !== null && locked.status === "arrived" &&
+          locked.stage === "checking_out" && hasOnlyManualAppointmentPayments(payments);
+        if (hasNonGiftCardPayment(payments) && !manualCheckout) {
           throw new Error("A payment is already recorded. Edit or delete it before recording another.");
         }
         if (expectedBalance !== null || payments.length > 0) {
@@ -1166,9 +1176,15 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
             throw new Error("The checkout balance changed. Go back to checkout and review the total.");
           }
           if (amountCents !== Number(cart.balance)) {
-            if (payments.length > 0) throw new Error("Record the full balance remaining after the gift-card payment.");
+            if (payments.length > 0 && !manualCheckout) throw new Error("Record the full balance remaining after the gift-card payment.");
             if (finishCheckout || !permissions.isManager) throw new Error("Record the full balance due for this appointment.");
           }
+        }
+      } else {
+        const payments = await activeAppointmentPayments(transaction, tenant.id, booking.id);
+        if (payments.length > 1 && hasOnlyManualAppointmentPayments(payments) &&
+            amountCents > await manualTenderBalance(transaction, tenant.id, booking.id, method)) {
+          throw new Error("Refund cannot exceed the amount collected with this payment method.");
         }
       }
       await insertManualPaymentEntry(transaction, tenant.id, booking.id, kind,
@@ -1232,6 +1248,13 @@ export async function correctAppointmentPayment(formData: FormData): Promise<Pay
       `, [tenant.id, booking.id]);
       const onlyManualPayment = payments.filter((item) => item.method !== "gift_card").length === 1;
       const delta = op === "delete" && onlyManualPayment ? -Math.max(balance.available, 0) : amountCents - payment.amountCents;
+      const splitTender = payments.length > 1 && hasOnlyManualAppointmentPayments(payments);
+      if (splitTender && op === "edit" && method !== payment.method) {
+        throw new Error("The payment method is fixed for a split checkout.");
+      }
+      if (splitTender && delta < 0 && -delta > await manualTenderBalance(transaction, tenant.id, booking.id, payment.method)) {
+        throw new Error("This change exceeds the collected balance for that payment method.");
+      }
       if (delta < -balance.available && delta < 0) {
         throw new Error("This change exceeds the collected balance after refunds.");
       }

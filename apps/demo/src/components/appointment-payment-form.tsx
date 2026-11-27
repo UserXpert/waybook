@@ -18,13 +18,14 @@ export function PaymentMethodOptions() {
   return <>{paymentMethods.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</>;
 }
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, requireFullBalance = false, canFinishCheckout = false, giftCardHref }: {
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, requireFullBalance = false, canFinishCheckout = false, manualSplit = false, giftCardHref }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
   checkout?: boolean;
   requireFullBalance?: boolean;
   canFinishCheckout?: boolean;
+  manualSplit?: boolean;
   giftCardHref?: string;
 }) {
   const router = useRouter();
@@ -34,17 +35,19 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   const submitting = useRef(false);
   const interrupted = useRef<FormData | null>(null);
   const { outstandingCents, refundableCents, payments } = balance;
-  const canAddPayment = !hasNonGiftCardPayment(payments) && outstandingCents > 0;
+  const canAddPayment = (manualSplit || !hasNonGiftCardPayment(payments)) && outstandingCents > 0;
   const [entryKind, setKind] = useState("");
   const kind = checkout ? "payment" : entryKind;
   const [method, setMethod] = useState(checkout ? "" : "card");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
-  const settlingGiftCard = kind === "payment" && canAddPayment && payments.length > 0;
+  const settlingGiftCard = kind === "payment" && canAddPayment && payments.some(({ method }) => method === "gift_card");
   const remainingAmount = kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "";
   const fixedAmount = settlingGiftCard || requireFullBalance;
   const amount = fixedAmount ? remainingAmount : draftAmount ?? remainingAmount;
   const finishCheckout = canFinishCheckout && canAddPayment && Number(amount) === Number(remainingAmount);
-  const recordLabel = finishCheckout ? "Record payment and finish checkout" : checkout ? "Record payment" : "Record entry";
+  const partialPayment = manualSplit && !fixedAmount && Number(amount) > 0 && Number(amount) < Number(remainingAmount);
+  const recordLabel = finishCheckout ? "Record payment and finish checkout"
+    : partialPayment ? "Record partial payment" : checkout ? "Record payment" : "Record entry";
   const editingDisabled = pending || retryRequired;
   const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Boolean(method) && Number(amount) > 0;
 
@@ -68,6 +71,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
       setState(result);
       if (result.success) {
         setKind("");
+        if (checkout) setMethod("");
         setDraftAmount(null);
         if (onRecorded) await onRecorded(bookingId).catch(() => router.refresh());
         else router.refresh();
