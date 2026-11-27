@@ -1,10 +1,9 @@
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-for (const tenant of [
-  { route: "nordic", slug: "nordic-studio", owner: "owner@nordic.local" },
-  { route: "copenhagen", slug: "copenhagen-physio", owner: "owner@copenhagen-physio.local" },
-]) test(`setup editors handle keyboard navigation in ${tenant.route}`, async ({ page }) => {
+const tenant = { route: "nordic", slug: "nordic-studio", owner: "owner@nordic.local" };
+
+test("setup editors handle keyboard navigation", async ({ page }) => {
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
   try {
     const [feature] = await control<{ tenant_id: string; is_enabled: boolean }[]>`

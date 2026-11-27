@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("appointment payment and refund limits preserve exact amounts in Reports", { tag: "@smoke" }, async ({ page }) => {
+test("appointment payment and refund limits preserve exact amounts in Reports", { tag: ["@smoke", "@mobile"] }, async ({ page }) => {
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const marker = randomUUID().slice(0, 8);
   const customerName = `Payment QA ${marker}`;
@@ -175,7 +175,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
   }
 });
 
-test("appointment and products share one reviewed checkout balance", async ({ page }) => {
+test("appointment and products share one reviewed checkout balance", { tag: "@mobile" }, async ({ page }) => {
   page.setDefaultTimeout(8_000);
   const uri = new URL(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!);
   if (!["localhost", "127.0.0.1"].includes(uri.hostname) || !uri.pathname.startsWith("/waybook_e2e_")) {
@@ -252,7 +252,7 @@ test("appointment and products share one reviewed checkout balance", async ({ pa
   }
 });
 
-test("manager records split tender and completes checkout with the final payment", async ({ page }) => {
+test("manager records split tender and completes checkout with the final payment", { tag: "@mobile" }, async ({ page }) => {
   const uri = new URL(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!);
   if (!["localhost", "127.0.0.1", "[::1]"].includes(uri.hostname) || !uri.pathname.startsWith("/waybook_e2e_")) {
     throw new Error("Split-tender checkout requires a disposable local database.");

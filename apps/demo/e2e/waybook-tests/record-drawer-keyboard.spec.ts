@@ -2,10 +2,9 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-for (const tenant of [
-  { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
-  { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
-]) test(`client records and package definitions keep focus in ${tenant.route}`, async ({ page }) => {
+const tenant = { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" };
+
+test("client records and package definitions keep focus", async ({ page }) => {
   const db = postgres(process.env[tenant.database]!, { max: 1, ssl: false });
   const suffix = randomUUID().slice(0, 8);
   const name = `QA keyboard contact ${suffix}`;

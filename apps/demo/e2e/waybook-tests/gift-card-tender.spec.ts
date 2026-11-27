@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
 for (const settleRemainder of [false, true]) test(
-  settleRemainder ? "partial gift-card tender leaves one manual remainder on the same sale" : "gift-card tender returns to the same card on cancellation", async ({ page, browser, baseURL, ignoreHTTPSErrors }, testInfo) => {
+  settleRemainder ? "partial gift-card tender leaves one manual remainder on the same sale" : "gift-card tender returns to the same card on cancellation",
+  { tag: settleRemainder ? "@mobile" : [] }, async ({ page, browser, baseURL, ignoreHTTPSErrors }, testInfo) => {
   test.setTimeout(180_000);
   const raw = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
   const url = new URL(raw);

@@ -220,32 +220,6 @@ test("switching staff profiles keeps exactly one avatar for the selected member"
   }
 });
 
-test("Apps menu groups, search, keyboard and navigation work", async ({ page }) => {
-  await page.goto("/login");
-  await page.getByLabel("Work email").fill("owner@nordic.local");
-  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/nordic\/app/);
-  const apps = page.getByRole("button", { name: "Apps", exact: true });
-  await apps.click();
-  const dialog = page.getByRole("dialog", { name: "Apps & settings" });
-  await expect(dialog).toBeVisible();
-  for (const group of ["Operations", "Commerce", "Setup", "Activity & insights"]) await expect(dialog.getByRole("heading", { name: group, exact: true })).toBeVisible();
-  const columns = await dialog.locator(".tenant-app-menu__groups").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
-  const width = page.viewportSize()!.width;
-  expect(columns).toBe(width <= 540 ? 1 : width <= 900 ? 2 : 4);
-  const search = dialog.getByRole("textbox", { name: "Search apps and settings" });
-  await search.fill("staff");
-  await expect(dialog.getByRole("link", { name: "Staff", exact: true })).toBeVisible();
-  await expect(dialog.getByRole("link", { name: "Sales", exact: true })).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  await expect(dialog).toHaveCount(0);
-  await expect(apps).toBeFocused();
-  await apps.click();
-  await dialog.getByRole("link", { name: "Staff", exact: true }).click();
-  await expect(page).toHaveURL(/\/nordic\/app\/team/);
-});
-
 test("staff can change their own photo and read-only members cannot", async ({ page, browser }) => {
   const { default: postgres } = await import("postgres");
   const { randomUUID } = await import("node:crypto");

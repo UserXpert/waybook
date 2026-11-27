@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("booking widget completes a booking from a separate website and restores keyboard focus", async ({ page, request, baseURL }) => {
+test("booking widget completes a booking from a separate website and restores keyboard focus", { tag: "@mobile" }, async ({ page, request, baseURL }) => {
   for (const workspace of [
     { route: "nordic", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
     { route: "copenhagen", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },

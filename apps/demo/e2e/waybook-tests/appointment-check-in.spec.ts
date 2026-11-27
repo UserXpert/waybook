@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("check in, resume checkout, and complete the same appointment", async ({ page }) => {
+test("check in, resume checkout, and complete the same appointment", { tag: "@mobile" }, async ({ page }) => {
   test.setTimeout(90_000);
   page.setDefaultTimeout(8000);
   const database = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;

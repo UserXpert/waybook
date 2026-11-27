@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 for (const tenant of [
   { route: "nordic", owner: "owner@nordic.local" },
   { route: "copenhagen", owner: "owner@copenhagen-physio.local" },
-]) test(`Calendar location search stays open after quick refocus in ${tenant.route}`, async ({ page }) => {
+]) test(`Calendar location search stays open after quick refocus in ${tenant.route}`, { tag: tenant.route === "nordic" ? "@mobile" : [] }, async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Work email").fill(tenant.owner);
   await page.getByPlaceholder("Enter your password").fill("waybook-local-only");

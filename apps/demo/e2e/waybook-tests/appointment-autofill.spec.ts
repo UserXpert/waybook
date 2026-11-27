@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { fromZonedTime } from "date-fns-tz";
 import postgres from "postgres";
 
-test("opt-in service autofill honors the selected slot, current price, and manual choice", async ({ page }) => {
+test("opt-in service autofill honors the selected slot, current price, and manual choice", { tag: "@mobile" }, async ({ page }) => {
   const database = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
   const target = new URL(database);
   if (!["127.0.0.1", "localhost", "[::1]"].includes(target.hostname) || !target.pathname.startsWith("/waybook_e2e_")) {

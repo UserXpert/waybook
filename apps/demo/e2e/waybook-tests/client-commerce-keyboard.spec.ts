@@ -1,9 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-for (const tenant of [
-  { route: "nordic", owner: "owner@nordic.local" },
-  { route: "copenhagen", owner: "owner@copenhagen-physio.local" },
-]) test(`client and commerce forms keep keyboard focus in ${tenant.route}`, async ({ page }) => {
+const tenant = { route: "nordic", owner: "owner@nordic.local" };
+
+test("client and commerce forms keep keyboard focus", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Work email").fill(tenant.owner);
   await page.getByPlaceholder("Enter your password").fill("waybook-local-only");

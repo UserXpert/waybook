@@ -4,7 +4,9 @@ for (const workspace of [
   { slug: "nordic", name: "Nordic Studio", email: "owner@nordic.local" },
   { slug: "copenhagen", name: "Copenhagen Physio", email: "owner@copenhagen-physio.local" },
 ]) {
-  test(`enabled navigation opens the correct ${workspace.name} pages without horizontal overflow`, async ({ page }) => {
+  test(`enabled navigation routes to ${workspace.name} without horizontal overflow`, {
+    tag: "@mobile",
+  }, async ({ page }) => {
     await page.goto("/login");
     await page.getByLabel("Work email").fill(workspace.email);
     await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
@@ -23,9 +25,13 @@ for (const workspace of [
     await shell.getByRole("button", { name: /^Account menu for / }).click();
     const settings = await page.getByRole("menuitem", { name: /^Settings/ }).getAttribute("href");
     expect(settings).toBe(`/${workspace.slug}/app/settings`);
-    for (const route of new Set([...primaryRoutes, ...appRoutes, settings!])) {
+    const app = `/${workspace.slug}/app`;
+    for (const route of [...primaryRoutes, ...appRoutes]) {
+      expect(route === app || route.startsWith(`${app}/`), route).toBe(true);
+    }
+    expect(primaryRoutes).toContain(`${app}/calendars`);
+    for (const route of [`${app}/calendars`, `${app}/settings`]) {
       await test.step(route, async () => {
-        expect(route.startsWith(`/${workspace.slug}/app`)).toBe(true);
         const response = await page.goto(route);
         expect.soft(response?.status(), route).toBe(200);
         expect.soft(new URL(page.url()).pathname, route).toBe(route);

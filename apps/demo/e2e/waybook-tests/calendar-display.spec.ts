@@ -174,7 +174,7 @@ test("calendar settings persist and change visible hours, grid density and the c
   await expect(page.locator(".waybook-month-calendar__weekday")).toHaveText(["Mon", "Tue", "Wed", "Thu", "Fri"]);
 });
 
-test("Today and view switches preserve calendar scope", async ({ page }) => {
+test("Today and view switches preserve calendar scope", { tag: "@mobile" }, async ({ page }) => {
   const timezone = "Europe/Copenhagen";
   const instant = new Date();
   const today = formatInTimeZone(instant, timezone, "yyyy-MM-dd");

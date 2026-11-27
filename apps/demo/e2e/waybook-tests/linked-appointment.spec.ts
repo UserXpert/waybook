@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { fromZonedTime } from "date-fns-tz";
 import postgres from "postgres";
 
-test("book, move, pay, and scope the provider view of linked services", { tag: "@smoke" }, async ({ page }) => {
+test("book, move, pay, and scope the provider view of linked services", { tag: ["@smoke", "@mobile"] }, async ({ page }) => {
   test.setTimeout(90_000);
   page.setDefaultTimeout(8000);
   const database = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;

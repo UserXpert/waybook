@@ -11,7 +11,7 @@ async function deliverStripe(sender: APIRequestContext, endpoint: string, event:
   } })).status();
 }
 
-test("Stripe checkout reserves one balance, reconciles once, and releases a cancelled attempt", async ({ page }) => {
+test("Stripe checkout reserves one balance, reconciles once, and releases a cancelled attempt", { tag: "@mobile" }, async ({ page }) => {
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 2, ssl: false });
   const [{ id: tenantId }] = await control`SELECT id FROM tenants WHERE slug = 'nordic-studio'`;
