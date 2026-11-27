@@ -7,7 +7,7 @@ import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { createManualBooking, getManualBookingAvailability } from "@/app/app/calendars/actions";
 import { AppointmentServiceStartSelect } from "@/components/appointment-service-start-select";
 import { findEligibleProvider, SearchPicker } from "@/components/calendar-selectors";
@@ -85,7 +85,8 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
     return { instant: defaultStart?.toISOString(), time: defaultStart ? clock(defaultStart.toISOString(), timezone) : "" };
   });
   const hasClientFields = showNewClient || !canLookupClients || Boolean(waitlistEntryId);
-  const clientReady = Boolean(selectedClient || (hasClientFields && client.name.trim() && client.email.includes("@")));
+  const clientReady = Boolean(selectedClient || (hasClientFields && client.name.trim() && client.email.includes("@")
+    && (waitlistEntryId || client.phone.trim())));
 
   const slotSelected = Boolean(selectedSlot);
   const compactDraft = !waitlistEntryId;
@@ -138,11 +139,15 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
           </>
         ) : (
             <div className="manual-appointment__client-fields">
-              {showNewClient ? <div className="manual-appointment__step-heading"><h3>New {terminology.client}</h3><button type="button" className="waybook-action waybook-action--secondary" onClick={() => setShowNewClient(false)}>Back to search</button></div> : null}
+              {showNewClient ? <div className="manual-appointment__step-heading">
+                <button type="button" className="waybook-icon-button manual-appointment__back"
+                  aria-label="Back to search" onClick={() => setShowNewClient(false)}><ArrowLeft aria-hidden="true" /></button>
+                <h3>New {terminology.client}</h3>
+              </div> : null}
               <label>{clientLabel} name<input name="customerName" autoFocus={showNewClient && (!client.name || Boolean(client.email))} readOnly={Boolean(waitlistEntryId)} required value={client.name} onChange={(event) => setClient((current) => ({ ...current, name: event.target.value }))} /></label>
               <div className="tenant-drawer-form__grid">
                 <label>Email<input name="customerEmail" type="email" autoFocus={showNewClient && Boolean(client.name) && !client.email} readOnly={Boolean(waitlistEntryId)} required value={client.email} onChange={(event) => setClient((current) => ({ ...current, email: event.target.value }))} /></label>
-                <label>Phone <small aria-hidden="true">optional</small><input name="customerPhone" type="tel" readOnly={Boolean(waitlistEntryId)} value={client.phone} onChange={(event) => setClient((current) => ({ ...current, phone: event.target.value }))} /></label>
+                <label>Phone<input name="customerPhone" type="tel" readOnly={Boolean(waitlistEntryId)} required={!waitlistEntryId} value={client.phone} onChange={(event) => setClient((current) => ({ ...current, phone: event.target.value }))} /></label>
               </div>
             </div>
         )}

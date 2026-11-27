@@ -74,6 +74,7 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("button", { name: "Add client", exact: true }).click();
     await drawer.getByLabel("Client name").fill(clientName);
     await drawer.getByLabel("Email", { exact: true }).fill(clientEmail);
+    await drawer.getByLabel("Phone", { exact: true }).fill("+4511223344");
     const originalService = drawer.getByRole("combobox", { name: "Service", exact: true });
     await originalService.fill(second.title);
     await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
@@ -124,6 +125,11 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await expect(drawer.getByText(`${secondary.name} · 10:45 · 30 min`, { exact: true })).toBeVisible();
     await expect(drawer.getByText(/75 min/)).toBeVisible();
     const confirm = drawer.getByRole("button", { name: "Confirm appointment" });
+    await drawer.locator("form").evaluate((form) => {
+      form.addEventListener("formdata", (event) => event.formData.delete("customerPhone"), { once: true });
+    });
+    await confirm.click();
+    await expect(drawer.getByRole("alert")).toHaveText("Enter a phone number for the new client.");
     await drawer.locator("form").evaluate((form) => {
       form.addEventListener("formdata", (event) => {
         const rows = JSON.parse(String(event.formData.get("additionalServices")));

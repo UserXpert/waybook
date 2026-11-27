@@ -148,6 +148,8 @@ for (const workspace of workspaces) {
           await form.getByRole("button", { name: /^Add (client|patient)$/i }).click();
           await expect(form.getByLabel("Email", { exact: true })).toBeFocused();
           await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
+          await expect(form.getByRole("button", { name: "Confirm appointment" })).toBeDisabled();
+          await form.getByLabel("Phone", { exact: true }).fill("+4511223344");
         } else {
           await form.getByRole("combobox", { name: /^Find a / }).fill(existingEmail);
           await form.getByRole("option", { name: new RegExp(`^${customerNames[index]}`) }).click();
@@ -279,7 +281,7 @@ for (const workspace of workspaces) {
         SELECT c.phone FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
         WHERE b.id=${moving.id} AND b.tenant_id=${tenantId}
       `;
-      expect(contact?.phone).toBe(moving.name === customerNames[1] ? "+4512345678" : null);
+      expect(contact?.phone).toBe(moving.name === customerNames[1] ? "+4512345678" : "+4511223344");
 
       const winningDrawer = drawer(pages[winnerIndex], winner);
       if (winnerIndex === 0) {

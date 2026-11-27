@@ -89,6 +89,7 @@ for (const workspace of workspaces) {
         const create = async (name: string, email: string, time: string) => {
           await createPanel.getByLabel(/^(client|patient) name$/i).fill(name);
           await createPanel.getByLabel("Email", { exact: true }).fill(email);
+          await createPanel.getByLabel("Phone", { exact: true }).fill("+4511223344");
           await expect(createPanel.getByRole("region", { name: "Selected calendar slot" })).toContainText(time);
           await createPanel.getByRole("button", { name: "Confirm appointment" }).click();
           await expect(createPanel.getByText("Appointment confirmed and added to the calendar.")).toBeVisible();
@@ -141,7 +142,9 @@ for (const workspace of workspaces) {
         await page.goto(teamBoard);
         await expect(slot(own.id, "10:00")).toBeVisible();
         await slot(colleague.id, "10:00").click();
+        await createPanel.getByRole("button", { name: "Change slot" }).click();
         await expect(createPanel.locator("input[readonly]")).toHaveCount(0);
+        await createPanel.getByRole("button", { name: "Hide slot options" }).click();
         await create(teamCustomer, `calendar-team-${tag}@example.test`, "10:00");
         const teamBooking = await getBooking(teamCustomer);
         expect(teamBooking).toMatchObject({ memberId: colleague.id, startsAt: startsAt("10:00"), status: "confirmed" });
@@ -163,6 +166,9 @@ for (const workspace of workspaces) {
         await expect(bookingCard(teamBooking.id)).toHaveAttribute("draggable", "false");
         await expect(page.locator(`[data-calendar-drop-cell][data-calendar-team-member-id="${colleague.id}"]`)).toHaveCount(0);
         await page.getByRole("link", { name: "New appointment", exact: true }).click();
+        await expect(createPanel.getByRole("region", { name: "Selected calendar slot" })).toContainText(own.name);
+        await expect(createPanel.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
+        await createPanel.getByRole("button", { name: /^(Change|Choose) slot$/ }).click();
         await expect(createPanel.locator("input[readonly]")).toHaveValue(own.name);
         await page.goto(`${teamBoard}&booking=${teamBooking.id}`);
         await expect(teamPanel.getByText("You have view-only access to this appointment.")).toBeVisible();

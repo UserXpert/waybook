@@ -1366,6 +1366,7 @@ async function createManualBookingRecord(formData: FormData) {
   if (!locationId || !teamMemberId || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{2}:\d{2}$/.test(localTime) || (!waitlistEntryId && !customerId && (!name || !email.includes("@")))) {
     throw new Error("Choose a location, staff member, service, local appointment time, and valid client details.");
   }
+  if (!waitlistEntryId && !customerId && !phone) throw new Error("Enter a phone number for the new client.");
   const { tenant, permissions } = await calendarPermissionContext();
   assertAppointmentPermission(permissions, teamMemberId);
   for (const extra of additionalServices) assertAppointmentPermission(permissions, extra.teamMemberId);
