@@ -9,6 +9,7 @@ import { fromZonedTime } from "date-fns-tz";
 import { CalendarSelectors } from "@/components/calendar-selectors";
 import { CalendarCurrentTime } from "@/components/calendar-current-time";
 import { getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
+import { calendarHolidays } from "@/lib/waybook/calendar-holidays";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
 import { CalendarActiveFilters } from "@/components/calendar-active-filters";
 import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
@@ -726,6 +727,8 @@ export default async function CalendarsPage({
   const monthDays = Array.from({ length: monthDayCount }, (_, index) => addDays(currentMonth, index))
     .filter((_, index) => (monthFirstWeekday + index) % 7 < monthColumns);
   const monthPadding = monthFirstWeekday < monthColumns ? monthFirstWeekday : 0;
+  const holidays = calendarHolidays(display.holidayRegion, monthlyView ? monthDays : teamView ? [teamDay] : days);
+  const dayHoliday = teamView ? holidays.get(teamDay) : undefined;
   const weekMember = hasSelectedEmployee ? selected
     : visibleTeamMembers.find((member) => member.id === permissions.teamMemberId) ?? visibleTeamMembers[0] ?? selected;
   const selectedEmployee = hasSelectedEmployee ? selected?.id : "";
@@ -824,10 +827,12 @@ export default async function CalendarsPage({
                           ? href({ view: "staff", employee: selected?.id, week: weekStartFor(date), day: date })
                           : href({ view: "team", employee: "", day: date });
                         const staffCount = dayOverview?.providers.size ?? 0;
+                        const holiday = holidays.get(date);
                         return <div key={date} className="waybook-month-calendar__day">
-                          <Link href={dayHref} className="waybook-month-calendar__day-link" aria-label={`${label}, ${dayBookings.length} ${dayBookings.length === 1 ? "booking" : "bookings"}. Open day view`}>
+                          <Link href={dayHref} className="waybook-month-calendar__day-link" aria-label={`${label}${holiday ? `, ${holiday}` : ""}, ${dayBookings.length} ${dayBookings.length === 1 ? "booking" : "bookings"}. Open day view`}>
                             <span className="waybook-month-calendar__date">{date.slice(-2).replace(/^0/, "")}</span>
                             {dayBookings.length > 0 ? <span className="waybook-month-calendar__count">{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}</span> : null}
+                            {holiday ? <span className="calendar-holiday waybook-month-calendar__holiday" title={holiday}>{holiday}</span> : null}
                           </Link>
                           {dayBookings.length > 0 ? <div className="waybook-month-calendar__preview" aria-label={`Bookings for ${label}`}><b>{label}</b><span>{dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"} · {staffCount} {staffCount === 1 ? terms.staffMember : terms.staffPlural}</span>{dayBookings.slice(0, 5).map((booking) => <Link key={booking.id} href={href({ view: "month", day: currentMonth, booking: booking.id })}>{clock.format(booking.startsAt)} · {booking.customerName}</Link>)}{dayBookings.length > 5 ? <Link href={dayHref}>+{dayBookings.length - 5} more · Open day</Link> : null}</div> : null}
                           <div className="waybook-month-calendar__appointments">
@@ -847,6 +852,7 @@ export default async function CalendarsPage({
                         <span className="waybook-calendar-toolbar__context is-standalone">{selectedLocation?.name} · {visibleTeamMembers.length} visible {terms.staffPlural}</span>
                       </p>
                       <h2>{calendarDate.format(new Date(`${teamDay}T12:00:00Z`))}</h2>
+                      {dayHoliday ? <span className="calendar-holiday">{dayHoliday}</span> : null}
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
                       <details className="calendar-filter-panel">
@@ -1147,6 +1153,7 @@ export default async function CalendarsPage({
                           data-availability-state={selectedBookableDays.has(day) ? "available" : "unavailable"}
                         >
                           <span>{calendarDate.format(new Date(`${day}T12:00:00Z`))}</span>
+                          {holidays.has(day) ? <span className="calendar-holiday">{holidays.get(day)}</span> : null}
                           {day >= tenantToday && !selectedBookableDays.has(day) ? (
                             <small>No availability</small>
                           ) : null}

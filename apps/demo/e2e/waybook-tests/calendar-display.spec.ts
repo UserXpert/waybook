@@ -1,6 +1,43 @@
 import { expect, test } from "@playwright/test";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
+test("holiday preferences add labels to Day, Week and Month", async ({ page }) => {
+  const christmas = `${formatInTimeZone(new Date(), "Europe/Copenhagen", "yyyy")}-12-25`;
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/nordic\/app/);
+
+  const calendar = `/nordic/app/calendars?view=team&day=${christmas}`;
+  const settings = "/nordic/app/settings?tab=calendar";
+  const holiday = page.getByText("Christmas Day", { exact: true });
+  await page.goto(calendar);
+  await expect(holiday).toHaveCount(0);
+  await page.goto(settings);
+  const region = page.getByRole("combobox", { name: "Public holidays", exact: true });
+  await expect(region).toHaveValue("");
+  await region.selectOption("DK");
+  const save = page.getByRole("button", { name: "Save calendar preferences" });
+  await save.click();
+  await expect(page.getByRole("status").filter({ hasText: "Calendar preferences saved." })).toBeVisible();
+
+  await page.goto(calendar);
+  await expect(holiday).toBeVisible();
+  await page.getByRole("link", { name: "Week", exact: true }).click();
+  await expect(page.locator(".waybook-week-calendar__day").getByText("Christmas Day", { exact: true })).toBeVisible();
+  await page.goto(`/nordic/app/calendars?view=month&day=${christmas}`);
+  await expect(page.getByRole("link", { name: /Christmas Day.*Open day view/ })).toBeVisible();
+
+  await page.goto(settings);
+  await expect(region).toHaveValue("DK");
+  await region.selectOption("");
+  await save.click();
+  await expect(page.getByRole("status").filter({ hasText: "Calendar preferences saved." })).toBeVisible();
+  await page.goto(calendar);
+  await expect(holiday).toHaveCount(0);
+});
+
 test("calendar settings persist and change visible hours, grid density and the current-time marker", async ({ page }) => {
   const timezone = "Europe/Copenhagen";
   const today = formatInTimeZone(new Date(), timezone, "yyyy-MM-dd");
