@@ -157,5 +157,5 @@ export async function redeemGiftCardForAppointmentSale(_previous: GiftCardTender
   }
   revalidatePath("/app/sales"); revalidatePath("/app/bookings"); revalidatePath("/app/calendars"); revalidatePath("/app/gift-cards");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
-  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}`, "Gift card redeemed."));
+  redirect(withSuccessToast(`${tenantPath(tenantSlug, "/app/sales")}?sale=${saleId}&step=payment`, "Gift card redeemed."));
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { hasNonGiftCardPayment } from "@/lib/waybook/appointment-payment-records";
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
@@ -332,11 +333,11 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const availableProducts = products.filter((product) => product.currency === selectedSale.currency);
       const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
       const recorded = paymentBalance?.payments ?? [];
-      const canRecordPayment = paymentBalance && recorded.length === 0 && outstandingCents > 0;
+      const canRecordPayment = paymentBalance && !hasNonGiftCardPayment(recorded) && outstandingCents > 0;
       const paymentStep = step === "payment" && Boolean(canRecordPayment);
       const reviewHref = saleHref(selectedSale);
       const paymentHref = `${reviewHref}&step=payment`;
-      const canUseGiftCard = activeAppointment && !selectedSale.giftCardRedeemed && canRecordPayment && selectedSale.currency === "DKK";
+      const canUseGiftCard = activeAppointment && !selectedSale.giftCardRedeemed && recorded.length === 0 && canRecordPayment && selectedSale.currency === "DKK";
       const giftCardStep = canUseGiftCard && tender === "gift-card";
       const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
       const bookedServices = [{
