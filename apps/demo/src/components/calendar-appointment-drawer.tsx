@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Ellipsis, Mail, Pencil, Phone, X } from "lucide-react";
+import { ArrowUpRight, Ellipsis, Mail, Pencil, Phone } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
@@ -38,7 +38,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   }, [initialDetail]);
 
   useEffect(() => {
-    if (mode) actionPanel.current?.focus();
+    if (mode === "edit" || mode === "reschedule") actionPanel.current?.focus();
   }, [mode]);
 
   const load = useCallback((id: string) => {
@@ -118,7 +118,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
         <div><h2>Appointment</h2></div>
         <div className="appointment-drawer__header-actions tenant-drawer-header-actions">
           {mode === "edit" ? <span data-appointment-save-action style={{ display: "contents" }} /> : null}
-          {canReschedule || canCancel ? <div className="appointment-action-popover"
+          {mode !== "edit" && mode !== "reschedule" && (canReschedule || canCancel) ? <div className="appointment-action-popover"
             onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false); }}
             onKeyDown={(event) => {
               if (event.key !== "Escape" || !menuOpen) return;
@@ -133,14 +133,18 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
             </button>
             {menuOpen ? <div className="appointment-action-popover__panel" role="group" aria-label="More appointment actions">
               {canReschedule ? <button type="button" onClick={() => { setMode("reschedule"); setMenuOpen(false); actionPanel.current?.focus(); }}>Reschedule</button> : null}
-              {canCancel ? <button type="button" onClick={() => { setMode("cancel"); setMenuOpen(false); actionPanel.current?.focus(); }}>Cancellation options</button> : null}
+              {canCancel ? <button type="button" onClick={() => { setMode("cancel"); setMenuOpen(false); }}>Cancel appointment</button> : null}
             </div> : null}
           </div> : null}
-          {canEdit ? <button type="button" className="calendar-drawer-icon" aria-label={mode ? "Close editing" : "Edit appointment"}
-            aria-expanded={Boolean(mode)} onClick={() => setMode(mode ? null : "edit")}>
-            {mode ? <X size={17} aria-hidden="true" /> : <Pencil size={17} aria-hidden="true" />}
+          {canEdit && !mode ? <button type="button" className="calendar-drawer-icon" aria-label="Edit appointment"
+            onClick={() => setMode("edit")}>
+            <Pencil size={17} aria-hidden="true" />
           </button> : null}
-          <button type="button" className="tenant-drawer-close" aria-label="Close appointment" onClick={(event) => {
+          <button type="button" className="tenant-drawer-close" aria-label={mode === "edit" ? "Close editing" : mode === "reschedule" ? "Close rescheduling" : "Close appointment"} onClick={(event) => {
+            if (mode === "edit" || mode === "reschedule") {
+              setMode(null);
+              return;
+            }
             event.currentTarget.closest("dialog")?.close();
             close();
           }}>×</button>
@@ -155,7 +159,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           {detail && capabilities ? <>
             <AppointmentAttendanceJourney key={detail.id} bookingId={detail.id} status={detail.status}
               stage={detail.attendanceStage} canUpdateStatus={capabilities.canUpdateStatus}
-              canCheckIn={detail.canCheckIn} canManage={detail.canManage}
+              canCheckIn={detail.canCheckIn} canCheckout={detail.canCheckout}
               canNotifyProviders={detail.canNotifyProviders} checkoutPath={checkoutPath} onChange={refreshAppointment} />
             {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
               bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
@@ -223,7 +227,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           </section>
           {detail.status === "cancelled" && capabilities.canCancel ? <AppointmentStatusActions
             bookingId={detail.id} status={detail.status} canChangeAttendanceNow={false} updateStatus={saveAppointmentAttendance} /> : null}
-          {mode && detail.status !== "cancelled" ? <div className="calendar-appointment-drawer__edit" ref={actionPanel} tabIndex={-1}>
+          {(mode === "edit" || mode === "reschedule") && detail.status !== "cancelled" ? <div className="calendar-appointment-drawer__edit" ref={actionPanel} tabIndex={-1}>
             {mode === "edit" && (capabilities.canEdit ? (
               <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance}
                 onPaymentRecorded={refreshAppointment} customerName={detail.customerName} customerEmail={detail.customerEmail}
@@ -238,8 +242,12 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
               {rescheduleOptions}
             </>)}
             {mode === "reschedule" ? rescheduleOptions : null}
-            {mode === "cancel" && canCancel ? <section><h3>Cancel this appointment?</h3><CancelAppointmentForm bookingId={detail.id} cancelAppointment={cancelAppointment} /></section> : null}
           </div> : null}
+          {mode === "cancel" && canCancel ? <CancelAppointmentForm key={detail.id}
+            bookingId={detail.id} cancelAppointment={cancelAppointment} onDismiss={() => {
+              setMode(null);
+              menuButton.current?.focus();
+            }} /> : null}
           {!canEdit && !canCancel && !capabilities.canCancel ? <p className="tenant-drawer-note">You have view-only access to this appointment.</p> : null}
         </>}
       </div>

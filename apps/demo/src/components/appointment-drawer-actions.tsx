@@ -9,6 +9,7 @@ import { RecordedAppointmentPayments } from "@/components/recorded-appointment-p
 import { AppointmentPaymentForm, PaymentMethodOptions } from "@/components/appointment-payment-form";
 import { RescheduleSlotPicker } from "@/components/reschedule-slot-picker";
 import { isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
+import { hasNonGiftCardPayment } from "@/lib/waybook/appointment-payment-records";
 import type { AppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import styles from "./appointment-drawer-actions.module.css";
 
@@ -218,7 +219,7 @@ export function AppointmentDrawerActions({ bookingId, customerName, customerEmai
   if (status === "cancelled") return attendance;
 
   const noShow = status === "no_show";
-  const canRecordPayment = Boolean(paymentBalance && (paymentBalance.refundableCents > 0 || (paymentBalance.payments.length === 0 && paymentBalance.outstandingCents > 0)));
+  const canRecordPayment = Boolean(paymentBalance && (paymentBalance.refundableCents > 0 || (!hasNonGiftCardPayment(paymentBalance.payments) && paymentBalance.outstandingCents > 0)));
   const paymentRecorded = async () => {
     setStatusNotice("");
     await refreshDrawer(onPaymentRecorded);

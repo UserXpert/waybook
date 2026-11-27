@@ -241,7 +241,15 @@ for (const workspace of workspaces) {
       await firstDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await expect(firstNameField).toHaveValue(first.name);
       const drawerDocument = await page.evaluate(() => performance.timeOrigin);
-      await firstDrawer.getByRole("button", { name: "Close appointment", exact: true }).click();
+      const editingHeader = firstDrawer.locator(":scope > header");
+      await expect(editingHeader.getByRole("button", { name: /^Close / })).toHaveCount(1);
+      await firstNameField.fill("Discard these details");
+      await editingHeader.getByRole("button", { name: "Close editing" }).click();
+      await expect(firstNameField).toHaveCount(0);
+      await editingHeader.getByRole("button", { name: "Edit appointment" }).click();
+      await expect(firstNameField).toHaveValue(first.name);
+      await editingHeader.getByRole("button", { name: "Close editing" }).click();
+      await editingHeader.getByRole("button", { name: "Close appointment" }).click();
       await expect(firstDrawer).toHaveCount(0);
       await expect(page).toHaveURL((url) => !url.searchParams.has("booking"));
       expect(await page.evaluate(() => performance.timeOrigin)).toBe(drawerDocument);
@@ -285,10 +293,14 @@ for (const workspace of workspaces) {
 
       const winningDrawer = drawer(pages[winnerIndex], winner);
       if (winnerIndex === 0) {
+        await winningDrawer.getByRole("button", { name: "Close editing" }).click();
         await winningDrawer.getByRole("button", { name: "More appointment actions" }).click();
-        await winningDrawer.getByRole("button", { name: "Cancellation options" }).click();
+        await winningDrawer.getByRole("button", { name: "Cancel appointment", exact: true }).click();
+        await pages[winnerIndex].getByRole("alertdialog", { name: "Cancel this appointment?" })
+          .getByRole("button", { name: "Cancel appointment" }).click();
+      } else {
+        await winningDrawer.getByRole("button", { name: "Cancel appointment" }).click();
       }
-      await winningDrawer.getByRole("button", { name: "Cancel appointment" }).click();
       await expect(drawer(pages[winnerIndex], winner).getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
       await expect.poll(async () => (await assignments()).length).toBe(0);
       expect(await availableAt(winner.memberId, "10:00")).toBe(true);
@@ -399,9 +411,23 @@ for (const workspace of workspaces) {
 
       await page.goto(`${calendar}&booking=${moving.id}`);
       const panel = drawer(page, moving);
-      await panel.getByRole("button", { name: "More appointment actions" }).click();
-      await panel.getByRole("button", { name: "Cancellation options" }).click();
-      await panel.getByRole("button", { name: "Cancel appointment" }).click();
+      const appointmentActions = panel.getByRole("button", { name: "More appointment actions" });
+      const confirmation = page.getByRole("alertdialog", { name: "Cancel this appointment?" });
+      await appointmentActions.click();
+      await panel.getByRole("button", { name: "Cancel appointment", exact: true }).click();
+      await expect(confirmation.getByRole("button", { name: "Keep appointment" })).toBeFocused();
+      await expect.poll(() => confirmation.evaluate((element) => {
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return Math.max(Math.abs(x + width / 2 - innerWidth / 2), Math.abs(y + height / 2 - innerHeight / 2));
+      })).toBeLessThan(3);
+      await page.keyboard.press("Escape");
+      await expect(confirmation).toHaveCount(0);
+      await expect(appointmentActions).toBeFocused();
+      await expect.poll(readBooking).toMatchObject({ status: "confirmed" });
+      await appointmentActions.click();
+      await panel.getByRole("button", { name: "Cancel appointment", exact: true }).click();
+      await confirmation.getByRole("button", { name: "Cancel appointment" }).click();
+      await expect(confirmation).toHaveCount(0);
       await expect(panel.getByText("This appointment has been cancelled.", { exact: false })).toBeVisible();
       await expect.poll(readBooking).toMatchObject({ state: "cancelled", status: "cancelled" });
       expect(await assignments()).toEqual([]);
