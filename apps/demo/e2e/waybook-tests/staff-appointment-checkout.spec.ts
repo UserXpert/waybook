@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("staff checkout settles the assigned appointment without opening workspace sales", async ({ page }, testInfo) => {
+test("staff checkout settles the assigned appointment without opening workspace sales", { tag: "@smoke" }, async ({ page }, testInfo) => {
   const options = { max: 1, ssl: false } as const;
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, options);
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, options);

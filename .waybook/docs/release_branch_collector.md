@@ -6,7 +6,7 @@ The collector runs every three hours and may append explicitly human-marked PRs 
 
 - A human applies the `release-ready` label after review.
 - The PR is open, non-draft, targets `main`, and comes from `UserXpert/waybook` (not a fork).
-- Its exact current head SHA has successful Package Checks, E2E Tests, DB Integration Tests, and Schema history guard checks. Preview status is intentionally evaluated only for the combined release PR, not every constituent PR.
+- Its exact current head SHA has successful Package Checks, PR Browser Smoke Tests, DB Integration Tests, and Schema history guard checks. The browser check retains the `e2e` job name used by the collector. Review the combined Waybook preview at the release gate.
 - Duplicate heads, stale heads, already-collected heads, and merge conflicts are skipped and logged. A conflict aborts only that tentative merge; existing release-branch history is never reset or force-pushed.
 
 The collector job starts from the trusted `main` workflow and script. It fetches and merges candidate commit objects but never executes candidate PR code.
@@ -15,7 +15,7 @@ The collector job starts from the trusted `main` workflow and script. It fetches
 
 A maintainer must bootstrap `release/ready` from current `main` once. The repository currently does not allow `GITHUB_TOKEN` to create pull requests, so the collector never creates or approves a PR. Because an unchanged branch cannot have a pull request, the collector may append the first eligible batch to that branch; a maintainer then opens the first non-draft `release/ready` → `main` pull request. After a release PR is merged, the next run may fast-forward `release/ready` to `main` only when the release tip is already an ancestor of `main`; it can then collect a fresh batch. If `release/ready` is ahead of `main` without an open release PR, it stops until a maintainer opens one. If the histories diverge, it fails closed and never resets or force-pushes.
 
-After a successful collection push, the collector dispatches `Release branch validation` from `main`, passing the exact collected SHA and exact `main` baseline as inputs. The workflow and its input verifier come from the trusted baseline; the jobs separately check out and verify the requested release SHA before running project commands. A changed main baseline fails validation. It runs isolated package, schema-history, integration, and E2E jobs with a read-only token and no production secrets. A dispatch is not a successful run; the human release review must wait for those jobs and for the combined release PR's Vercel preview before merging. The collector's `GITHUB_TOKEN` push does **not** trigger ordinary `push` workflows and is not evidence that combined CI or preview checks ran.
+After a successful collection push, the collector dispatches `Release branch validation` from `main`, passing the exact collected SHA and exact `main` baseline as inputs. The workflow and its input verifier come from the trusted baseline. The jobs separately check out and verify the requested release SHA before running project commands. A changed main baseline fails validation. The comprehensive tier runs the full desktop and mobile browser suite alongside isolated package, schema-history, and integration jobs. It uses a read-only token and no production secrets. Before merging, verify the successful run for the exact candidate and baseline and verify the combined release PR's Vercel preview.
 
 ## Operational limitations
 
