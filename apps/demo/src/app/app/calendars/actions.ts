@@ -1,5 +1,6 @@
 "use server";
 
+import { calendarBookingInterval, maxCalendarMoveTargets } from "@/lib/waybook/calendar-slot-time";
 import { activeAppointmentPayments, hasNonGiftCardPayment, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
@@ -246,7 +247,7 @@ export async function getManualBookingAvailability(input: {
     input.serviceId,
     new Date(dayStart.getTime() - 86_400_000),
     new Date(dayStart.getTime() + 172_800_000),
-    { locationId: input.locationId, slotInterval: 30 },
+    { locationId: input.locationId, slotInterval: calendarBookingInterval, alignToClock: true },
   );
   const visibleCandidates =
     permissions.isManager || permissions.canManageTeamAppointments
@@ -289,7 +290,7 @@ export async function getRescheduleBookingAvailability(input: {
     endDate.setUTCDate(endDate.getUTCDate() + 7);
     const from = fromZonedTime(`${input.startDate}T00:00:00`, tenant.timezone);
     const until = fromZonedTime(`${endDate.toISOString().slice(0, 10)}T00:00:00`, tenant.timezone);
-    return { slots: await linkedAppointmentOpenings(db, tenant, booking.locationId, reservations, from, until, 30) };
+    return { slots: await linkedAppointmentOpenings(db, tenant, booking.locationId, reservations, from, until, calendarBookingInterval) };
   }
   const durationMinutes = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
   if (durationMinutes <= 0) return { slots: [] };
@@ -310,7 +311,11 @@ export async function getRescheduleBookingAvailability(input: {
     for (const hour of locationHours.filter((item) => item.dayOfWeek === localDate.getUTCDay())) {
       const start = fromZonedTime(`${date}T${hour.startTime}`, tenant.timezone);
       const end = fromZonedTime(`${date}T${hour.endTime}`, tenant.timezone);
-      for (let cursor = start.getTime(); cursor + durationMinutes * 60_000 <= end.getTime(); cursor += 30 * 60_000) {
+      const minutes = Number(hour.startTime.split(":")[1]);
+      const seconds = Number(hour.startTime.split(":")[2] ?? 0);
+      const slotOffset = (calendarBookingInterval - minutes % calendarBookingInterval) % calendarBookingInterval * 60_000 - seconds * 1000;
+      const firstSlot = start.getTime() + slotOffset + (slotOffset < 0 ? calendarBookingInterval * 60_000 : 0);
+      for (let cursor = firstSlot; cursor + durationMinutes * 60_000 <= end.getTime(); cursor += calendarBookingInterval * 60_000) {
         const startsAt = new Date(cursor);
         if (startsAt.getTime() < Date.now()) continue;
         for (const member of staff) targets.push({ teamMemberId: member.id, startsAt, endsAt: new Date(cursor + durationMinutes * 60_000) });
@@ -472,7 +477,7 @@ export async function getCalendarBookingMoveTargets(input: {
   targets: Array<{ teamMemberId: string; startsAt: string }>;
 }): Promise<{ targets: string[]; error: string | null }> {
   try {
-    if (!input.bookingId || !Array.isArray(input.targets) || input.targets.length === 0 || input.targets.length > 500) {
+    if (!input.bookingId || !Array.isArray(input.targets) || input.targets.length === 0 || input.targets.length > maxCalendarMoveTargets) {
       return { targets: [], error: "Could not prepare calendar destinations." };
     }
     const requested = new Map<string, { teamMemberId: string; startsAt: string }>();
@@ -1188,7 +1193,7 @@ async function linkedServiceGrid(
 ) {
   const dayStart = fromZonedTime(`${localDate}T00:00`, tenant.timezone);
   const [provider] = await staffAvailableSlots(tenant, serviceId, dayStart, new Date(dayStart.getTime() + 48 * 60 * 60_000),
-    { ...options, slotInterval: 30 }, db);
+    { ...options, slotInterval: calendarBookingInterval, alignToClock: true }, db);
   return (provider?.slots ?? []).filter((slot) => {
     const start = new Date(slot.startTime);
     const key = localDateTimeKey(start, tenant.timezone);
@@ -1415,7 +1420,7 @@ async function createManualBookingRecord(formData: FormData) {
   if (!service) throw new Error("That staff member cannot deliver this service at the selected location.");
   const startsAt = fromZonedTime(`${localDate}T${localTime}`, tenant.timezone);
   const endsAt = new Date(startsAt.getTime() + service.durationMinutes * 60_000);
-  const candidates = await staffAvailableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
+  const candidates = await staffAvailableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: calendarBookingInterval, alignToClock: true });
   const availableSlot = candidates.find((candidate) => candidate.teamMemberId === teamMemberId)?.slots.find((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime());
   if (!availableSlot) throw new Error("That staff member is not available at the selected time.");
   const linked: AdditionalServiceBooking[] = [];

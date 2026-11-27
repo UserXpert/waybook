@@ -25,7 +25,7 @@ export type ScheduleOverride = {
 export type OccupiedInterval = { startsAt: Date; endsAt: Date };
 
 type TimeWindow = { start: number; end: number };
-type SlotOptions = { duration: number; slotInterval?: number; now?: Date };
+type SlotOptions = { duration: number; slotInterval?: number; alignToClock?: boolean; now?: Date };
 
 const minute = 60_000;
 const day = 24 * 60 * minute;
@@ -137,7 +137,10 @@ export function calculateStaffSlots(
   const blocks = occupied.map(({ startsAt, endsAt }) => ({ start: +startsAt, end: +endsAt }));
   const slots = new Map<number, TimeWindow>();
   for (const window of windows) {
-    const first = window.start + Math.max(0, Math.ceil((Math.max(lower, now - duration) - window.start) / interval)) * interval;
+    const offset = options.alignToClock ? Number(formatInTimeZone(window.start, timezone, "mm")) * minute
+      + Number(formatInTimeZone(window.start, timezone, "ss")) * 1000 : 0;
+    const anchor = window.start - offset;
+    const first = anchor + Math.ceil((Math.max(lower, now - duration, window.start) - anchor) / interval) * interval;
     const last = Math.min(window.end, upper) - duration;
     for (let start = first; start <= last; start += interval) {
       const slot = { start, end: start + duration };

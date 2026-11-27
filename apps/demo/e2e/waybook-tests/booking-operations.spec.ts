@@ -103,8 +103,9 @@ for (const workspace of workspaces) {
       `;
 
       for (const [index, member] of staff.entries()) {
+        const slotTime = index === 0 ? "10:00" : "10:15";
         await page.goto(calendar);
-        const slot = page.getByRole("link", { name: `New appointment ${member.name} ${day} 10:00`, exact: true });
+        const slot = page.getByRole("link", { name: `New appointment ${member.name} ${day} ${slotTime}`, exact: true });
         await slot.focus();
         await slot.press("Enter");
         const form = page.getByRole("complementary", { name: "New appointment" });
@@ -113,7 +114,7 @@ for (const workspace of workspaces) {
         const selectedSlot = form.getByRole("region", { name: "Selected calendar slot" });
         const changeSlot = selectedSlot.getByRole("button", { name: "Change slot" });
         await expect(selectedSlot).toContainText(member.name);
-        await expect(selectedSlot).toContainText("10:00");
+        await expect(selectedSlot).toContainText(slotTime);
         await expect(form.getByRole("region", { name: "Appointment schedule" })).toHaveCount(0);
         await page.keyboard.press("Shift+Tab");
         await expect(changeSlot).toBeFocused();
@@ -144,7 +145,7 @@ for (const workspace of workspaces) {
           await form.getByRole("button", { name: "Back to search" }).click();
           await expect(clientLookup).toBeFocused();
           await expect(selectedSlot).toContainText(location.name);
-          await expect(selectedSlot).toContainText("10:00");
+          await expect(selectedSlot).toContainText(slotTime);
           await form.getByRole("button", { name: /^Add (client|patient)$/i }).click();
           await expect(form.getByLabel("Email", { exact: true })).toBeFocused();
           await form.getByLabel("Email", { exact: true }).fill(`qa-booking-${index}-${tag}@example.test`);
@@ -182,7 +183,7 @@ for (const workspace of workspaces) {
         WHERE b.tenant_id=${tenantId} AND b.service_id=${service.id} ORDER BY c.name
       `;
       expect(bookings.map((booking) => [booking.locationId, booking.startsAt.toISOString()])).toEqual([
-        [location.id, start("10:00")], [location.id, start("10:00")],
+        [location.id, start("10:00")], [location.id, start("10:15")],
       ]);
       await page.goto(`/${workspace.route}/app/calendars?view=team&day=${day}&location=${primary.id}`);
       await expect(page.locator("a.waybook-week-calendar__entry").filter({ hasText: customerNames[0] })).toHaveCount(0);
@@ -326,7 +327,7 @@ for (const workspace of workspaces) {
       await expect(source.getByRole("img", { name: `Resource: ${resource.name}`, exact: true })).toBeVisible();
 
       if (testInfo.project.name.startsWith("desktop")) {
-        const destination = page.locator(`[data-calendar-team-member-id="${moving.memberId}"][data-calendar-starts-at="${day}T11:30"]`);
+        const destination = page.locator(`[data-calendar-team-member-id="${moving.memberId}"][data-calendar-starts-at="${day}T11:15"]`);
         async function prepareDrop() {
           await source.scrollIntoViewIfNeeded();
           const sourceBounds = (await source.boundingBox())!;
@@ -370,7 +371,7 @@ for (const workspace of workspaces) {
         await panel.getByRole("button", { name: "More appointment actions" }).click();
         await panel.getByRole("button", { name: "Reschedule", exact: true }).click();
         const date = panel.locator(".appointment-reschedule-picker__day").filter({ hasText: day.slice(-2) });
-        const slot = panel.getByRole("button", { name: "11:30", exact: true });
+        const slot = panel.getByRole("button", { name: "11:15", exact: true });
         const reschedule = panel.getByRole("button", { name: "Reschedule appointment" });
         const nextWeek = panel.getByRole("button", { name: "Next week" });
         await date.click();
@@ -404,7 +405,7 @@ for (const workspace of workspaces) {
         await reschedule.click();
       }
 
-      await expect.poll(readBooking).toMatchObject({ state: "confirmed", status: "confirmed", startsAt: start("11:30"), memberId: moving.memberId, locationId: location.id });
+      await expect.poll(readBooking).toMatchObject({ state: "confirmed", status: "confirmed", startsAt: start("11:15"), memberId: moving.memberId, locationId: location.id });
       expect(await assignments()).toEqual([{ bookingId: moving.id }]);
       expect(await availableAt(moving.memberId, "10:00")).toBe(true);
       expect(await availableAt(moving.memberId, "11:30")).toBe(false);

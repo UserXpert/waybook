@@ -25,7 +25,7 @@ async function resolvedLocationId(tenant: TenantRecord, requestedId?: string) {
   return (await resolvedLocation(tenant, requestedId)).id;
 }
 
-type SlotOptions = { excludeBookingBlockId?: string; excludeBookingBlockIds?: string[]; teamMemberId?: string; locationId?: string; slotInterval?: number; durationMinutes?: number };
+type SlotOptions = { excludeBookingBlockId?: string; excludeBookingBlockIds?: string[]; teamMemberId?: string; locationId?: string; slotInterval?: number; alignToClock?: boolean; durationMinutes?: number };
 
 export function availableSlots(tenant: TenantRecord, serviceSlug: string, startsAt: Date, endsAt: Date, options?: SlotOptions, db = tenantDb(tenant)) {
   return calculateAvailableSlots(tenant, serviceSlug, startsAt, endsAt, options, db, true);
@@ -95,6 +95,7 @@ async function calculateAvailableSlots(tenant: TenantRecord, serviceSlug: string
     const slots = calculateStaffSlots(rules, overrides, occupied, { start: startsAt, end: endsAt }, tenant.timezone, {
       duration: durationMinutes,
       slotInterval: options?.slotInterval,
+      alignToClock: options?.alignToClock,
     })
       .filter((slot) => new Date(slot.startTime) >= startsAt && new Date(slot.endTime) <= endsAt && !closedDates.has(localDateAndMinutes(new Date(slot.startTime), location.timezone).localDate) && isSlotWithinLocationHours(new Date(slot.startTime), new Date(slot.endTime), locationHours, location.timezone))
       // Resource allocation is deliberately post-booking. Staff time is the

@@ -169,6 +169,17 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     const secondService = bookedServices.getByRole("listitem").filter({ hasText: second.title });
     await expect(secondService).toContainText(`10:45–11:15 · ${secondary.name}`);
     await expect(secondService).toContainText("30 min");
+    const teamGrid = page.locator(".team-day-calendar__grid");
+    const linkedCard = teamGrid.locator("a.is-booking").filter({ hasText: second.title });
+    const startsAtCell = teamGrid.locator(`[data-calendar-team-member-id="${secondary.id}"][data-calendar-starts-at="${day}T10:45"]`);
+    const endCell = teamGrid.locator(`[data-calendar-team-member-id="${secondary.id}"][data-calendar-starts-at="${day}T11:15"]`);
+    const cardBounds = await linkedCard.boundingBox();
+    const startBounds = await startsAtCell.boundingBox();
+    const endBounds = await endCell.boundingBox();
+    expect(cardBounds && startBounds && endBounds).toBeTruthy();
+    expect(Math.abs(cardBounds!.x - startBounds!.x)).toBeLessThan(5);
+    expect(Math.abs(cardBounds!.x + cardBounds!.width - endBounds!.x)).toBeLessThan(5);
+
     await saved.getByRole("button", { name: "More appointment actions" }).click();
     await saved.getByRole("button", { name: "Reschedule", exact: true }).click();
     const schedule = saved.locator("section").filter({ has: page.getByRole("heading", { name: "Reschedule", exact: true }) });

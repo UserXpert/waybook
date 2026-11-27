@@ -5366,3 +5366,32 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   .appointment-receipt article { background: white; border: 0; padding: 0; }
   .appointment-receipt tr { break-inside: avoid; }
 }
+
+.workspace-settings__panel > .calendar-display-form { max-width: 34rem; margin-top: 1rem; padding: 0; }
+.tenant-dashboard-page .calendar-display-form select { height: 2.45rem; padding-block: 0; font-weight: 400; }
+.calendar-display-form__hours > label { display: grid; gap: .3rem; font-size: .8125rem; font-weight: 600; }
+.calendar-display-form__hours { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.calendar-display-form .calendar-display-form__check { display: flex; align-items: center; gap: .5rem; }
+.calendar-display-form > button { justify-self: start; }
+
+.tenant-dashboard-page .waybook-week-calendar__scroll { overflow-x: auto; }
+.tenant-dashboard-page .team-day-calendar__time-header { min-width: 0; justify-items: start; padding-inline-start: .3rem; }
+.tenant-dashboard-page .waybook-week-calendar__cell[data-hour-start] {
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+.calendar-current-time { position: relative; z-index: 4; pointer-events: none; }
+.calendar-current-time > span {
+  position: absolute;
+  inset-block: 0;
+  border-inline-start: 2px solid var(--waybook-danger, #bc372e);
+}
+.calendar-current-time b {
+  display: block;
+  width: max-content;
+  border-radius: 0 .25rem .25rem 0;
+  padding: .13rem .3rem;
+  background: var(--waybook-danger, #bc372e);
+  color: #fff;
+  font-size: .65rem;
+  font-variant-numeric: tabular-nums;
+}
