@@ -508,7 +508,12 @@ export default async function CalendarsPage({
             item.id,
             new Date(rangeStart.getTime() - 86_400_000),
             new Date(rangeEnd.getTime() + 86_400_000),
-            { locationId: selectedLocation.id, slotInterval: calendarBookingInterval, alignToClock: true },
+            {
+              locationId: selectedLocation.id,
+              teamMemberId: teamView ? undefined : selected?.id,
+              slotInterval: calendarBookingInterval,
+              alignToClock: true,
+            },
           ),
         })),
       )
