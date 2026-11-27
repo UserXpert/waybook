@@ -1,6 +1,7 @@
 "use client";
 
-import { Ellipsis, Pencil, X } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, Ellipsis, Pencil, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getCalendarAppointment, updateBookingDetails, rescheduleBooking, saveAppointmentAttendance, cancelAppointment } from "@/app/app/calendars/actions";
 import { AppointmentDrawerActions, AppointmentRescheduleActions, AppointmentStatusActions } from "@/components/appointment-drawer-actions";
@@ -17,7 +18,7 @@ const servicePrice = new Intl.NumberFormat("en-DK", { style: "currency", currenc
 type Detail = NonNullable<Awaited<ReturnType<typeof getCalendarAppointment>>>;
 export type CalendarAppointmentSummary = Pick<Detail, "id" | "bookingNumber" | "customerName" | "serviceTitle" | "teamMemberName" | "startsAt" | "endsAt" | "status" | "attendanceStage">;
 
-export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, checkoutPath, staffLabel = "Staff" }: { summaries: CalendarAppointmentSummary[]; initialDetail: Detail | null; timezone: string; checkoutPath: string; staffLabel?: string }) {
+export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, checkoutPath, clientPath, clientLabel = "Client", staffLabel = "Staff" }: { summaries: CalendarAppointmentSummary[]; initialDetail: Detail | null; timezone: string; checkoutPath: string; clientPath: string; clientLabel?: string; staffLabel?: string }) {
   const [selected, setSelected] = useState<CalendarAppointmentSummary | null>(initialDetail);
   const [detail, setDetail] = useState<Detail | null>(initialDetail);
   const [error, setError] = useState("");
@@ -108,11 +109,12 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     id: detail.id, title: detail.serviceTitle, provider: detail.teamMemberName,
     startsAt: detail.startsAt, endsAt: detail.endsAt, priceCents: detail.primaryServicePriceCents,
   }, ...detail.additionalServices] : [];
+  const historyDate = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, dateStyle: "medium", timeStyle: "short" });
   const clock = (value: string) => value ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "";
   return <TenantEditorDialog title={`Appointment with ${selected.customerName}`} onDismiss={close} cycleFocus>
     <aside className="tenant-drawer appointment-drawer manual-appointment-drawer calendar-appointment-drawer" aria-label={`Appointment with ${selected.customerName}`}>
       <header>
-        <div><p>APPOINTMENT</p><h2>{selected.customerName}</h2></div>
+        <div><h2>Appointment</h2></div>
         <div className="appointment-drawer__header-actions tenant-drawer-header-actions">
           {mode === "edit" ? <span data-appointment-save-action style={{ display: "contents" }} /> : null}
           {canReschedule || canCancel ? <div className="appointment-action-popover"
@@ -144,21 +146,45 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
         </div>
       </header>
       <div className="appointment-drawer__body">
-        <section className="appointment-drawer__details"><dl>
-          <div className="appointment-drawer__detail--status"><dt>Status</dt><dd>{attendanceLabel ?? selected.status.replace("_", " ")}</dd></div>
-          <div className="appointment-drawer__detail--date"><dt>Date</dt><dd>{date}</dd></div>
-          <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(selected.startsAt)}–{clock(selected.endsAt)}</dd></div>
-          <div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
-        </dl></section>
-        {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
-          <div className="calendar-appointment-drawer__actions">
+        <div className="calendar-appointment-drawer__actions">
+          <div className="calendar-appointment-drawer__state">
+            <span className="calendar-appointment-drawer__status-dot" data-stage={selected.attendanceStage ?? selected.status} aria-hidden="true" />
+            <dl className="appointment-drawer__detail--status"><dt className="sr-only">Status</dt><dd>{attendanceLabel ?? selected.status.replace("_", " ")}</dd></dl>
+          </div>
+          {detail && capabilities ? <>
             <AppointmentAttendanceJourney key={detail.id} bookingId={detail.id} status={detail.status}
               stage={detail.attendanceStage} canUpdateStatus={capabilities.canUpdateStatus}
               canCheckIn={detail.canCheckIn} canOpenCheckout={detail.canChangeAttendanceNow} canManage={detail.canManage}
               canNotifyProviders={detail.canNotifyProviders} checkoutPath={checkoutPath} onChange={refreshAppointment} />
             {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
               bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
-          </div>
+          </> : null}
+        </div>
+        <section className="appointment-drawer__details" aria-label="Schedule"><dl>
+          <div className="appointment-drawer__detail--date"><dt>Date</dt><dd>{date}</dd></div>
+          <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(selected.startsAt)}–{clock(selected.endsAt)}</dd></div>
+          {detail?.locationName ? <div><dt>Location</dt><dd>{detail.locationName}</dd></div> : null}
+        </dl></section>
+        {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
+          <section className="calendar-appointment-drawer__client" aria-label={clientLabel}>
+            <div className="calendar-appointment-drawer__client-heading">
+              <span className="calendar-appointment-drawer__avatar" aria-hidden="true">
+                {detail.customerName.trim().split(/\s+/).slice(0, 2).map((part) => Array.from(part)[0]).join("").toUpperCase()}
+              </span>
+              <div>
+                <h3>{detail.customerName}</h3>
+                {detail.clientRecord ? <p>{clientLabel} since {new Intl.DateTimeFormat("en-GB", { timeZone: timezone, month: "long", year: "numeric" }).format(new Date(detail.clientRecord.createdAt))}</p> : null}
+              </div>
+              {detail.clientRecord ? <Link className="waybook-action waybook-action--secondary"
+                href={`${clientPath}?customer=${encodeURIComponent(detail.clientRecord.id)}`}>
+                Open {clientLabel.toLowerCase()} <ArrowUpRight size={14} aria-hidden="true" />
+              </Link> : null}
+            </div>
+            {detail.clientRecord && (detail.customerPhone || detail.customerEmail) ? <dl>
+              {detail.customerPhone ? <div><dt>Phone</dt><dd><a href={`tel:${detail.customerPhone.replace(/[^+0-9]/g, "")}`}>{detail.customerPhone}</a></dd></div> : null}
+              {detail.customerEmail ? <div><dt>Email</dt><dd><a href={`mailto:${encodeURIComponent(detail.customerEmail)}`}>{detail.customerEmail}</a></dd></div> : null}
+            </dl> : null}
+          </section>
           <section className="calendar-appointment-drawer__services" aria-label="Booked services">
             <h3>Services</h3>
             <ul>{services.map((service) => <li key={service.id}>
@@ -171,6 +197,19 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
                 <span>{Math.round((Date.parse(service.endsAt) - Date.parse(service.startsAt)) / 60_000)} min</span>
               </div>
             </li>)}</ul>
+          </section>
+          <section className="calendar-appointment-drawer__booking" aria-label="Booking details">
+            <h3>Booking details</h3>
+            <dl>
+              <div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
+              {detail.activity ? <>
+                <div><dt>Booked on</dt><dd>{historyDate.format(new Date(detail.activity.createdAt))}</dd></div>
+                <div><dt>Booked through</dt><dd>{detail.activity.source === "public" ? "Online booking" : "Workspace"}</dd></div>
+                {detail.activity.bookedBy ? <div><dt>Booked by</dt><dd>{detail.activity.bookedBy}</dd></div> : null}
+                {detail.activity.updatedAt !== detail.activity.createdAt ? <div><dt>Last updated</dt><dd>{historyDate.format(new Date(detail.activity.updatedAt))}</dd></div> : null}
+                {detail.activity.updatedBy ? <div><dt>Updated by</dt><dd>{detail.activity.updatedBy}</dd></div> : null}
+              </> : null}
+            </dl>
           </section>
           {detail.status === "cancelled" && capabilities.canCancel ? <AppointmentStatusActions
             bookingId={detail.id} status={detail.status} canChangeAttendanceNow={false} updateStatus={saveAppointmentAttendance} /> : null}

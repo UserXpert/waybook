@@ -89,6 +89,12 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("link", { name: "View appointment" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("booking") === booking.id && !url.searchParams.has("create"));
     const saved = page.getByRole("complementary", { name: `Appointment with ${clientName}` });
+    const clientSummary = saved.getByRole("region", { name: "Client", exact: true });
+    await expect(clientSummary.getByRole("link", { name: clientEmail })).toBeVisible();
+    await expect(clientSummary.getByRole("link", { name: "Open client" })).toHaveAttribute("href", /\/app\/customers\?customer=/);
+    const bookingDetails = saved.getByRole("region", { name: "Booking details" });
+    await expect(bookingDetails).toContainText("Booked on");
+    await expect(bookingDetails).toContainText("Workspace");
     const bookedServices = saved.getByRole("region", { name: "Booked services" });
     await expect(bookedServices.getByRole("listitem")).toHaveCount(2);
     const secondService = bookedServices.getByRole("listitem").filter({ hasText: second.title });

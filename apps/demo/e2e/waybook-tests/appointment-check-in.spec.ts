@@ -181,6 +181,9 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await segmentAlert.getByRole("link", { name: "Open appointment" }).click();
     const segmentDrawer = segmentPage.getByRole("complementary", { name: `Appointment with ${waiting.name}` });
     await expect(segmentDrawer.getByText(segmentService.title, { exact: true })).toBeVisible();
+    await expect(segmentDrawer.getByRole("link", { name: "Open client" })).toHaveCount(0);
+    await expect(segmentDrawer.getByRole("link", { name: /@/ })).toHaveCount(0);
+    await expect(segmentDrawer.getByText("Booked by", { exact: true })).toHaveCount(0);
     await segmentContext.close();
     await open(waiting);
     await expect(drawer.getByRole("button", { name: "Start service" })).toBeVisible();

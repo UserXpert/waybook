@@ -119,20 +119,23 @@ export async function getCalendarAppointment(bookingId: string) {
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) return null;
   const db = tenantDb(tenant);
-  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; attendanceStage: AppointmentAttendanceStage | null; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; locationName: string | null; customerId: string; customerCreatedAt: Date; createdAt: Date; updatedAt: Date; source: "public" | "tenant"; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; attendanceStage: AppointmentAttendanceStage | null; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
     SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
+      l.name AS "locationName", c.id AS "customerId", c.created_at AS "customerCreatedAt",
+      b.created_at AS "createdAt", b.updated_at AS "updatedAt", b.source,
       bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,b.attendance_stage AS "attendanceStage",
       c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId",
       b.updated_at::text AS revision, b.booked_price_cents AS "priceCents", ${appointmentHasSettlement(db)} AS "hasSettlement"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
     JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
+    LEFT JOIN locations l ON l.id=b.location_id AND l.tenant_id=b.tenant_id
     LEFT JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
     LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
     WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND ${calendarBookingVisibility(db, canViewTeam, permissions.teamMemberId)} LIMIT 1
   `;
   if (!booking) return null;
-  const { teamMemberId, revision, priceCents, hasSettlement, ...detail } = booking;
-  const [resources, paymentBalance, additionalServices] = await Promise.all([
+  const { teamMemberId, revision, priceCents, hasSettlement, customerId, customerCreatedAt, createdAt, updatedAt, source, ...detail } = booking;
+  const [resources, paymentBalance, additionalServices, bookingActors] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -141,6 +144,18 @@ export async function getCalendarAppointment(bookingId: string) {
   ` : [],
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
     getAdditionalAppointmentServices(db, tenant.id, bookingId),
+    permissions.isManager ? db<{ event: "created" | "updated"; name: string }[]>`
+      SELECT DISTINCT ON (activity.event) activity.event, member.name
+      FROM booking_events e
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN e.event_type = 'booking.created_by_tenant' THEN 'created' ELSE 'updated' END AS event
+      ) activity
+      JOIN team_members member ON member.tenant_id=e.tenant_id AND member.identity_id=e.actor_identity_id
+      WHERE e.tenant_id=${tenant.id} AND e.booking_id=${bookingId}
+        AND (e.event_type = 'booking.created_by_tenant'
+          OR (e.event_type LIKE 'booking.%' AND e.created_at::text = ${revision}))
+      ORDER BY activity.event, e.created_at DESC, e.id, member.id
+    ` : [],
   ]);
   const providers = [teamMemberId, ...additionalServices.map((item) => item.teamMemberId)];
   const ownSegment = !canViewTeam && teamMemberId !== permissions.teamMemberId
@@ -170,6 +185,12 @@ export async function getCalendarAppointment(bookingId: string) {
     // never contact or resource data used by the manager editing surface.
     customerEmail: permissions.isManager ? booking.customerEmail : "",
     customerPhone: permissions.isManager ? booking.customerPhone : null,
+    clientRecord: permissions.isManager ? { id: customerId, createdAt: customerCreatedAt.toISOString() } : null,
+    activity: permissions.isManager ? {
+      source, createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString(),
+      bookedBy: bookingActors.find((event) => event.event === "created")?.name,
+      updatedBy: bookingActors.find((event) => event.event === "updated")?.name,
+    } : null,
     resourceId: permissions.isManager ? booking.resourceId : null,
     serviceId: permissions.isManager ? booking.serviceId : "",
     locationId: permissions.isManager ? booking.locationId : "",

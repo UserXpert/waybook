@@ -1216,7 +1216,8 @@ export default async function CalendarsPage({
           ) : null}
         </>
       )}
-      <CalendarAppointmentDrawer checkoutPath={tenantPath(tenantSlug, "/app/sales")} staffLabel={titleTerminology(terms.staffPlural)}
+      <CalendarAppointmentDrawer checkoutPath={tenantPath(tenantSlug, "/app/sales")}
+        clientPath={tenantPath(tenantSlug, "/app/customers")} clientLabel={titleTerminology(terms.client)} staffLabel={titleTerminology(terms.staffPlural)}
         timezone={tenant.timezone}
         summaries={[...bookings, ...teamBookings, ...monthScopedBookings].map((item) => ({
           id: item.id, bookingNumber: item.bookingNumber, customerName: item.customerName,
