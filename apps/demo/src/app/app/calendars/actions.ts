@@ -1,6 +1,6 @@
 "use server";
 
-import { activeAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
+import { activeAppointmentPayments, hasNonGiftCardPayment, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
 import type { TransactionSql } from "postgres";
@@ -1002,10 +1002,11 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
       }
       if (kind === "payment") {
         if (locked.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
-        if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
+        const payments = await activeAppointmentPayments(transaction, tenant.id, booking.id);
+        if (hasNonGiftCardPayment(payments)) {
           throw new Error("A payment is already recorded. Edit or delete it before recording another.");
         }
-        if (expectedBalance !== null) {
+        if (expectedBalance !== null || payments.length > 0) {
           const [cart] = await transaction.unsafe<{ balance: string }[]>(`
             SELECT greatest(cart.chargeable_cents - coalesce((
               SELECT sum(CASE WHEN kind='payment' THEN amount_cents ELSE -amount_cents END)
@@ -1013,8 +1014,11 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
             ), 0), 0)::text AS balance
             FROM appointment_checkout_amounts($1, $2) cart
           `, [tenant.id, booking.id]);
-          if (!cart || cart.balance !== expectedBalance) {
+          if (!cart || (expectedBalance !== null && cart.balance !== expectedBalance)) {
             throw new Error("The checkout balance changed. Go back to checkout and review the total.");
+          }
+          if (payments.length > 0 && amountCents !== Number(cart.balance)) {
+            throw new Error("Record the full balance remaining after the gift-card payment.");
           }
         }
       }
