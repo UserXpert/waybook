@@ -3,6 +3,7 @@
 import { activeAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { TransactionSql } from "postgres";
 import { assertNoOperationalFreeText } from "@/lib/waybook/operations-only-fields";
 import { refundGiftCardOnCancellation } from "@/lib/waybook/gift-card-cancellation";
@@ -14,7 +15,10 @@ import { appointmentHasSettlement, calendarBookingVisibility, getAdditionalAppoi
 import { getAppointmentReservations, linkedAppointmentOpenings } from "@/lib/waybook/linked-appointment-schedule";
 import { tenantDb } from "@/lib/waybook/database";
 import { arrivalAlertsEnabled, unnotifiedArrivalProviders } from "@/lib/waybook/provider-arrival-alerts";
-import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
+import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { appointmentStripeConfig, runAppointmentStripeCheckout } from "@/lib/waybook/stripe-appointment-checkout";
+import { runStripeAppointmentRefund } from "@/lib/waybook/stripe-appointment-refunds";
 import { requireFeature } from "@/lib/waybook/features";
 import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
@@ -772,7 +776,14 @@ async function persistBookingStatus(
       SELECT cart.chargeable_cents = coalesce((
         SELECT sum(CASE WHEN kind = 'payment' THEN amount_cents ELSE -amount_cents END)
         FROM payment_records WHERE tenant_id = $1 AND booking_id = $2
-      ), 0) AS paid FROM appointment_checkout_amounts($1, $2) cart
+      ), 0) OR EXISTS (
+        SELECT 1 FROM payment_records p
+        JOIN booking_events e ON e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+          AND e.event_type = 'payment.payment' AND e.metadata->>'paymentId' = p.id::text
+          AND e.metadata->>'source' = 'stripe_sandbox'
+        WHERE p.tenant_id = $1 AND p.booking_id = $2 AND p.kind = 'payment'
+          AND p.amount_cents = cart.chargeable_cents
+      ) AS paid FROM appointment_checkout_amounts($1, $2) cart
     `, [tenant.id, booking.id]);
     if (!settlement?.paid) throw new Error("Settle the checkout balance before completing the appointment.");
   }
@@ -952,6 +963,71 @@ export async function cancelAppointment(formData: FormData): Promise<Cancellatio
 
 export type PaymentState = { error: string | null; success: string | null };
 
+export async function updateStripeAppointmentRefund(_state: PaymentState, formData: FormData): Promise<PaymentState> {
+  try {
+    const config = appointmentStripeConfig();
+    const action = formData.get("action");
+    const bookingId = String(formData.get("bookingId") ?? "");
+    const id = String(formData.get("requestId") ?? "");
+    const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+    if (!config || (action !== "start" && action !== "check") || !uuid.test(bookingId) || !uuid.test(id)) {
+      throw new Error("Stripe sandbox refund is unavailable.");
+    }
+    const amount = String(formData.get("amountDkk") ?? "").replace(",", ".");
+    if (action === "start" && !/^\d{1,6}(?:\.\d{1,2})?$/.test(amount)) throw new Error("Enter a valid refund amount.");
+    const { tenant, db } = await editableBooking(bookingId, "manager");
+    await requireFeature(tenant.id, "booking-essentials");
+    const actor = await requireIdentity();
+    const result = await runStripeAppointmentRefund({ db, tenantId: tenant.id, bookingId }, config, {
+      action, id, amountCents: Math.round(Number(amount) * 100),
+      expectedCents: Number(formData.get("expectedCents")), actorId: actor.id,
+    });
+    const message = {
+      succeeded: "Stripe sandbox refund recorded.",
+      pending: "Stripe is processing the refund. Check its status again shortly.",
+      failed: "Stripe declined the refund. Review the payment before trying again.",
+      canceled: "Stripe cancelled the refund.",
+    };
+    revalidateCalendars();
+    return { error: result === "failed" ? message.failed : null, success: !result ? "There is no pending Stripe refund." : result === "failed" ? null : message[result] };
+  } catch (error) {
+    revalidateCalendars();
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not verify the Stripe refund. Check its status before trying again.", success: null };
+  }
+}
+
+export async function updateStripeAppointmentPayment(_state: PaymentState, formData: FormData): Promise<PaymentState> {
+  let destination: string | null = null;
+  let success: string | null = null;
+  try {
+    const config = appointmentStripeConfig();
+    if (!config) throw new Error("Stripe sandbox checkout is unavailable.");
+    const action = formData.get("action");
+    const bookingId = String(formData.get("bookingId") ?? "");
+    const expectedCents = Number(formData.get("expectedCents"));
+    if (action !== "open" && action !== "check" && action !== "cancel" && action !== "return") throw new Error("Choose a payment action.");
+    if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(bookingId)) throw new Error("Appointment is unavailable.");
+    const { tenant, db } = await editableBooking(bookingId, "manager");
+    await requireFeature(tenant.id, "booking-essentials");
+    const [identity, slug] = await Promise.all([requireIdentity(), currentTenantRouteSlug(tenant.slug)]);
+    const reviewPath = tenantPath(slug, `/app/sales?booking=${bookingId}`);
+    const outcome = await runAppointmentStripeCheckout({ db, tenantId: tenant.id, bookingId }, config, {
+      action, expectedCents, actorId: identity.id, returnPath: `${reviewPath}&step=payment&stripe=return`,
+    });
+    if (outcome.state === "open" && action === "open") destination = outcome.url;
+    if (outcome.state === "paid") destination = reviewPath;
+    if (outcome.state === "expired") success = "Stripe checkout is closed. You can choose a payment method.";
+    if (outcome.state === "open") success = "Stripe is waiting for the card payment.";
+    if (outcome.state === "processing") success = "Stripe is processing the payment. Check again shortly.";
+  } catch (error) {
+    revalidateCalendars();
+    return { error: error instanceof Error && !("severity" in error) ? error.message : "Could not verify the Stripe payment. Check again before taking payment.", success: null };
+  }
+  revalidateCalendars();
+  if (destination) redirect(destination);
+  return { error: null, success };
+}
+
 /** Appends a tenant-recorded payment or refund; corrections are never destructive. */
 async function insertManualPaymentEntry(
   transaction: TransactionSql,
@@ -1069,6 +1145,7 @@ export async function correctAppointmentPayment(formData: FormData): Promise<Pay
       const payment = payments.find((item) => item.id === paymentId);
       if (!payment || payment.revision !== revision) throw new Error("This payment has changed. Reopen the appointment and try again.");
       if (payment.method === "gift_card") throw new Error("Gift-card payments use the original card’s refund workflow.");
+      if (payment.stripeSandbox) throw new Error("Stripe sandbox payments must be reconciled through Stripe.");
 
       const [balance] = await transaction.unsafe<{ available: number }[]>(`
         SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)::int AS available

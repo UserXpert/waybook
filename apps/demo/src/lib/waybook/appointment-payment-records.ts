@@ -5,13 +5,16 @@ export const paymentMethodLabels: Record<string, string> = {
   card: "Card", cash: "Cash", bank_transfer: "Bank transfer", other: "Other", gift_card: "Gift card",
 };
 
-export type RecordedAppointmentPayment = { id: string; amountCents: number; method: string; revision: string | null };
+export type RecordedAppointmentPayment = { id: string; amountCents: number; method: string; revision: string | null; stripeSandbox?: boolean };
 
 /** Payment corrections are recorded in booking history and linked to any ledger adjustment. */
 export function activeAppointmentPayments(db: Pick<ReturnType<typeof tenantDb>, "unsafe">, tenantId: string, bookingId: string) {
   return db.unsafe<RecordedAppointmentPayment[]>(`
     SELECT p.id, coalesce((edit.metadata->>'amountCents')::int, p.amount_cents) AS "amountCents",
-      coalesce(edit.metadata->>'method', p.method) AS method, edit.id AS revision
+      coalesce(edit.metadata->>'method', p.method) AS method, edit.id AS revision,
+      EXISTS (SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+        AND e.event_type = 'payment.payment' AND e.metadata->>'paymentId' = p.id::text
+        AND e.metadata->>'source' = 'stripe_sandbox') AS "stripeSandbox"
     FROM payment_records p
     LEFT JOIN LATERAL (
       SELECT id, event_type, metadata FROM booking_events
@@ -25,7 +28,10 @@ export function activeAppointmentPayments(db: Pick<ReturnType<typeof tenantDb>, 
       AND NOT EXISTS (
         SELECT 1 FROM booking_events e
         WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
-          AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text
+          AND (
+            (e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text)
+            OR (e.event_type = 'payment.refund_returned' AND e.metadata->>'paymentId' = p.id::text)
+          )
       )
       AND (p.method <> 'gift_card' OR NOT EXISTS (
         SELECT 1 FROM payment_records r

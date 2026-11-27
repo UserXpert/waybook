@@ -5,18 +5,22 @@ import { TenantAppearanceControls } from "@/components/tenant-appearance-control
 import { TenantBusinessProfileForm } from "@/components/tenant-business-profile-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
 import { TenantTerminologyForm } from "@/components/tenant-terminology-form";
+import { StripeOnboardingButton } from "@/components/stripe-onboarding-button";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-page-media";
 import { parseBusinessProfile } from "@/lib/waybook/business-profile";
 import { tenantDb } from "@/lib/waybook/database";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { stripeSandboxConfig } from "@/lib/waybook/stripe-connect-api";
+import { sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { terminologyLabels, titleTerminology } from "@/lib/waybook/terminology-labels";
 import { StaffRolesPanel } from "./roles/panel";
+import { checkStripeSandboxStatus, startStripeSandboxOnboarding } from "./payment-actions";
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; stripe?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
   const [params, slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled, terminology] = await Promise.all([
     searchParams,
@@ -29,10 +33,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const canManageRoles = teamEnabled && membership.role === "owner";
   const showingRoles = params.tab === "roles";
   const showingBusiness = params.tab === "business";
+  const showingPayments = params.tab === "payments";
+  const sandbox = membership.role === "owner" ? stripeSandboxConfig(process.env) : null;
   if (showingRoles && !canManageRoles) notFound();
+  if (showingPayments && !sandbox) notFound();
   const settingsHref = tenantPath(slug, "/app/settings");
   const rolesHref = `${settingsHref}?tab=roles`;
   const businessHref = `${settingsHref}?tab=business`;
+  const paymentsHref = `${settingsHref}?tab=payments`;
+  const merchantStatus = showingPayments && sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -60,12 +69,37 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <header className="workspace-settings__heading"><p>WORKSPACE</p><h1>Settings</h1><span>Manage your preferences and business setup.</span></header>
       <div className="workspace-settings__layout">
         <nav className="workspace-settings__nav" aria-label="Settings sections">
-          <Link href={settingsHref} aria-current={!showingRoles && !showingBusiness ? "page" : undefined}>Appearance</Link>
+          <Link href={settingsHref} aria-current={!showingRoles && !showingBusiness && !showingPayments ? "page" : undefined}>Appearance</Link>
           {canViewBusiness ? <Link href={businessHref} aria-current={showingBusiness ? "page" : undefined}>Business setup</Link> : null}
+          {sandbox ? <Link href={paymentsHref} aria-current={showingPayments ? "page" : undefined}>Payments</Link> : null}
           {canManageRoles ? <Link href={rolesHref} aria-current={showingRoles ? "page" : undefined}>Roles &amp; permissions</Link> : null}
         </nav>
         <div className="workspace-settings__content">
-          {showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
+          {merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
+            <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
+            {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
+            {params.stripe === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
+            <p role={params.stripe === "returned" || params.stripe === "checked" ? "status" : undefined}>{{
+              unconnected: "Set up a Danish sandbox merchant to test card payments.",
+              pending: "Stripe setup is incomplete or awaiting verification.",
+              ready: "Stripe has verified your sandbox account for card payments.",
+              restricted: "Stripe has restricted card payments on this sandbox account.",
+              disconnected: "Stripe could not find this sandbox account. Review the account in Stripe.",
+              unresolved: "An earlier setup attempt needs to be reconciled before you can continue.",
+              unavailable: "Stripe status is temporarily unavailable. Try refreshing the status.",
+            }[merchantStatus]}</p>
+            {merchantStatus === "unconnected" || merchantStatus === "pending" ? <p>
+              Already use Stripe? Sign in with your Stripe login and select your existing business if Stripe offers it.
+            </p> : null}
+            <div className="workspace-settings__payment-actions">
+              {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
+                <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : "Continue Stripe setup"} />
+              </form> : null}
+              {merchantStatus !== "unconnected" ? <form action={checkStripeSandboxStatus}>
+                <StripeOnboardingButton label="Check Stripe status" checkStatus />
+              </form> : null}
+            </div>
+          </section> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
             {canEditBusiness ? <section className="workspace-settings__panel" id="business-settings">
               <h2>Business details</h2>
               <p>Manage your branding, registration and contact details.</p>
