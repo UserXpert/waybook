@@ -78,7 +78,7 @@ globalThis.fetch = async (input, init) => {
       const amount = Number(body.get("line_items[0][price_data][unit_amount]"));
       if (!key || body.get("client_reference_id") !== key || body.get("mode") !== "payment" ||
           body.get("line_items[0][price_data][currency]") !== "dkk" ||
-          body.get("payment_method_types[0]") !== "card" || body.get("adaptive_pricing[enabled]") !== "false" ||
+          body.get("allowed_payment_method_types[0]") !== "card" || body.get("adaptive_pricing[enabled]") !== "false" ||
           !body.get("success_url")?.startsWith(origin + "/nordic/app/sales?booking=")) return error(400);
       const id = `cs_test_${key.replaceAll("-", "")}`;
       const existing = sessions.get(id);
@@ -138,9 +138,10 @@ globalThis.fetch = async (input, init) => {
     const body = await request.json();
     const account = accounts.get(body.account);
     const onboarding = body.use_case?.account_onboarding;
-    if (!account || body.use_case?.type !== "account_onboarding" || onboarding.configurations.join() !== "merchant" ||
-        !onboarding.return_url.startsWith(origin + "/") || !onboarding.return_url.endsWith("&stripe=returned") ||
-        onboarding.refresh_url !== onboarding.return_url.replace("&stripe=returned", "&stripe=resume")) {
+    const returnUrl = onboarding?.return_url;
+    if (!account || body.use_case?.type !== "account_onboarding" ||
+        typeof returnUrl !== "string" || !returnUrl.startsWith(origin + "/") || !returnUrl.endsWith("&stripe=returned") ||
+        onboarding?.refresh_url !== returnUrl.replace("&stripe=returned", "&stripe=resume")) {
       return error(400);
     }
     account.links += 1;
