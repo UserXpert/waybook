@@ -74,8 +74,8 @@ for (const fixture of [
 
       await page.goto(`${app}/settings`);
       const settingsNav = page.getByRole("navigation", { name: "Settings sections" });
-      await expect(settingsNav.getByRole("link", { name: /^(Appearance|Business setup|Roles & permissions)$/ }))
-        .toHaveText(["Appearance", "Business setup", "Roles & permissions"]);
+      await expect(settingsNav.getByRole("link", { name: /^(Appearance|Calendar|Business setup|Roles & permissions)$/ }))
+        .toHaveText(["Appearance", "Calendar", "Business setup", "Roles & permissions"]);
       await expect(page.locator("#business-settings").getByRole("link", { name: /^Roles & permissions/ })).toHaveCount(0);
       const rolesTab = settingsNav.getByRole("link", { name: "Roles & permissions" });
       await rolesTab.click();

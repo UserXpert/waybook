@@ -32,7 +32,7 @@ type Props = {
 type StatusActionProps = Pick<Props, "bookingId" | "status" | "canChangeAttendanceNow" | "onStatusSaved" | "separateCheckIn" | "attendanceLabel"> & {
   updateStatus: (formData: FormData) => Promise<AttendanceResult>;
 };
-type RescheduleProps = Pick<Props, "bookingId" | "status" | "timezone" | "days" | "slots" | "reschedule" | "currentStartsAt" | "linkedServices">;
+type RescheduleProps = Pick<Props, "bookingId" | "status" | "timezone" | "days" | "slots" | "reschedule" | "currentStartsAt" | "linkedServices"> & { showTimezone?: boolean };
 
 function attendanceOptions(status: string, separateCheckIn?: boolean) {
   if (status === "confirmed" && !separateCheckIn) return [["arrived", "Arrived"], ["completed", "Completed"], ["no_show", "No show"]] as const;
@@ -130,7 +130,7 @@ export function AppointmentStatusActions({ bookingId, status, updateStatus, canC
   </>;
 }
 
-export function AppointmentRescheduleActions({ bookingId, status, timezone, days, slots, reschedule, currentStartsAt, linkedServices }: RescheduleProps) {
+export function AppointmentRescheduleActions({ bookingId, status, timezone, days, slots, reschedule, currentStartsAt, linkedServices, showTimezone }: RescheduleProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -154,6 +154,7 @@ export function AppointmentRescheduleActions({ bookingId, status, timezone, days
 
   return <section>
     <h3>Reschedule</h3>
+    {showTimezone ? <p>Choose a time in {timezone}.</p> : null}
     {linkedServices ? <p>All services move together with their assigned providers.</p> : null}
     <form action={saveSchedule} className="tenant-drawer-form">
       <input type="hidden" name="bookingId" value={bookingId} />

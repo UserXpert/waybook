@@ -4236,6 +4236,12 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-dashboard-page .waybook-month-calendar__day-link { position: absolute; inset: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: .2rem; padding: .55rem; color: inherit; text-decoration: none; }
 .tenant-dashboard-page .waybook-month-calendar__day-link:focus-visible { outline: 2px solid var(--waybook-accent, #262626); outline-offset: -2px; }
 .tenant-dashboard-page .waybook-month-calendar__count { color: #71717a; font-size: .65rem; white-space: nowrap; }
+.tenant-dashboard-page .calendar-holiday { color: var(--waybook-accent-ink); font-size: .72rem; font-weight: 600; }
+.tenant-dashboard-page .waybook-calendar-toolbar > div > .calendar-holiday { color: var(--waybook-accent-ink); }
+.tenant-dashboard-page .waybook-month-calendar__day-link:has(.waybook-month-calendar__holiday) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; }
+.tenant-dashboard-page .waybook-month-calendar__day-link:has(.waybook-month-calendar__holiday) .waybook-month-calendar__count { justify-self: end; }
+.tenant-dashboard-page .waybook-month-calendar__holiday { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tenant-dashboard-page .waybook-month-calendar__day:has(.waybook-month-calendar__holiday) .waybook-month-calendar__appointments { margin-top: 2.7rem; }
 .tenant-dashboard-page .waybook-month-calendar__appointments { position: relative; z-index: 2; display: grid; gap: .25rem; margin-top: 1.8rem; pointer-events: none; }
 .tenant-dashboard-page .waybook-month-calendar__appointment,.tenant-dashboard-page .waybook-month-calendar__more { overflow: hidden; min-width: 0; border-left: 3px solid var(--waybook-accent, #777); border-radius: .25rem; padding: .22rem .3rem; background: #f1f1f3; color: #27272a; font-size: .68rem; line-height: 1.3; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; pointer-events: auto; }
 .tenant-dashboard-page .waybook-month-calendar__appointment:hover,.tenant-dashboard-page .waybook-month-calendar__appointment:focus-visible { background: #e4e4e7; outline: 2px solid var(--waybook-accent, #262626); }
@@ -4260,6 +4266,8 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   .tenant-dashboard-page .waybook-month-calendar__day { min-height: 6.5rem; padding: .25rem; }
   .tenant-dashboard-page .waybook-month-calendar__day-link { padding: .3rem; }
   .tenant-dashboard-page .waybook-month-calendar__count { display: none; }
+  .tenant-dashboard-page .waybook-month-calendar__holiday { font-size: .58rem; }
+  .tenant-dashboard-page .waybook-month-calendar__day:has(.waybook-month-calendar__holiday) .waybook-month-calendar__appointments { margin-top: 2.2rem; }
   .tenant-dashboard-page .waybook-month-calendar__appointments { margin-top: 1.4rem; gap: .15rem; }
   .tenant-dashboard-page .waybook-month-calendar__appointment,.tenant-dashboard-page .waybook-month-calendar__more { padding: .15rem; font-size: .58rem; }
   .tenant-dashboard-page .waybook-month-calendar__preview { display: none !important; }
@@ -5367,3 +5375,45 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   .appointment-receipt article { background: white; border: 0; padding: 0; }
   .appointment-receipt tr { break-inside: avoid; }
 }
+
+.workspace-settings__panel > .calendar-display-form { max-width: 34rem; margin-top: 1rem; padding: 0; }
+.tenant-dashboard-page .calendar-display-form select { height: 2.45rem; padding-block: 0; font-weight: 400; }
+.calendar-display-form__hours > label,.calendar-display-form__holiday > label { display: grid; gap: .3rem; font-size: .8125rem; font-weight: 600; }
+.calendar-display-form__holiday { display: grid; gap: .35rem; }
+.calendar-display-form__holiday > small { font-size: .75rem; }
+.calendar-display-form__hours { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.calendar-display-form .calendar-display-form__check { display: flex; align-items: center; gap: .5rem; }
+.calendar-display-form > button { justify-self: start; }
+
+.tenant-dashboard-page .waybook-week-calendar__scroll { overflow-x: auto; }
+.tenant-dashboard-page .team-day-calendar__time-header { min-width: 0; justify-items: start; padding-inline-start: .3rem; }
+.tenant-dashboard-page .waybook-week-calendar__cell[data-hour-start] {
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+.calendar-current-time { position: relative; z-index: 4; pointer-events: none; }
+.calendar-current-time > span {
+  position: absolute;
+  inset-block: 0;
+  border-inline-start: 2px solid var(--waybook-danger, #bc372e);
+}
+.calendar-current-time b {
+  display: block;
+  width: max-content;
+  border-radius: 0 .25rem .25rem 0;
+  padding: .13rem .3rem;
+  background: var(--waybook-danger, #bc372e);
+  color: #fff;
+  font-size: .65rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-range-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.calendar-range-actions > .calendar-view-toggle,
+.calendar-range-actions > .calendar-today-link { height: 2.5rem; min-height: 2.5rem; }
+.calendar-range-actions > .calendar-today-link { padding-block: 0; }
+@media (max-width: 760px) {
+  .team-day-calendar .calendar-range-actions { grid-column: 1 / -1; }
+}
+.tenant-dashboard-page a.team-day-calendar__staff { color: inherit; text-decoration: none; }
+.tenant-dashboard-page a.team-day-calendar__staff:hover strong { text-decoration: underline; }
+.tenant-dashboard-page a.team-day-calendar__staff:focus-visible { outline-offset: -2px; }

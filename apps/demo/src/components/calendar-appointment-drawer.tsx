@@ -103,12 +103,18 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   const canEdit = Boolean(detail?.status !== "cancelled" && (capabilities?.canEdit || capabilities?.canUpdateStatus || canReschedule));
   const rescheduleOptions = canReschedule && detail ? <AppointmentRescheduleActions key={detail.id}
     bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots}
-    currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} reschedule={rescheduleBooking} /> : null;
-  const date = selected.startsAt ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" }).format(new Date(selected.startsAt)) : "";
+    currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} showTimezone={timezone !== detail.timezone} reschedule={rescheduleBooking} /> : null;
   const services = detail ? [{
     id: detail.id, title: detail.serviceTitle, provider: detail.teamMemberName,
     startsAt: detail.startsAt, endsAt: detail.endsAt, priceCents: detail.primaryServicePriceCents,
   }, ...detail.additionalServices] : [];
+  let scheduleStart = detail?.startsAt ?? selected.startsAt;
+  let scheduleEnd = detail?.endsAt ?? selected.endsAt;
+  for (const service of services) {
+    if (service.startsAt < scheduleStart) scheduleStart = service.startsAt;
+    if (service.endsAt > scheduleEnd) scheduleEnd = service.endsAt;
+  }
+  const date = scheduleStart ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" }).format(new Date(scheduleStart)) : "";
   const historyDate = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, dateStyle: "medium", timeStyle: "short" });
   const clock = (value: string) => value ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "";
   return <TenantEditorDialog title={`Appointment with ${selected.customerName}`} onDismiss={close} cycleFocus>
@@ -166,7 +172,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
         </div>
         <section className="appointment-drawer__details" aria-label="Schedule"><dl>
           <div className="appointment-drawer__detail--date"><dt>Date</dt><dd>{date}</dd></div>
-          <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(selected.startsAt)}–{clock(selected.endsAt)}</dd></div>
+          <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(scheduleStart)}–{clock(scheduleEnd)}</dd></div>
           {detail?.locationName ? <div><dt>Location</dt><dd>{detail.locationName}</dd></div> : null}
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
