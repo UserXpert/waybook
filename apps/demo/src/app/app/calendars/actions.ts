@@ -149,7 +149,9 @@ export async function getCalendarAppointment(bookingId: string) {
   if (!canViewTeam && teamMemberId !== permissions.teamMemberId && !ownSegment) return null;
   const visibleAdditionalServices = additionalServices
     .filter((item) => item.id !== ownSegment?.id && (canViewTeam || item.teamMemberId === permissions.teamMemberId))
-    .map(({ id, provider, title, startsAt, endsAt }) => ({ id, provider, title, startsAt, endsAt }));
+    .map(({ id, provider, title, startsAt, endsAt, priceCents }) => ({
+      id, provider, title, startsAt, endsAt, priceCents: permissions.isManager ? priceCents : null,
+    }));
   const canManageSchedule = canManageAppointment(permissions, ...providers) &&
     (canViewTeam || providers.length === 1 || providers.every((id) => id === permissions.teamMemberId));
   const canUpdateStatus = canUpdateAppointmentAttendance(permissions, providers);
@@ -185,6 +187,7 @@ export async function getCalendarAppointment(bookingId: string) {
     paymentBalance,
     days,
     slots,
+    primaryServicePriceCents: permissions.isManager ? priceCents : null,
     additionalServices: visibleAdditionalServices,
     serviceEditor: permissions.isManager && !hasSettlement && isMovableAppointmentStatus(booking.status)
       ? { revision, primary: { id: null, serviceId: booking.serviceId, title: booking.serviceTitle, teamMemberId,

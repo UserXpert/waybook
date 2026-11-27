@@ -36,7 +36,7 @@ In the playground, the past-date entry showed preferences without a booking acti
 
 Keep front-desk actions visible in the calendar appointment summary according to the operator’s permissions. **Check in** opens a compact Waiting room or In service menu beside **Edit services**.
 
-The top-right pencil opens appointment details, attendance and rescheduling for authorized staff. **Save changes** appears in edit mode. The three-dot menu opens Reschedule directly or shows a cancellation confirmation. Editing services starts with compact rows showing service, provider, time and price. **Add service** focuses a searchable list and uses the previous provider when eligible. The next service starts after the previous service unless staff enter a different time.
+The top-right pencil opens appointment details, attendance and rescheduling for authorized staff. **Save changes** appears in edit mode. The three-dot menu opens Reschedule directly or shows a cancellation confirmation. The appointment summary shows each service’s provider, time range and duration, with the booked price visible to managers. Editing services starts with compact rows showing service, provider, time and price. **Add service** focuses a searchable list and uses the previous provider when eligible. The next service starts after the previous service unless staff enter a different time.
 
 For a No show, the pencil opens payment method and amount in the same drawer, including when the current service balance is zero. The operator can select Completed and submit once. If required payment details are missing, show a compact inline message and keep the draft. Commit the no-show payment and completion atomically.
 

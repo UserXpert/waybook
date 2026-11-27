@@ -12,6 +12,8 @@ import { appointmentDrawerCapabilities } from "@/lib/waybook/appointment-drawer-
 
 import { appointmentStageLabels, isMovableAppointmentStatus } from "@/lib/waybook/appointment-lifecycle";
 
+const servicePrice = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
+
 type Detail = NonNullable<Awaited<ReturnType<typeof getCalendarAppointment>>>;
 export type CalendarAppointmentSummary = Pick<Detail, "id" | "bookingNumber" | "customerName" | "serviceTitle" | "teamMemberName" | "startsAt" | "endsAt" | "status" | "attendanceStage">;
 
@@ -102,6 +104,10 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
     bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots}
     currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} reschedule={rescheduleBooking} /> : null;
   const date = selected.startsAt ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" }).format(new Date(selected.startsAt)) : "";
+  const services = detail ? [{
+    id: detail.id, title: detail.serviceTitle, provider: detail.teamMemberName,
+    startsAt: detail.startsAt, endsAt: detail.endsAt, priceCents: detail.primaryServicePriceCents,
+  }, ...detail.additionalServices] : [];
   const clock = (value: string) => value ? new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "";
   return <TenantEditorDialog title={`Appointment with ${selected.customerName}`} onDismiss={close} cycleFocus>
     <aside className="tenant-drawer appointment-drawer manual-appointment-drawer calendar-appointment-drawer" aria-label={`Appointment with ${selected.customerName}`}>
@@ -142,7 +148,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
           <div className="appointment-drawer__detail--status"><dt>Status</dt><dd>{attendanceLabel ?? selected.status.replace("_", " ")}</dd></div>
           <div className="appointment-drawer__detail--date"><dt>Date</dt><dd>{date}</dd></div>
           <div className="appointment-drawer__detail--time"><dt>Time</dt><dd>{clock(selected.startsAt)}–{clock(selected.endsAt)}</dd></div>
-          <div><dt>Service</dt><dd>{selected.serviceTitle}</dd></div><div><dt>{staffLabel}</dt><dd>{selected.teamMemberName}</dd></div><div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
+          <div><dt>Booking number</dt><dd>{selected.bookingNumber}</dd></div>
         </dl></section>
         {error ? <p role="alert">{error}</p> : !detail || !capabilities ? <p role="status">Loading appointment details…</p> : <>
           <div className="calendar-appointment-drawer__actions">
@@ -153,13 +159,19 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
             {detail.serviceEditor ? <AppointmentServiceEditor key={`${detail.id}-${detail.serviceEditor.revision}`}
               bookingId={detail.id} locationId={detail.locationId} timezone={detail.timezone} editor={detail.serviceEditor} onSaved={refreshAppointment} /> : null}
           </div>
-          {detail.additionalServices.length > 0 ? <section className="appointment-drawer__details">
-            <h3>Additional services</h3>
-            <dl>{detail.additionalServices.map((service) => <div key={service.id}>
-              <dt>{service.title}</dt>
-              <dd>{clock(service.startsAt)}–{clock(service.endsAt)}{service.provider ? ` · ${service.provider}` : ""}</dd>
-            </div>)}</dl>
-          </section> : null}
+          <section className="calendar-appointment-drawer__services" aria-label="Booked services">
+            <h3>Services</h3>
+            <ul>{services.map((service) => <li key={service.id}>
+              <div>
+                <strong>{service.title}</strong>
+                <span>{clock(service.startsAt)}–{clock(service.endsAt)}{service.provider ? ` · ${service.provider}` : ` · No ${staffLabel.toLowerCase()} assigned`}</span>
+              </div>
+              <div>
+                {service.priceCents != null ? <strong>{servicePrice.format(service.priceCents / 100)}</strong> : null}
+                <span>{Math.round((Date.parse(service.endsAt) - Date.parse(service.startsAt)) / 60_000)} min</span>
+              </div>
+            </li>)}</ul>
+          </section>
           {detail.status === "cancelled" && capabilities.canCancel ? <AppointmentStatusActions
             bookingId={detail.id} status={detail.status} canChangeAttendanceNow={false} updateStatus={saveAppointmentAttendance} /> : null}
           {mode && detail.status !== "cancelled" ? <div className="calendar-appointment-drawer__edit" ref={actionPanel} tabIndex={-1}>

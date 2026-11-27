@@ -89,7 +89,11 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("link", { name: "View appointment" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("booking") === booking.id && !url.searchParams.has("create"));
     const saved = page.getByRole("complementary", { name: `Appointment with ${clientName}` });
-    await expect(saved.getByText(second.title, { exact: true })).toBeVisible();
+    const bookedServices = saved.getByRole("region", { name: "Booked services" });
+    await expect(bookedServices.getByRole("listitem")).toHaveCount(2);
+    const secondService = bookedServices.getByRole("listitem").filter({ hasText: second.title });
+    await expect(secondService).toContainText(`10:45–11:15 · ${secondary.name}`);
+    await expect(secondService).toContainText("30 min");
     await saved.getByRole("button", { name: "More appointment actions" }).click();
     await saved.getByRole("button", { name: "Reschedule", exact: true }).click();
     const schedule = saved.locator("section").filter({ has: page.getByRole("heading", { name: "Reschedule", exact: true }) });

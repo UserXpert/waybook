@@ -4908,3 +4908,36 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   .tenant-dashboard-page .calendar-appointment-drawer > header > div:first-child { flex: 1 1 7rem; min-width: 0; }
   .tenant-dashboard-page .calendar-appointment-drawer .appointment-drawer__header-actions { margin-inline-start: auto; }
 }
+
+.calendar-appointment-drawer__actions:has(.appointment-service-editor--open) + .calendar-appointment-drawer__services {
+  display: none;
+}
+.calendar-appointment-drawer__services ul {
+  display: grid;
+  gap: .45rem;
+  margin: .55rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.calendar-appointment-drawer__services li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .75rem;
+  padding: .65rem .75rem;
+  border: 1px solid var(--appointment-action-border);
+  border-radius: .6rem;
+  background: var(--appointment-action-surface);
+  font-size: .82rem;
+}
+.calendar-appointment-drawer__services li > div {
+  display: grid;
+  gap: .18rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.calendar-appointment-drawer__services li > div:last-child { flex-shrink: 0; text-align: right; }
+.calendar-appointment-drawer__services li span {
+  color: var(--ice-muted, var(--wb-dark-muted, #606065));
+  font-size: .75rem;
+}
