@@ -60,6 +60,10 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
       await sale.getByRole("button", { name: "Pay by card in Stripe sandbox" }).click();
       await expect(sale.getByRole("alert")).toContainText("Stripe sandbox checkout is temporarily unavailable.");
       await expect(sale.getByRole("button", { name: "Record payment" })).toHaveCount(0);
+      await expect(sale.getByRole("link", { name: "Gift card", exact: true })).toHaveCount(0);
+      await page.goto(`${paymentPath}&tender=gift-card`);
+      await expect(sale.getByRole("form", { name: "Gift card", exact: true })).toHaveCount(0);
+      await expect(sale.getByRole("button", { name: "Record payment" })).toHaveCount(0);
       const [reserved] = await attempts(id);
       expect(reserved).toMatchObject({ state: "pending", session_id: null });
       expect(await receipts(id)).toEqual([]);
