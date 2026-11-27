@@ -1,5 +1,6 @@
 "use server";
 
+import { getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
 import { calendarBookingInterval, maxCalendarMoveTargets } from "@/lib/waybook/calendar-slot-time";
 import { activeAppointmentPayments, hasNonGiftCardPayment, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
@@ -269,6 +270,45 @@ export async function getManualBookingAvailability(input: {
         })),
     ),
   };
+}
+
+/** Suggest only the latest visible completed appointment's primary service. */
+export async function getLatestAppointmentService(input: {
+  customerId: string; locationId: string; teamMemberId: string; date: string; time: string;
+}) {
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  if (![input.customerId, input.locationId, input.teamMemberId].every((value) => uuid.test(value)) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) return null;
+  const { tenant, permissions } = await calendarPermissionContext();
+  if (!(permissions.isManager || permissions.canViewClients || permissions.canManageClients) ||
+      !canManageAppointment(permissions, input.teamMemberId) ||
+      !(await getCalendarDisplay(tenant.id)).autofillLatestService) return null;
+
+  const startsAt = fromZonedTime(`${input.date}T${input.time}`, tenant.timezone);
+  if (!Number.isFinite(+startsAt) || +startsAt <= Date.now() ||
+      localDateTimeKey(startsAt, tenant.timezone) !== `${input.date}T${input.time}`) return null;
+
+  const db = tenantDb(tenant);
+  const [service] = await db<{ id: string; title: string; durationMinutes: number; priceCents: number }[]>`
+    SELECT s.id, s.title, s.duration_minutes AS "durationMinutes", s.price_cents AS "priceCents"
+    FROM (
+      SELECT service_id FROM bookings
+      WHERE tenant_id = ${tenant.id} AND customer_id = ${input.customerId} AND status = 'completed' AND starts_at < now()
+        AND (${permissions.isManager || permissions.canViewTeamCalendar} OR team_member_id = ${permissions.teamMemberId}::uuid)
+      ORDER BY starts_at DESC, id DESC LIMIT 1
+    ) recent
+    JOIN services s ON s.tenant_id = ${tenant.id} AND s.id = recent.service_id AND s.is_active
+    JOIN service_locations sl ON sl.tenant_id = s.tenant_id AND sl.service_id = s.id AND sl.location_id = ${input.locationId}
+    JOIN service_team_members sm ON sm.tenant_id = s.tenant_id AND sm.service_id = s.id AND sm.team_member_id = ${input.teamMemberId}
+    JOIN team_member_locations ml ON ml.tenant_id = s.tenant_id AND ml.team_member_id = sm.team_member_id AND ml.location_id = sl.location_id
+  `;
+  if (!service) return null;
+
+  const endsAt = new Date(+startsAt + service.durationMinutes * 60_000);
+  const [provider] = await staffAvailableSlots(tenant, service.id, startsAt, endsAt, {
+    locationId: input.locationId, teamMemberId: input.teamMemberId, slotInterval: calendarBookingInterval, alignToClock: true,
+  }, db);
+  return provider?.slots.some((slot) => +new Date(slot.startTime) === +startsAt) ? service : null;
 }
 
 /** Availability for an existing appointment's seven-day reschedule window.

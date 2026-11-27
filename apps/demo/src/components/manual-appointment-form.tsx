@@ -8,7 +8,7 @@ import { useActionState, useCallback, useEffect, useMemo, useState } from "react
 import { fromZonedTime } from "date-fns-tz";
 import Link from "next/link";
 import { ArrowLeft, X } from "lucide-react";
-import { createManualBooking, getManualBookingAvailability } from "@/app/app/calendars/actions";
+import { createManualBooking, getLatestAppointmentService, getManualBookingAvailability } from "@/app/app/calendars/actions";
 import { AppointmentServiceStartSelect } from "@/components/appointment-service-start-select";
 import { findEligibleProvider, SearchPicker } from "@/components/calendar-selectors";
 
@@ -18,7 +18,7 @@ type Service = { id: string; title: string; durationMinutes: number; priceCents:
 type Client = { id: string; name: string; email: string; phone: string | null };
 type Slot = { teamMemberId: string; startTime: string };
 type ServiceDraft = { id: string; service: Service | null; member: Member | null; time: string; providerPending?: boolean; editingDetails?: boolean };
-type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; fromCalendarSlot?: boolean; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; calendarPath: string; terminology?: TenantTerminology };
+type Props = { initialLocation: Location; initialMember: Member; initialService: Service | null; fixedStaff?: boolean; autofillLatestService?: boolean; fromCalendarSlot?: boolean; defaultDate: string; defaultTime?: string; canLookupClients: boolean; waitlistEntryId?: string; waitlistUnavailable?: boolean; initialClient?: Client; customerName?: string; customerEmail?: string; customerPhone?: string | null; timezone: string; calendarPath: string; terminology?: TenantTerminology };
 
 const servicePrice = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
 
@@ -28,11 +28,13 @@ function localDateKey(timezone: string) { const parts = new Intl.DateTimeFormat(
 function dateLabel(value: string) { const date = new Date(`${value}T12:00:00Z`); return { weekday: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date), day: new Intl.DateTimeFormat("en-GB", { day: "2-digit" }).format(date), full: new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" }).format(date) }; }
 
 /** Selection lists are searched in bounded windows; availability and writes stay server-authoritative. */
-export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, fromCalendarSlot = false, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, calendarPath, terminology = defaultTenantTerminology }: Props) {
+export function ManualAppointmentForm({ initialLocation, initialMember, initialService, fixedStaff = false, autofillLatestService = false, fromCalendarSlot = false, defaultDate, defaultTime, canLookupClients, waitlistEntryId, waitlistUnavailable = false, initialClient, customerName, customerEmail, customerPhone, timezone, calendarPath, terminology = defaultTenantTerminology }: Props) {
   const [state, formAction, pending] = useActionState(createManualBooking, { error: null, success: null });
   const [location, setLocation] = useState(initialLocation);
   const [member, setMember] = useState<Member | null>(initialMember);
-  const [service, setService] = useState<Service | null>(initialService);
+  const [chosenService, setChosenService] = useState<Service | null>(initialService);
+  const [serviceEdited, setServiceEdited] = useState(false);
+  const [suggestion, setSuggestion] = useState<{ key: string; service: Service | null }>();
   const [additionalServices, setAdditionalServices] = useState<ServiceDraft[]>([]);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [date, setDate] = useState(defaultDate);
@@ -47,16 +49,37 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
   const dates = useMemo(() => Array.from({ length: 7 }, (_, index) => dateAt(dateWindowStart, index)), [dateWindowStart]);
   const locationId = location.id;
   const teamMemberId = member?.id ?? "";
+  const customerId = selectedClient?.id;
+  const suggestionKey = autofillLatestService && !waitlistEntryId && !serviceEdited && customerId && locationId && teamMemberId && time
+    ? JSON.stringify([customerId, locationId, teamMemberId, date, time])
+    : null;
+  const appliedSuggestion = suggestionKey && suggestion?.key === suggestionKey ? suggestion.service : null;
+  const service = appliedSuggestion ?? chosenService;
   const serviceId = service?.id ?? "";
+  const loadingSuggestion = Boolean(suggestionKey && suggestion?.key !== suggestionKey);
   const timeSlots = slots.filter((slot) => slot.teamMemberId === teamMemberId);
   const locationSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/locations?q=${encodeURIComponent(query)}&limit=8`, []);
   const clientSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/clients?purpose=appointment&q=${encodeURIComponent(query)}&limit=8`, []);
   const serviceSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
   const staffSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/staff?${new URLSearchParams({ locationId, q: query, limit: "8" }).toString()}`, [locationId]);
-  useEffect(() => { setLocation(initialLocation); setMember(initialMember); setService(initialService); const safeDate = defaultDate < today ? today : defaultDate; setDate(safeDate); setDateWindowStart(safeDate); setTime(defaultTime ?? ""); }, [defaultDate, defaultTime, initialLocation, initialMember, initialService, today]);
+  useEffect(() => { setLocation(initialLocation); setMember(initialMember); setChosenService(initialService); const safeDate = defaultDate < today ? today : defaultDate; setDate(safeDate); setDateWindowStart(safeDate); setTime(defaultTime ?? ""); }, [defaultDate, defaultTime, initialLocation, initialMember, initialService, today]);
   useEffect(() => { setClient({ name: customerName ?? "", email: customerEmail ?? "", phone: customerPhone ?? "" }); }, [customerEmail, customerName, customerPhone]);
   useEffect(() => { let cancelled = false; if (!locationId || !serviceId) { setSlots([]); setChecking(false); return; } setChecking(true); getManualBookingAvailability({ locationId, serviceId, date }).then((result) => { if (!cancelled) setSlots(result.slots); }).catch(() => { if (!cancelled) setSlots([]); }).finally(() => { if (!cancelled) setChecking(false); }); return () => { cancelled = true; }; }, [date, locationId, serviceId]);
   useEffect(() => { if (!fromCalendarSlot && !checking && !timeSlots.some((slot) => clock(slot.startTime, timezone) === time)) setTime(!waitlistEntryId && timeSlots[0] ? clock(timeSlots[0].startTime, timezone) : ""); }, [checking, fromCalendarSlot, time, timeSlots, timezone, waitlistEntryId]);
+  useEffect(() => {
+    if (!suggestionKey || !customerId) return;
+    let current = true;
+    getLatestAppointmentService({ customerId, locationId, teamMemberId, date, time })
+      .then((service) => { if (current) setSuggestion({ key: suggestionKey, service }); })
+      .catch(() => { if (current) setSuggestion({ key: suggestionKey, service: null }); });
+    return () => { current = false; };
+  }, [suggestionKey, customerId, locationId, teamMemberId, date, time]);
+
+  function pickService(item: Service | null) {
+    setServiceEdited(true);
+    setChosenService(item);
+  }
+
   const clientLabel = titleTerminology(terminology.client);
   const totalCents = (service?.priceCents ?? 0) + additionalServices.reduce((sum, row) => sum + (row.service?.priceCents ?? 0), 0);
   const durationMinutes = (service?.durationMinutes ?? 0) + additionalServices.reduce((sum, row) => sum + (row.service?.durationMinutes ?? 0), 0);
@@ -153,7 +176,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
         )}
       </section>
       {showSchedule ? <div className="tenant-drawer-form__grid manual-appointment__selectors">
-        {waitlistEntryId ? <label>Location<input value={location.name} readOnly /></label> : <SearchPicker<Location> label="Location" selectedLabel={location.name} placeholder="Search locations" searchUrl={locationSearchUrl} resultsLabel={(item) => item.name} onPick={(item) => { if (item.id === locationId) return; setLocation(item); setService(null); setAdditionalServices([]); if (!fixedStaff) setMember(null); }} />}
+        {waitlistEntryId ? <label>Location<input value={location.name} readOnly /></label> : <SearchPicker<Location> label="Location" selectedLabel={location.name} placeholder="Search locations" searchUrl={locationSearchUrl} resultsLabel={(item) => item.name} onPick={(item) => { if (item.id === locationId) return; setLocation(item); setChosenService(null); setAdditionalServices([]); if (!fixedStaff) setMember(null); }} />}
         {fixedStaff ? (
           <label>{titleTerminology(terminology.staffPlural)}<input value={initialMember.name} readOnly /></label>
         ) : (
@@ -167,8 +190,9 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
           placeholder="Search services" searchUrl={serviceSearchUrl}
           resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min`}
           resultsDetail={(item) => servicePrice.format(item.priceCents / 100)}
-          onPick={setService} onClear={service ? () => setService(null) : undefined} />}
+          onPick={pickService} onClear={service ? () => pickService(null) : undefined} />}
       </div>
+      {appliedSuggestion && appliedSuggestion.id !== chosenService?.id ? <small role="status">Service filled from the latest completed appointment.</small> : null}
       {service ? <section className="manual-appointment__step" aria-label="Additional services">
         {additionalServices.map((row, index) => <fieldset className="manual-appointment__step manual-appointment__service-row" key={row.id}>
           <legend>Service {index + 2}</legend>
@@ -206,7 +230,10 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
               onChange={(time) => editAdditionalService(row.id, { time })} />
           </div> : null}
         </fieldset>)}
-        {additionalServices.length < 5 ? <button type="button" className="waybook-action waybook-action--secondary" onClick={() => setAdditionalServices((current) => [...current, { id: crypto.randomUUID(), service: null, member: fixedStaff ? initialMember : null, time: "" }])}>Add service</button> : null}
+        {additionalServices.length < 5 ? <button type="button" className="waybook-action waybook-action--secondary" onClick={() => {
+            pickService(service);
+            setAdditionalServices((current) => [...current, { id: crypto.randomUUID(), service: null, member: fixedStaff ? initialMember : null, time: "" }]);
+          }}>Add service</button> : null}
       </section> : null}
       <input type="hidden" name="appointmentDate" value={date} /><input type="hidden" name="appointmentTime" value={time} />
       {showSchedule ? <section className="appointment-reschedule-picker manual-appointment__slot-picker" aria-label="Appointment schedule">
@@ -252,7 +279,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
       {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
       {service ? <div><strong>{servicePrice.format(totalCents / 100)}</strong><span>{durationMinutes} min{!compactDraft && time ? ` · ${dateLabel(date).full}, ${time}` : ""}</span></div> : null}
       {state.booking ? <Link className="waybook-primary-link" data-appointment-navigation href={`${calendarPath}?${new URLSearchParams({ view: "team", location: state.booking.locationId, day: state.booking.date, booking: state.booking.id })}`}>View appointment</Link> :
-        <button type="submit" className="waybook-action" disabled={pending || checking || !locationId || !serviceId || !teamMemberId || !slotSelected || !clientReady || !linkedReady || waitlistUnavailable}>{pending ? "Confirming…" : "Confirm appointment"}</button>}
+        <button type="submit" className="waybook-action" disabled={pending || checking || loadingSuggestion || !locationId || !serviceId || !teamMemberId || !slotSelected || !clientReady || !linkedReady || waitlistUnavailable}>{pending ? "Confirming…" : "Confirm appointment"}</button>}
     </div>
   </form>;
 }

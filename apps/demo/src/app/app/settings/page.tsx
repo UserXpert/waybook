@@ -92,6 +92,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </select></label>
               <label className="calendar-display-form__check"><input type="checkbox" name="showNow" defaultChecked={calendar.showNow} /> Show current time</label>
               <label className="calendar-display-form__check"><input type="checkbox" name="showWeekends" defaultChecked={calendar.showWeekends} /> Show weekends in Week and Month views</label>
+              <label className="calendar-display-form__check"><input type="checkbox" name="autofillLatestService" defaultChecked={calendar.autofillLatestService} /> Autofill service from the latest completed appointment</label>
               <button type="submit" className="waybook-action">Save calendar preferences</button>
             </form>
           </section> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>

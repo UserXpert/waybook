@@ -9,6 +9,7 @@ type CalendarDisplay = {
   end: number | null;
   showNow: boolean;
   showWeekends: boolean;
+  autofillLatestService: boolean;
 };
 
 function cookieName(tenantId: string) {
@@ -30,6 +31,7 @@ function readDisplay(value: unknown): CalendarDisplay {
     end: invalidHours ? null : end,
     showNow: data.showNow !== false,
     showWeekends: data.showWeekends !== false,
+    autofillLatestService: data.autofillLatestService === true,
   };
 }
 
@@ -52,6 +54,7 @@ export async function setCalendarDisplay(tenantId: string, form: FormData) {
     end: end ? Number(end) : null,
     showNow: form.has("showNow"),
     showWeekends: form.has("showWeekends"),
+    autofillLatestService: form.has("autofillLatestService"),
   });
   (await cookies()).set(cookieName(tenantId), JSON.stringify(settings), {
     httpOnly: true,
