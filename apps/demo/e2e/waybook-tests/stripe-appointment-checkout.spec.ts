@@ -60,6 +60,11 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
       await sale.getByRole("button", { name: "Pay by card in Stripe sandbox" }).click();
       await expect(sale.getByRole("alert")).toContainText("Stripe sandbox checkout is temporarily unavailable.");
       await expect(sale.getByRole("button", { name: "Record payment" })).toHaveCount(0);
+      await expect(sale.getByRole("link", { name: "Gift card", exact: true })).toHaveCount(0);
+      await page.goto(`${paymentPath}&tender=gift-card`);
+      await expect(sale.getByRole("form", { name: "Gift card", exact: true })).toHaveCount(0);
+      await expect(sale.getByRole("button", { name: "Record payment" })).toHaveCount(0);
+      await page.goto(paymentPath);
       const [reserved] = await attempts(id);
       expect(reserved).toMatchObject({ state: "pending", session_id: null });
       expect(await receipts(id)).toEqual([]);
@@ -237,7 +242,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
         await expect(sale.getByRole("button", { name: "Record payment" })).toBeVisible();
         expect(await attempts(id)).toEqual([{ id: reserved.id, state: "expired", session_id: sessionId }]);
         expect(await receipts(id)).toEqual([]);
-        await sale.getByRole("combobox", { name: "Method", exact: true }).selectOption("cash");
+        await sale.getByRole("radio", { name: "Cash", exact: true }).check();
         await sale.getByRole("button", { name: "Record payment" }).click();
         await expect(sale.getByRole("button", { name: "Finish checkout" })).toBeVisible();
         expect(await receipts(id)).toEqual([{ id: expect.any(String), amount_cents: 6502, method: "cash" }]);
