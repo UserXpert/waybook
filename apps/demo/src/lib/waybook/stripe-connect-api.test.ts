@@ -58,14 +58,13 @@ test("account status requires the expected Stripe account and mode", async () =>
 
 test("onboarding links stay scoped to the selected account and Stripe's origin", async () => {
   const settings = "/nordic/app/settings?tab=payments";
-  const url = `https://accounts.stripe.com/r/${accountId}#link`;
+  const url = `https://connect.stripe.com/setup/e/${accountId}/token`;
   const stripe = stripeConnectSandbox(config, async (input, init) => {
     const request = new Request(input, init);
     assert.equal(request.url, "https://api.stripe.com/v2/core/account_links");
     assert.deepEqual(await request.json(), {
       account: accountId,
       use_case: { type: "account_onboarding", account_onboarding: {
-        configurations: ["merchant"],
         return_url: config.origin + settings + "&stripe=returned",
         refresh_url: config.origin + settings + "&stripe=resume",
       } },

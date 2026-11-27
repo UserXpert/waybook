@@ -11,7 +11,7 @@ const attempt = {
   returnPath: "/nordic/app/sales?booking=fixture&step=payment",
 };
 const sessionId = "cs_test_fixture";
-const hostedUrl = `https://checkout.stripe.com/c/pay/${sessionId}#fixture`;
+const hostedUrl = `https://checkout.stripe.com/g/pay/${sessionId}#fixture`;
 const open = {
   id: sessionId,
   object: "checkout.session",
@@ -46,7 +46,7 @@ test("checkout retries send the same amount and idempotency key on the connected
   assert.deepEqual(bodies[0], bodies[1]);
   assert.deepEqual(bodies[0], {
     mode: "payment",
-    "payment_method_types[0]": "card",
+    "allowed_payment_method_types[0]": "card",
     "adaptive_pricing[enabled]": "false",
     client_reference_id: attempt.id,
     expires_at: String(attempt.expiresAtSeconds),

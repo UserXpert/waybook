@@ -59,7 +59,7 @@ function verifySession(
     if (session.status === "open" && typeof session.url === "string" && URL.canParse(session.url)) {
       const url = new URL(session.url);
       if (url.origin === "https://checkout.stripe.com" && !url.username && !url.password &&
-          url.pathname === `/c/pay/${id}`) return { id, state: "open", url: url.href };
+          (url.pathname === `/c/pay/${id}` || url.pathname === `/g/pay/${id}`)) return { id, state: "open", url: url.href };
     }
   }
   throw new Error("Stripe returned an unexpected checkout outcome.");
@@ -159,7 +159,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       if (cancelUrl.searchParams.get("stripe") === "return") cancelUrl.searchParams.delete("stripe");
       return call(attempt, "create", undefined, new URLSearchParams({
         mode: "payment",
-        "payment_method_types[0]": "card",
+        "allowed_payment_method_types[0]": "card",
         "adaptive_pricing[enabled]": "false",
         client_reference_id: attempt.id,
         expires_at: String(attempt.expiresAtSeconds),

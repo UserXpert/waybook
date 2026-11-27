@@ -95,7 +95,6 @@ export function stripeConnectSandbox(config: StripeSandboxConfig, request: typeo
         use_case: {
           type: "account_onboarding",
           account_onboarding: {
-            configurations: ["merchant"],
             return_url: settings.href,
             refresh_url: refresh.href,
           },
@@ -105,7 +104,8 @@ export function stripeConnectSandbox(config: StripeSandboxConfig, request: typeo
         throw new Error("Stripe did not return a sandbox onboarding link.");
       }
       const url = new URL(link.url);
-      if (url.origin !== "https://accounts.stripe.com" || url.username || url.password) {
+      if ((url.origin !== "https://accounts.stripe.com" && url.origin !== "https://connect.stripe.com") ||
+          url.username || url.password) {
         throw new Error("Stripe returned an unexpected onboarding destination.");
       }
       return url.href;
