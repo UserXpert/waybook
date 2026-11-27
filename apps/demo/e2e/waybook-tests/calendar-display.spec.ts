@@ -41,3 +41,67 @@ test("calendar settings persist and change visible hours, grid density and the c
   await page.getByRole("link", { name: "Month", exact: true }).click();
   await expect(page.locator(".waybook-month-calendar__weekday")).toHaveText(["Mon", "Tue", "Wed", "Thu", "Fri"]);
 });
+
+test("Today and view switches preserve calendar scope", async ({ page }) => {
+  const timezone = "Europe/Copenhagen";
+  const instant = new Date();
+  const today = formatInTimeZone(instant, timezone, "yyyy-MM-dd");
+  const earlier = formatInTimeZone(new Date(+instant - 40 * 86_400_000), timezone, "yyyy-MM-dd");
+  await page.goto("/login");
+  await page.getByLabel("Work email").fill("owner@nordic.local");
+  await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/nordic\/app/);
+
+  await page.goto(`/nordic/app/calendars?day=${earlier}`);
+  const staffWeek = page.getByRole("link", { name: /^View week for / }).first();
+  const windowUrl = new URL((await staffWeek.getAttribute("href"))!, page.url());
+  const location = windowUrl.searchParams.get("location")!;
+  const catalogue = await page.request.get("/nordic/api/app/services", { params: { locationId: location, limit: 1 } });
+  expect(catalogue.ok()).toBeTruthy();
+  const { items: [service] } = await catalogue.json();
+  const scope = new URLSearchParams({ location, service: service.id, day: earlier });
+  await page.goto(`/nordic/app/calendars?${scope}`);
+
+  const range = page.locator(".calendar-view-toggle");
+  const todayLink = page.getByRole("link", { name: "Today", exact: true });
+  await expect(range.getByRole("link")).toHaveText(["Day", "Week", "Month"]);
+  await expect(range.getByRole("link", { name: "Day" })).toHaveAttribute("aria-current", "page");
+  await expect(todayLink).not.toHaveAttribute("aria-current", "date");
+  const groupBounds = await range.boundingBox();
+  const todayBounds = await todayLink.boundingBox();
+  expect(groupBounds && todayBounds && (
+    groupBounds.x + groupBounds.width <= todayBounds.x || groupBounds.y + groupBounds.height <= todayBounds.y
+  )).toBeTruthy();
+  await todayLink.click();
+  await expect(page).toHaveURL((url) =>
+    url.searchParams.get("view") === "team" && !url.searchParams.has("employee") &&
+    url.searchParams.get("location") === location && url.searchParams.get("service") === service.id &&
+    url.searchParams.get("day") === today);
+  await page.goto(`/nordic/app/calendars?${scope}`);
+  await range.getByRole("link", { name: "Week" }).click();
+  await expect(range.getByRole("link", { name: "Week" })).toHaveAttribute("aria-current", "page");
+  await range.getByRole("link", { name: "Day" }).click();
+  await expect(range.getByRole("link", { name: "Day" })).toHaveAttribute("aria-current", "page");
+
+  const staff = new URL((await staffWeek.getAttribute("href"))!, page.url()).searchParams.get("employee");
+  expect(staff).toBeTruthy();
+  await staffWeek.click();
+  await expect(range.getByRole("link", { name: "Week" })).toHaveAttribute("aria-current", "page");
+  await todayLink.click();
+  await expect(page).toHaveURL((url) =>
+    url.searchParams.get("view") === "staff" && url.searchParams.get("employee") === staff &&
+    url.searchParams.get("location") === location && url.searchParams.get("service") === service.id &&
+    url.searchParams.get("day") === today);
+  await expect(todayLink).toHaveAttribute("aria-current", "date");
+
+  await range.getByRole("link", { name: "Month" }).click();
+  await page.getByRole("link", { name: "Previous month" }).click();
+  await todayLink.click();
+  await expect(page).toHaveURL((url) =>
+    url.searchParams.get("view") === "month" && url.searchParams.get("employee") === staff &&
+    url.searchParams.get("location") === location && url.searchParams.get("service") === service.id &&
+    url.searchParams.get("day") === today);
+  await expect(range.getByRole("link", { name: "Month" })).toHaveAttribute("aria-current", "page");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(page.viewportSize()!.width);
+});

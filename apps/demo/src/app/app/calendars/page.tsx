@@ -726,6 +726,26 @@ export default async function CalendarsPage({
   const monthDays = Array.from({ length: monthDayCount }, (_, index) => addDays(currentMonth, index))
     .filter((_, index) => (monthFirstWeekday + index) % 7 < monthColumns);
   const monthPadding = monthFirstWeekday < monthColumns ? monthFirstWeekday : 0;
+  const weekMember = hasSelectedEmployee ? selected
+    : visibleTeamMembers.find((member) => member.id === permissions.teamMemberId) ?? visibleTeamMembers[0] ?? selected;
+  const selectedEmployee = hasSelectedEmployee ? selected?.id : "";
+  const todayLink = href({ view: calendarView, employee: selectedEmployee, day: tenantToday, week: weekStartFor(tenantToday) });
+  const viewingToday = monthlyView ? currentMonth === monthStartFor(tenantToday)
+    : teamView ? teamDay === tenantToday : currentWeek === weekStartFor(tenantToday);
+  const viewDay = calendarView === "staff" && weekStartFor(teamDay) !== currentWeek ? currentWeek : teamDay;
+  const calendarRangeControls = <div className="calendar-range-actions">
+    <div className="calendar-view-toggle" aria-label="Calendar range">
+      {canViewTeam ? <Link href={href({ view: "team", employee: "", day: viewDay, week: weekStartFor(viewDay) })}
+        aria-current={calendarView === "team" ? "page" : undefined}>Day</Link> : null}
+      {weekMember ? <Link href={href({ view: "staff", employee: weekMember.id, day: viewDay, week: weekStartFor(viewDay) })}
+        aria-current={calendarView === "staff" ? "page" : undefined}>Week</Link> : null}
+      <Link href={href({ view: "month", employee: selectedEmployee, day: viewDay })}
+        aria-current={calendarView === "month" ? "page" : undefined}>Month</Link>
+    </div>
+    <Link className="waybook-action waybook-action--secondary calendar-today-link"
+      href={todayLink} aria-current={viewingToday ? "date" : undefined}>Today</Link>
+  </div>;
+
 
   return (
     <main className="waybook-data-page tenant-dashboard-page">
@@ -783,10 +803,7 @@ export default async function CalendarsPage({
                         excludesOffShift={showOffShift === "0"}
                         dayFallback={teamDay}
                       />
-                      <div className="calendar-view-toggle" aria-label="Calendar range">
-                        {hasSelectedEmployee ? <Link href={href({ view: "staff", employee: selected?.id, week: weekStartFor(teamDay), day: teamDay, monthDay: undefined })}>Week</Link> : <Link href={href({ view: "team", employee: "", day: teamDay, monthDay: undefined })}>Day</Link>}
-                        <Link href={href({ view: "month", day: currentMonth, monthDay: undefined })} aria-current="page">Month</Link>
-                      </div>
+                      {calendarRangeControls}
                       <div className="waybook-calendar-date-nav" aria-label="Calendar month navigation">
                         <Link href={href({ view: "month", day: addMonths(currentMonth, -1), monthDay: undefined })} aria-label="Previous month"><ChevronLeft size={17} aria-hidden="true" /></Link>
                         <CalendarDatePicker date={teamDay} label={new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${currentMonth}T12:00:00Z`))} scope={calendarDatePickerScope} />
@@ -852,7 +869,7 @@ export default async function CalendarsPage({
                         excludesOffShift={showOffShift === "0"}
                         dayFallback={teamDay}
                       />
-                      <div className="calendar-view-toggle" aria-label="Calendar range"><Link href={href({ view: "team", employee: "", day: teamDay })} aria-current="page">Day</Link><Link href={href({ view: "month", employee: "", day: teamDay })}>Month</Link></div>
+                      {calendarRangeControls}
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
                           href={href({
@@ -906,7 +923,11 @@ export default async function CalendarsPage({
                       {display.showNow ? <CalendarCurrentTime now={calendarNow.getTime()} timezone={tenant.timezone}
                         dates={[teamDay]} start={teamGridStart} end={teamGridEnd} team /> : null}
                       {visibleTeamMembers.flatMap((member, memberIndex) => [
-                        <div key={`staff-${member.id}`} className="team-day-calendar__staff" aria-label={member.name} style={{ gridColumn: 1, gridRow: memberIndex + 2 }}><i aria-hidden>{member.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</i><strong>{member.name}</strong></div>,
+                        <Link key={`staff-${member.id}`} className="team-day-calendar__staff" aria-label={`View week for ${member.name}`}
+                          href={href({ view: "staff", employee: member.id, day: teamDay, week: weekStartFor(teamDay) })}
+                          prefetch={false} style={{ gridColumn: 1, gridRow: memberIndex + 2 }}>
+                          <i aria-hidden>{member.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</i><strong>{member.name}</strong>
+                        </Link>,
                         ...Array.from({ length: teamRowCount }, (_, index) => {
                           const time = `${String(Math.floor((teamGridStart + index * interval) / 60)).padStart(2, "0")}:${String((teamGridStart + index * interval) % 60).padStart(2, "0")}`;
                           const slotKey = `${member.id}|${teamDay}T${time}`;
@@ -1053,10 +1074,7 @@ export default async function CalendarsPage({
                         excludesOffShift={showOffShift === "0"}
                         dayFallback={teamDay}
                       />
-                      <div className="calendar-view-toggle" aria-label="Calendar range">
-                        <Link href={href({ view: "staff", day: undefined })} aria-current="page">Week</Link>
-                        <Link href={href({ view: "month", day: teamDay })}>Month</Link>
-                      </div>
+                      {calendarRangeControls}
                       <div className="waybook-calendar-date-nav" aria-label="Calendar date navigation">
                         <Link
                           href={href({
