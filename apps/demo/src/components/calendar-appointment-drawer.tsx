@@ -102,7 +102,7 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
   const canCancel = Boolean(movable && capabilities?.canCancel);
   const canEdit = Boolean(detail?.status !== "cancelled" && (capabilities?.canEdit || capabilities?.canUpdateStatus || canReschedule));
   const rescheduleOptions = canReschedule && detail ? <AppointmentRescheduleActions key={detail.id}
-    bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days} slots={detail.slots}
+    bookingId={detail.id} status={detail.status} timezone={detail.timezone} days={detail.days}
     currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0} showTimezone={timezone !== detail.timezone} reschedule={rescheduleBooking} /> : null;
   const services = detail ? [{
     id: detail.id, title: detail.serviceTitle, provider: detail.teamMemberName,
@@ -236,14 +236,14 @@ export function CalendarAppointmentDrawer({ summaries, initialDetail, timezone, 
               <AppointmentDrawerActions key={detail.id} bookingId={detail.id} paymentBalance={detail.paymentBalance}
                 onPaymentRecorded={refreshAppointment} customerName={detail.customerName} customerEmail={detail.customerEmail}
                 customerPhone={detail.customerPhone} status={detail.status} canChangeAttendanceNow={detail.canChangeAttendanceNow}
-                separateCheckIn attendanceLabel={attendanceLabel} onStatusSaved={refreshAppointment} timezone={detail.timezone} days={detail.days}
-                slots={detail.slots} currentStartsAt={detail.startsAt} linkedServices={detail.additionalServices.length > 0}
+                separateCheckIn attendanceLabel={attendanceLabel} onStatusSaved={refreshAppointment} timezone={detail.timezone} days={[]}
+                onOpenReschedule={canReschedule ? () => setMode("reschedule") : undefined}
                 saveDetails={updateBookingDetails} reschedule={rescheduleBooking} resourceId={detail.resourceId} resources={detail.resources} />
             ) : <>
               {capabilities.canUpdateStatus ? <AppointmentStatusActions bookingId={detail.id} status={detail.status}
                 canChangeAttendanceNow={detail.canChangeAttendanceNow} separateCheckIn attendanceLabel={attendanceLabel}
                 onStatusSaved={refreshAppointment} updateStatus={saveAppointmentAttendance} /> : null}
-              {rescheduleOptions}
+              {canReschedule ? <button type="button" className="waybook-action waybook-action--secondary" onClick={() => setMode("reschedule")}>Reschedule</button> : null}
             </>)}
             {mode === "reschedule" ? rescheduleOptions : null}
           </div> : null}
