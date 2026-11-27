@@ -2118,9 +2118,6 @@ body {
 .tenant-dashboard-page .manual-appointment fieldset.manual-appointment__step { margin: 0; min-width: 0; }
 .tenant-dashboard-page .manual-appointment__step > button { justify-self: start; }
 .tenant-dashboard-page .appointment-service-editor .tenant-drawer-form__grid { align-items: start; }
-.tenant-dashboard-page .appointment-service-editor label.appointment-service-editor__time { display: grid; grid-template-columns: minmax(0, 1fr); gap: .35rem; }
-.tenant-dashboard-page .appointment-service-editor__time input { width: 100%; }
-.tenant-dashboard-page .appointment-service-editor__time small { grid-column: 1; font-weight: 400; }
 .tenant-dashboard-page .appointment-service-editor__review { flex-wrap: wrap; }
 .tenant-dashboard-page .manual-appointment__client-fields h3 { margin: 0; font-size: .82rem; font-weight: 600; }
 .tenant-dashboard-page .manual-appointment__client-fields small { font-weight: 400; opacity: .8; }
@@ -5091,6 +5088,33 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 
 .manual-appointment__service-row,
 .appointment-service-editor__fields { position: relative; }
+.tenant-dashboard-page .tenant-drawer-form__grid:has(> .appointment-service-start) {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  align-items: start;
+  row-gap: .3rem;
+}
+.tenant-dashboard-page .tenant-drawer-form__grid:has(> .appointment-service-start) > * {
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.tenant-dashboard-page .tenant-drawer-form__grid > .appointment-service-start:has(> small) { grid-row: span 3; }
+.tenant-dashboard-page .tenant-drawer-form fieldset .appointment-service-start > label,
+.tenant-dashboard-page .tenant-drawer-form fieldset .tenant-drawer-form__grid:has(> .appointment-service-start) > label,
+.tenant-dashboard-page .tenant-drawer-form fieldset .tenant-drawer-form__grid:has(> .appointment-service-start) > .calendar-search-picker > label {
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.tenant-dashboard-page .tenant-drawer-form .appointment-service-start > select {
+  height: 2.45rem;
+  padding-block: 0;
+  font-weight: 400;
+}
+.tenant-dashboard-page .tenant-drawer-form fieldset .appointment-service-start > small { grid-column: 1; }
 .manual-appointment__service-row > .calendar-search-picker,
 .appointment-service-editor__fields:has(> .appointment-service-remove) > .calendar-search-picker {
   margin-inline-end: 2.25rem;
