@@ -5235,6 +5235,50 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   }
 }
 
+.appointment-payment-methods {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.appointment-payment-methods legend {
+  margin-block-end: .5rem;
+  padding: 0;
+  font-size: .82rem;
+  font-weight: 600;
+}
+.appointment-payment-methods__choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .45rem;
+}
+.appointment-payment-methods .appointment-payment-methods__option {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  min-height: 2.65rem;
+  padding: .5rem .65rem;
+  border: 1px solid var(--ice-field-border, var(--wb-dark-border, #c9c9cf));
+  border-radius: .45rem;
+  color: inherit;
+  font-size: .8rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.appointment-payment-methods__option:is(:hover, :has(input:checked)) {
+  background: var(--ice-field, var(--wb-dark-hover, #ececf0));
+}
+.appointment-payment-methods .appointment-payment-methods__option input[type="radio"] {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+}
+.appointment-payment-methods:disabled .appointment-payment-methods__option { opacity: .7; cursor: default; }
+
 .appointment-receipt {
   width: min(calc(100% - 2rem), 42rem);
   margin: 2rem auto;

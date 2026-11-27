@@ -108,8 +108,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; page?: string; sort?: string; activity?: string } & TableDateParams> }) {
-  const { location: rawLocation, q, status, sale, booking, step, page: rawPage, sort, activity: paymentActivity, from, to } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; tender?: string; page?: string; sort?: string; activity?: string } & TableDateParams> }) {
+  const { location: rawLocation, q, status, sale, booking, step, tender, page: rawPage, sort, activity: paymentActivity, from, to } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -326,6 +326,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const canRecordPayment = paymentBalance && recorded.length === 0 && outstandingCents > 0;
       const paymentStep = step === "payment" && Boolean(canRecordPayment);
       const reviewHref = saleHref(selectedSale);
+      const paymentHref = `${reviewHref}&step=payment`;
+      const canUseGiftCard = activeAppointment && !selectedSale.giftCardRedeemed && canRecordPayment && selectedSale.currency === "DKK";
+      const giftCardStep = canUseGiftCard && tender === "gift-card";
       const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
       const bookedServices = [{
         id: selectedSale.bookingId, title: selectedSale.serviceTitle, provider: selectedSale.teamMemberName,
@@ -365,11 +368,15 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <dt>{balance < 0 ? "Credit due" : "Balance due"}</dt><dd>{money(Math.abs(balance))}</dd>
               </div> : null}
             </dl>
-              {!paymentStep && canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={`${reviewHref}&step=payment`}>Go to payments</Link> : null}
+              {!paymentStep && canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={paymentHref}>Go to payments</Link> : null}
               {!paymentStep && selectedSale.attendanceStage === "checking_out" && balance === 0 ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
             </section>
-            {paymentStep && paymentBalance ? <section><h3>Payments</h3>
-              <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout />
+            {paymentStep && paymentBalance ? <section><h3>{giftCardStep ? "Gift card" : "Payments"}</h3>
+              {giftCardStep ? <>
+                <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />
+                <Link className="waybook-action waybook-action--secondary sale-detail__action" href={paymentHref}>Other payment methods</Link>
+              </> : <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout
+                giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} />}
             </section> : null}
             {!paymentStep && recorded.length > 0 ? <section><h3>Payment details</h3>
               <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={selectedSale.status !== "cancelled"} />
@@ -399,8 +406,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                   <button className="waybook-action waybook-action--secondary" type="submit">Redeem package visit</button>
                 </form> : <p className="sale-detail__note">No eligible package can be redeemed.</p>}
               </section> : null}
-              {selectedSale.giftCardRedeemed || (activeAppointment && recorded.length === 0 && outstandingCents > 0 && selectedSale.currency === "DKK") ? <section><h3>Gift card</h3>
-                {selectedSale.giftCardRedeemed ? <p className="sale-detail__note">A gift card has been used for this appointment.</p> : <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />}
+              {selectedSale.giftCardRedeemed ? <section><h3>Gift card</h3>
+                <p className="sale-detail__note">A gift card has been used for this appointment.</p>
               </section> : null}
               {selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment") ?
                 <Link className="waybook-action waybook-action--secondary sale-detail__action"

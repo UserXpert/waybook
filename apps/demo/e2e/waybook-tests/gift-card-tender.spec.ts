@@ -39,6 +39,12 @@ test("gift-card tender returns to the same card on cancellation", async ({ page,
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/nordic\/app/, { timeout: 30_000 });
     await page.goto(`/nordic/app/sales?sale=${fixture.sale.id}`);
+    await page.getByRole("link", { name: "Go to payments" }).click();
+    await page.getByRole("link", { name: "Gift card", exact: true }).click();
+    await expect(page.getByRole("form", { name: "Gift card", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Other payment methods" }).click();
+    await expect(page.getByRole("radio", { name: "Cash" })).toBeVisible();
+    await page.getByRole("link", { name: "Gift card", exact: true }).click();
     const giftAmount = page.getByRole("form", { name: "Gift card", exact: true }).getByLabel("Amount (DKK)");
     await page.getByLabel("Gift-card number").fill("INVALID12345");
     await giftAmount.fill("100");

@@ -105,7 +105,7 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await expect(earlySale.getByRole("button", { name: "Finish checkout" })).toHaveCount(0);
     await earlySale.getByRole("link", { name: "Go to payments" }).click();
     await expect(earlySale.getByLabel("Amount (DKK)")).toHaveValue("65.00");
-    await earlySale.getByRole("combobox", { name: "Method", exact: true }).selectOption("cash");
+    await earlySale.getByRole("radio", { name: "Cash", exact: true }).check();
     await earlySale.getByRole("button", { name: "Record payment" }).click();
     await earlySale.getByRole("button", { name: "Finish checkout" }).click();
     await expect.poll(() => state(early.id)).toEqual({ status: "completed", attendance_stage: null });
@@ -252,7 +252,7 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await sale.getByRole("link", { name: "Go to payments" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
     await expect(sale.getByLabel("Amount (DKK)")).toHaveValue("65.00");
-    await sale.getByRole("combobox", { name: "Method", exact: true }).selectOption("cash");
+    await sale.getByRole("radio", { name: "Cash", exact: true }).check();
     await sale.getByRole("button", { name: "Record payment" }).click();
     await sale.getByRole("button", { name: "Finish checkout", exact: true }).click();
     await expect.poll(() => state(waiting.id)).toEqual({ status: "completed", attendance_stage: null });

@@ -132,14 +132,16 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await expect(salePayment).toHaveCount(0);
     await saleDrawer.getByRole("link", { name: "Go to payments" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
-    await expect(salePayment.getByLabel("Method")).toBeVisible();
+    for (const name of ["Cash", "Card paid elsewhere", "Bank transfer", "Other"]) {
+      await expect(salePayment.getByRole("radio", { name, exact: true })).toBeVisible();
+    }
 
     const staleTab = await page.context().newPage();
     try {
       await staleTab.goto(page.url());
       const stalePayment = staleTab.getByRole("dialog", { name: "Appointment checkout" }).locator(".appointment-payment-form");
-      await stalePayment.getByLabel("Method").selectOption("card");
-      await salePayment.getByLabel("Method").selectOption("card");
+      await stalePayment.getByRole("radio", { name: "Card paid elsewhere" }).check();
+      await salePayment.getByRole("radio", { name: "Card paid elsewhere" }).check();
       await salePayment.getByRole("button", { name: "Record payment" }).click();
       await expect(salePayment).toHaveCount(0);
       await expect(saleDrawer.locator(".recorded-appointment-payments")).toContainText("250,50");
@@ -212,7 +214,7 @@ test("appointment and products share one reviewed checkout balance", async ({ pa
     await expect(review.getByText(`${productTitle} × 2`, { exact: true })).toBeVisible();
     await review.getByRole("link", { name: "Go to payments" }).click();
     await expect(review.getByLabel("Amount (DKK)")).toHaveValue("200.00");
-    await review.getByLabel("Method").selectOption("cash");
+    await review.getByRole("radio", { name: "Cash" }).check();
 
     const other = await page.context().newPage();
     try {
@@ -232,7 +234,7 @@ test("appointment and products share one reviewed checkout balance", async ({ pa
     await expect(review.getByText(`${productTitle} × 2`, { exact: true })).toBeVisible();
     await review.getByRole("link", { name: "Go to payments" }).click();
     await expect(review.getByLabel("Amount (DKK)")).toHaveValue("200.00");
-    await review.getByLabel("Method").selectOption("cash");
+    await review.getByRole("radio", { name: "Cash" }).check();
     await review.getByLabel("Amount (DKK)").fill("200.01");
     await review.getByRole("button", { name: "Record payment", exact: true }).click();
     await expect(review.getByRole("alert")).toContainText("appointment payment cannot exceed the checkout total");
