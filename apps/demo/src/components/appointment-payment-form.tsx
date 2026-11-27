@@ -82,6 +82,17 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   return <form className="tenant-drawer-form appointment-payment-form" onSubmit={saveEntry}>
     <input type="hidden" name="bookingId" value={bookingId} />
     {settlingGiftCard ? <p className="sale-detail__note">Gift card applied. Record the remaining balance.</p> : null}
+    <div className={`tenant-drawer-form__grid${checkout ? " appointment-payment-form__amount" : ""}`}>
+      {checkout ? <><input type="hidden" name="kind" value="payment" /><input type="hidden" name="expectedBalanceCents" value={outstandingCents} /></> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
+        <option value="" disabled>Select payment action</option>
+        {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
+        <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>
+      </select></label>}
+      {!checkout ? <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
+        <PaymentMethodOptions />
+      </select></label> : null}
+      <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} readOnly={fixedAmount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
+    </div>
     {checkout ? <fieldset className="appointment-payment-methods" disabled={editingDisabled}>
       <legend>Payment method</legend>
       <div className="appointment-payment-methods__choices">
@@ -94,17 +105,6 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
           : <Link className="appointment-payment-methods__option" href={giftCardHref}>Gift card</Link>) : null}
       </div>
     </fieldset> : null}
-    <div className="tenant-drawer-form__grid">
-      {checkout ? <><input type="hidden" name="kind" value="payment" /><input type="hidden" name="expectedBalanceCents" value={outstandingCents} /></> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
-        <option value="" disabled>Select payment action</option>
-        {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
-        <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>
-      </select></label>}
-      {!checkout ? <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
-        <PaymentMethodOptions />
-      </select></label> : null}
-      <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} readOnly={fixedAmount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
-    </div>
     {state.error ? <p className="manual-appointment__message is-error" role="alert">{state.error}</p> : null}
     {state.success ? <p className="manual-appointment__message is-success" role="status">{state.success}</p> : null}
     <button type="submit" disabled={pending || (!retryRequired && !canRecord)}>
