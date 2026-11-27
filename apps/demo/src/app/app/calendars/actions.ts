@@ -1157,6 +1157,71 @@ async function insertAdditionalBookingService(transaction: TransactionSql, tenan
   }
 }
 
+async function linkedServiceGrid(
+  tenant: Parameters<typeof staffAvailableSlots>[0],
+  db: ReturnType<typeof tenantDb>,
+  serviceId: string,
+  localDate: string,
+  earliest: Date,
+  options: { locationId: string; teamMemberId: string; durationMinutes: number; excludeBookingBlockIds?: string[] },
+) {
+  const dayStart = fromZonedTime(`${localDate}T00:00`, tenant.timezone);
+  const [provider] = await staffAvailableSlots(tenant, serviceId, dayStart, new Date(dayStart.getTime() + 48 * 60 * 60_000),
+    { ...options, slotInterval: 30 }, db);
+  return (provider?.slots ?? []).filter((slot) => {
+    const start = new Date(slot.startTime);
+    const key = localDateTimeKey(start, tenant.timezone);
+    return start >= earliest && key.startsWith(`${localDate}T`)
+      && fromZonedTime(key, tenant.timezone).getTime() === start.getTime();
+  });
+}
+
+export async function getLinkedServiceStartOptions(input: {
+  locationId: string; serviceId: string; teamMemberId: string; date: string;
+  earliest: string; bookingId?: string; segmentId?: string;
+}) {
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const earliest = new Date(input.earliest);
+  if (![input.locationId, input.serviceId, input.teamMemberId].every((id) => uuid.test(id))
+    || (input.bookingId && !uuid.test(input.bookingId)) || (input.segmentId && !uuid.test(input.segmentId))
+    || !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !Number.isFinite(earliest.getTime())) {
+    return { times: [], sequentialAvailable: false };
+  }
+  const { tenant, permissions } = await calendarPermissionContext();
+  assertAppointmentPermission(permissions, input.teamMemberId);
+  const db = tenantDb(tenant);
+  if (localDateKey(earliest, tenant.timezone) !== input.date) return { times: [], sequentialAvailable: false };
+  let excludeBookingBlockIds: string[] = [];
+  let retainedDuration: number | undefined;
+  if (input.bookingId) {
+    const { booking } = await editableBooking(input.bookingId, "manager");
+    if (booking.locationId !== input.locationId || localDateKey(booking.startsAt, tenant.timezone) !== input.date
+      || !isMovableAppointmentStatus(booking.status)) return { times: [], sequentialAvailable: false };
+    excludeBookingBlockIds = (await getAppointmentReservations(db, tenant.id, input.bookingId)).map(({ id }) => id);
+    if (input.segmentId) {
+      const original = (await getAdditionalAppointmentServices(db, tenant.id, input.bookingId))
+        .find((service) => service.id === input.segmentId && service.serviceId === input.serviceId);
+      if (original) retainedDuration = (Date.parse(original.endsAt) - Date.parse(original.startsAt)) / 60_000;
+    }
+  }
+  const [service] = await db<{ durationMinutes: number }[]>`
+    SELECT duration_minutes AS "durationMinutes" FROM services
+    WHERE tenant_id=${tenant.id} AND id=${input.serviceId} AND is_active
+  `;
+  if (!service) return { times: [], sequentialAvailable: false };
+  const durationMinutes = retainedDuration ?? service.durationMinutes;
+  const options = { locationId: input.locationId, teamMemberId: input.teamMemberId, durationMinutes, excludeBookingBlockIds };
+  const end = new Date(earliest.getTime() + durationMinutes * 60_000);
+  const [grid, [provider]] = await Promise.all([
+    linkedServiceGrid(tenant, db, input.serviceId, input.date, earliest, options),
+    staffAvailableSlots(tenant, input.serviceId, earliest, end, { ...options, slotInterval: 1 }, db),
+  ]);
+  return {
+    times: grid.map((slot) => localDateTimeKey(new Date(slot.startTime), tenant.timezone).slice(11)),
+    sequentialAvailable: Boolean(provider?.slots.some((slot) => Date.parse(slot.startTime) === earliest.getTime())),
+  };
+}
+
 export async function updateAppointmentServices(formData: FormData): Promise<{ error: string | null }> {
   try {
     const bookingId = String(formData.get("bookingId") ?? "");
@@ -1221,11 +1286,16 @@ export async function updateAppointmentServices(formData: FormData): Promise<{ e
         }
         if (changed) {
           if (!catalog.active) throw new Error(`${catalog.title} is no longer available.`);
-          const [provider] = await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, {
-            locationId: booking.locationId, slotInterval: 1, durationMinutes: duration / 60_000,
-            teamMemberId: item.teamMemberId, excludeBookingBlockIds: excludedBlocks,
-          }, connection);
-          if (!provider?.slots.some((slot) => Date.parse(slot.startTime) === startsAt.getTime() && Date.parse(slot.endTime) === endsAt.getTime())) {
+          const options = {
+            locationId: booking.locationId, teamMemberId: item.teamMemberId,
+            durationMinutes: duration / 60_000, excludeBookingBlockIds: excludedBlocks,
+          };
+          const requiresGrid = index > 0 && item.time && startsAt.getTime() !== previousEnd.getTime()
+            && startsAt.getTime() !== original?.startsAt.getTime();
+          const slots = requiresGrid
+            ? await linkedServiceGrid(tenant, connection, item.serviceId, localDate, previousEnd, options)
+            : (await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, { ...options, slotInterval: 1 }, connection))[0]?.slots ?? [];
+          if (!slots.some((slot) => Date.parse(slot.startTime) === startsAt.getTime() && Date.parse(slot.endTime) === endsAt.getTime())) {
             throw new Error(`${catalog.title} is unavailable with that provider at ${localDateTimeKey(startsAt, tenant.timezone).slice(11)}. Choose another provider or time.`);
           }
         }
@@ -1340,10 +1410,11 @@ async function createManualBookingRecord(formData: FormData) {
       || (extra.time && localDateTimeKey(nextStart, tenant.timezone) !== `${localDate}T${extra.time}`)) {
       throw new Error(`${item.title} must start on the appointment date, after the preceding service.`);
     }
-    const providers = await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { locationId, slotInterval: 1 });
-    if (!providers.find((provider) => provider.teamMemberId === extra.teamMemberId)?.slots.some((slot) =>
-      new Date(slot.startTime).getTime() === nextStart.getTime() && new Date(slot.endTime).getTime() === nextEnd.getTime(),
-    )) {
+    const options = { locationId, teamMemberId: extra.teamMemberId, durationMinutes: item.durationMinutes };
+    const slots = extra.time && nextStart.getTime() !== previousEnd.getTime()
+      ? await linkedServiceGrid(tenant, db, extra.serviceId, localDate, previousEnd, options)
+      : (await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { ...options, slotInterval: 1 }, db))[0]?.slots ?? [];
+    if (!slots.some((slot) => Date.parse(slot.startTime) === nextStart.getTime() && Date.parse(slot.endTime) === nextEnd.getTime())) {
       throw new Error(`${item.title} is unavailable with that provider at ${localDateTimeKey(nextStart, tenant.timezone).slice(11)}. Choose another time or provider.`);
     }
     linked.push({ ...extra, startsAt: nextStart, endsAt: nextEnd, priceCents: item.priceCents, title: item.title });

@@ -7,7 +7,9 @@ import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
 import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { fromZonedTime } from "date-fns-tz";
 import Link from "next/link";
+import { X } from "lucide-react";
 import { createManualBooking, getManualBookingAvailability } from "@/app/app/calendars/actions";
+import { AppointmentServiceStartSelect } from "@/components/appointment-service-start-select";
 import { findEligibleProvider, SearchPicker } from "@/components/calendar-selectors";
 
 type Location = { id: string; name: string };
@@ -80,7 +82,7 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
     const defaultStart = precedingEnd;
     const start = row.time ? fromZonedTime(`${date}T${row.time}`, timezone) : defaultStart;
     precedingEnd = start && row.service ? new Date(start.getTime() + row.service.durationMinutes * 60_000) : null;
-    return defaultStart ? clock(defaultStart.toISOString(), timezone) : "";
+    return { instant: defaultStart?.toISOString(), time: defaultStart ? clock(defaultStart.toISOString(), timezone) : "" };
   });
   const hasClientFields = showNewClient || !canLookupClients || Boolean(waitlistEntryId);
   const clientReady = Boolean(selectedClient || (hasClientFields && client.name.trim() && client.email.includes("@")));
@@ -150,16 +152,20 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
     </div> : null}
     <div className="manual-appointment__selectors">{waitlistEntryId ? <label>Service<input value={service?.title ?? ""} readOnly /></label> : <SearchPicker<Service> label="Service" minimumQueryLength={1} browseOnFocus autoFocus={false} selectedLabel={service ? `${service.title} · ${service.durationMinutes} min` : ""} placeholder="Search services" searchUrl={serviceSearchUrl} resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${servicePrice.format(item.priceCents / 100)}`} onPick={setService} onClear={service ? () => setService(null) : undefined} />}</div>
     {service ? <section className="manual-appointment__step" aria-label="Additional services">
-      {additionalServices.map((row, index) => <fieldset className="manual-appointment__step" key={row.id}>
+      {additionalServices.map((row, index) => <fieldset className="manual-appointment__step manual-appointment__service-row" key={row.id}>
         <legend>Service {index + 2}</legend>
+        <button type="button" className="appointment-service-remove" aria-label={`Remove service ${index + 2}`}
+          onClick={() => setAdditionalServices((current) => current.filter((item) => item.id !== row.id))}>
+          <X size={16} aria-hidden="true" />
+        </button>
         <SearchPicker<Service>
-          label={`Service ${index + 2}`} minimumQueryLength={1} browseOnFocus selectedLabel={row.service ? `${row.service.title} · ${row.service.durationMinutes} min` : ""}
+          label={`Service ${index + 2}`} hideLabel minimumQueryLength={1} browseOnFocus selectedLabel={row.service ? `${row.service.title} · ${row.service.durationMinutes} min` : ""}
           placeholder="Search services" searchUrl={serviceSearchUrl}
           resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${servicePrice.format(item.priceCents / 100)}`}
           onPick={(item) => void pickAdditionalService(row, index, item)}
         />
         {fromCalendarSlot && row.service && row.member ? <div className="manual-appointment__service-summary">
-          <span>{[row.member.name, row.time || suggestedStarts[index], `${row.service.durationMinutes} min`].filter(Boolean).join(" · ")}</span>
+          <span>{[row.member.name, row.time || suggestedStarts[index].time, `${row.service.durationMinutes} min`].filter(Boolean).join(" · ")}</span>
           <button type="button" className="waybook-action waybook-action--secondary"
             aria-expanded={Boolean(row.editingDetails)} aria-label={`Change provider or time for service ${index + 2}`}
             onClick={() => editAdditionalService(row.id, { editingDetails: !row.editingDetails })}>
@@ -174,11 +180,11 @@ export function ManualAppointmentForm({ initialLocation, initialMember, initialS
             searchUrl={(query) => row.service ? `${tenantApiPrefix()}/api/app/staff?${new URLSearchParams({ locationId, serviceId: row.service.id, q: query, limit: "8" })}` : ""}
             onPick={(item) => editAdditionalService(row.id, { member: item })}
           />}
-          <label>Start time<input type="time" value={row.time} onChange={(event) => editAdditionalService(row.id, { time: event.target.value })} />
-            <small>{suggestedStarts[index] ? `Defaults to ${suggestedStarts[index]}` : "Defaults to after the preceding service"}</small>
-          </label>
+          <AppointmentServiceStartSelect label="Start time" locationId={locationId} date={date}
+            serviceId={row.service?.id} providerId={row.member?.id} earliest={suggestedStarts[index].instant}
+            sequentialTime={suggestedStarts[index].time} value={row.time}
+            onChange={(time) => editAdditionalService(row.id, { time })} />
         </div> : null}
-        <button type="button" className="waybook-action waybook-action--secondary" onClick={() => setAdditionalServices((current) => current.filter((item) => item.id !== row.id))}>Remove service {index + 2}</button>
       </fieldset>)}
       {additionalServices.length < 5 ? <button type="button" className="waybook-action waybook-action--secondary" onClick={() => setAdditionalServices((current) => [...current, { id: crypto.randomUUID(), service: null, member: fixedStaff ? initialMember : null, time: "" }])}>Add service</button> : null}
     </section> : null}

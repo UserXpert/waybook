@@ -2,7 +2,10 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
+import { fromZonedTime } from "date-fns-tz";
+import { tenantDateKey } from "@/lib/waybook/today-command-centre";
+import { AppointmentServiceStartSelect } from "@/components/appointment-service-start-select";
 import { findEligibleProvider, SearchPicker } from "@/components/calendar-selectors";
 import { updateAppointmentServices, type getCalendarAppointment } from "@/app/app/calendars/actions";
 import { tenantApiPrefix } from "@/lib/waybook/tenant-api-path";
@@ -33,6 +36,20 @@ export function AppointmentServiceEditor({ bookingId, locationId, timezone, edit
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const subtotal = (draft ?? []).reduce((sum, row) => sum + (row.service?.priceCents ?? 0), 0);
+  const primaryStart = new Date(editor.primary.startsAt);
+  const bookingDate = tenantDateKey(primaryStart, timezone);
+  let previousEnd: Date | null = null;
+  const draftStarts = (draft ?? []).map((row, index) => {
+    const earliest = previousEnd;
+    const start: Date | null = index === 0 ? primaryStart
+      : row.time ? fromZonedTime(`${bookingDate}T${row.time}`, timezone) : earliest;
+    previousEnd = start && row.service ? new Date(start.getTime() + row.service.durationMinutes * 60_000) : null;
+    return {
+      time: start ? clock.format(start) : "",
+      earliest: earliest?.toISOString(),
+      sequentialTime: earliest ? clock.format(earliest) : "",
+    };
+  });
   const startEditing = () => {
     setError("");
     setOpenRow(null);
@@ -93,7 +110,7 @@ export function AppointmentServiceEditor({ bookingId, locationId, timezone, edit
           disabled={saving} onClick={() => setOpenRow(openRow === row.key ? null : row.key)}>
           <span className="appointment-service-editor__overview">
             <strong>{row.service?.title ?? "Choose a service"}</strong>
-            <span>{[row.provider?.name, index === 0 ? clock.format(new Date(editor.primary.startsAt)) : row.time || "After previous service",
+            <span>{[row.provider?.name, draftStarts[index].time,
               row.service ? `${row.service.durationMinutes} min` : null].filter(Boolean).join(" · ")}</span>
           </span>
           {row.service ? <span>{money.format(row.service.priceCents / 100)}</span> : null}
@@ -101,6 +118,10 @@ export function AppointmentServiceEditor({ bookingId, locationId, timezone, edit
         </button>
         {openRow === row.key ? <fieldset className="appointment-service-editor__fields" disabled={saving}>
           <legend className="sr-only">{`Service ${index + 1}`}</legend>
+          {index > 0 ? <button type="button" className="appointment-service-remove" aria-label={`Remove service ${index + 1}`} onClick={() => {
+            setDraft((rows) => rows?.filter((item) => item.key !== row.key) ?? null);
+            setOpenRow(null);
+          }}><X size={16} aria-hidden="true" /></button> : null}
           <SearchPicker<Service> label={`Choose service ${index + 1}`} selectedLabel={row.service?.title ?? ""}
             placeholder="Search services" searchUrl={(q) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId, q, limit: "8" })}`}
             resultsLabel={(item) => `${item.title} · ${item.durationMinutes} min · ${money.format(item.priceCents / 100)}`}
@@ -110,15 +131,12 @@ export function AppointmentServiceEditor({ bookingId, locationId, timezone, edit
               placeholder="Search eligible staff"
               searchUrl={(q) => `${tenantApiPrefix()}/api/app/staff?${new URLSearchParams({ locationId, serviceId: row.service!.id, q, limit: "8" })}`}
               resultsLabel={(item) => item.name} onPick={(provider) => editRow(row.key, { provider })} /> : null}
-            {index > 0 && row.service ? <label className="appointment-service-editor__time">{`Start time for service ${index + 1}`}
-              <input type="time" value={row.time} onChange={(event) => editRow(row.key, { time: event.target.value })} />
-              <small>Defaults to after the previous service.</small>
-            </label> : null}
+            {index > 0 && row.service ? <AppointmentServiceStartSelect label={`Start time for service ${index + 1}`}
+              bookingId={bookingId} segmentId={row.segmentId} locationId={locationId} date={bookingDate}
+              serviceId={row.service.id} providerId={row.provider?.id} earliest={draftStarts[index].earliest}
+              sequentialTime={draftStarts[index].sequentialTime} value={row.time}
+              onChange={(time) => editRow(row.key, { time })} /> : null}
           </div>
-          {index > 0 ? <button type="button" className="waybook-action waybook-action--secondary" onClick={() => {
-            setDraft((rows) => rows?.filter((item) => item.key !== row.key) ?? null);
-            setOpenRow(null);
-          }}>Remove service {index + 1}</button> : null}
         </fieldset> : null}
       </div>)}
       {draft.length < 6 ? <button type="button" className="waybook-action waybook-action--secondary" disabled={saving} onClick={() =>

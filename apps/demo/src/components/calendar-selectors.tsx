@@ -14,6 +14,7 @@ type SearchResult<T> = { items: T[] };
 
 export type SearchPickerProps<T extends { id: string }> = {
   label: string;
+  hideLabel?: boolean;
   name?: string;
   selectedLabel: string;
   placeholder: string;
@@ -31,6 +32,7 @@ export type SearchPickerProps<T extends { id: string }> = {
 /** A bounded async picker that searches after two characters by default. */
 export function SearchPicker<T extends { id: string }>({
   label,
+  hideLabel,
   name,
   selectedLabel,
   placeholder,
@@ -126,7 +128,7 @@ export function SearchPicker<T extends { id: string }>({
 
   return (
     <div className={browseOnFocus ? "calendar-search-picker calendar-search-picker--browse" : "calendar-search-picker"}>
-      <label htmlFor={listId}>{label}</label>
+      <label htmlFor={listId} className={hideLabel ? "sr-only" : undefined}>{label}</label>
       <input
         id={listId}
         name={name}

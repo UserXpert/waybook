@@ -997,7 +997,7 @@ body {
 .tenant-dashboard-page .tenant-drawer-scrim { background: rgba(12,12,14,.42); backdrop-filter: blur(4px); }
 .tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button { border-color: #d2d2d5; background: #f2f2f3; color: #8b8b91; box-shadow: none; }
 .tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle):disabled,.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:disabled { border-color: #dedee1; background: #f4f4f5; color: #99999f; cursor: not-allowed; }
-.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle, .appointment-service-editor__row-trigger):not(.appointment-reschedule-picker__day):not(.appointment-reschedule-picker__slot):not(.calendar-search-picker__clear):not([role="option"]):not(:disabled),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:not(:disabled) { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }
+.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button:not(.staff-multi-toggle, .appointment-service-editor__row-trigger, .appointment-service-remove):not(.appointment-reschedule-picker__day):not(.appointment-reschedule-picker__slot):not(.calendar-search-picker__clear):not([role="option"]):not(:disabled),.tenant-dashboard-page .appointment-drawer .appointment-status-form > button:not(:disabled) { border-color: var(--waybook-accent); background: var(--waybook-accent); color: #fff; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button { border-color: #d4d4d7; background: #fff; color: #55555b; box-shadow: none; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button:not(:disabled):hover,.tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button:not(:disabled):focus-visible { border-color: #a7a7ad; background: #f4f4f5; color: #252529; outline: 0; }
 .tenant-dashboard-page .appointment-drawer .appointment-drawer__status-actions button.is-selected { border-color: var(--waybook-accent); background: var(--waybook-accent-soft); color: var(--waybook-accent-ink); box-shadow: inset 0 0 0 1px var(--waybook-accent); }
@@ -5061,4 +5061,57 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 :root[data-waybook-theme] .tenant-dashboard-page .appointment-drawer .tenant-drawer-form.manual-appointment--slot button.waybook-action--secondary[type="button"]:not(:disabled):is(:hover, :focus-visible) {
   background: var(--ice-field, var(--wb-dark-hover, #edf0f3));
+}
+
+.appointment-checkout__client,
+.appointment-checkout__items li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .45rem .75rem;
+}
+.appointment-checkout__client { flex-wrap: wrap; font-size: .88rem; }
+.appointment-checkout__client > div,
+.appointment-checkout__items li > div { display: grid; gap: .18rem; min-width: 0; overflow-wrap: anywhere; }
+.appointment-checkout__client span,
+.appointment-checkout__client small,
+.appointment-checkout__items li small {
+  color: var(--ice-muted, var(--wb-dark-muted, #606065));
+  font-size: .75rem;
+}
+.appointment-checkout__items ul { display: grid; margin: .65rem 0 0; padding: 0; list-style: none; }
+.appointment-checkout__items li {
+  padding: .65rem 0;
+  border-top: 1px solid var(--ice-edge, var(--wb-dark-border, #dedee3));
+  font-size: .82rem;
+}
+.appointment-checkout__items li b { flex-shrink: 0; }
+.sale-detail__totals + .sale-detail__action { margin-top: .5rem; }
+
+
+.manual-appointment__service-row,
+.appointment-service-editor__fields { position: relative; }
+.manual-appointment__service-row > .calendar-search-picker,
+.appointment-service-editor__fields:has(> .appointment-service-remove) > .calendar-search-picker {
+  margin-inline-end: 2.25rem;
+}
+.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button.appointment-service-remove {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: .55rem;
+  inset-inline-end: .55rem;
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ice-ink, var(--wb-dark-text, #303035));
+}
+.tenant-dashboard-page .appointment-drawer .tenant-drawer-form button.appointment-service-remove:is(:hover, :focus-visible) {
+  background: var(--ice-field, var(--wb-dark-hover, #f1f1f4));
+  border-color: var(--ice-edge, var(--wb-dark-border, #dedee3));
 }

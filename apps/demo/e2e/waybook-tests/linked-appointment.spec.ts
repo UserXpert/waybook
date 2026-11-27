@@ -104,6 +104,17 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await expect(nextService).toHaveValue(`${replacement.title} · 45 min`);
     await expect(drawer.getByText(`${primary.name} · 10:45 · 45 min`, { exact: true })).toBeVisible();
     await expect(nextProvider).toHaveCount(0);
+    await drawer.getByRole("button", { name: "Change provider or time for service 2" }).click();
+    const startTime = drawer.getByRole("combobox", { name: "Start time", exact: true });
+    await expect(startTime).toBeEnabled();
+    await expect(startTime.locator("option:checked")).toHaveText("10:45");
+    await expect(startTime.getByRole("option", { name: "10:50", exact: true })).toHaveCount(0);
+    await startTime.selectOption("11:00");
+    await expect(startTime).toHaveValue("11:00");
+    await startTime.selectOption("");
+    await expect(startTime.locator("option:checked")).toHaveText("10:45");
+    await expect(drawer.getByRole("button", { name: "Remove service 2" })).toBeVisible();
+    await drawer.getByRole("button", { name: "Change provider or time for service 2" }).click();
 
     await nextService.fill(second.title);
     await drawer.getByRole("option", { name: new RegExp(second.title) }).click();
@@ -112,8 +123,18 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await drawer.getByRole("option", { name: secondary.name, exact: true }).click();
     await expect(drawer.getByText(`${secondary.name} · 10:45 · 30 min`, { exact: true })).toBeVisible();
     await expect(drawer.getByText(/75 min/)).toBeVisible();
-    await drawer.getByRole("button", { name: "Confirm appointment" }).click();
-    await expect(drawer.getByRole("alert")).toContainText(`${second.title} is unavailable`);
+    const confirm = drawer.getByRole("button", { name: "Confirm appointment" });
+    await drawer.locator("form").evaluate((form) => {
+      form.addEventListener("formdata", (event) => {
+        const rows = JSON.parse(String(event.formData.get("additionalServices")));
+        rows[0].time = "13:07";
+        event.formData.set("additionalServices", JSON.stringify(rows));
+      }, { once: true });
+    });
+    await confirm.click();
+    await expect(drawer.getByRole("alert")).toContainText("at 13:07");
+    await confirm.click();
+    await expect(drawer.getByRole("alert")).toContainText("at 10:45");
     const [existing] = await sql`SELECT count(*)::int AS count FROM bookings b JOIN customers c ON c.id=b.customer_id
       WHERE b.tenant_id=${tenantId} AND c.email=${clientEmail}`;
     expect(existing.count).toBe(0);
@@ -176,9 +197,11 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await editor.getByRole("combobox", { name: "Provider for service 1" }).fill(primary.name);
     await editor.getByRole("option", { name: primary.name, exact: true }).click();
     await editor.getByRole("button", { name: /^Edit service 2/ }).click();
-    await editor.getByLabel(/Start time for service 2/).fill("12:15");
+    const editStart = editor.getByLabel(/Start time for service 2/);
+    await expect(editStart.getByRole("option", { name: "12:30", exact: true })).toHaveCount(1);
+    await editStart.selectOption("12:30");
     const [editBlock] = await sql`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
-      VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("12:15")}, ${time("12:45")}, 'confirmed') RETURNING id`;
+      VALUES (${tenantId}, ${secondary.id}, ${location.id}, ${time("12:30")}, ${time("13:00")}, 'confirmed') RETURNING id`;
     await save.click();
     await expect(editor.getByRole("alert")).toContainText(`${second.title} is unavailable`);
     expect(await currentService()).toBe(first.id);
@@ -186,7 +209,7 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await sql`UPDATE booking_blocks SET state='released' WHERE tenant_id=${tenantId} AND id=${editBlock.id}`;
     await save.click();
     await expect(saved.getByText(replacement.title, { exact: true })).toBeVisible();
-    await expect(saved.getByText(new RegExp(`12:15–12:45 · ${secondary.name}`))).toBeVisible();
+    await expect(saved.getByText(new RegExp(`12:30–13:00 · ${secondary.name}`))).toBeVisible();
     expect(await currentService()).toBe(replacement.id);
     expect((await sql`SELECT booked_price_cents FROM booking_service_segments WHERE tenant_id=${tenantId} AND booking_id=${booking.id}`)[0]?.booked_price_cents).toBe(3000);
 
@@ -215,11 +238,13 @@ test("book, move, pay, and scope the provider view of linked services", async ({
     await staleEditorPage.getByRole("button", { name: "Edit services", exact: true }).click();
     const staleEditor = staleEditorPage.getByRole("region", { name: "Appointment services" });
     await staleEditor.getByRole("button", { name: /^Edit service 2/ }).click();
-    await staleEditor.getByLabel(/Start time for service 2/).fill("12:30");
+    await staleEditor.getByLabel(/Start time for service 2/).selectOption("12:30");
 
     await page.goto(`/nordic/app/sales?booking=${booking.id}`);
     const checkout = page.getByRole("complementary", { name: `Sale details for ${clientName}` });
     await expect(checkout.getByText(second.title, { exact: false })).toBeVisible();
+    const reviewItems = checkout.getByRole("region", { name: "Checkout items" });
+    await expect(reviewItems.getByRole("listitem").filter({ hasText: second.title })).toContainText(`11:45–12:15 · ${secondary.name}`);
     await checkout.getByRole("link", { name: "Go to payments" }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
     await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("125.00");
