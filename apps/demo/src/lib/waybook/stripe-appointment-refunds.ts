@@ -1,11 +1,10 @@
 import "server-only";
 
 import { tenantDb } from "./database";
-import { appointmentStripeAccount, recoverStripeCheckoutByPaymentIntent } from "./stripe-appointment-checkout";
-import type { StripeSandboxConfig } from "./stripe-connect-api";
+import { recoverStripeCheckoutByPaymentIntent } from "./stripe-appointment-checkout";
+import { stripePaymentAccount, stripePaymentTenantForAccount, type StripePaymentConfig } from "./stripe-payment-mode";
 import type { StripeDashboardRefundNotification, StripeRefundNotification } from "./stripe-sandbox-webhook";
-import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
-import { stripeRefundSandbox, type SandboxRefund, type SandboxRefundAttempt } from "./stripe-refund-api";
+import { stripeRefund, type SandboxRefund, type SandboxRefundAttempt } from "./stripe-refund-api";
 
 type Database = ReturnType<typeof tenantDb>;
 type Context = { db: Database; tenantId: string; bookingId: string };
@@ -21,6 +20,7 @@ type PaidCheckout = {
   accountId: string;
   paymentIntentId: string;
   paymentMethod: "card" | "mobilepay";
+  livemode: boolean;
 };
 const refundColumns = `r.id, r.amount_cents AS "amountCents", r.created_by_identity_id AS "actorId",
   r.refund_id AS "refundId", r.state, r.created_at > now() - interval '20 hours' AS retryable`;
@@ -31,13 +31,14 @@ async function lockBooking(sql: Query, { tenantId, bookingId }: Context) {
   return booking;
 }
 
-async function paidCheckout(sql: Query, { tenantId, bookingId }: Context) {
+async function paidCheckout(sql: Query, { tenantId, bookingId }: Context, livemode?: boolean) {
   const [checkout] = await sql.unsafe<PaidCheckout[]>(`
     SELECT id, account_id AS "accountId", payment_intent_id AS "paymentIntentId",
-           payment_method_type AS "paymentMethod"
+           payment_method_type AS "paymentMethod", livemode
     FROM stripe_sandbox_checkout_attempts
     WHERE tenant_id = $1 AND booking_id = $2 AND state = 'settled'
-  `, [tenantId, bookingId]);
+      AND ($3::boolean IS NULL OR livemode = $3)
+  `, [tenantId, bookingId, livemode ?? null]);
   return checkout;
 }
 
@@ -59,8 +60,8 @@ async function refundAttempt(sql: Query, payment: PaidCheckout, id: string | nul
   return attempt ? { ...attempt, accountId: payment.accountId, paymentIntentId: payment.paymentIntentId } : null;
 }
 
-export async function stripeAppointmentRefundDetails(context: Context) {
-  const paid = await paidCheckout(context.db, context);
+export async function stripeAppointmentRefundDetails(context: Context, config?: StripePaymentConfig) {
+  const paid = await paidCheckout(context.db, context, config ? config.livemode === true : undefined);
   if (!paid) return null;
   const [remainingCents, [latest]] = await Promise.all([
     remainingRefund(context.db, context),
@@ -74,16 +75,16 @@ export async function stripeAppointmentRefundDetails(context: Context) {
   const failure = latest?.returned ? "Stripe returned the last refund after it was recorded." :
     latest?.state === "failed" ? "Stripe declined the last refund." :
     latest?.state === "canceled" ? "Stripe cancelled the last refund." : null;
-  return { remainingCents, pendingCents, failure, paymentMethod: paid.paymentMethod };
+  return { remainingCents, pendingCents, failure, paymentMethod: paid.paymentMethod, livemode: paid.livemode };
 }
 
 type RefundInput = { action: "start" | "check"; id: string; amountCents: number; expectedCents: number; actorId: string };
 
-async function reserveRefund(context: Context, accountId: string, input: RefundInput) {
+async function reserveRefund(context: Context, accountId: string, livemode: boolean, input: RefundInput) {
   return context.db.begin(async (sql) => {
     const booking = await lockBooking(sql, context);
-    const paid = await paidCheckout(sql, context);
-    if (paid?.accountId !== accountId) throw new Error("The original Stripe sandbox account is unavailable.");
+    const paid = await paidCheckout(sql, context, livemode);
+    if (paid?.accountId !== accountId) throw new Error("The original Stripe account is unavailable.");
     if (input.action === "check") return refundAttempt(sql, paid, null);
     const repeated = await refundAttempt(sql, paid, input.id);
     if (repeated) {
@@ -126,7 +127,7 @@ async function postRefundEntry(
     VALUES ($1, $2, $3, $4, $5, 'card', $6)
   `, [id, tenantId, bookingId, kind, stored.amountCents, stored.actorId]);
   const metadata = JSON.stringify({ paymentId: id, originalPaymentId: payment.id, amountCents: stored.amountCents,
-    method: "card", source: "stripe_sandbox", stripePaymentMethod: payment.paymentMethod,
+    method: "card", source: payment.livemode ? "stripe_live" : "stripe_sandbox", stripePaymentMethod: payment.paymentMethod,
     recordedVia: stored.actorId ? "waybook" : "stripe",
     ...(returnPaymentId ? { originalRefundId: stored.id } : {}) });
   await sql.unsafe(`
@@ -139,11 +140,13 @@ async function postRefundEntry(
   `, [tenantId, stored.actorId, action, id, metadata]);
 }
 
-async function reconcileRefund(context: Context, attempt: StoredRefund, refund: SandboxRefund) {
+async function reconcileRefund(context: Context, livemode: boolean, attempt: StoredRefund, refund: SandboxRefund) {
   return context.db.begin(async (sql) => {
     await lockBooking(sql, context);
-    const payment = await paidCheckout(sql, context);
-    if (!payment) throw new Error("The original Stripe payment is unavailable.");
+    const payment = await paidCheckout(sql, context, livemode);
+    if (!payment || payment.accountId !== attempt.accountId || payment.paymentIntentId !== attempt.paymentIntentId) {
+      throw new Error("The original Stripe payment is unavailable.");
+    }
     const stored = await refundAttempt(sql, payment, attempt.id);
     if (!stored || stored.amountCents !== attempt.amountCents) throw new Error("The Stripe refund changed unexpectedly.");
     return recordRefundOutcome(sql, context, payment, stored, refund);
@@ -169,26 +172,26 @@ async function recordRefundOutcome(sql: Query, context: Context, payment: PaidCh
   return refund.state;
 }
 
-export async function runStripeAppointmentRefund(context: Context, config: StripeSandboxConfig, input: RefundInput) {
-  const accountId = await appointmentStripeAccount(context.tenantId);
-  if (!accountId) throw new Error("The original Stripe sandbox account is unavailable.");
-  const attempt = await reserveRefund(context, accountId, input);
+export async function runStripeAppointmentRefund(context: Context, config: StripePaymentConfig, input: RefundInput) {
+  const accountId = await stripePaymentAccount(context.tenantId, config);
+  if (!accountId) throw new Error("The original Stripe account is unavailable.");
+  const attempt = await reserveRefund(context, accountId, config.livemode === true, input);
   if (!attempt) return null;
   if (attempt.state !== "pending") return attempt.state;
-  const stripe = stripeRefundSandbox(config);
+  const stripe = stripeRefund(config);
   if (!attempt.refundId && !attempt.retryable) {
     throw new Error("Check the original refund in Stripe before starting another.");
   }
   const refund = !attempt.refundId ? await stripe.create(attempt) :
     attempt.actorId ? await stripe.retrieve(attempt, attempt.refundId) : await stripe.retrieveDashboard(attempt, attempt.refundId);
-  return reconcileRefund(context, attempt, refund);
+  return reconcileRefund(context, config.livemode === true, attempt, refund);
 }
 
 export async function settleStripeRefundNotification(
-  config: StripeSandboxConfig, notification: StripeRefundNotification | StripeDashboardRefundNotification,
+  config: StripePaymentConfig, notification: StripeRefundNotification | StripeDashboardRefundNotification,
 ) {
   const { accountId, refundId } = notification;
-  const tenant = await stripeSandboxTenantForAccount(accountId);
+  const tenant = await stripePaymentTenantForAccount(accountId, config);
   if (!tenant) return;
   const db = tenantDb(tenant);
   if (notification.kind === "dashboard-refund") {
@@ -200,29 +203,30 @@ export async function settleStripeRefundNotification(
            p.payment_intent_id AS "paymentIntentId"
     FROM stripe_sandbox_refund_attempts r JOIN stripe_sandbox_checkout_attempts p ON p.id = r.payment_attempt_id
     WHERE p.tenant_id = $1 AND p.account_id = $2 AND p.state = 'settled'
-      AND r.id = $3 AND r.state IN ('pending', 'succeeded')
-  `, [tenant.id, accountId, notification.attemptId]);
+      AND r.id = $3 AND r.state IN ('pending', 'succeeded') AND p.livemode = $4
+  `, [tenant.id, accountId, notification.attemptId, config.livemode === true]);
   if (!attempt || (attempt.refundId && attempt.refundId !== refundId)) return;
-  const refund = await stripeRefundSandbox(config).retrieve(attempt, refundId);
-  await reconcileRefund({ db, tenantId: tenant.id, bookingId: attempt.bookingId }, attempt, refund);
+  const refund = await stripeRefund(config).retrieve(attempt, refundId);
+  await reconcileRefund({ db, tenantId: tenant.id, bookingId: attempt.bookingId }, config.livemode === true, attempt, refund);
 }
 
-async function recordDashboardRefund(db: Database, tenantId: string, config: StripeSandboxConfig, notification: StripeDashboardRefundNotification) {
+async function recordDashboardRefund(db: Database, tenantId: string, config: StripePaymentConfig, notification: StripeDashboardRefundNotification) {
   const { accountId, paymentIntentId, amountCents, refundId } = notification;
   const linkedPayment = async () => (await db.unsafe<{ bookingId: string }[]>(`
     SELECT booking_id AS "bookingId" FROM stripe_sandbox_checkout_attempts
-    WHERE tenant_id = $1 AND account_id = $2 AND payment_intent_id = $3 AND state = 'settled'
-  `, [tenantId, accountId, paymentIntentId]))[0];
+    WHERE tenant_id = $1 AND account_id = $2 AND payment_intent_id = $3
+      AND state = 'settled' AND livemode = $4
+  `, [tenantId, accountId, paymentIntentId, config.livemode === true]))[0];
   let linked = await linkedPayment();
   if (!linked) {
     const [pending] = await db.unsafe(`
       SELECT id FROM stripe_sandbox_checkout_attempts
-      WHERE tenant_id = $1 AND account_id = $2 AND state = 'pending' LIMIT 1
-    `, [tenantId, accountId]);
+      WHERE tenant_id = $1 AND account_id = $2 AND state = 'pending' AND livemode = $3 LIMIT 1
+    `, [tenantId, accountId, config.livemode === true]);
     if (!pending) linked = await linkedPayment();
     if (!pending && !linked) return;
   }
-  const refund = await stripeRefundSandbox(config).retrieveDashboard(notification, refundId);
+  const refund = await stripeRefund(config).retrieveDashboard(notification, refundId);
   if (!linked) {
     const recovered = await recoverStripeCheckoutByPaymentIntent(db, tenantId, config, notification);
     // A simultaneous checkout notification can settle the intent during lookup.
@@ -233,7 +237,7 @@ async function recordDashboardRefund(db: Database, tenantId: string, config: Str
   const context = { db, tenantId, bookingId: linked.bookingId };
   await db.begin(async (sql) => {
     await lockBooking(sql, context);
-    const paid = await paidCheckout(sql, context);
+    const paid = await paidCheckout(sql, context, config.livemode === true);
     if (!paid || paid.accountId !== accountId || paid.paymentIntentId !== paymentIntentId) {
       throw new Error("The original Stripe payment changed unexpectedly.");
     }

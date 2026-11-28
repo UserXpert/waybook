@@ -2,10 +2,10 @@ import "server-only";
 
 import { completeSettledAppointment } from "./appointment-checkout-completion";
 import { controlDb, tenantDb } from "./database";
-import { stripeConnectSandbox, stripeSandboxConfig, type StripeSandboxConfig } from "./stripe-connect-api";
-import { stripeCheckoutLifetimeSeconds, stripeCheckoutSandbox, stripeSandboxMobilePayAvailable, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
+import { stripeConnectLive, stripeConnectSandbox, stripeSandboxConfig } from "./stripe-connect-api";
+import { stripeCheckoutLifetimeSeconds, stripeCheckout, stripeMobilePayAvailable, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
 import type { StripeCheckoutNotification } from "./stripe-sandbox-webhook";
-import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
+import { stripeCanStartPayment, stripePaymentAccount, stripePaymentTenantForAccount, type StripePaymentConfig } from "./stripe-payment-mode";
 
 type TenantDatabase = ReturnType<typeof tenantDb>;
 type CheckoutContext = { db: TenantDatabase; tenantId: string; bookingId: string };
@@ -19,6 +19,7 @@ type CheckoutInput = {
 };
 type Attempt = SandboxCheckoutAttempt & {
   paymentMethod: PaymentMethod;
+  livemode: boolean;
   bookingId: string;
   actorId: string;
   returnOrigin: string;
@@ -30,7 +31,7 @@ const selectAttempt = `
   SELECT id, booking_id AS "bookingId", account_id AS "accountId", amount_cents AS "amountCents",
          created_by_identity_id AS "actorId", expires_at_seconds AS "expiresAtSeconds", return_path AS "returnPath",
          return_origin AS "returnOrigin", session_id AS "sessionId", stripe_customer_id AS "stripeCustomerId",
-         payment_method_type AS "paymentMethod", state
+         payment_method_type AS "paymentMethod", livemode, state
   FROM stripe_sandbox_checkout_attempts
 `;
 
@@ -56,7 +57,7 @@ async function currentAttempt(sql: AttemptQuery, tenantId: string, bookingId: st
 
 export async function appointmentStripeState({ db, tenantId, bookingId }: CheckoutContext) {
   const attempt = await currentAttempt(db, tenantId, bookingId);
-  return attempt ? { state: attempt.state, paymentMethod: attempt.paymentMethod } : null;
+  return attempt ? { state: attempt.state, paymentMethod: attempt.paymentMethod, livemode: attempt.livemode } : null;
 }
 
 async function lockAppointment(sql: AttemptQuery, tenantId: string, bookingId: string) {
@@ -69,7 +70,7 @@ async function lockAppointment(sql: AttemptQuery, tenantId: string, bookingId: s
 
 async function reserveAttempt(
   { db, tenantId, bookingId }: CheckoutContext,
-  config: StripeSandboxConfig,
+  config: StripePaymentConfig,
   accountId: string | null,
   input: CheckoutInput,
   canStart: boolean,
@@ -77,13 +78,18 @@ async function reserveAttempt(
   return db.begin(async (sql) => {
     const booking = await lockAppointment(sql, tenantId, bookingId);
     const existing = await currentAttempt(sql, tenantId, bookingId);
+    const livemode = config.livemode === true;
+    if (existing && existing.livemode !== livemode) {
+      throw new Error("Resolve the original Stripe payment in its own mode before proceeding.");
+    }
     if (existing && input.paymentMethod && existing.paymentMethod !== input.paymentMethod) {
       throw new Error("Resolve the open Stripe payment before choosing a different payment method.");
     }
     if (existing || input.action !== "open") return existing;
     if (!accountId || booking.status !== "arrived" || booking.stage !== "checking_out") {
-      throw new Error("Open appointment checkout with a connected Stripe sandbox account first.");
+      throw new Error("Open appointment checkout with a connected Stripe account first.");
     }
+    if (!stripeCanStartPayment(config)) throw new Error("New Stripe payments are currently disabled.");
     if (!canStart) throw new Error("The Stripe payment changed. Review checkout and try again.");
     const paymentMethod = input.paymentMethod ?? "card";
     const [cart] = await sql.unsafe<{ total: number; currency: string; alreadyRecorded: boolean; stripeCustomerId: string | null }[]>(`
@@ -96,8 +102,8 @@ async function reserveAttempt(
       LEFT JOIN stripe_sandbox_client_cards saved
         ON saved.tenant_id = booking.tenant_id AND saved.customer_id = booking.customer_id
         AND saved.account_id = $3 AND saved.consented_at IS NOT NULL AND saved.card_brand IS NOT NULL
-        AND $4::text = 'card'
-    `, [tenantId, bookingId, accountId, paymentMethod]);
+        AND $4::text = 'card' AND NOT $5::boolean
+    `, [tenantId, bookingId, accountId, paymentMethod, livemode]);
     if (!cart || cart.currency !== "DKK" || cart.alreadyRecorded || cart.total <= 0 ||
         cart.total > 10_000_000 || cart.total !== input.expectedCents) {
       throw new Error("Review the current checkout total before opening a Stripe sandbox payment.");
@@ -105,10 +111,10 @@ async function reserveAttempt(
     await sql.unsafe(`
       INSERT INTO stripe_sandbox_checkout_attempts
         (tenant_id, booking_id, account_id, amount_cents, return_path, return_origin, created_by_identity_id,
-         expires_at_seconds, stripe_customer_id, payment_method_type)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + $8::int, $9, $10)
+         expires_at_seconds, stripe_customer_id, payment_method_type, livemode)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + $8::int, $9, $10, $11)
     `, [tenantId, bookingId, accountId, cart.total, input.returnPath, config.origin, input.actorId,
-      stripeCheckoutLifetimeSeconds, cart.stripeCustomerId, paymentMethod]);
+      stripeCheckoutLifetimeSeconds, cart.stripeCustomerId, paymentMethod, livemode]);
     return currentAttempt(sql, tenantId, bookingId);
   });
 }
@@ -129,7 +135,7 @@ async function reconcileAttempt(
     }
     const booking = await lockAppointment(sql, tenantId, bookingId);
     const stored = await currentAttempt(sql, tenantId, bookingId);
-    if (!stored || stored.id !== attempt.id) return { state: "expired" as const };
+    if (!stored || stored.id !== attempt.id || stored.livemode !== attempt.livemode) return { state: "expired" as const };
     if (stored.state === "settled") return { state: "paid" as const };
     if (stored.sessionId && stored.sessionId !== session.id) throw new Error("The Stripe session changed unexpectedly.");
     await sql.unsafe("UPDATE stripe_sandbox_checkout_attempts SET session_id = $2 WHERE id = $1", [stored.id, session.id]);
@@ -146,7 +152,7 @@ async function reconcileAttempt(
       VALUES ($1, $2, $3, 'payment', $4, 'card', $5)
     `, [stored.id, tenantId, bookingId, stored.amountCents, stored.actorId]);
     const metadata = JSON.stringify({ paymentId: stored.id, amountCents: stored.amountCents,
-      method: "card", source: "stripe_sandbox", stripePaymentMethod: stored.paymentMethod });
+      method: "card", source: stored.livemode ? "stripe_live" : "stripe_sandbox", stripePaymentMethod: stored.paymentMethod });
     await sql.unsafe(`
       INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
       VALUES ($1, $2, $3, 'payment.payment', $4::text::jsonb)
@@ -167,21 +173,22 @@ async function reconcileAttempt(
 
 export async function runAppointmentStripeCheckout(
   context: CheckoutContext,
-  config: StripeSandboxConfig,
+  config: StripePaymentConfig,
   input: CheckoutInput,
 ) {
-  const accountId = await appointmentStripeAccount(context.tenantId);
-  const canStart = Boolean(accountId && input.action === "open" &&
+  const accountId = await stripePaymentAccount(context.tenantId, config);
+  const canStart = Boolean(accountId && stripeCanStartPayment(config) && input.action === "open" &&
     !await currentAttempt(context.db, context.tenantId, context.bookingId));
   if (canStart && accountId) {
     if (input.paymentMethod === "mobilepay" && input.expectedCents < 250) {
       throw new Error("MobilePay payments must be at least DKK 2.50.");
     }
-    if (await stripeConnectSandbox(config).merchantStatus(accountId) !== "ready") {
-      throw new Error("Finish Stripe sandbox setup in Settings before taking a payment.");
+    const stripeConnect = config.livemode === true ? stripeConnectLive(config) : stripeConnectSandbox(config);
+    if (await stripeConnect.merchantStatus(accountId) !== "ready") {
+      throw new Error("Finish Stripe setup in Settings before taking a payment.");
     }
-    if (input.paymentMethod === "mobilepay" && !await stripeSandboxMobilePayAvailable(config, accountId)) {
-      throw new Error("MobilePay is unavailable for this Stripe sandbox account.");
+    if (input.paymentMethod === "mobilepay" && !await stripeMobilePayAvailable(config, accountId)) {
+      throw new Error("MobilePay is unavailable for this Stripe account.");
     }
   }
   const attempt = await reserveAttempt(context, config, accountId, input, canStart);
@@ -190,10 +197,10 @@ export async function runAppointmentStripeCheckout(
   if (attempt.returnOrigin !== config.origin || attempt.accountId !== accountId) {
     throw new Error("The open Stripe payment must be resolved with its original account and return address.");
   }
-  const stripe = stripeCheckoutSandbox(config);
+  const stripe = stripeCheckout(config);
   let sessionId = attempt.sessionId;
   if (!sessionId) {
-    if (Date.now() >= attempt.expiresAtSeconds * 1000) {
+    if (Date.now() >= attempt.expiresAtSeconds * 1000 || !stripeCanStartPayment(config)) {
       const recovered = await stripe.findAfterExpiry(attempt);
       if (!recovered) throw new Error("Stripe did not confirm the original session. Check this attempt in Stripe before accepting another payment.");
       if (input.action !== "cancel" || recovered.state !== "open") return reconcileAttempt(context, attempt, recovered);
@@ -211,17 +218,18 @@ export async function runAppointmentStripeCheckout(
   return reconcileAttempt(context, attempt, session);
 }
 
-export async function settleStripeCheckoutNotification(config: StripeSandboxConfig, notification: StripeCheckoutNotification) {
+export async function settleStripeCheckoutNotification(config: StripePaymentConfig, notification: StripeCheckoutNotification) {
   const { accountId, attemptId, sessionId } = notification;
-  const tenant = await stripeSandboxTenantForAccount(accountId);
+  const tenant = await stripePaymentTenantForAccount(accountId, config);
   if (!tenant) return;
   const db = tenantDb(tenant);
   const [attempt] = await db.unsafe<Attempt[]>(`
-    ${selectAttempt} WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND state = 'pending'
-  `, [tenant.id, accountId, attemptId]);
+    ${selectAttempt} WHERE tenant_id = $1 AND account_id = $2 AND id = $3
+      AND state = 'pending' AND livemode = $4
+  `, [tenant.id, accountId, attemptId, config.livemode === true]);
   if (!attempt || (attempt.sessionId && attempt.sessionId !== sessionId)) return;
   // Stripe's current record is authoritative even if a signed delivery arrives out of order.
-  const session = await stripeCheckoutSandbox(config).retrieve(attempt, sessionId);
+  const session = await stripeCheckout(config).retrieve(attempt, sessionId);
   if (session.state !== "paid" && session.state !== "expired") {
     throw new Error("Stripe checkout has not reached its final state.");
   }
@@ -230,15 +238,16 @@ export async function settleStripeCheckoutNotification(config: StripeSandboxConf
 }
 
 export async function recoverStripeCheckoutByPaymentIntent(
-  db: TenantDatabase, tenantId: string, config: StripeSandboxConfig,
+  db: TenantDatabase, tenantId: string, config: StripePaymentConfig,
   { accountId, paymentIntentId }: { accountId: string; paymentIntentId: string },
 ) {
-  const stripe = stripeCheckoutSandbox(config);
+  const stripe = stripeCheckout(config);
   const candidate = await stripe.findByPaymentIntent(accountId, paymentIntentId);
   if (!candidate) return false;
   const [attempt] = await db.unsafe<Attempt[]>(`
-    ${selectAttempt} WHERE tenant_id = $1 AND account_id = $2 AND id = $3 AND state <> 'expired'
-  `, [tenantId, accountId, candidate.attemptId]);
+    ${selectAttempt} WHERE tenant_id = $1 AND account_id = $2 AND id = $3
+      AND state <> 'expired' AND livemode = $4
+  `, [tenantId, accountId, candidate.attemptId, config.livemode === true]);
   if (!attempt) return false;
   if (attempt.sessionId && attempt.sessionId !== candidate.id) throw new Error("The Stripe session changed unexpectedly.");
   const session = await stripe.retrieve(attempt, candidate.id);

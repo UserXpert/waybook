@@ -16,15 +16,18 @@ const statusDescriptions: Record<LiveStripeStatus, string> = {
 
 const countryNames = new Intl.DisplayNames("en", { type: "region" });
 
-export function LiveStripePanel({ status, feedback, countries }: {
+export function LiveStripePanel({ status, feedback, countries, collectionEnabled }: {
   status: LiveStripeStatus;
   feedback?: string;
   countries: readonly string[];
+  collectionEnabled: boolean;
 }) {
   const canContinue = status === "pending" || status === "restricted";
   return <section className="workspace-settings__panel" aria-labelledby="stripe-live-title">
     <h2 id="stripe-live-title">Stripe</h2>
-    <p role={feedback === "returned" || feedback === "checked" ? "status" : undefined}>{statusDescriptions[status]}</p>
+    <p role={feedback === "returned" || feedback === "checked" ? "status" : undefined}>
+      {status === "ready" && collectionEnabled ? "Stripe has verified your account for appointment payments in Waybook." : statusDescriptions[status]}
+    </p>
     {feedback === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
     {feedback === "country" ? <p role="alert">Select a supported country for your business.</p> : null}
     {feedback === "resume" && canContinue ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}

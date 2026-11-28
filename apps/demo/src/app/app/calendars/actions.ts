@@ -22,6 +22,7 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { appointmentClientCard, runClientCardSetup } from "@/lib/waybook/stripe-client-card";
 import { appointmentStripeAccount, appointmentStripeConfig, runAppointmentStripeCheckout } from "@/lib/waybook/stripe-appointment-checkout";
+import { stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
 import { runStripeAppointmentRefund } from "@/lib/waybook/stripe-appointment-refunds";
 import { requireFeature } from "@/lib/waybook/features";
 import { appointmentCheckoutAccess } from "@/lib/waybook/appointment-checkout-access";
@@ -830,7 +831,7 @@ async function persistBookingStatus(
         SELECT 1 FROM payment_records p
         JOIN booking_events e ON e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
           AND e.event_type = 'payment.payment' AND e.metadata->>'paymentId' = p.id::text
-          AND e.metadata->>'source' = 'stripe_sandbox'
+          AND e.metadata->>'source' IN ('stripe_sandbox', 'stripe_live')
         WHERE p.tenant_id = $1 AND p.booking_id = $2 AND p.kind = 'payment'
           AND p.amount_cents = cart.chargeable_cents
       ) AS paid FROM appointment_checkout_amounts($1, $2) cart
@@ -1019,13 +1020,13 @@ export type PaymentState = { error: string | null; success: string | null };
 
 export async function updateStripeAppointmentRefund(_state: PaymentState, formData: FormData): Promise<PaymentState> {
   try {
-    const config = appointmentStripeConfig();
+    const config = stripeAppointmentPaymentConfig(process.env);
     const action = formData.get("action");
     const bookingId = String(formData.get("bookingId") ?? "");
     const id = String(formData.get("requestId") ?? "");
     const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
     if (!config || (action !== "start" && action !== "check") || !uuid.test(bookingId) || !uuid.test(id)) {
-      throw new Error("Stripe sandbox refund is unavailable.");
+      throw new Error("Stripe refund is unavailable.");
     }
     const amount = String(formData.get("amountDkk") ?? "").replace(",", ".");
     if (action === "start" && !/^\d{1,6}(?:\.\d{1,2})?$/.test(amount)) throw new Error("Enter a valid refund amount.");
@@ -1037,7 +1038,7 @@ export async function updateStripeAppointmentRefund(_state: PaymentState, formDa
       expectedCents: Number(formData.get("expectedCents")), actorId: actor.id,
     });
     const message = {
-      succeeded: "Stripe sandbox refund recorded.",
+      succeeded: config.livemode ? "Stripe refund recorded." : "Stripe sandbox refund recorded.",
       pending: "Stripe is processing the refund. Check its status again shortly.",
       failed: "Stripe declined the refund. Review the payment before trying again.",
       canceled: "Stripe cancelled the refund.",
@@ -1099,8 +1100,8 @@ export async function updateStripeAppointmentPayment(_state: PaymentState, formD
   let destination: string | null = null;
   let success: string | null = null;
   try {
-    const config = appointmentStripeConfig();
-    if (!config) throw new Error("Stripe sandbox checkout is unavailable.");
+    const config = stripeAppointmentPaymentConfig(process.env);
+    if (!config) throw new Error("Stripe checkout is unavailable.");
     const requestedAction = formData.get("action");
     const paymentMethod = requestedAction === "open-mobilepay" ? "mobilepay" : requestedAction === "open-card" ? "card" : undefined;
     const action = paymentMethod ? "open" : requestedAction;
@@ -1294,7 +1295,7 @@ export async function correctAppointmentPayment(formData: FormData): Promise<Pay
       const payment = payments.find((item) => item.id === paymentId);
       if (!payment || payment.revision !== revision) throw new Error("This payment has changed. Reopen the appointment and try again.");
       if (payment.method === "gift_card") throw new Error("Gift-card payments use the original card’s refund workflow.");
-      if (payment.stripeSandbox) throw new Error("Stripe sandbox payments must be reconciled through Stripe.");
+      if (payment.stripeMode) throw new Error("Stripe payments must be reconciled through Stripe.");
 
       const [balance] = await transaction.unsafe<{ available: number }[]>(`
         SELECT coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)::int AS available

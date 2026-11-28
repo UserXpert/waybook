@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stripeCheckoutSandbox, stripeSandboxMobilePayAvailable } from "./stripe-checkout-api";
+import { stripeCheckout, stripeCheckoutSandbox, stripeMobilePayAvailable, stripePaymentRequest, stripeSandboxMobilePayAvailable } from "./stripe-checkout-api";
 
 const config = { secretKey: "sk_test_fixture", origin: "https://waybook.example" };
+const liveConfig = { ...config, secretKey: "rk_live_fixture", livemode: true, allowedCountries: ["DK"], allowNewPayments: true } as const;
 const attempt = {
   id: "ab60260a-14a7-4c38-8d29-d78804a53616",
   accountId: "acct_sandboxFixture",
@@ -264,6 +265,16 @@ test("MobilePay availability requires the connected merchant's active default sa
     return Response.json(payload);
   });
   assert.equal(await available(page), true);
+  const liveAvailable = (payload: unknown) => stripeMobilePayAvailable(liveConfig, attempt.accountId, async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.headers.get("Authorization"), `Bearer ${liveConfig.secretKey}`);
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    return Response.json(payload);
+  });
+  assert.equal(await liveAvailable(page), false);
+  const livePage = { ...page, data: [{ ...child, livemode: true }] };
+  assert.equal(await available(livePage), false);
+  assert.equal(await liveAvailable(livePage), true);
   for (const fields of [
     { active: false }, { is_default: false }, { livemode: true }, { parent: null },
     { object: "payment_method" }, { mobilepay: null }, { mobilepay: { available: false } },
@@ -276,4 +287,50 @@ test("MobilePay availability requires the connected merchant's active default sa
   assert.equal(await available({ ...page, data: [] }), false);
   assert.equal(await stripeSandboxMobilePayAvailable(config, attempt.accountId, async () => new Response(null, { status: 503 })), false);
   assert.equal(await stripeSandboxMobilePayAvailable(config, attempt.accountId, async () => new Response("not JSON")), false);
+});
+
+test("live Checkout uses the selected merchant and validates both Stripe mode and session ID", async () => {
+  const liveId = "cs_live_fixture";
+  const liveUrl = `https://checkout.stripe.com/c/pay/${liveId}#fixture`;
+  const liveOpen = { ...open, id: liveId, livemode: true, url: liveUrl };
+  const livePaid = { ...liveOpen, status: "complete", payment_status: "paid", payment_intent: "pi_liveFixture" };
+  const stripe = stripeCheckout(liveConfig, async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.headers.get("Authorization"), `Bearer ${liveConfig.secretKey}`);
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    if (request.method === "POST") {
+      assert.equal(request.url, "https://api.stripe.com/v1/checkout/sessions");
+      assert.equal(request.headers.get("Idempotency-Key"), attempt.id);
+      const body = new URLSearchParams(await request.text());
+      assert.equal(body.get("allowed_payment_method_types[0]"), "card");
+      assert.equal(body.get("line_items[0][price_data][unit_amount]"), String(attempt.amountCents));
+      return Response.json(liveOpen);
+    }
+    assert.equal(request.url, `https://api.stripe.com/v1/checkout/sessions/${liveId}`);
+    return Response.json(livePaid);
+  });
+  assert.deepEqual(await stripe.create(attempt), { id: liveId, state: "open", url: liveUrl });
+  assert.deepEqual(await stripe.retrieve(attempt, liveId), { id: liveId, state: "paid", paymentIntentId: "pi_liveFixture" });
+  await assert.rejects(() => stripe.retrieve(attempt, sessionId), /live checkout context/);
+  for (const payload of [open, { ...liveOpen, livemode: false }, { ...liveOpen, id: sessionId }]) {
+    const invalid = stripeCheckout(liveConfig, async () => Response.json(payload));
+    await assert.rejects(() => invalid.create(attempt), /expected live checkout session/);
+  }
+  const sandbox = stripeCheckoutSandbox(config, async () => Response.json(liveOpen));
+  await assert.rejects(() => sandbox.create(attempt), /expected sandbox checkout session/);
+
+  const wrongList = { object: "list", has_more: false, data: [{ ...open, client_reference_id: "unrelated" }] };
+  const recovery = stripeCheckout(liveConfig, async () => Response.json(wrongList));
+  await assert.rejects(() => recovery.findAfterExpiry(attempt), /could not confirm the original/);
+});
+
+test("connected requests reject wrong-mode credentials and unsafe API paths before fetch", async () => {
+  const request: typeof fetch = async () => assert.fail("Unexpected provider request");
+  const mixedConfig = { ...liveConfig, secretKey: config.secretKey };
+  const path = "/v1/checkout/sessions";
+  await assert.rejects(() => stripePaymentRequest(mixedConfig, request, attempt.accountId, path, "GET"), /live checkout context/);
+  await assert.rejects(() => stripeCheckoutSandbox({ ...config, secretKey: liveConfig.secretKey }, request).create(attempt), /sandbox checkout context/);
+  for (const invalid of ["https://other.example/v1/checkout/sessions", "/v1/../v2/core/accounts", `${path}#fragment`]) {
+    await assert.rejects(() => stripePaymentRequest(liveConfig, request, attempt.accountId, invalid, "GET"), /live API path/);
+  }
 });

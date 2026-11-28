@@ -18,7 +18,7 @@ export type StripeRefundNotification = ConnectedNotification & { kind: "refund";
 export type StripeDashboardRefundNotification = {
   kind: "dashboard-refund"; accountId: string; refundId: string; paymentIntentId: string; amountCents: number;
 };
-export type StripeSandboxNotification = StripeCheckoutNotification | StripeRefundNotification | StripeDashboardRefundNotification;
+export type StripePaymentNotification = StripeCheckoutNotification | StripeRefundNotification | StripeDashboardRefundNotification;
 
 type StripeWebhookEnvelope = {
   id?: unknown;
@@ -34,12 +34,13 @@ type StripeWebhookEnvelope = {
 };
 
 /** Verify the original bytes before decoding the Stripe snapshot event. */
-export function readStripeSandboxNotification(
+export function readStripePaymentNotification(
   bytes: Uint8Array,
   signature: string,
   secret: string,
+  expectedLivemode = false,
   nowSeconds = Math.floor(Date.now() / 1000),
-): StripeSandboxNotification | null {
+): StripePaymentNotification | null {
   const parts = signature.split(",").map((entry) => entry.trim());
   const timestamps = parts.filter((entry) => entry.startsWith("t="));
   const timestamp = timestamps[0]?.slice(2) ?? "";
@@ -54,19 +55,20 @@ export function readStripeSandboxNotification(
   const event = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as StripeWebhookEnvelope | null;
   if (event?.object !== "event" || typeof event.id !== "string" || !/^evt_[A-Za-z0-9]+$/.test(event.id) ||
       typeof event.type !== "string") throw new Error("Invalid Stripe event.");
-  if (event.livemode !== false || typeof event.account !== "string" ||
+  if (event.livemode !== expectedLivemode || typeof event.account !== "string" ||
       !/^acct_[A-Za-z0-9]+$/.test(event.account)) return null;
   const resource = event.data?.object;
   if (typeof resource?.id !== "string") return null;
   if (checkoutEvents.has(event.type) && resource.object === "checkout.session") {
     const attemptId = resource.client_reference_id;
-    if (resource.livemode === false && /^cs_test_[A-Za-z0-9]+$/.test(resource.id) &&
+    const sessionIdPattern = expectedLivemode ? /^cs_live_[A-Za-z0-9]+$/ : /^cs_test_[A-Za-z0-9]+$/;
+    if (resource.livemode === expectedLivemode && sessionIdPattern.test(resource.id) &&
         typeof attemptId === "string" && uuidPattern.test(attemptId)) {
       return { kind: "checkout", accountId: event.account, attemptId, sessionId: resource.id };
     }
   }
   if (refundEvents.has(event.type) && resource.object === "refund" &&
-      (resource.livemode === undefined || resource.livemode === false) && /^re_[A-Za-z0-9]+$/.test(resource.id)) {
+      (resource.livemode === undefined || resource.livemode === expectedLivemode) && /^re_[A-Za-z0-9]+$/.test(resource.id)) {
     // Refund snapshots can omit livemode. The signed envelope declares it.
     const attemptId = resource.metadata?.waybook_refund_attempt;
     if (typeof attemptId === "string" && uuidPattern.test(attemptId)) {

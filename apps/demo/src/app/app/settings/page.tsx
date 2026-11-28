@@ -12,6 +12,7 @@ import { parseBusinessProfile } from "@/lib/waybook/business-profile";
 import { tenantDb } from "@/lib/waybook/database";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { stripeLiveConfig, stripeSandboxConfig } from "@/lib/waybook/stripe-connect-api";
+import { stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
 import { liveMerchantStatus } from "@/lib/waybook/stripe-live";
 import { sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -51,6 +52,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const businessHref = `${settingsHref}?tab=business`;
   const paymentsHref = `${settingsHref}?tab=payments`;
   const liveStripe = showingPayments && isOwner ? stripeLiveConfig(process.env) : null;
+  const collection = liveStripe ? stripeAppointmentPaymentConfig(process.env) : null;
   const liveStatus = liveStripe ? await liveMerchantStatus(tenant.id, liveStripe) : null;
   const sandbox = showingPayments && isOwner ? stripeSandboxConfig(process.env) : null;
   const merchantStatus = sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
@@ -127,6 +129,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               status={liveStatus}
               feedback={params.stripe}
               countries={liveStripe.allowedCountries}
+              collectionEnabled={collection?.livemode === true && collection.allowNewPayments}
             /> : merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
               <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
               {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}

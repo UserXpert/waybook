@@ -224,8 +224,29 @@ process and configure `WAYBOOK_STRIPE_LIVE_SECRET_KEY` as a Production secret,
 `WAYBOOK_STRIPE_LIVE_COUNTRIES` as the comma-separated ISO country codes enabled
 for the live platform. Confirm the Stripe platform configuration for each
 enabled business country. The live and sandbox connections use separate
-Control tables. Live collection, refunds, and saved cards require a
-separate release. See [#30](https://github.com/UserXpert/waybook/issues/30).
+Control tables. See [#30](https://github.com/UserXpert/waybook/issues/30).
+
+### Live appointment payments
+
+Tenant migration 0074 pins Stripe mode on each checkout reservation and
+preserves the existing reservation constraint across both modes. Appointment
+payments are DKK direct charges on the connected business's Stripe account.
+MobilePay is available when the connected merchant enables it on Stripe.
+Refunds use the mode, account and payment of the original transaction.
+
+Before enabling live collection, apply the reviewed migrations, verify the
+connected account, and set up a dedicated **Connected accounts** destination
+at `/api/webhooks/stripe-live`. Subscribe to `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`, `checkout.session.expired`,
+`refund.created`, `refund.updated`, and `refund.failed`. Store its
+signing secret as `WAYBOOK_STRIPE_LIVE_WEBHOOK_SECRET` in Production.
+Set `WAYBOOK_STRIPE_LIVE_COLLECTION_ENABLED=true` only after testing direct
+delivery and confirming the pilot release. Saved card setup continues to
+use the sandbox workflow.
+
+To stop new live charges, unset the collection flag. Keep the live
+credential, webhook configuration, and compatible build in place while
+open sessions and refunds reconcile.
 
 ## Planned: two distinct Waybook money products (2026-11-08)
 

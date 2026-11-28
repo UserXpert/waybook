@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stripeRefundSandbox } from "./stripe-refund-api";
+import { stripeRefund, stripeRefundSandbox } from "./stripe-refund-api";
 
 const config = { secretKey: "sk_test_fixture", origin: "https://waybook.example" };
 const attempt = { id: "ab60260a-14a7-4c38-8d29-d78804a53616", accountId: "acct_fixture", paymentIntentId: "pi_fixture", amountCents: 1101 };
@@ -71,4 +71,35 @@ test("Dashboard refunds are retrieved under the connected account without a crea
   await assert.rejects(() => stripe.retrieveDashboard({ ...attempt, amountCents: 1 }, payload.id), /expected sandbox refund/);
   const existingWaybook = stripeRefundSandbox(config, async () => Response.json(payload));
   await assert.rejects(() => existingWaybook.retrieveDashboard(attempt, payload.id), /expected sandbox refund/);
+});
+
+test("live refunds use the live key and reject a sandbox-mode response", async () => {
+  const live = { ...config, secretKey: "sk_live_fixture", livemode: true, allowedCountries: ["DK"], allowNewPayments: false } as const;
+  const livePayload = { ...payload, livemode: true };
+  const stripe = stripeRefund(live, async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.headers.get("Authorization"), `Bearer ${live.secretKey}`);
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    if (request.method === "POST") {
+      assert.equal(request.url, "https://api.stripe.com/v1/refunds");
+      assert.equal(request.headers.get("Idempotency-Key"), attempt.id);
+      const body = new URLSearchParams(await request.text());
+      assert.equal(body.get("payment_intent"), attempt.paymentIntentId);
+      assert.equal(body.get("amount"), String(attempt.amountCents));
+      return Response.json(livePayload);
+    }
+    assert.equal(request.url, `https://api.stripe.com/v1/refunds/${payload.id}`);
+    assert.equal(request.headers.get("Idempotency-Key"), null);
+    return Response.json(payload);
+  });
+  const confirmed = { id: payload.id, state: "succeeded" };
+  assert.deepEqual(await stripe.create(attempt), confirmed);
+  assert.deepEqual(await stripe.retrieve(attempt, payload.id), confirmed);
+
+  const mismatched = stripeRefund(live, async () => Response.json({ ...payload, livemode: false }));
+  await assert.rejects(() => mismatched.retrieve(attempt, payload.id), /expected live refund/);
+  const sandbox = stripeRefundSandbox(config, async () => Response.json(livePayload));
+  await assert.rejects(() => sandbox.create(attempt), /expected sandbox refund/);
+  const wrongKey = stripeRefund({ ...live, secretKey: config.secretKey }, async () => assert.fail("Sandbox request sent"));
+  await assert.rejects(() => wrongKey.create(attempt), /Invalid Stripe live refund/);
 });

@@ -19,7 +19,7 @@ export async function getAppointmentPaymentBalance(db: ReturnType<typeof tenantD
     ) payment
     WHERE b.tenant_id = ${tenantId} AND b.id = ${bookingId}
   `, activeAppointmentPayments(db, tenantId, bookingId)]);
-  return balance ? { ...balance, refundableCents: payments.some((payment) => payment.stripeSandbox) ? 0 : balance.refundableCents, payments } : null;
+  return balance ? { ...balance, refundableCents: payments.some((payment) => payment.stripeMode) ? 0 : balance.refundableCents, payments } : null;
 }
 
 /** Check completion inside the status transaction without exposing the payment ledger. */

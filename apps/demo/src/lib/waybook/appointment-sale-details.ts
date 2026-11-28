@@ -26,7 +26,7 @@ export function getAppointmentSalePayments({ db, tenantId }: SaleItemContext, bo
       CASE WHEN EXISTS (SELECT 1 FROM booking_events e
         WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
           AND e.event_type IN ('payment.payment', 'payment.refund', 'payment.refund_returned')
-          AND e.metadata->>'paymentId' = p.id::text AND e.metadata->>'source' = 'stripe_sandbox'
+          AND e.metadata->>'paymentId' = p.id::text AND e.metadata->>'source' IN ('stripe_sandbox', 'stripe_live')
           AND e.metadata->>'stripePaymentMethod' = 'mobilepay')
         THEN 'mobilepay' ELSE p.method END AS method,
       EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id

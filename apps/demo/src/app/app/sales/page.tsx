@@ -22,8 +22,9 @@ import { appointmentCheckoutAccess } from "@/lib/waybook/appointment-checkout-ac
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
-import { appointmentStripeAccount, appointmentStripeConfig, appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
-import { stripeSandboxMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
+import { appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
+import { stripeMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
+import { stripeAppointmentPaymentConfig, stripeCanStartPayment, stripePaymentAccount } from "@/lib/waybook/stripe-payment-mode";
 import { stripeAppointmentRefundDetails } from "@/lib/waybook/stripe-appointment-refunds";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
@@ -159,7 +160,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         coalesce(sum(CASE pr.kind WHEN 'refund' THEN pr.amount_cents ELSE -pr.amount_cents END) FILTER (WHERE EXISTS (
           SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
             AND e.event_type IN ('payment.refund', 'payment.refund_returned') AND e.metadata->>'paymentId' = pr.id::text
-            AND e.metadata->>'source' = 'stripe_sandbox'
+            AND e.metadata->>'source' IN ('stripe_sandbox', 'stripe_live')
         )), 0)::int AS "stripeRefundedCents",
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
         c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
@@ -261,20 +262,22 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     ORDER BY cp.created_at
   ` : [];
   const clock = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, hour: "2-digit", minute: "2-digit" });
-  const stripeConfig = appointmentStripeConfig();
+  const stripeConfig = stripeAppointmentPaymentConfig(process.env);
+  const stripeCollectionEnabled = stripeConfig ? stripeCanStartPayment(stripeConfig) : false;
   const [stripeState, stripeAccount, stripeRefund] = selectedSale && stripeConfig ? await Promise.all([
     appointmentStripeState({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }),
-    manager ? appointmentStripeAccount(tenant.id) : null,
-    manager && ["completed", "cancelled"].includes(selectedSale.status) && paymentBalance?.payments.some((payment) => payment.stripeSandbox)
-      ? stripeAppointmentRefundDetails({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId })
+    manager && stripeCollectionEnabled ? stripePaymentAccount(tenant.id, stripeConfig) : null,
+    manager && ["completed", "cancelled"].includes(selectedSale.status) && paymentBalance?.payments.some((payment) => payment.stripeMode)
+      ? stripeAppointmentRefundDetails({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }, stripeConfig)
       : null,
   ]) : [null, null, null];
   const pendingStripeMethod = stripeState?.state === "pending" ? stripeState.paymentMethod : null;
   const stripePending = Boolean(pendingStripeMethod);
+  const currentStripeMode = !stripePending || stripeState?.livemode === (stripeConfig?.livemode === true);
   const mobilePayAvailable = Boolean(stripeConfig && stripeAccount && !stripePending &&
     step === "payment" && selectedSale?.attendanceStage === "checking_out" && selectedSale.currency === "DKK" &&
     selectedSale.chargeableCents - selectedSale.paidCents >= 250 && paymentItems.length === 0 &&
-    await stripeSandboxMobilePayAvailable(stripeConfig, stripeAccount));
+    await stripeMobilePayAvailable(stripeConfig, stripeAccount));
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
   const saleListParams = dateFilterParams(new URLSearchParams(), dates);
@@ -445,9 +448,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />
                 <Link className="waybook-action waybook-action--secondary sale-detail__action" href={paymentHref}>Other payment methods</Link>
               </> : <>
-                {manager && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
+                {manager && stripePending && !currentStripeMode ? <p role="status" className="sale-detail__note">
+                  Resolve the open payment in its original Stripe environment.
+                </p> : null}
+                {manager && currentStripeMode && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
                   amountCents={outstandingCents} pendingPayment={pendingStripeMethod} mobilePayAvailable={mobilePayAvailable}
-                  verifyOnReturn={stripe === "return"} /> : null}
+                  livemode={stripeConfig?.livemode === true} verifyOnReturn={stripe === "return"} /> : null}
                 {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
                   canFinishCheckout={activeCheckout} manualSplit={manualSplit}
                   giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} /> : null}

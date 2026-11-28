@@ -60,10 +60,10 @@ export function RecordedAppointmentPayments({ bookingId, payments, onRecorded, a
 
   return <div className="recorded-appointment-payments">
     {payments.map((payment) => <div className="recorded-appointment-payments__item" key={payment.id}>
-      <div><strong>{money.format(payment.amountCents / 100)}</strong><span>{payment.stripeSandbox
-        ? payment.stripePaymentMethod === "mobilepay" ? "Stripe sandbox MobilePay" : "Stripe sandbox card"
+      <div><strong>{money.format(payment.amountCents / 100)}</strong><span>{payment.stripeMode
+        ? `Stripe ${payment.stripeMode === "sandbox" ? "sandbox " : ""}${payment.stripePaymentMethod === "mobilepay" ? "MobilePay" : "card"}`
         : paymentMethodLabels[payment.method] ?? payment.method}</span></div>
-      {payment.stripeSandbox ? null : payment.method !== "gift_card" ? <div className="recorded-appointment-payments__actions">
+      {payment.stripeMode ? null : payment.method !== "gift_card" ? <div className="recorded-appointment-payments__actions">
         {allowEdit ? <button type="button" className="waybook-action waybook-action--secondary" disabled={pending || retry} onClick={() => { setError(""); setSelected({ payment, operation: "edit" }); }}>Edit payment</button> : null}
         <button type="button" className="waybook-action waybook-action--secondary" disabled={pending || retry} onClick={() => { setError(""); setSelected({ payment, operation: "delete" }); }}>Delete payment</button>
       </div> : <span>Refunds return to the original gift card.</span>}

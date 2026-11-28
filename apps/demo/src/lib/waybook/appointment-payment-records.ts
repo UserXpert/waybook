@@ -10,7 +10,7 @@ export type RecordedAppointmentPayment = {
   amountCents: number;
   method: string;
   revision: string | null;
-  stripeSandbox?: boolean;
+  stripeMode?: "sandbox" | "live" | null;
   stripePaymentMethod?: "card" | "mobilepay" | null;
 };
 
@@ -19,8 +19,8 @@ export function hasNonGiftCardPayment(payments: RecordedAppointmentPayment[]) {
 }
 
 export function hasOnlyManualAppointmentPayments(payments: RecordedAppointmentPayment[]) {
-  return payments.every(({ method, stripeSandbox }) =>
-    !stripeSandbox && manualPaymentMethods.some((value) => value === method));
+  return payments.every(({ method, stripeMode }) =>
+    !stripeMode && manualPaymentMethods.some((value) => value === method));
 }
 
 /** Payment corrections are recorded in booking history and linked to any ledger adjustment. */
@@ -28,13 +28,13 @@ export function activeAppointmentPayments(db: Pick<ReturnType<typeof tenantDb>, 
   return db.unsafe<RecordedAppointmentPayment[]>(`
     SELECT p.id, coalesce((edit.metadata->>'amountCents')::int, p.amount_cents) AS "amountCents",
       coalesce(edit.metadata->>'method', p.method) AS method, edit.id AS revision,
-      stripe.metadata IS NOT NULL AS "stripeSandbox",
+      CASE stripe.metadata->>'source' WHEN 'stripe_live' THEN 'live' WHEN 'stripe_sandbox' THEN 'sandbox' END AS "stripeMode",
       stripe.metadata->>'stripePaymentMethod' AS "stripePaymentMethod"
     FROM payment_records p
     LEFT JOIN LATERAL (
       SELECT metadata FROM booking_events
       WHERE tenant_id = p.tenant_id AND booking_id = p.booking_id AND event_type = 'payment.payment'
-        AND metadata->>'paymentId' = p.id::text AND metadata->>'source' = 'stripe_sandbox'
+        AND metadata->>'paymentId' = p.id::text AND metadata->>'source' IN ('stripe_sandbox', 'stripe_live')
       LIMIT 1
     ) stripe ON true
     LEFT JOIN LATERAL (
