@@ -3,13 +3,22 @@ import "server-only";
 import { completeSettledAppointment } from "./appointment-checkout-completion";
 import { controlDb, tenantDb } from "./database";
 import { stripeConnectSandbox, stripeSandboxConfig, type StripeSandboxConfig } from "./stripe-connect-api";
-import { stripeCheckoutLifetimeSeconds, stripeCheckoutSandbox, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
+import { stripeCheckoutLifetimeSeconds, stripeCheckoutSandbox, stripeSandboxMobilePayAvailable, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
 import type { StripeCheckoutNotification } from "./stripe-sandbox-webhook";
 import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
 
 type TenantDatabase = ReturnType<typeof tenantDb>;
 type CheckoutContext = { db: TenantDatabase; tenantId: string; bookingId: string };
+type PaymentMethod = "card" | "mobilepay";
+type CheckoutInput = {
+  action: "open" | "check" | "cancel" | "return";
+  expectedCents: number;
+  actorId: string;
+  returnPath: string;
+  paymentMethod?: PaymentMethod;
+};
 type Attempt = SandboxCheckoutAttempt & {
+  paymentMethod: PaymentMethod;
   bookingId: string;
   actorId: string;
   returnOrigin: string;
@@ -20,7 +29,8 @@ type AttemptQuery = Pick<TenantDatabase, "unsafe">;
 const selectAttempt = `
   SELECT id, booking_id AS "bookingId", account_id AS "accountId", amount_cents AS "amountCents",
          created_by_identity_id AS "actorId", expires_at_seconds AS "expiresAtSeconds", return_path AS "returnPath",
-         return_origin AS "returnOrigin", session_id AS "sessionId", stripe_customer_id AS "stripeCustomerId", state
+         return_origin AS "returnOrigin", session_id AS "sessionId", stripe_customer_id AS "stripeCustomerId",
+         payment_method_type AS "paymentMethod", state
   FROM stripe_sandbox_checkout_attempts
 `;
 
@@ -45,7 +55,8 @@ async function currentAttempt(sql: AttemptQuery, tenantId: string, bookingId: st
 }
 
 export async function appointmentStripeState({ db, tenantId, bookingId }: CheckoutContext) {
-  return (await currentAttempt(db, tenantId, bookingId))?.state ?? null;
+  const attempt = await currentAttempt(db, tenantId, bookingId);
+  return attempt ? { state: attempt.state, paymentMethod: attempt.paymentMethod } : null;
 }
 
 async function lockAppointment(sql: AttemptQuery, tenantId: string, bookingId: string) {
@@ -60,15 +71,21 @@ async function reserveAttempt(
   { db, tenantId, bookingId }: CheckoutContext,
   config: StripeSandboxConfig,
   accountId: string | null,
-  input: { action: "open" | "check" | "cancel" | "return"; expectedCents: number; actorId: string; returnPath: string },
+  input: CheckoutInput,
+  canStart: boolean,
 ) {
   return db.begin(async (sql) => {
     const booking = await lockAppointment(sql, tenantId, bookingId);
     const existing = await currentAttempt(sql, tenantId, bookingId);
+    if (existing && input.paymentMethod && existing.paymentMethod !== input.paymentMethod) {
+      throw new Error("Resolve the open Stripe payment before choosing a different payment method.");
+    }
     if (existing || input.action !== "open") return existing;
     if (!accountId || booking.status !== "arrived" || booking.stage !== "checking_out") {
       throw new Error("Open appointment checkout with a connected Stripe sandbox account first.");
     }
+    if (!canStart) throw new Error("The Stripe payment changed. Review checkout and try again.");
+    const paymentMethod = input.paymentMethod ?? "card";
     const [cart] = await sql.unsafe<{ total: number; currency: string; alreadyRecorded: boolean; stripeCustomerId: string | null }[]>(`
       SELECT cart.chargeable_cents::int AS total, sale.currency,
              EXISTS (SELECT 1 FROM payment_records WHERE tenant_id = $1 AND booking_id = $2) AS "alreadyRecorded",
@@ -79,17 +96,19 @@ async function reserveAttempt(
       LEFT JOIN stripe_sandbox_client_cards saved
         ON saved.tenant_id = booking.tenant_id AND saved.customer_id = booking.customer_id
         AND saved.account_id = $3 AND saved.consented_at IS NOT NULL AND saved.card_brand IS NOT NULL
-    `, [tenantId, bookingId, accountId]);
+        AND $4::text = 'card'
+    `, [tenantId, bookingId, accountId, paymentMethod]);
     if (!cart || cart.currency !== "DKK" || cart.alreadyRecorded || cart.total <= 0 ||
         cart.total > 10_000_000 || cart.total !== input.expectedCents) {
       throw new Error("Review the current checkout total before opening a Stripe sandbox payment.");
     }
     await sql.unsafe(`
       INSERT INTO stripe_sandbox_checkout_attempts
-        (tenant_id, booking_id, account_id, amount_cents, return_path, return_origin, created_by_identity_id, expires_at_seconds, stripe_customer_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + $8::int, $9)
+        (tenant_id, booking_id, account_id, amount_cents, return_path, return_origin, created_by_identity_id,
+         expires_at_seconds, stripe_customer_id, payment_method_type)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, floor(extract(epoch FROM now()))::int + $8::int, $9, $10)
     `, [tenantId, bookingId, accountId, cart.total, input.returnPath, config.origin, input.actorId,
-      stripeCheckoutLifetimeSeconds, cart.stripeCustomerId]);
+      stripeCheckoutLifetimeSeconds, cart.stripeCustomerId, paymentMethod]);
     return currentAttempt(sql, tenantId, bookingId);
   });
 }
@@ -126,7 +145,8 @@ async function reconcileAttempt(
       INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id)
       VALUES ($1, $2, $3, 'payment', $4, 'card', $5)
     `, [stored.id, tenantId, bookingId, stored.amountCents, stored.actorId]);
-    const metadata = JSON.stringify({ paymentId: stored.id, amountCents: stored.amountCents, method: "card", source: "stripe_sandbox" });
+    const metadata = JSON.stringify({ paymentId: stored.id, amountCents: stored.amountCents,
+      method: "card", source: "stripe_sandbox", stripePaymentMethod: stored.paymentMethod });
     await sql.unsafe(`
       INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
       VALUES ($1, $2, $3, 'payment.payment', $4::text::jsonb)
@@ -148,15 +168,23 @@ async function reconcileAttempt(
 export async function runAppointmentStripeCheckout(
   context: CheckoutContext,
   config: StripeSandboxConfig,
-  input: Parameters<typeof reserveAttempt>[3],
+  input: CheckoutInput,
 ) {
   const accountId = await appointmentStripeAccount(context.tenantId);
-  if (accountId && input.action === "open" && !await currentAttempt(context.db, context.tenantId, context.bookingId)) {
+  const canStart = Boolean(accountId && input.action === "open" &&
+    !await currentAttempt(context.db, context.tenantId, context.bookingId));
+  if (canStart && accountId) {
+    if (input.paymentMethod === "mobilepay" && input.expectedCents < 250) {
+      throw new Error("MobilePay payments must be at least DKK 2.50.");
+    }
     if (await stripeConnectSandbox(config).merchantStatus(accountId) !== "ready") {
-      throw new Error("Finish Stripe sandbox setup in Settings before taking a card payment.");
+      throw new Error("Finish Stripe sandbox setup in Settings before taking a payment.");
+    }
+    if (input.paymentMethod === "mobilepay" && !await stripeSandboxMobilePayAvailable(config, accountId)) {
+      throw new Error("MobilePay is unavailable for this Stripe sandbox account.");
     }
   }
-  const attempt = await reserveAttempt(context, config, accountId, input);
+  const attempt = await reserveAttempt(context, config, accountId, input, canStart);
   if (!attempt) return { state: "expired" as const };
   if (attempt.state === "settled") return { state: "paid" as const };
   if (attempt.returnOrigin !== config.origin || attempt.accountId !== accountId) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stripeCheckoutSandbox } from "./stripe-checkout-api";
+import { stripeCheckoutSandbox, stripeSandboxMobilePayAvailable } from "./stripe-checkout-api";
 
 const config = { secretKey: "sk_test_fixture", origin: "https://waybook.example" };
 const attempt = {
@@ -219,4 +219,61 @@ test("saved-card checkout binds the customer on create and on reconciliation", a
   assert.equal((await stripe.create(savedAttempt)).state, "open");
   await assert.rejects(stripe.retrieve(savedAttempt, sessionId), /expected sandbox checkout session/);
   assert.equal(requests.length, 2);
+});
+
+test("MobilePay checkout reserves only MobilePay and skips the saved card customer", async () => {
+  const paymentAttempt = { ...attempt, paymentMethod: "mobilepay" as const, stripeCustomerId: "cus_saved" };
+  const mobilePayOpen = { ...open, payment_method_types: ["mobilepay"], customer: null };
+  const stripe = stripeCheckoutSandbox(config, async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    if (request.method === "POST") {
+      const body = new URLSearchParams(await request.text());
+      assert.equal(body.get("allowed_payment_method_types[0]"), "mobilepay");
+      assert.equal(body.has("allowed_payment_method_types[1]"), false);
+      assert.equal(body.has("customer"), false);
+      assert.equal(request.headers.get("Idempotency-Key"), attempt.id);
+      return Response.json(mobilePayOpen);
+    }
+    return Response.json({ ...mobilePayOpen, status: "complete", payment_status: "paid", payment_intent: "pi_mobilepay" });
+  });
+  assert.deepEqual(await stripe.create(paymentAttempt), { id: sessionId, state: "open", url: hostedUrl });
+  assert.deepEqual(await stripe.retrieve(paymentAttempt, sessionId), { id: sessionId, state: "paid", paymentIntentId: "pi_mobilepay" });
+  await assert.rejects(() => stripe.retrieve(attempt, sessionId), /expected sandbox checkout session/);
+  for (const methods of [["card"], ["mobilepay", "card"], ["mobilepay", "mobilepay"]]) {
+    const unexpected = stripeCheckoutSandbox(config, async () => Response.json({ ...mobilePayOpen, payment_method_types: methods }));
+    await assert.rejects(() => unexpected.retrieve(paymentAttempt, sessionId), /expected sandbox checkout session/);
+  }
+});
+
+test("MobilePay availability requires the connected merchant's active default sandbox child", async () => {
+  const child = {
+    object: "payment_method_configuration",
+    active: true,
+    is_default: true,
+    livemode: false,
+    parent: "pmc_platformDefault",
+    mobilepay: { available: true },
+  };
+  const page = { object: "list", has_more: false, data: [child] };
+  const available = (payload: unknown) => stripeSandboxMobilePayAvailable(config, attempt.accountId, async (input, init) => {
+    const request = new Request(input, init);
+    assert.equal(request.url, "https://api.stripe.com/v1/payment_method_configurations");
+    assert.equal(request.method, "GET");
+    assert.equal(request.headers.get("Stripe-Account"), attempt.accountId);
+    return Response.json(payload);
+  });
+  assert.equal(await available(page), true);
+  for (const fields of [
+    { active: false }, { is_default: false }, { livemode: true }, { parent: null },
+    { object: "payment_method" }, { mobilepay: null }, { mobilepay: { available: false } },
+    { mobilepay: { available: "true" } },
+  ]) {
+    assert.equal(await available({ ...page, data: [{ ...child, ...fields }] }), false);
+  }
+  assert.equal(await available({ ...page, has_more: true }), false);
+  assert.equal(await available({ ...page, data: [child, child] }), false);
+  assert.equal(await available({ ...page, data: [] }), false);
+  assert.equal(await stripeSandboxMobilePayAvailable(config, attempt.accountId, async () => new Response(null, { status: 503 })), false);
+  assert.equal(await stripeSandboxMobilePayAvailable(config, attempt.accountId, async () => new Response("not JSON")), false);
 });

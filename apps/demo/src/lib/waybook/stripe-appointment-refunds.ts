@@ -16,7 +16,12 @@ type StoredRefund = SandboxRefundAttempt & {
   state: SandboxRefund["state"];
   retryable: boolean;
 };
-type PaidCheckout = { id: string; accountId: string; paymentIntentId: string };
+type PaidCheckout = {
+  id: string;
+  accountId: string;
+  paymentIntentId: string;
+  paymentMethod: "card" | "mobilepay";
+};
 const refundColumns = `r.id, r.amount_cents AS "amountCents", r.created_by_identity_id AS "actorId",
   r.refund_id AS "refundId", r.state, r.created_at > now() - interval '20 hours' AS retryable`;
 
@@ -28,7 +33,8 @@ async function lockBooking(sql: Query, { tenantId, bookingId }: Context) {
 
 async function paidCheckout(sql: Query, { tenantId, bookingId }: Context) {
   const [checkout] = await sql.unsafe<PaidCheckout[]>(`
-    SELECT id, account_id AS "accountId", payment_intent_id AS "paymentIntentId"
+    SELECT id, account_id AS "accountId", payment_intent_id AS "paymentIntentId",
+           payment_method_type AS "paymentMethod"
     FROM stripe_sandbox_checkout_attempts
     WHERE tenant_id = $1 AND booking_id = $2 AND state = 'settled'
   `, [tenantId, bookingId]);
@@ -68,7 +74,7 @@ export async function stripeAppointmentRefundDetails(context: Context) {
   const failure = latest?.returned ? "Stripe returned the last refund after it was recorded." :
     latest?.state === "failed" ? "Stripe declined the last refund." :
     latest?.state === "canceled" ? "Stripe cancelled the last refund." : null;
-  return { remainingCents, pendingCents, failure };
+  return { remainingCents, pendingCents, failure, paymentMethod: paid.paymentMethod };
 }
 
 type RefundInput = { action: "start" | "check"; id: string; amountCents: number; expectedCents: number; actorId: string };
@@ -106,7 +112,7 @@ async function reserveRefund(context: Context, accountId: string, input: RefundI
 async function postRefundEntry(
   sql: Query,
   context: Context,
-  originalPaymentId: string,
+  payment: PaidCheckout,
   stored: StoredRefund,
   returnPaymentId?: string,
 ) {
@@ -119,8 +125,9 @@ async function postRefundEntry(
     INSERT INTO payment_records (id, tenant_id, booking_id, kind, amount_cents, method, recorded_by_identity_id)
     VALUES ($1, $2, $3, $4, $5, 'card', $6)
   `, [id, tenantId, bookingId, kind, stored.amountCents, stored.actorId]);
-  const metadata = JSON.stringify({ paymentId: id, originalPaymentId, amountCents: stored.amountCents,
-    method: "card", source: "stripe_sandbox", recordedVia: stored.actorId ? "waybook" : "stripe",
+  const metadata = JSON.stringify({ paymentId: id, originalPaymentId: payment.id, amountCents: stored.amountCents,
+    method: "card", source: "stripe_sandbox", stripePaymentMethod: payment.paymentMethod,
+    recordedVia: stored.actorId ? "waybook" : "stripe",
     ...(returnPaymentId ? { originalRefundId: stored.id } : {}) });
   await sql.unsafe(`
     INSERT INTO booking_events (tenant_id, booking_id, actor_identity_id, event_type, metadata)
@@ -152,13 +159,13 @@ async function recordRefundOutcome(sql: Query, context: Context, payment: PaidCh
       UPDATE stripe_sandbox_refund_attempts
       SET state = 'failed', return_payment_id = $2, failure_balance_transaction_id = $3 WHERE id = $1
     `, [stored.id, returnPaymentId, refund.failureBalanceTransactionId]);
-    await postRefundEntry(sql, context, payment.id, stored, returnPaymentId);
+    await postRefundEntry(sql, context, payment, stored, returnPaymentId);
     return "failed";
   }
   if (stored.state !== "pending") return stored.state;
   await sql.unsafe("UPDATE stripe_sandbox_refund_attempts SET refund_id = $2, state = $3 WHERE id = $1",
     [stored.id, refund.id, refund.state]);
-  if (refund.state === "succeeded") await postRefundEntry(sql, context, payment.id, stored);
+  if (refund.state === "succeeded") await postRefundEntry(sql, context, payment, stored);
   return refund.state;
 }
 

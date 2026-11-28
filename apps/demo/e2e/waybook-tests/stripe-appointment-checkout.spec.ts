@@ -30,7 +30,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
       const [customer] = await tx`INSERT INTO customers (tenant_id, name, email)
         VALUES (${tenantId}, ${name}, ${`stripe-client-${marker}@example.test`}) RETURNING id`;
       const bookings: string[] = [];
-      for (const [hoursAgo, amount] of [[25, 6501], [27, 6502], [29, 6503], [31, 6504]]) {
+      for (const [hoursAgo, amount] of [[25, 6501], [27, 6502], [29, 6503], [31, 6504], [33, 6505]]) {
         const [block] = await tx`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
           VALUES (${tenantId}, ${member.id}, ${location.id}, now() - ${hoursAgo} * interval '1 hour',
             now() - ${hoursAgo - 1} * interval '1 hour', 'confirmed') RETURNING id, starts_at, ends_at`;
@@ -66,7 +66,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
           AND action = 'booking.completed'`).toEqual([attempt]);
     };
 
-    for (const [index, id] of appointments.entries()) {
+    for (const [index, id] of appointments.slice(0, -1).entries()) {
       const paymentPath = `/nordic/app/sales?booking=${id}&step=payment`;
       await page.goto(paymentPath);
       await sale.getByRole("button", { name: "Pay by card in Stripe sandbox" }).click();
@@ -267,6 +267,53 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
         expect(await receipts(id)).toEqual([{ id: expect.any(String), amount_cents: 6502, method: "cash" }]);
       }
     }
+
+    const mobilePayBooking = appointments.at(-1)!;
+    const paymentPath = `/nordic/app/sales?booking=${mobilePayBooking}&step=payment`;
+    await page.goto(paymentPath);
+    await sale.getByRole("button", { name: "Pay with MobilePay in Stripe sandbox", exact: true }).click();
+    await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_/);
+    const [mobilePayAttempt] = await db`SELECT id, account_id, amount_cents, payment_method_type, session_id, state
+      FROM stripe_sandbox_checkout_attempts WHERE tenant_id = ${tenantId} AND booking_id = ${mobilePayBooking}`;
+    const sessionId = `cs_test_${mobilePayAttempt.id.replaceAll("-", "")}`;
+    expect(mobilePayAttempt).toMatchObject({
+      account_id: "acct_checkoutFixture", amount_cents: 6505, payment_method_type: "mobilepay", session_id: sessionId, state: "pending",
+    });
+    await expect(page).toHaveURL(`https://checkout.stripe.com/c/pay/${sessionId}`);
+    expect(await receipts(mobilePayBooking)).toEqual([]);
+
+    await page.goto(paymentPath + "&stripe=return");
+    await expectCompleted(mobilePayBooking);
+    await expect(sale.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
+    const mobilePayReceipt = { id: mobilePayAttempt.id, amount_cents: 6505, method: "card" };
+    expect(await receipts(mobilePayBooking)).toEqual([mobilePayReceipt]);
+
+    const endpoint = new URL("/api/webhooks/stripe-sandbox", page.url()).href;
+    const event = {
+      object: "event", id: "evt_waybookMobilePay", livemode: false, account: mobilePayAttempt.account_id,
+      type: "checkout.session.completed",
+      data: { object: { object: "checkout.session", id: sessionId, livemode: false, client_reference_id: mobilePayAttempt.id } },
+    };
+    expect(await deliverStripe(page.request, endpoint, event)).toBe(204);
+    await expectCompleted(mobilePayBooking);
+    expect(await receipts(mobilePayBooking)).toEqual([mobilePayReceipt]);
+
+    await sale.getByLabel("Refund amount (DKK)").fill("5.05");
+    await sale.getByRole("button", { name: "Refund in Stripe sandbox", exact: true }).click();
+    await expect(sale.getByLabel("Refund amount (DKK)")).toHaveValue("60.00");
+    expect(await receipts(mobilePayBooking)).toEqual([
+      mobilePayReceipt, { id: expect.any(String), amount_cents: 505, method: "card" },
+    ]);
+    expect(await db`SELECT event_type AS event, metadata->>'stripePaymentMethod' AS method FROM booking_events
+      WHERE tenant_id = ${tenantId} AND booking_id = ${mobilePayBooking}
+      AND event_type IN ('payment.payment', 'payment.refund') ORDER BY event_type`).toEqual([
+      { event: "payment.payment", method: "mobilepay" }, { event: "payment.refund", method: "mobilepay" },
+    ]);
+    await sale.getByRole("link", { name: "View receipt", exact: true }).click();
+    const paymentRows = page.getByRole("table", { name: "Payments and refunds" });
+    await expect(paymentRows.getByRole("row", { name: /Payment · MobilePay/ })).toContainText("65,05");
+    await expect(paymentRows.getByRole("row", { name: /Refund · MobilePay/ })).toContainText("5,05");
+    await expect(paymentRows.getByRole("row", { name: /Net payments/ })).toContainText("60,00");
   } finally {
     await control`DELETE FROM waybook_stripe_sandbox_connections WHERE tenant_id = ${tenantId} AND account_id = 'acct_checkoutFixture'`;
     await Promise.all([control.end(), db.end()]);

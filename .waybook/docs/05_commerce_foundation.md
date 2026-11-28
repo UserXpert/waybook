@@ -192,6 +192,25 @@ Hosted sandbox verification, including the reuse option for an eligible
 existing Stripe business, remains part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
+### MobilePay for appointment checkout
+
+Tenant migration 0073 adds an explicit tender to sandbox Checkout attempts.
+When Stripe reports MobilePay available for the connected merchant, a
+manager can choose **Pay with MobilePay in Stripe sandbox** on a DKK
+appointment balance of at least DKK 2.50. Waybook reserves the same
+balance while Stripe hosts the payment. An open attempt can be resumed
+or cancelled before choosing another tender.
+
+Stripe confirms the exact account, session, amount, currency and tender
+before Waybook records the payment. Refunds follow the original Stripe
+transaction. Appointment payments and receipts identify MobilePay, and
+the underlying ledger continues to use the card settlement rail. The
+existing card-on-file setup remains available for card payments.
+
+Resolve open MobilePay sessions and refunds in Stripe before rolling
+back to a card-only build. That build cannot reconcile a MobilePay
+checkout session.
+
 ## Live Stripe onboarding
 
 When the live Stripe Connect platform is configured, every workspace owner
@@ -205,7 +224,7 @@ process and configure `WAYBOOK_STRIPE_LIVE_SECRET_KEY` as a Production secret,
 `WAYBOOK_STRIPE_LIVE_COUNTRIES` as the comma-separated ISO country codes enabled
 for the live platform. Confirm the Stripe platform configuration for each
 enabled business country. The live and sandbox connections use separate
-Control tables. Live card collection, refunds, and saved cards require a
+Control tables. Live collection, refunds, and saved cards require a
 separate release. See [#30](https://github.com/UserXpert/waybook/issues/30).
 
 ## Planned: two distinct Waybook money products (2026-11-08)

@@ -23,6 +23,7 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { appointmentStripeAccount, appointmentStripeConfig, appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
+import { stripeSandboxMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
 import { stripeAppointmentRefundDetails } from "@/lib/waybook/stripe-appointment-refunds";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
@@ -260,14 +261,20 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     ORDER BY cp.created_at
   ` : [];
   const clock = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, hour: "2-digit", minute: "2-digit" });
-  const [stripeState, stripeAccount, stripeRefund] = selectedSale && appointmentStripeConfig() ? await Promise.all([
+  const stripeConfig = appointmentStripeConfig();
+  const [stripeState, stripeAccount, stripeRefund] = selectedSale && stripeConfig ? await Promise.all([
     appointmentStripeState({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }),
     manager ? appointmentStripeAccount(tenant.id) : null,
     manager && ["completed", "cancelled"].includes(selectedSale.status) && paymentBalance?.payments.some((payment) => payment.stripeSandbox)
       ? stripeAppointmentRefundDetails({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId })
       : null,
   ]) : [null, null, null];
-  const stripePending = stripeState === "pending";
+  const pendingStripeMethod = stripeState?.state === "pending" ? stripeState.paymentMethod : null;
+  const stripePending = Boolean(pendingStripeMethod);
+  const mobilePayAvailable = Boolean(stripeConfig && stripeAccount && !stripePending &&
+    step === "payment" && selectedSale?.attendanceStage === "checking_out" && selectedSale.currency === "DKK" &&
+    selectedSale.chargeableCents - selectedSale.paidCents >= 250 && paymentItems.length === 0 &&
+    await stripeSandboxMobilePayAvailable(stripeConfig, stripeAccount));
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
   const saleListParams = dateFilterParams(new URLSearchParams(), dates);
@@ -417,7 +424,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               </div> : null}
             </dl>
               {!manager && stripePending ? <p className="sale-detail__note" role="status">
-                A card payment is in progress. Ask a manager to review it before taking another payment.
+                {pendingStripeMethod === "mobilepay" ? "A MobilePay payment is in progress." : "A card payment is in progress."} Ask a manager to review it before taking another payment.
               </p> : null}
               {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={paymentHref}>Go to payments</Link> : null}
               {selectedSale.attendanceStage === "checking_out" && !stripePending && (balance === 0 || (manager && selectedSale.stripeRefundedCents > 0)) ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
@@ -439,7 +446,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 <Link className="waybook-action waybook-action--secondary sale-detail__action" href={paymentHref}>Other payment methods</Link>
               </> : <>
                 {manager && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
-                  amountCents={outstandingCents} pendingPayment={stripePending} verifyOnReturn={stripe === "return"} /> : null}
+                  amountCents={outstandingCents} pendingPayment={pendingStripeMethod} mobilePayAvailable={mobilePayAvailable}
+                  verifyOnReturn={stripe === "return"} /> : null}
                 {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
                   canFinishCheckout={activeCheckout} manualSplit={manualSplit}
                   giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} /> : null}

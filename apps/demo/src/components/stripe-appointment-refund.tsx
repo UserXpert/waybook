@@ -3,12 +3,13 @@
 import { useActionState } from "react";
 import { updateStripeAppointmentRefund } from "@/app/app/calendars/actions";
 
-export function StripeAppointmentRefund({ bookingId, requestId, remainingCents, pendingCents, failure }: {
+export function StripeAppointmentRefund({ bookingId, requestId, remainingCents, pendingCents, failure, paymentMethod }: {
   bookingId: string;
   requestId: string;
   remainingCents: number;
   pendingCents: number | null;
   failure: string | null;
+  paymentMethod: "card" | "mobilepay";
 }) {
   const [result, submit, submitting] = useActionState(updateStripeAppointmentRefund, { error: null, success: null });
   const formatter = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" });
@@ -24,7 +25,9 @@ export function StripeAppointmentRefund({ bookingId, requestId, remainingCents, 
         {submitting ? "Checking Stripe…" : "Check refund status"}
       </button>
     </> : remainingCents > 0 ? <>
-      <p className="sale-detail__note">Refunds return to the original test card.</p>
+      <p className="sale-detail__note">{paymentMethod === "mobilepay"
+        ? "Stripe refunds the card used for the original MobilePay payment."
+        : "Refunds return to the original test card."}</p>
       <label>Refund amount (DKK)<input key={remainingCents} type="number" name="amountDkk" min="0.01"
         max={(remainingCents / 100).toFixed(2)} step="0.01" defaultValue={(remainingCents / 100).toFixed(2)} required /></label>
       <button className="waybook-action waybook-action--secondary" name="action" value="start" disabled={submitting} type="submit">
