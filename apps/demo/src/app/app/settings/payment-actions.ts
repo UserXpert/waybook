@@ -1,7 +1,6 @@
 "use server";
 
 import { notFound, redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -35,12 +34,6 @@ export async function startStripeSandboxOnboarding() {
     redirect(`${settingsPath}&${feedbackKey}=unavailable`);
   }
   redirect(destination);
-}
-
-export async function checkStripeSandboxStatus() {
-  const { settingsPath, feedbackKey } = await sandboxSettingsContext();
-  revalidatePath("/app/settings");
-  redirect(`${settingsPath}&${feedbackKey}=checked`);
 }
 
 export async function startStripeSandboxRehearsal(formData: FormData) {
@@ -149,12 +142,4 @@ export async function startStripeLiveOnboarding(formData: FormData) {
     redirect(`${settingsPath}&stripe=unavailable`);
   }
   redirect(destination);
-}
-
-export async function checkStripeLiveStatus() {
-  const { tenant, membership } = await requireTenantWorkspace();
-  if (membership.role !== "owner" || !stripeLiveConfig(process.env)) notFound();
-  const slug = await currentTenantRouteSlug(tenant.slug);
-  revalidatePath("/app/settings");
-  redirect(tenantPath(slug, "/app/settings?tab=payments&stripe=checked"));
 }
