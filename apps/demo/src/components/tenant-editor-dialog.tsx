@@ -25,7 +25,7 @@ type DialogDismissal = { closeHref: string; onDismiss?: never } | { onDismiss: (
 
 export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, centered = false, showScrim = true, cycleFocus = false, dismissSuccessToastOnClose = false, children }: DialogDismissal & {
   title: string;
-  initialField?: "name" | "title" | "code" | "scopeType";
+  initialField?: "name" | "title" | "code" | "scopeType" | "appointmentClientSearch";
   centered?: boolean;
   showScrim?: boolean;
   cycleFocus?: boolean;
@@ -38,9 +38,9 @@ export function TenantEditorDialog({ title, closeHref, onDismiss, initialField, 
     const editor = dialog.current;
     if (!editor) return;
     editor.showModal();
-    const focusSelector = initialField ? `form [name="${initialField}"]`
-      : cycleFocus ? ".tenant-drawer-close" : 'form input:not([type="hidden"])';
-    const initialControl = editor.querySelector<HTMLElement>(focusSelector);
+    const field = initialField ? editor.querySelector<HTMLElement>(`form [name="${initialField}"]`) : null;
+    const fallback = cycleFocus ? ".tenant-drawer-close" : 'form input:not([type="hidden"])';
+    const initialControl = field ?? editor.querySelector<HTMLElement>(fallback);
     initialControl?.focus();
     return () => editor.close();
   }, [initialField, cycleFocus]);

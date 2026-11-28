@@ -1,6 +1,8 @@
 "use server";
 
-import { activeAppointmentPayments, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
+import { getCalendarDisplay } from "@/lib/waybook/calendar-display-preferences";
+import { calendarBookingInterval, maxCalendarMoveTargets } from "@/lib/waybook/calendar-slot-time";
+import { activeAppointmentPayments, hasNonGiftCardPayment, manualPaymentMethods } from "@/lib/waybook/appointment-payment-records";
 import { canCompleteNoShow, getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { revalidatePath } from "next/cache";
 import type { TransactionSql } from "postgres";
@@ -16,12 +18,14 @@ import { tenantDb } from "@/lib/waybook/database";
 import { arrivalAlertsEnabled, unnotifiedArrivalProviders } from "@/lib/waybook/provider-arrival-alerts";
 import { requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { requireFeature } from "@/lib/waybook/features";
+import { appointmentCheckoutAccess } from "@/lib/waybook/appointment-checkout-access";
 import { canManageAppointment, canUpdateAppointmentAttendance, staffPermissionContext, type StaffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { promptEmailDelivery } from "@/lib/waybook/email-delivery-trigger";
 import {
   activeAppointmentStage,
   type AppointmentAttendanceStage,
   assertMovableAppointmentStatus,
+  canBeginAppointmentAttendance,
   canChangeAttendanceNow,
   isMovableAppointmentStatus,
 } from "@/lib/waybook/appointment-lifecycle";
@@ -118,20 +122,24 @@ export async function getCalendarAppointment(bookingId: string) {
   const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
   if (!canViewTeam && !permissions.teamMemberId) return null;
   const db = tenantDb(tenant);
-  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; attendanceStage: AppointmentAttendanceStage | null; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean }[]>`
+  const [booking] = await db<{ id: string; bookingNumber: string; serviceId: string; locationId: string; locationName: string | null; customerId: string; customerCreatedAt: Date; createdAt: Date; updatedAt: Date; source: "public" | "tenant"; resourceId: string | null; startsAt: Date; endsAt: Date; status: string; attendanceStage: AppointmentAttendanceStage | null; customerName: string; customerEmail: string; customerPhone: string | null; serviceTitle: string; teamMemberName: string | null; teamMemberId: string | null; revision: string; priceCents: number; hasSettlement: boolean; canCheckout: boolean }[]>`
     SELECT b.id,b.booking_number AS "bookingNumber",b.service_id AS "serviceId",b.location_id AS "locationId",
+      l.name AS "locationName", c.id AS "customerId", c.created_at AS "customerCreatedAt",
+      b.created_at AS "createdAt", b.updated_at AS "updatedAt", b.source,
       bra.resource_id AS "resourceId",b.starts_at AS "startsAt",b.ends_at AS "endsAt",b.status,b.attendance_stage AS "attendanceStage",
       c.name AS "customerName",c.email AS "customerEmail",c.phone AS "customerPhone",s.title AS "serviceTitle",tm.name AS "teamMemberName",tm.id AS "teamMemberId",
-      b.updated_at::text AS revision, b.booked_price_cents AS "priceCents", ${appointmentHasSettlement(db)} AS "hasSettlement"
+      b.updated_at::text AS revision, b.booked_price_cents AS "priceCents", ${appointmentHasSettlement(db)} AS "hasSettlement",
+      (${appointmentCheckoutAccess(db, permissions)}) AS "canCheckout"
     FROM bookings b JOIN customers c ON c.id=b.customer_id AND c.tenant_id=b.tenant_id
     JOIN services s ON s.id=b.service_id AND s.tenant_id=b.tenant_id
+    LEFT JOIN locations l ON l.id=b.location_id AND l.tenant_id=b.tenant_id
     LEFT JOIN team_members tm ON tm.id=b.team_member_id AND tm.tenant_id=b.tenant_id
     LEFT JOIN booking_resource_assignments bra ON bra.booking_id=b.id AND bra.tenant_id=b.tenant_id AND bra.released_at IS NULL
     WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND ${calendarBookingVisibility(db, canViewTeam, permissions.teamMemberId)} LIMIT 1
   `;
   if (!booking) return null;
-  const { teamMemberId, revision, priceCents, hasSettlement, ...detail } = booking;
-  const [resources, paymentBalance, additionalServices] = await Promise.all([
+  const { teamMemberId, revision, priceCents, hasSettlement, customerId, customerCreatedAt, createdAt, updatedAt, source, ...detail } = booking;
+  const [resources, paymentBalance, additionalServices, bookingActors] = await Promise.all([
     permissions.isManager ? db<{ id: string; name: string; isMutuallyExclusive: boolean }[]>`
     SELECT r.id,r.name,r.is_mutually_exclusive AS "isMutuallyExclusive" FROM resources r
     JOIN resource_locations rl ON rl.tenant_id=r.tenant_id AND rl.resource_id=r.id AND rl.location_id=${booking.locationId}
@@ -140,6 +148,18 @@ export async function getCalendarAppointment(bookingId: string) {
   ` : [],
     permissions.isManager ? getAppointmentPaymentBalance(db, tenant.id, bookingId) : null,
     getAdditionalAppointmentServices(db, tenant.id, bookingId),
+    permissions.isManager ? db<{ event: "created" | "updated"; name: string }[]>`
+      SELECT DISTINCT ON (activity.event) activity.event, member.name
+      FROM booking_events e
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN e.event_type = 'booking.created_by_tenant' THEN 'created' ELSE 'updated' END AS event
+      ) activity
+      JOIN team_members member ON member.tenant_id=e.tenant_id AND member.identity_id=e.actor_identity_id
+      WHERE e.tenant_id=${tenant.id} AND e.booking_id=${bookingId}
+        AND (e.event_type = 'booking.created_by_tenant'
+          OR (e.event_type LIKE 'booking.%' AND e.created_at::text = ${revision}))
+      ORDER BY activity.event, e.created_at DESC, e.id, member.id
+    ` : [],
   ]);
   const providers = [teamMemberId, ...additionalServices.map((item) => item.teamMemberId)];
   const ownSegment = !canViewTeam && teamMemberId !== permissions.teamMemberId
@@ -148,7 +168,9 @@ export async function getCalendarAppointment(bookingId: string) {
   if (!canViewTeam && teamMemberId !== permissions.teamMemberId && !ownSegment) return null;
   const visibleAdditionalServices = additionalServices
     .filter((item) => item.id !== ownSegment?.id && (canViewTeam || item.teamMemberId === permissions.teamMemberId))
-    .map(({ id, provider, title, startsAt, endsAt }) => ({ id, provider, title, startsAt, endsAt }));
+    .map(({ id, provider, title, startsAt, endsAt, priceCents }) => ({
+      id, provider, title, startsAt, endsAt, priceCents: permissions.isManager ? priceCents : null,
+    }));
   const canManageSchedule = canManageAppointment(permissions, ...providers) &&
     (canViewTeam || providers.length === 1 || providers.every((id) => id === permissions.teamMemberId));
   const canUpdateStatus = canUpdateAppointmentAttendance(permissions, providers);
@@ -159,14 +181,18 @@ export async function getCalendarAppointment(bookingId: string) {
   const days = canManageSchedule
     ? Array.from({ length: 7 }, (_, index) => { const value = new Date(`${today}T12:00:00Z`); value.setUTCDate(value.getUTCDate()+index); return value.toISOString().slice(0,10); })
     : [];
-  const slots = canManageSchedule && isMovableAppointmentStatus(booking.status)
-    ? (await getRescheduleBookingAvailability({ bookingId, startDate: today })).slots : [];
   return {
     ...detail,
     // Status-only staff need the appointment identity and current state, but
     // never contact or resource data used by the manager editing surface.
     customerEmail: permissions.isManager ? booking.customerEmail : "",
     customerPhone: permissions.isManager ? booking.customerPhone : null,
+    clientRecord: permissions.isManager ? { id: customerId, createdAt: customerCreatedAt.toISOString() } : null,
+    activity: permissions.isManager ? {
+      source, createdAt: createdAt.toISOString(), updatedAt: updatedAt.toISOString(),
+      bookedBy: bookingActors.find((event) => event.event === "created")?.name,
+      updatedBy: bookingActors.find((event) => event.event === "updated")?.name,
+    } : null,
     resourceId: permissions.isManager ? booking.resourceId : null,
     serviceId: permissions.isManager ? booking.serviceId : "",
     locationId: permissions.isManager ? booking.locationId : "",
@@ -176,13 +202,14 @@ export async function getCalendarAppointment(bookingId: string) {
     endsAt: ownSegment?.endsAt ?? booking.endsAt.toISOString(),
     canManage: permissions.isManager,
     canManageSchedule,
+    canCheckIn: canBeginAppointmentAttendance(booking.startsAt, tenant.timezone),
     canChangeAttendanceNow: canChangeAttendanceNow(booking),
     canUpdateStatus,
     canNotifyProviders,
     resources,
     paymentBalance,
     days,
-    slots,
+    primaryServicePriceCents: permissions.isManager ? priceCents : null,
     additionalServices: visibleAdditionalServices,
     serviceEditor: permissions.isManager && !hasSettlement && isMovableAppointmentStatus(booking.status)
       ? { revision, primary: { id: null, serviceId: booking.serviceId, title: booking.serviceTitle, teamMemberId,
@@ -218,7 +245,7 @@ export async function getManualBookingAvailability(input: {
     input.serviceId,
     new Date(dayStart.getTime() - 86_400_000),
     new Date(dayStart.getTime() + 172_800_000),
-    { locationId: input.locationId, slotInterval: 30 },
+    { locationId: input.locationId, slotInterval: calendarBookingInterval, alignToClock: true },
   );
   const visibleCandidates =
     permissions.isManager || permissions.canManageTeamAppointments
@@ -242,6 +269,45 @@ export async function getManualBookingAvailability(input: {
   };
 }
 
+/** Suggest only the latest visible completed appointment's primary service. */
+export async function getLatestAppointmentService(input: {
+  customerId: string; locationId: string; teamMemberId: string; date: string; time: string;
+}) {
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  if (![input.customerId, input.locationId, input.teamMemberId].every((value) => uuid.test(value)) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) return null;
+  const { tenant, permissions } = await calendarPermissionContext();
+  if (!(permissions.isManager || permissions.canViewClients || permissions.canManageClients) ||
+      !canManageAppointment(permissions, input.teamMemberId) ||
+      !(await getCalendarDisplay(tenant.id)).autofillLatestService) return null;
+
+  const startsAt = fromZonedTime(`${input.date}T${input.time}`, tenant.timezone);
+  if (!Number.isFinite(+startsAt) || +startsAt <= Date.now() ||
+      localDateTimeKey(startsAt, tenant.timezone) !== `${input.date}T${input.time}`) return null;
+
+  const db = tenantDb(tenant);
+  const [service] = await db<{ id: string; title: string; durationMinutes: number; priceCents: number }[]>`
+    SELECT s.id, s.title, s.duration_minutes AS "durationMinutes", s.price_cents AS "priceCents"
+    FROM (
+      SELECT service_id FROM bookings
+      WHERE tenant_id = ${tenant.id} AND customer_id = ${input.customerId} AND status = 'completed' AND starts_at < now()
+        AND (${permissions.isManager || permissions.canViewTeamCalendar} OR team_member_id = ${permissions.teamMemberId}::uuid)
+      ORDER BY starts_at DESC, id DESC LIMIT 1
+    ) recent
+    JOIN services s ON s.tenant_id = ${tenant.id} AND s.id = recent.service_id AND s.is_active
+    JOIN service_locations sl ON sl.tenant_id = s.tenant_id AND sl.service_id = s.id AND sl.location_id = ${input.locationId}
+    JOIN service_team_members sm ON sm.tenant_id = s.tenant_id AND sm.service_id = s.id AND sm.team_member_id = ${input.teamMemberId}
+    JOIN team_member_locations ml ON ml.tenant_id = s.tenant_id AND ml.team_member_id = sm.team_member_id AND ml.location_id = sl.location_id
+  `;
+  if (!service) return null;
+
+  const endsAt = new Date(+startsAt + service.durationMinutes * 60_000);
+  const [provider] = await staffAvailableSlots(tenant, service.id, startsAt, endsAt, {
+    locationId: input.locationId, teamMemberId: input.teamMemberId, slotInterval: calendarBookingInterval, alignToClock: true,
+  }, db);
+  return provider?.slots.some((slot) => +new Date(slot.startTime) === +startsAt) ? service : null;
+}
+
 /** Availability for an existing appointment's seven-day reschedule window.
  * The same server-side availability contract is used again by the write action. */
 export async function getRescheduleBookingAvailability(input: {
@@ -261,7 +327,7 @@ export async function getRescheduleBookingAvailability(input: {
     endDate.setUTCDate(endDate.getUTCDate() + 7);
     const from = fromZonedTime(`${input.startDate}T00:00:00`, tenant.timezone);
     const until = fromZonedTime(`${endDate.toISOString().slice(0, 10)}T00:00:00`, tenant.timezone);
-    return { slots: await linkedAppointmentOpenings(db, tenant, booking.locationId, reservations, from, until, 30) };
+    return { slots: await linkedAppointmentOpenings(db, tenant, booking.locationId, reservations, from, until, calendarBookingInterval) };
   }
   const durationMinutes = Math.round((booking.endsAt.getTime() - booking.startsAt.getTime()) / 60_000);
   if (durationMinutes <= 0) return { slots: [] };
@@ -282,7 +348,11 @@ export async function getRescheduleBookingAvailability(input: {
     for (const hour of locationHours.filter((item) => item.dayOfWeek === localDate.getUTCDay())) {
       const start = fromZonedTime(`${date}T${hour.startTime}`, tenant.timezone);
       const end = fromZonedTime(`${date}T${hour.endTime}`, tenant.timezone);
-      for (let cursor = start.getTime(); cursor + durationMinutes * 60_000 <= end.getTime(); cursor += 30 * 60_000) {
+      const minutes = Number(hour.startTime.split(":")[1]);
+      const seconds = Number(hour.startTime.split(":")[2] ?? 0);
+      const slotOffset = (calendarBookingInterval - minutes % calendarBookingInterval) % calendarBookingInterval * 60_000 - seconds * 1000;
+      const firstSlot = start.getTime() + slotOffset + (slotOffset < 0 ? calendarBookingInterval * 60_000 : 0);
+      for (let cursor = firstSlot; cursor + durationMinutes * 60_000 <= end.getTime(); cursor += calendarBookingInterval * 60_000) {
         const startsAt = new Date(cursor);
         if (startsAt.getTime() < Date.now()) continue;
         for (const member of staff) targets.push({ teamMemberId: member.id, startsAt, endsAt: new Date(cursor + durationMinutes * 60_000) });
@@ -301,7 +371,7 @@ export async function getRescheduleBookingAvailability(input: {
   };
 }
 
-async function editableBooking(bookingId: string, purpose: "appointment" | "status" | "manager" = "appointment") {
+async function editableBooking(bookingId: string, purpose: "appointment" | "status" | "manager" | "checkout" = "appointment") {
   if (!bookingId) throw new Error("Booking is required.");
   const privilegedTenant = purpose === "manager" ? await editableCalendarTenant() : null;
   const { tenant, permissions } = privilegedTenant
@@ -315,15 +385,16 @@ async function editableBooking(bookingId: string, purpose: "appointment" | "stat
       s.duration_minutes AS "durationMinutes",
       EXISTS (SELECT 1 FROM booking_service_segments segment WHERE segment.tenant_id = b.tenant_id AND segment.booking_id = b.id) AS "hasLinkedServices"
     FROM bookings b JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
-    WHERE b.id = ${bookingId} AND b.tenant_id = ${tenant.id} LIMIT 1
+    WHERE b.id = ${bookingId} AND b.tenant_id = ${tenant.id}
+      AND ${purpose === "checkout" ? appointmentCheckoutAccess(db, permissions) : db`TRUE`} LIMIT 1
   `;
   if (!booking) throw new Error("Booking is unavailable.");
   const linkedProviders = booking.hasLinkedServices && !permissions.isManager
     ? (await getAppointmentReservations(db, tenant.id, booking.id)).filter((item) => item.position > 1).map((item) => item.teamMemberId)
     : [];
   const providers = [booking.teamMemberId, ...linkedProviders];
-  if (purpose === "manager") {
-    // The tenant role check above is the authorization boundary for payments.
+  if (purpose === "manager" || purpose === "checkout") {
+    // Manager and scoped checkout access were checked above.
   } else if (purpose === "status") {
     if (!canUpdateAppointmentAttendance(permissions, providers)) {
       throw new Error("You do not have permission to change appointment status.");
@@ -443,7 +514,7 @@ export async function getCalendarBookingMoveTargets(input: {
   targets: Array<{ teamMemberId: string; startsAt: string }>;
 }): Promise<{ targets: string[]; error: string | null }> {
   try {
-    if (!input.bookingId || !Array.isArray(input.targets) || input.targets.length === 0 || input.targets.length > 500) {
+    if (!input.bookingId || !Array.isArray(input.targets) || input.targets.length === 0 || input.targets.length > maxCalendarMoveTargets) {
       return { targets: [], error: "Could not prepare calendar destinations." };
     }
     const requested = new Map<string, { teamMemberId: string; startsAt: string }>();
@@ -527,7 +598,7 @@ export async function updateBookingDetails(formData: FormData): Promise<BookingD
     const payment = parseDrawerPayment(formData);
     await withSerializableRetry(() => db.begin(async (transaction) => {
       if (status || payment) await persistBookingStatus(transaction, context, status, formData.get("expectedStatus"), null,
-        payment ? { ...payment, actorId: identity.id } : undefined);
+        { noShowPayment: payment ? { ...payment, actorId: identity.id } : undefined });
 
       if (!editDetails) return;
       const [customer] = await transaction.unsafe<{ id: string; status: string }[]>("SELECT customer_id AS id, status FROM bookings WHERE id = $1 AND tenant_id = $2 FOR UPDATE", [booking.id, tenant.id]);
@@ -687,7 +758,7 @@ async function persistBookingStatus(
   status: string,
   expectedStatus: FormDataEntryValue | null,
   actorId: string | null,
-  noShowPayment?: ManualPayment,
+  { noShowPayment, finishCheckout }: { noShowPayment?: ManualPayment; finishCheckout?: boolean } = {},
 ) {
   // Keep the block/booking lock order aligned with moves so a cancel cannot race them.
   const [block] = await transaction.unsafe<{ state: string }[]>(
@@ -709,7 +780,8 @@ async function persistBookingStatus(
   if (["completed", "cancelled"].includes(current.status)) {
     throw new Error("This appointment has a final status and cannot be changed.");
   }
-  if (status !== "cancelled" && !canChangeAttendanceNow(current)) {
+  const completingCheckout = current.stage === "checking_out" && status === "completed";
+  if (status !== "cancelled" && !(completingCheckout && finishCheckout) && !canChangeAttendanceNow(current)) {
     throw new Error("Attendance cannot be updated before the appointment is eligible.");
   }
   const allowedTransitions: Record<string, string[]> = {
@@ -741,7 +813,7 @@ async function persistBookingStatus(
   if (current.status === "no_show" && status === "completed" && !(await canCompleteNoShow(transaction, tenant.id, booking.id))) {
     throw new NoShowPaymentRequired();
   }
-  if (current.stage === "checking_out" && status === "completed") {
+  if (completingCheckout) {
     const [settlement] = await transaction.unsafe<{ paid: boolean }[]>(`
       SELECT cart.chargeable_cents = coalesce((
         SELECT sum(CASE WHEN kind = 'payment' THEN amount_cents ELSE -amount_cents END)
@@ -830,20 +902,22 @@ export async function notifyWaitingRoomProviders(bookingId: string) {
 export async function setAppointmentAttendanceStage(bookingId: string, stage: AppointmentAttendanceStage): Promise<AttendanceResult> {
   try {
     if (!["waiting_room", "in_service", "checking_out"].includes(stage)) throw new Error("Choose a valid next step.");
-    const { tenant, db, booking, permissions } = await editableBooking(bookingId, stage === "checking_out" ? "manager" : "status");
+    const { tenant, db, booking, permissions } = await editableBooking(bookingId, stage === "checking_out" ? "checkout" : "status");
     const actor = await requireIdentity();
     await withSerializableRetry(() => db.begin(async (transaction) => {
       const connection = transaction as unknown as typeof db;
       await connection`SELECT id FROM booking_blocks WHERE tenant_id = ${tenant.id} AND id = ${booking.bookingBlockId} FOR UPDATE`;
       const canViewTeam = permissions.isManager || permissions.canViewTeamCalendar;
-      const [current] = await connection<{ status: string; startsAt: Date; endsAt: Date; attendanceStage: AppointmentAttendanceStage | null }[]>`
-        SELECT b.status, b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.attendance_stage AS "attendanceStage"
+      const [current] = await connection<{ status: string; startsAt: Date; attendanceStage: AppointmentAttendanceStage | null }[]>`
+        SELECT b.status, b.starts_at AS "startsAt", b.attendance_stage AS "attendanceStage"
         FROM bookings b WHERE b.tenant_id = ${tenant.id} AND b.id = ${booking.id}
-          AND ${calendarBookingVisibility(connection, canViewTeam, permissions.teamMemberId ?? null)}
+          AND ${stage === "checking_out"
+            ? appointmentCheckoutAccess(connection, permissions)
+            : calendarBookingVisibility(connection, canViewTeam, permissions.teamMemberId ?? null)}
         FOR UPDATE
       `;
       if (!current) throw new Error("Appointment is unavailable.");
-      if (!permissions.isManager) {
+      if (!permissions.isManager && stage !== "checking_out") {
         const providers = await getAppointmentReservations(connection, tenant.id, booking.id);
         if (!canUpdateAppointmentAttendance(permissions, providers.map((item) => item.teamMemberId))) {
           throw new Error("You do not have permission to change attendance for this appointment.");
@@ -855,7 +929,9 @@ export async function setAppointmentAttendanceStage(bookingId: string, stage: Ap
       const isStartService = previousStage === "waiting_room" && stage === "in_service";
       const isCheckout = previousStage === "in_service" && stage === "checking_out";
       if (!isCheckIn && !isStartService && !isCheckout) throw new Error("This appointment has changed. Reopen it before continuing.");
-      if (!canChangeAttendanceNow(current)) throw new Error("Attendance can be updated once the appointment starts.");
+      if (!isCheckout && !canBeginAppointmentAttendance(current.startsAt, tenant.timezone)) {
+        throw new Error("Check-in is available on the appointment date.");
+      }
       await connection`UPDATE bookings SET status = 'arrived', attendance_stage = ${stage}, updated_at = now()
         WHERE tenant_id = ${tenant.id} AND id = ${booking.id}`;
       const event = `booking.${stage}`;
@@ -874,18 +950,21 @@ export async function setAppointmentAttendanceStage(bookingId: string, stage: Ap
 
 export async function finishAppointmentCheckout(bookingId: string): Promise<AttendanceResult> {
   try {
-    const context = await editableBooking(bookingId, "manager");
-    const { tenant, db, booking } = context;
+    const context = await editableBooking(bookingId, "checkout");
+    const { tenant, db, booking, permissions } = context;
     const actor = await requireIdentity();
     await withSerializableRetry(() => db.begin(async (transaction) => {
       await transaction.unsafe("SELECT id FROM booking_blocks WHERE tenant_id = $1 AND id = $2 FOR UPDATE", [tenant.id, booking.bookingBlockId]);
-      const [current] = await transaction.unsafe<{ status: string; stage: string | null }[]>(
-        "SELECT status, attendance_stage AS stage FROM bookings WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
-        [tenant.id, booking.id],
-      );
+      const connection = transaction as unknown as typeof db;
+      const [current] = await connection<{ status: string; stage: string | null }[]>`
+        SELECT b.status, b.attendance_stage AS stage FROM bookings b
+        WHERE b.tenant_id = ${tenant.id} AND b.id = ${booking.id}
+          AND ${appointmentCheckoutAccess(connection, permissions)}
+        FOR UPDATE
+      `;
       if (current?.status === "completed") return;
       if (current?.status !== "arrived" || current.stage !== "checking_out") throw new Error("Open checkout from the appointment before finishing it.");
-      await persistBookingStatus(transaction, context, "completed", "arrived", actor.id);
+      await persistBookingStatus(transaction, context, "completed", "arrived", actor.id, { finishCheckout: true });
     }));
     revalidateCalendars();
     return { error: null };
@@ -950,16 +1029,23 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
       throw new Error("Enter a valid positive amount and payment method.");
     }
     if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(entryId)) throw new Error("The payment entry could not be identified.");
-    const { tenant, db, booking } = await editableBooking(bookingId, "manager");
+    const { tenant, db, booking, permissions } = await editableBooking(bookingId, kind === "payment" ? "checkout" : "manager");
     assertNoOperationalFreeText(formData, "notes");
     const identity = await requireIdentity();
     const amountCents = Math.round(amount * 100);
     await db.begin(async (transaction) => {
+      if (!permissions.isManager) {
+        // Schedule edits take the same block lock before changing providers.
+        await transaction.unsafe("SELECT id FROM booking_blocks WHERE tenant_id = $1 AND id = $2 FOR UPDATE", [tenant.id, booking.bookingBlockId]);
+      }
       // Use the ledger trigger's booking lock to serialize simultaneous retries.
-      const [locked] = await transaction.unsafe<{ status: string }[]>(
-        "SELECT status FROM bookings WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
-        [tenant.id, booking.id],
-      );
+      const connection = transaction as unknown as typeof db;
+      const [locked] = await connection<{ status: string; stage: string | null }[]>`
+        SELECT b.status, b.attendance_stage AS stage FROM bookings b
+        WHERE b.tenant_id = ${tenant.id} AND b.id = ${booking.id}
+          AND ${appointmentCheckoutAccess(connection, permissions)}
+        FOR UPDATE
+      `;
       if (!locked) throw new Error("Booking is unavailable.");
       const [existing] = await transaction.unsafe<{ bookingId: string; kind: string; method: string; amountCents: number; actorId: string | null }[]>(`
         SELECT booking_id AS "bookingId", kind, method, amount_cents AS "amountCents", recorded_by_identity_id AS "actorId"
@@ -972,11 +1058,15 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
         return;
       }
       if (kind === "payment") {
+        if (!permissions.isManager && (locked.status !== "arrived" || locked.stage !== "checking_out" || expectedBalance === null)) {
+          throw new Error("Open checkout from the appointment before recording a payment.");
+        }
         if (locked.status === "cancelled") throw new Error("Cancelled appointments cannot receive a payment record.");
-        if ((await activeAppointmentPayments(transaction, tenant.id, booking.id)).length) {
+        const payments = await activeAppointmentPayments(transaction, tenant.id, booking.id);
+        if (hasNonGiftCardPayment(payments)) {
           throw new Error("A payment is already recorded. Edit or delete it before recording another.");
         }
-        if (expectedBalance !== null) {
+        if (expectedBalance !== null || payments.length > 0) {
           const [cart] = await transaction.unsafe<{ balance: string }[]>(`
             SELECT greatest(cart.chargeable_cents - coalesce((
               SELECT sum(CASE WHEN kind='payment' THEN amount_cents ELSE -amount_cents END)
@@ -984,8 +1074,12 @@ export async function recordPayment(formData: FormData): Promise<PaymentState> {
             ), 0), 0)::text AS balance
             FROM appointment_checkout_amounts($1, $2) cart
           `, [tenant.id, booking.id]);
-          if (!cart || cart.balance !== expectedBalance) {
+          if (!cart || (expectedBalance !== null && cart.balance !== expectedBalance)) {
             throw new Error("The checkout balance changed. Go back to checkout and review the total.");
+          }
+          if (amountCents !== Number(cart.balance)) {
+            if (payments.length > 0) throw new Error("Record the full balance remaining after the gift-card payment.");
+            if (!permissions.isManager) throw new Error("Record the full balance due for this appointment.");
           }
         }
       }
@@ -1077,7 +1171,7 @@ export async function correctAppointmentPayment(formData: FormData): Promise<Pay
 export type ManualBookingState = {
   error: string | null;
   success: string | null;
-  booking?: { id: string; date: string; locationId: string };
+  booking?: { id: string; date: string; locationId: string; startsAt: string };
 };
 
 type AdditionalServiceInput = { serviceId: string; teamMemberId: string; time: string; segmentId?: string };
@@ -1124,6 +1218,71 @@ async function insertAdditionalBookingService(transaction: TransactionSql, tenan
     }
     throw error;
   }
+}
+
+async function linkedServiceGrid(
+  tenant: Parameters<typeof staffAvailableSlots>[0],
+  db: ReturnType<typeof tenantDb>,
+  serviceId: string,
+  localDate: string,
+  earliest: Date,
+  options: { locationId: string; teamMemberId: string; durationMinutes: number; excludeBookingBlockIds?: string[] },
+) {
+  const dayStart = fromZonedTime(`${localDate}T00:00`, tenant.timezone);
+  const [provider] = await staffAvailableSlots(tenant, serviceId, dayStart, new Date(dayStart.getTime() + 48 * 60 * 60_000),
+    { ...options, slotInterval: calendarBookingInterval, alignToClock: true }, db);
+  return (provider?.slots ?? []).filter((slot) => {
+    const start = new Date(slot.startTime);
+    const key = localDateTimeKey(start, tenant.timezone);
+    return start >= earliest && key.startsWith(`${localDate}T`)
+      && fromZonedTime(key, tenant.timezone).getTime() === start.getTime();
+  });
+}
+
+export async function getLinkedServiceStartOptions(input: {
+  locationId: string; serviceId: string; teamMemberId: string; date: string;
+  earliest: string; bookingId?: string; segmentId?: string;
+}) {
+  const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+  const earliest = new Date(input.earliest);
+  if (![input.locationId, input.serviceId, input.teamMemberId].every((id) => uuid.test(id))
+    || (input.bookingId && !uuid.test(input.bookingId)) || (input.segmentId && !uuid.test(input.segmentId))
+    || !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !Number.isFinite(earliest.getTime())) {
+    return { times: [], sequentialAvailable: false };
+  }
+  const { tenant, permissions } = await calendarPermissionContext();
+  assertAppointmentPermission(permissions, input.teamMemberId);
+  const db = tenantDb(tenant);
+  if (localDateKey(earliest, tenant.timezone) !== input.date) return { times: [], sequentialAvailable: false };
+  let excludeBookingBlockIds: string[] = [];
+  let retainedDuration: number | undefined;
+  if (input.bookingId) {
+    const { booking } = await editableBooking(input.bookingId, "manager");
+    if (booking.locationId !== input.locationId || localDateKey(booking.startsAt, tenant.timezone) !== input.date
+      || !isMovableAppointmentStatus(booking.status)) return { times: [], sequentialAvailable: false };
+    excludeBookingBlockIds = (await getAppointmentReservations(db, tenant.id, input.bookingId)).map(({ id }) => id);
+    if (input.segmentId) {
+      const original = (await getAdditionalAppointmentServices(db, tenant.id, input.bookingId))
+        .find((service) => service.id === input.segmentId && service.serviceId === input.serviceId);
+      if (original) retainedDuration = (Date.parse(original.endsAt) - Date.parse(original.startsAt)) / 60_000;
+    }
+  }
+  const [service] = await db<{ durationMinutes: number }[]>`
+    SELECT duration_minutes AS "durationMinutes" FROM services
+    WHERE tenant_id=${tenant.id} AND id=${input.serviceId} AND is_active
+  `;
+  if (!service) return { times: [], sequentialAvailable: false };
+  const durationMinutes = retainedDuration ?? service.durationMinutes;
+  const options = { locationId: input.locationId, teamMemberId: input.teamMemberId, durationMinutes, excludeBookingBlockIds };
+  const end = new Date(earliest.getTime() + durationMinutes * 60_000);
+  const [grid, [provider]] = await Promise.all([
+    linkedServiceGrid(tenant, db, input.serviceId, input.date, earliest, options),
+    staffAvailableSlots(tenant, input.serviceId, earliest, end, { ...options, slotInterval: 1 }, db),
+  ]);
+  return {
+    times: grid.map((slot) => localDateTimeKey(new Date(slot.startTime), tenant.timezone).slice(11)),
+    sequentialAvailable: Boolean(provider?.slots.some((slot) => Date.parse(slot.startTime) === earliest.getTime())),
+  };
 }
 
 export async function updateAppointmentServices(formData: FormData): Promise<{ error: string | null }> {
@@ -1190,11 +1349,16 @@ export async function updateAppointmentServices(formData: FormData): Promise<{ e
         }
         if (changed) {
           if (!catalog.active) throw new Error(`${catalog.title} is no longer available.`);
-          const [provider] = await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, {
-            locationId: booking.locationId, slotInterval: 1, durationMinutes: duration / 60_000,
-            teamMemberId: item.teamMemberId, excludeBookingBlockIds: excludedBlocks,
-          }, connection);
-          if (!provider?.slots.some((slot) => Date.parse(slot.startTime) === startsAt.getTime() && Date.parse(slot.endTime) === endsAt.getTime())) {
+          const options = {
+            locationId: booking.locationId, teamMemberId: item.teamMemberId,
+            durationMinutes: duration / 60_000, excludeBookingBlockIds: excludedBlocks,
+          };
+          const requiresGrid = index > 0 && item.time && startsAt.getTime() !== previousEnd.getTime()
+            && startsAt.getTime() !== original?.startsAt.getTime();
+          const slots = requiresGrid
+            ? await linkedServiceGrid(tenant, connection, item.serviceId, localDate, previousEnd, options)
+            : (await staffAvailableSlots(tenant, item.serviceId, startsAt, endsAt, { ...options, slotInterval: 1 }, connection))[0]?.slots ?? [];
+          if (!slots.some((slot) => Date.parse(slot.startTime) === startsAt.getTime() && Date.parse(slot.endTime) === endsAt.getTime())) {
             throw new Error(`${catalog.title} is unavailable with that provider at ${localDateTimeKey(startsAt, tenant.timezone).slice(11)}. Choose another provider or time.`);
           }
         }
@@ -1265,6 +1429,7 @@ async function createManualBookingRecord(formData: FormData) {
   if (!locationId || !teamMemberId || !serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(localDate) || !/^\d{2}:\d{2}$/.test(localTime) || (!waitlistEntryId && !customerId && (!name || !email.includes("@")))) {
     throw new Error("Choose a location, staff member, service, local appointment time, and valid client details.");
   }
+  if (!waitlistEntryId && !customerId && !phone) throw new Error("Enter a phone number for the new client.");
   const { tenant, permissions } = await calendarPermissionContext();
   assertAppointmentPermission(permissions, teamMemberId);
   for (const extra of additionalServices) assertAppointmentPermission(permissions, extra.teamMemberId);
@@ -1292,7 +1457,7 @@ async function createManualBookingRecord(formData: FormData) {
   if (!service) throw new Error("That staff member cannot deliver this service at the selected location.");
   const startsAt = fromZonedTime(`${localDate}T${localTime}`, tenant.timezone);
   const endsAt = new Date(startsAt.getTime() + service.durationMinutes * 60_000);
-  const candidates = await staffAvailableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: 30 });
+  const candidates = await staffAvailableSlots(tenant, service.id, new Date(startsAt.getTime() - 86_400_000), new Date(endsAt.getTime() + 86_400_000), { locationId, slotInterval: calendarBookingInterval, alignToClock: true });
   const availableSlot = candidates.find((candidate) => candidate.teamMemberId === teamMemberId)?.slots.find((slot) => new Date(slot.startTime).getTime() === startsAt.getTime() && new Date(slot.endTime).getTime() === endsAt.getTime());
   if (!availableSlot) throw new Error("That staff member is not available at the selected time.");
   const linked: AdditionalServiceBooking[] = [];
@@ -1309,10 +1474,11 @@ async function createManualBookingRecord(formData: FormData) {
       || (extra.time && localDateTimeKey(nextStart, tenant.timezone) !== `${localDate}T${extra.time}`)) {
       throw new Error(`${item.title} must start on the appointment date, after the preceding service.`);
     }
-    const providers = await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { locationId, slotInterval: 1 });
-    if (!providers.find((provider) => provider.teamMemberId === extra.teamMemberId)?.slots.some((slot) =>
-      new Date(slot.startTime).getTime() === nextStart.getTime() && new Date(slot.endTime).getTime() === nextEnd.getTime(),
-    )) {
+    const options = { locationId, teamMemberId: extra.teamMemberId, durationMinutes: item.durationMinutes };
+    const slots = extra.time && nextStart.getTime() !== previousEnd.getTime()
+      ? await linkedServiceGrid(tenant, db, extra.serviceId, localDate, previousEnd, options)
+      : (await staffAvailableSlots(tenant, extra.serviceId, nextStart, nextEnd, { ...options, slotInterval: 1 }, db))[0]?.slots ?? [];
+    if (!slots.some((slot) => Date.parse(slot.startTime) === nextStart.getTime() && Date.parse(slot.endTime) === nextEnd.getTime())) {
       throw new Error(`${item.title} is unavailable with that provider at ${localDateTimeKey(nextStart, tenant.timezone).slice(11)}. Choose another time or provider.`);
     }
     linked.push({ ...extra, startsAt: nextStart, endsAt: nextEnd, priceCents: item.priceCents, title: item.title });
@@ -1365,7 +1531,7 @@ async function createManualBookingRecord(formData: FormData) {
   }
   revalidateCalendars();
   if (waitlistEntryId) revalidatePath("/app/waitlist");
-  return { id: bookingId, date: localDate, locationId };
+  return { id: bookingId, date: localDate, locationId, startsAt: startsAt.toISOString() };
 }
 
 /** Expected validation and availability failures stay inside the calendar form rather than becoming a page error. */

@@ -15,10 +15,20 @@ The prior Lab was reconciled and retained as [`archive/lab-reconciled-20261121`]
 
 1. Implement a bounded change, update its GitHub issue and record migrations, environment changes and data effects separately.
 2. Run the relevant build and tests; verify UI changes on desktop and mobile against an isolated test database. Confirm that local-only changes are committed before claiming they are included.
-3. Push the branch and open a pull request. Require the package, Postgres integration, E2E and migration-history workflows. For a direct release also verify the Waybook app preview; for a batch, verify the combined release preview as described below. Identify unrelated project failures explicitly instead of treating them as app success.
-4. Merge only the reviewed commit after checks pass. The main branch automatically triggers Vercel production deployment; group changes when practical and assess migrations and rollback before merging.
+3. Push the branch and open a pull request. The fast PR tier runs package checks, Postgres migration integration, migration history, and tagged desktop and mobile browser smoke tests for booking, checkout, payment integrity, and workspace access.
+4. Before any merge to main, pass the comprehensive release tier on the exact candidate and verify its Waybook preview. The main branch automatically triggers Vercel production deployment. Group changes when practical and assess migrations and rollback before merging.
 
-Keep the PR in draft while iterating. Draft PRs run the migration-history guard. Run focused tests locally and push a coherent batch when it is ready for review. Marking the PR ready starts the package, database and browser checks. Review the successful checks for the exact release candidate before merging. Treat skipped draft checks as pending release evidence. A browser run that stops after two failures still fails and needs a fresh passing run after the fix.
+Keep the PR in draft while iterating. Draft PRs run the migration-history guard. Marking the PR ready starts the fast tier. Run the same browser subset with `npm run e2e:smoke --workspace=@waybook/app` against disposable local databases. Add `@smoke` only to short journeys that protect key workflows across the app. All browser tests also run in the comprehensive tier.
+
+### Comprehensive pre-deployment checks
+
+The release collector dispatches `Release branch validation` for its combined candidate. For a direct or manually batched release, dispatch the same workflow from current GitHub main using the reviewed PR head and the current main SHA:
+
+```sh
+gh workflow run release-validation.yml --ref main -f release_sha="$release_sha" -f base_sha="$base_sha"
+```
+
+The workflow verifies both SHAs and runs the full browser suite plus package, integration, and migration-history checks. Require a successful run for those exact inputs before merging. If the candidate or main changes, refresh the candidate and rerun release validation. An ordinary PR's `e2e` check runs the smoke subset. Use the named release workflow and its validated inputs as the pre-merge evidence. A timeout or a run stopped after test failures requires a fresh successful run.
 
 ### Batch several PRs into one production release
 
@@ -41,7 +51,7 @@ or unreviewed work just to fill the batch.
 Open one release PR from that branch to `main`. Describe the included PRs and
 issues, schema and configuration changes, data effects, compatibility and
 rollback. Run the required package, database integration, E2E and
-migration-history checks on the combined commit and verify its Waybook preview.
+migration-history checks through the comprehensive release workflow on the combined commit and verify its Waybook preview.
 Apply the hosted migration release gate below to any change that needs schema
 updates. Merge the release PR only after the combined result passes review and
 checks. The single merge to `main` triggers one production deployment; verify

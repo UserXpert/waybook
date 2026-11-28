@@ -71,10 +71,18 @@ for (const fixture of [
       await expect(staff.getByRole("heading", { name: /^(Clients|Patients)$/ })).toBeVisible();
       const restricted = await staff.goto(`${app}/settings?tab=roles`);
       expect(restricted?.status()).toBe(404);
+      await staff.goto(`${app}/settings`);
+      await expect(staff.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Payments", exact: true })).toHaveCount(0);
+      expect((await staff.goto(`${app}/settings?tab=payments`))?.status()).toBe(404);
 
       await page.goto(`${app}/settings`);
       const settingsNav = page.getByRole("navigation", { name: "Settings sections" });
-      await expect(settingsNav.getByRole("link")).toHaveText(["Appearance", "Business setup", "Roles & permissions"]);
+      await expect(settingsNav.getByRole("link")).toHaveText(["Appearance", "Calendar", "Business setup", "Payments", "Roles & permissions"]);
+      const paymentsTab = settingsNav.getByRole("link", { name: "Payments", exact: true });
+      await paymentsTab.click();
+      await expect(paymentsTab).toHaveAttribute("aria-current", "page");
+      await expect(page.getByRole("region", { name: "Stripe", exact: true })).toContainText("Setup unavailable");
+      await expect(page.getByRole("link", { name: "Open Sales", exact: true })).toHaveAttribute("href", `${app}/sales`);
       await expect(page.locator("#business-settings").getByRole("link", { name: /^Roles & permissions/ })).toHaveCount(0);
       const rolesTab = settingsNav.getByRole("link", { name: "Roles & permissions" });
       await rolesTab.click();

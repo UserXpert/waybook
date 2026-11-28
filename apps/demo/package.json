@@ -9,6 +9,7 @@
     "start": "next start --port 3333",
     "test": "tsx --test src/lib/waybook/*.test.ts",
     "e2e": "playwright test --config e2e/waybook.config.ts",
+    "e2e:smoke": "npm run e2e -- --grep @smoke",
     "e2e:ui": "playwright test --config e2e/waybook.config.ts --ui"
   },
   "dependencies": {

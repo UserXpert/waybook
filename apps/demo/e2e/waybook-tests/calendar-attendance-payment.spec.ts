@@ -61,6 +61,8 @@ for (const [bookedCents, productCents] of [[25050, 0], [0, 0], [0, 3750]]) test(
     expect(hoverShape.width).toBe(hoverShape.height);
     expect(hoverShape.borderRadius).toBe("50%");
 
+    await expect(drawer.getByRole("button", { name: "Save changes" })).toHaveCount(0);
+    await drawer.getByRole("button", { name: "Edit appointment" }).click();
     const noShow = drawer.getByRole("button", { name: "No show", exact: true });
     const complete = drawer.getByRole("button", { name: "Completed", exact: true });
     const save = drawer.getByRole("button", { name: "Save changes", exact: true });
@@ -101,6 +103,7 @@ for (const [bookedCents, productCents] of [[25050, 0], [0, 0], [0, 3750]]) test(
     try {
       await staleTab.goto(url);
       const staleDrawer = staleTab.getByRole("dialog", { name: `Appointment with ${name}` });
+      await staleDrawer.getByRole("button", { name: "Edit appointment" }).click();
       await staleDrawer.getByRole("button", { name: "Completed", exact: true }).click();
       await staleDrawer.getByLabel(due ? "Amount (DKK)" : "No-show fee (DKK)", { exact: true }).fill("100");
 
@@ -128,6 +131,11 @@ for (const [bookedCents, productCents] of [[25050, 0], [0, 0], [0, 3750]]) test(
     } finally {
       await staleTab.close();
     }
+    const editClose = drawer.getByRole("button", { name: "Close editing", exact: true });
+    await expect(close).toHaveCount(0);
+    await editClose.click();
+    await expect(drawer.getByRole("button", { name: "Save changes" })).toHaveCount(0);
+    await expect(drawer.getByRole("button", { name: "Edit appointment" })).toBeVisible();
     await close.click();
     await expect(drawer).toHaveCount(0);
   } finally {

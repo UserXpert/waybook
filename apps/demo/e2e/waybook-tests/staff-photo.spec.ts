@@ -375,11 +375,14 @@ for (const workspaceCase of [
 
     await page.goto(`/${workspaceCase.route}/app/calendars?day=${future.day}`);
     await bookingLink(future.id).click();
-    await expect(page.getByText('Attendance can be updated once the appointment starts.')).toBeVisible();
+    await page.getByRole('button', { name: 'Edit appointment' }).click();
+    await expect(page.getByText('Completion and no-show options are available once the appointment starts.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Check in', exact: true })).toHaveCount(0);
     for (const label of attendanceLabels) await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
 
     await page.goto(`/${workspaceCase.route}/app/calendars?day=${past.day}`);
     await bookingLink(past.id).click();
+    await page.getByRole('button', { name: 'Edit appointment' }).click();
     await expect(page.getByText('Current: no show')).toBeVisible();
     for (const heading of ['Edit', 'Reschedule', 'Sales ledger']) await expect(page.getByRole('heading', { name: heading })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /cancel appointment/i })).toHaveCount(0);

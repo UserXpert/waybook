@@ -83,7 +83,8 @@ for (const tenant of [
     const appointment = page.getByRole("row").filter({ hasText: email }).filter({ hasText: "arrived" });
     await appointment.getByRole("link").click();
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("booking") === fixture.booking.id);
-    await expect(page.getByText("Current: arrived", { exact: true })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: `Appointment with ${clientName}` })
+      .locator(".appointment-drawer__detail--status dd")).toHaveText(/^arrived$/i);
     await page.getByRole("complementary", { name: `Appointment with ${clientName}` })
       .getByRole("button", { name: "Close appointment" }).click();
 
@@ -122,6 +123,7 @@ for (const tenant of [
     const review = page.getByRole("row").filter({ hasText: clientName });
     await review.getByRole("link", { name: "Review booking" }).click();
     await expect(page).toHaveURL((url) => url.pathname === `${app}/calendars` && url.searchParams.get("booking") === fixture.booking.id);
+    await page.getByRole("button", { name: "Edit appointment" }).click();
     await page.getByRole("button", { name: "Completed", exact: true }).click();
     await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByText("This appointment’s status is final and cannot be changed.")).toBeVisible();
