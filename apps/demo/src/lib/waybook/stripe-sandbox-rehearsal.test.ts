@@ -12,7 +12,7 @@ const config = { origin, secretKey: "rk_test_rehearsalFixture" };
 const session = {
   id: "cs_test_rehearsal", object: "checkout.session", livemode: false, mode: "payment",
   amount_total: 1000, currency: "dkk", client_reference_id: reference, status: "open",
-  payment_status: "unpaid", created: 1795850000, url: "https://checkout.stripe.com/c/pay/cs_test_rehearsal",
+  payment_status: "unpaid", payment_method_types: ["card"], created: 1795850000, url: "https://checkout.stripe.com/c/pay/cs_test_rehearsal",
 };
 
 test("workspace sandbox config never enables sandbox appointments in production", () => {
@@ -32,8 +32,11 @@ test("rehearsal creates a tenant-scoped sandbox checkout and rejects forged live
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("Stripe-Account"), account);
     assert.equal(headers.get("Idempotency-Key"), reference);
+    assert.equal(headers.get("Stripe-Version"), "2026-11-18.endive");
     const body = init?.body as URLSearchParams;
     assert.equal(body.get("client_reference_id"), reference);
+    assert.equal(body.get("allowed_payment_method_types[0]"), "card");
+    assert.equal(body.has("payment_method_types[0]"), false);
     assert.equal(body.get("success_url"), origin + sales + `?sale=${nonce}&sandbox=payment-returned`);
     assert.equal(body.get("cancel_url"), origin + sales + `?sale=${nonce}&sandbox=payment-cancelled`);
     assert.equal(body.get("line_items[0][price_data][unit_amount]"), "1000");
@@ -54,4 +57,6 @@ test("reconciliation only accepts the saved test session from the workspace sand
   assert.equal(await sandboxRehearsalPaid(config, account, session.id, nonce, async () => Response.json(session)), false);
   await assert.rejects(() => sandboxRehearsalPaid(config, account, session.id, nonce, async () =>
     Response.json({ ...session, client_reference_id: nonce })));
+  await assert.rejects(() => sandboxRehearsalPaid(config, account, session.id, nonce, async () =>
+    Response.json({ ...session, payment_method_types: ["card", "mobilepay"], status: "complete", payment_status: "paid" })));
 });

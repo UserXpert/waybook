@@ -8,13 +8,15 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 type StripeSession = {
   id?: unknown; object?: unknown; livemode?: unknown; mode?: unknown;
   amount_total?: unknown; currency?: unknown; client_reference_id?: unknown;
-  status?: unknown; payment_status?: unknown; url?: unknown;
+  status?: unknown; payment_status?: unknown; payment_method_types?: unknown; url?: unknown;
 };
 
 function isRehearsal(session: StripeSession) {
   return session.object === "checkout.session" && session.livemode === false && session.mode === "payment" &&
     typeof session.id === "string" && /^cs_test_[A-Za-z0-9]+$/.test(session.id) &&
     session.currency === "dkk" && session.amount_total === rehearsalAmountCents &&
+    Array.isArray(session.payment_method_types) && session.payment_method_types.length === 1 &&
+    session.payment_method_types[0] === "card" &&
     typeof session.client_reference_id === "string" && session.client_reference_id.startsWith(rehearsalPrefix) &&
     uuidPattern.test(session.client_reference_id.slice(rehearsalPrefix.length));
 }
@@ -31,7 +33,7 @@ export async function openSandboxRehearsal(config: StripeSandboxConfig, accountI
   const reference = rehearsalPrefix + nonce;
   const params = new URLSearchParams({
     mode: "payment",
-    "payment_method_types[0]": "card",
+    "allowed_payment_method_types[0]": "card",
     "adaptive_pricing[enabled]": "false",
     client_reference_id: reference,
     success_url: returnUrl.href,

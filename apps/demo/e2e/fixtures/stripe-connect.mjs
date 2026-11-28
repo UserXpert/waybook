@@ -104,10 +104,11 @@ globalThis.fetch = async (input, init) => {
         const body = new URLSearchParams(await request.text());
         const reference = body.get("client_reference_id");
         if (!reference?.startsWith("waybook-rehearsal-") || reference !== request.headers.get("Idempotency-Key") ||
-            body.get("line_items[0][price_data][unit_amount]") !== "1000") return error(400);
+            body.get("line_items[0][price_data][unit_amount]") !== "1000" ||
+            body.get("allowed_payment_method_types[0]") !== "card" || body.has("payment_method_types[0]")) return error(400);
         const id = `cs_test_${reference.replaceAll("-", "")}`;
         const session = { id, object: "checkout.session", livemode: false, mode: "payment", amount_total: 1000,
-          currency: "dkk", client_reference_id: reference, status: "open", payment_status: "unpaid",
+          currency: "dkk", client_reference_id: reference, status: "open", payment_status: "unpaid", payment_method_types: ["card"],
           created: Math.floor(Date.now() / 1000), url: `https://checkout.stripe.com/c/pay/${id}` };
         // Simulate Stripe confirming payment before the browser returns to Waybook.
         rehearsals.set(id, { account, session: { ...session, status: "complete", payment_status: "paid" } });
