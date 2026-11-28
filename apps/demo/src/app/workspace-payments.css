@@ -96,3 +96,51 @@
   .payment-provider__logo { width: 3rem; }
   .payment-provider__statuses { max-width: 8rem; }
 }
+
+.paid-sale__header-actions, .paid-sale__links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+}
+.paid-sale__menu { position: relative; }
+.paid-sale__menu summary { cursor: pointer; list-style: none; }
+.paid-sale__menu summary::-webkit-details-marker { display: none; }
+.paid-sale__menu summary.tenant-drawer-close::before,
+.paid-sale__menu summary.tenant-drawer-close::after { content: none; }
+.paid-sale__menu nav {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + .4rem);
+  right: 0;
+  display: grid;
+  width: max-content;
+  max-width: calc(100vw - 5rem);
+  padding: .35rem;
+  border: 1px solid var(--wb-dark-border, var(--ice-edge, #dedee3));
+  border-radius: .65rem;
+  background: var(--wb-dark-surface, #fff);
+  box-shadow: 0 .6rem 1.6rem #14212d22;
+}
+.paid-sale__menu nav a {
+  padding: .6rem .75rem;
+  border-radius: .35rem;
+  color: inherit;
+  font-size: .82rem;
+  text-decoration: none;
+}
+.paid-sale__menu nav a:is(:hover, :focus-visible) { background: var(--waybook-accent-soft); }
+.paid-sale-drawer .appointment-drawer__body { padding-top: 1.15rem; gap: 1rem; }
+.paid-sale-drawer .appointment-drawer__body > section { padding-top: .9rem; }
+.paid-sale__client { display: flex; gap: .5rem 1rem; flex-wrap: wrap; align-items: baseline; justify-content: space-between; }
+.paid-sale__client span, .paid-sale__transactions small { color: var(--wb-dark-muted, var(--ice-muted, #65666d)); font-size: .8rem; }
+.paid-sale__total { margin: .4rem 0 0; }
+.paid-sale__total > div, .paid-sale__transactions li { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; }
+.paid-sale__total dd { margin: 0; font-weight: 600; }
+.paid-sale__total > div:first-child { border-top: 1px solid var(--wb-dark-border, #dedee3); }
+.paid-sale__transactions ul { list-style: none; padding: 0; margin: .25rem 0 0; }
+.paid-sale__transactions small { display: block; margin-top: .15rem; }
+.paid-sale__transactions li { font-size: .85rem; }
+.paid-sale__activity summary { cursor: pointer; font-size: .82rem; font-weight: 600; }
+.appointment-receipt__send { padding: 0 0 1rem; }
+@media print { .appointment-receipt__send { display: none; } }

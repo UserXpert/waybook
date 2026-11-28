@@ -6,7 +6,7 @@ import { useLayoutEffect, useRef } from "react";
 
 export function cycleDialogTab(event: React.KeyboardEvent<HTMLDialogElement>) {
   if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
-  const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('a[href], button, input:not([type="hidden"]), select, textarea')]
+  const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('a[href], button, summary, input:not([type="hidden"]), select, textarea')]
     .filter((control) => control.tabIndex >= 0 && !control.matches(":disabled") && control.getClientRects().length > 0);
   if (!controls.length) return;
   // WebKit can skip links in its native Tab order, including the only control in a details drawer.

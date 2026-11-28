@@ -145,7 +145,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
       await salePayment.getByRole("radio", { name: "Card paid elsewhere" }).check();
       await salePayment.getByRole("button", { name: "Record payment" }).click();
       await expect(salePayment).toHaveCount(0);
-      await expect(saleDrawer.locator(".recorded-appointment-payments")).toContainText("250,50");
+      await expect(saleDrawer.getByRole("region", { name: "Transactions" })).toContainText("250,50");
       await stalePayment.getByRole("button", { name: "Record payment" }).click();
       await expect(stalePayment.getByRole("alert")).toContainText("This checkout is already complete.");
     } finally {

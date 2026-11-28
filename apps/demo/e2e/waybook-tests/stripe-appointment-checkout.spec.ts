@@ -154,10 +154,14 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
             await expectCompleted(id);
             await page.reload();
             await expect(sale.getByText("Stripe sandbox card", { exact: true })).toBeVisible();
-            await expect(sale.getByText("Refund recorded", { exact: true }).locator("..")).toContainText("Stripe sandbox");
+            await expect(sale.getByText("Refund · Card", { exact: true })).toBeVisible();
             await expect(sale.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
+            await sale.getByLabel("Sale actions", { exact: true }).click();
+            await sale.getByRole("link", { name: "Refund", exact: true }).click();
             const refundAmount = sale.getByLabel("Refund amount (DKK)");
             const refundButton = sale.getByRole("button", { name: "Refund in Stripe sandbox" });
+            await expect(refundAmount).toBeVisible();
+            const refundPath = page.url();
             for (const [amount, status] of [["12.02", "failed"], ["13.03", "succeeded"]]) {
               await refundAmount.fill(amount);
               await refundButton.click();
@@ -179,7 +183,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
               expect(await Promise.all([sendRefund(), sendRefund()])).toEqual([204, 204]);
               expect(await db`SELECT state, refund_id FROM stripe_sandbox_refund_attempts WHERE id = ${pending.id}`)
                 .toEqual([{ state: status, refund_id: refundId }]);
-              await page.goto(paymentPath);
+              await page.goto(refundPath);
               if (status === "failed") {
                 await expect(sale.getByRole("alert")).toContainText("Stripe declined the last refund.");
                 await expect(refundAmount).toHaveValue("60.00");
@@ -204,7 +208,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
                 expect(await db`SELECT kind FROM payment_records WHERE id = ${returned.return_payment_id}`).toEqual([{ kind: "payment" }]);
                 await page.reload();
                 await expect(sale.getByText("Stripe sandbox card", { exact: true })).toHaveCount(1);
-                await expect(sale.getByText("Refund returned · card", { exact: true })).toBeVisible();
+                await expect(sale.getByText("Refund returned · Card", { exact: true })).toBeVisible();
                 await expect(sale.getByRole("alert")).toContainText("Stripe returned the last refund");
                 await expect(refundAmount).toHaveValue("60.00");
                 await sale.getByRole("link", { name: "View receipt", exact: true }).click();
@@ -253,6 +257,8 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
           VALUES (${tenantId}, ${id}, 'refund', 100, 'cash', ${actor.id})`).rejects.toThrow("must be reconciled through Stripe");
         await expectCompleted(id);
         await expect(sale.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
+        await sale.getByLabel("Sale actions", { exact: true }).click();
+        await sale.getByRole("link", { name: "Refund", exact: true }).click();
         const refundAmount = sale.getByLabel("Refund amount (DKK)");
         const submitRefund = sale.getByRole("button", { name: "Refund in Stripe sandbox" });
         const checkRefund = sale.getByRole("button", { name: "Check refund status" });
@@ -320,6 +326,8 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
     await expectCompleted(mobilePayBooking);
     expect(await receipts(mobilePayBooking)).toEqual([mobilePayReceipt]);
 
+    await sale.getByLabel("Sale actions", { exact: true }).click();
+    await sale.getByRole("link", { name: "Refund", exact: true }).click();
     await sale.getByLabel("Refund amount (DKK)").fill("5.05");
     await sale.getByRole("button", { name: "Refund in Stripe sandbox", exact: true }).click();
     await expect(sale.getByLabel("Refund amount (DKK)")).toHaveValue("60.00");

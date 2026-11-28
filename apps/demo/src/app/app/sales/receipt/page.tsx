@@ -14,6 +14,7 @@ type ReceiptAppointment = {
   id: string;
   number: string;
   client: string;
+  email: string;
   startsAt: Date;
   location: string | null;
   service: string;
@@ -25,18 +26,18 @@ type ReceiptAppointment = {
 };
 
 export default async function AppointmentReceipt({ searchParams }: {
-  searchParams: Promise<{ sale?: string }>;
+  searchParams: Promise<{ sale?: string; print?: string; send?: string }>;
 }) {
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
   if (!(await staffPermissionContext(tenant, membership)).isManager) redirect(tenantPath(tenantSlug, "/app"));
-  const { sale: saleId } = await searchParams;
+  const { sale: saleId, print, send } = await searchParams;
   if (typeof saleId !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(saleId)) notFound();
 
   const db = tenantDb(tenant);
   const [appointment] = await db<ReceiptAppointment[]>`
-    SELECT b.id, b.booking_number AS number, c.name AS client, b.starts_at AS "startsAt",
+    SELECT b.id, b.booking_number AS number, c.name AS client, c.email, b.starts_at AS "startsAt",
       l.name AS location, s.title AS service, b.booked_price_cents AS "serviceCents",
       b.no_show_charge_cents AS "noShowChargeCents", cart.chargeable_cents::int AS "totalCents",
       cart.package_redeemed AS "packageRedeemed", sale.currency
@@ -62,11 +63,36 @@ export default async function AppointmentReceipt({ searchParams }: {
   const date = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: tenant.timezone });
   const netPaid = payments.reduce((total, item) => total + (item.kind === "payment" ? item.amountCents : -item.amountCents), 0);
 
+  const items = [
+    { description: appointment.service, amount: appointment.serviceCents },
+    ...services.map((line) => ({ description: line.title, amount: line.priceCents })),
+    ...products.map((line) => ({ description: `${line.title} × ${line.quantity}`, amount: line.unitPriceCents * line.quantity - line.discountCents })),
+    ...(appointment.noShowChargeCents ? [{ description: "No-show fee", amount: appointment.noShowChargeCents }] : []),
+    ...(appointment.packageRedeemed ? [{ description: "Package coverage", amount: -appointment.serviceCents }] : []),
+  ];
+  const transactionLabel = (item: typeof payments[number]) => `${item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · ${paymentMethodLabels[item.method] ?? item.method}`;
+  const receiptText = [
+    tenant.name, `Appointment receipt ${appointment.number}`, date.format(appointment.startsAt), appointment.client, "",
+    ...items.map(({ description, amount }) => `${description}  ${money.format(amount / 100)}`), "",
+    `Total  ${money.format(appointment.totalCents / 100)}`,
+    ...[...payments].reverse().map((item) => `${transactionLabel(item)}  ${money.format((item.kind === "refund" ? -item.amountCents : item.amountCents) / 100)}`),
+    `Net payments  ${money.format(netPaid / 100)}`,
+  ].join("\r\n");
+  const recipient = appointment.email?.trim() ?? "";
+  const draft = /^[^\s@<>?,;&]+@[^\s@<>?,;&]+\.[^\s@<>?,;&]+$/.test(recipient)
+    ? `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent("Appointment receipt " + appointment.number)}&body=${encodeURIComponent(receiptText)}`
+    : null;
+
   return <main className="appointment-receipt">
     <nav aria-label="Receipt actions">
       <Link href={tenantPath(tenantSlug, `/app/sales?sale=${saleId}`)}>Back to sale</Link>
-      <PrintReceiptButton />
+      <PrintReceiptButton onOpen={print === "1"} />
     </nav>
+    {send === "1" ? <aside className="appointment-receipt__send" aria-label="Send receipt">
+      {draft ? <><p>Open a receipt draft addressed to <strong>{recipient}</strong> in your email app.</p>
+        <a className="waybook-action waybook-action--secondary" href={draft}>Open email draft</a></>
+        : <p>Add a valid client email before preparing a receipt.</p>}
+    </aside> : null}
     <article aria-labelledby="appointment-receipt-title">
       <header>
         <p>{tenant.name}{appointment.location && appointment.location !== tenant.name ? ` · ${appointment.location}` : ""}</p>
@@ -81,11 +107,8 @@ export default async function AppointmentReceipt({ searchParams }: {
         <caption>Items</caption>
         <thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead>
         <tbody>
-          <tr><td>{appointment.service}</td><td>{money.format(appointment.serviceCents / 100)}</td></tr>
-          {services.map((line) => <tr key={line.id}><td>{line.title}</td><td>{money.format(line.priceCents / 100)}</td></tr>)}
-          {products.map((line) => <tr key={line.id}><td>{line.title} × {line.quantity}</td><td>{money.format((line.unitPriceCents * line.quantity - line.discountCents) / 100)}</td></tr>)}
-          {appointment.noShowChargeCents > 0 ? <tr><td>No-show fee</td><td>{money.format(appointment.noShowChargeCents / 100)}</td></tr> : null}
-          {appointment.packageRedeemed ? <tr><td>Package coverage</td><td>{money.format(-appointment.serviceCents / 100)}</td></tr> : null}
+          {items.map(({ description, amount }, index) =>
+            <tr key={index}><td>{description}</td><td>{money.format(amount / 100)}</td></tr>)}
         </tbody>
         <tfoot><tr><th scope="row">Checkout total</th><td>{money.format(appointment.totalCents / 100)}</td></tr></tfoot>
       </table>
@@ -93,7 +116,7 @@ export default async function AppointmentReceipt({ searchParams }: {
         <caption>Payments and refunds</caption>
         <thead><tr><th scope="col">Transaction</th><th scope="col">Amount</th></tr></thead>
         <tbody>{[...payments].reverse().map((item) => <tr key={item.id}>
-          <td>{item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {paymentMethodLabels[item.method] ?? item.method}<small>{date.format(item.recordedAt)}</small></td>
+          <td>{transactionLabel(item)}<small>{date.format(item.recordedAt)}</small></td>
           <td>{money.format((item.kind === "refund" ? -item.amountCents : item.amountCents) / 100)}</td>
         </tr>)}</tbody>
         <tfoot><tr><th scope="row">Net payments</th><td>{money.format(netPaid / 100)}</td></tr></tfoot>

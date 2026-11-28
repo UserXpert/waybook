@@ -1,5 +1,6 @@
 import { ListFilterOptions } from "@/components/workspace-options";
 import Link from "next/link";
+import { Ellipsis } from "lucide-react";
 import { redirect } from "next/navigation";
 import { hasNonGiftCardPayment, hasOnlyManualAppointmentPayments, paymentMethodLabels } from "@/lib/waybook/appointment-payment-records";
 import { getAppointmentSaleProducts, getAppointmentSalePayments } from "@/lib/waybook/appointment-sale-details";
@@ -127,8 +128,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; tender?: string; page?: string; sort?: string; activity?: string; stripe?: string; practice?: string } & TableDateParams> }) {
-  const { location: rawLocation, q, status, sale, booking, step, tender, page: rawPage, sort, activity: paymentActivity, from, to, stripe, practice } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; tender?: string; page?: string; sort?: string; activity?: string; stripe?: string; practice?: string; saleAction?: string } & TableDateParams> }) {
+  const { location: rawLocation, q, status, sale, booking, step, tender, page: rawPage, sort, activity: paymentActivity, from, to, stripe, practice, saleAction } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -416,6 +417,106 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         id: selectedSale.bookingId, title: selectedSale.serviceTitle, provider: selectedSale.teamMemberName,
         startsAt: selectedSale.startsAt, endsAt: selectedSale.endsAt, priceCents: selectedSale.bookedPriceCents,
       }, ...additionalServiceLines];
+      if (manager && !paymentStep && selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment")) {
+        const hasRefund = paymentItems.some((item) => item.kind === "refund" && !item.adjustment);
+        const closedLabel = hasRefund && balance > 0 && !selectedSale.stripeRefundedCents
+          ? selectedSale.paidCents === 0 ? "Refunded" : "Partially refunded" : state.label;
+        const receiptHref = tenantPath(tenantSlug, `/app/sales/receipt?sale=${selectedSale.id}`);
+        const refundHref = `${reviewHref}&saleAction=refund`;
+        const reopenHref = `${reviewHref}&saleAction=reopen`;
+        const canRecordRefund = Boolean(paymentBalance && paymentBalance.refundableCents > 0 && recorded.length &&
+          hasOnlyManualAppointmentPayments(recorded));
+        const canRefund = Boolean(canRecordRefund || (stripeRefund && (stripeRefund.remainingCents > 0 || stripeRefund.pendingCents !== null)));
+        return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
+          <aside className="tenant-drawer appointment-drawer sale-detail paid-sale-drawer" aria-label={`Sale details for ${selectedSale.customerName}`}>
+            <header>
+              <div>
+                <p>{closedLabel} SALE</p>
+                <h2>Appointment sale</h2>
+                <span>{dateTime.format(selectedSale.startsAt)}</span>
+              </div>
+              <div className="paid-sale__header-actions">
+                <details className="paid-sale__menu" key={saleAction}>
+                  <summary className="tenant-drawer-close" aria-label="Sale actions"><Ellipsis size={18} aria-hidden="true" /></summary>
+                  <nav aria-label="Available sale actions">
+                    {canRefund ? <Link href={refundHref} scroll={false}>Refund</Link> : null}
+                    <Link href={reopenHref} scroll={false}>Reopen for corrections</Link>
+                    <Link href={receiptHref + "&print=1"}>Print receipt</Link>
+                    <Link href={receiptHref + "&send=1"}>Send receipt</Link>
+                  </nav>
+                </details>
+                <TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose>
+              </div>
+            </header>
+            <div className="appointment-drawer__body">
+              <div className="paid-sale__client">
+                <strong>{selectedSale.customerName}</strong>
+                {selectedSale.locationName ? <span>{selectedSale.locationName}</span> : null}
+              </div>
+              {saleAction === "refund" && (canRefund || stripeRefund) ? <section aria-label="Refund">
+                <h3>{stripeRefund ? "Refund payment" : "Record refund"}</h3>
+                {stripeRefund ? <StripeAppointmentRefund bookingId={selectedSale.bookingId} requestId={crypto.randomUUID()} {...stripeRefund} /> : null}
+                {canRecordRefund && paymentBalance ? <>
+                  <p className="sale-detail__note">Record money already returned to the client.</p>
+                  <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} refundOnly />
+                </> : null}
+                <Link className="appointment-checkout__back" href={reviewHref} scroll={false}>Back to sale</Link>
+              </section> : null}
+              {saleAction === "reopen" ? <section aria-label="Sale corrections">
+                <h3>Sale corrections</h3>
+                <p className="sale-detail__note">Corrections are recorded in the ledger. The appointment stays completed.</p>
+                <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} />
+                <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
+                <Link className="appointment-checkout__back" href={reviewHref} scroll={false}>Back to sale</Link>
+              </section> : null}
+              <section aria-label="Checkout items" className="appointment-checkout__items">
+                <ul>
+                  {bookedServices.map((line) => <li key={line.id}><div><strong>{line.title}</strong>
+                    {line.provider ? <small>with {line.provider}</small> : null}</div><b>{money(line.priceCents)}</b></li>)}
+                  {selectedSale.noShowChargeCents > 0 ? <li><strong>No-show fee</strong><b>{money(selectedSale.noShowChargeCents)}</b></li> : null}
+                  {saleLines.map((line) => <li key={line.id}><strong>{line.title} × {line.quantity}</strong><b>{money(line.unitPriceCents * line.quantity - line.discountCents)}</b></li>)}
+                </ul>
+                <dl className="paid-sale__total">
+                  {selectedSale.packageRedeemed ? <div><dt>Package coverage</dt><dd>−{money(selectedSale.bookedPriceCents)}</dd></div> : null}
+                  <div><dt>Total</dt><dd>{money(selectedSale.chargeableCents)}</dd></div>
+                  {hasRefund ? <div><dt>Net paid</dt><dd>{money(selectedSale.paidCents)}</dd></div> : null}
+                  {balance !== 0 && !hasRefund ? <div><dt>{balance < 0 ? "Credit due" : "Balance due"}</dt><dd>{money(Math.abs(balance))}</dd></div> : null}
+                </dl>
+              </section>
+              <section aria-label="Transactions" className="paid-sale__transactions">
+                <h3>Transactions</h3>
+                {saleAction !== "refund" && stripeRefund?.pendingCents != null ? <p className="sale-detail__note">
+                  <Link href={refundHref}>Pending refund of {money(stripeRefund.pendingCents)}</Link>
+                </p> : null}
+                {saleAction !== "refund" && stripeRefund?.failure ? <p className="sale-detail__note" role="alert">{stripeRefund.failure}</p> : null}
+                <ul>
+                  {paymentItems.map((item) => {
+                    const provider = recorded.find((payment) => payment.id === item.id && payment.stripeMode);
+                    const method = provider ? `Stripe ${provider.stripeMode === "sandbox" ? "sandbox " : ""}${provider.stripePaymentMethod === "mobilepay" ? "MobilePay" : "card"}`
+                      : paymentMethodLabels[item.method] ?? item.method;
+                    const action = item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : null;
+                    return <li key={item.id}>
+                      <div><strong>{action ? `${action} · ${method}` : method}</strong><small>{dateTime.format(item.recordedAt)}</small></div>
+                      <b>{item.kind === "refund" ? "−" : ""}{money(item.amountCents)}</b>
+                    </li>;
+                  })}
+                </ul>
+              </section>
+              <div className="paid-sale__links">
+                {canRecordPayment ? <Link className="waybook-action" href={paymentHref}>Go to payments</Link> : null}
+                <Link className="waybook-action waybook-action--secondary" href={receiptHref}>View receipt</Link>
+                <Link className="waybook-action waybook-action--secondary" href={checkoutHref(selectedSale)}>Open appointment</Link>
+              </div>
+              {activity.length > 0 ? <details className="paid-sale__activity"><summary>Sale activity</summary>
+                <ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div>
+                  <strong>{activityLabel(event.eventType, clientLabel)}</strong>
+                  <span>{dateTime.format(event.createdAt)} · {event.providerRecorded ? "Stripe" : event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span>
+                </div></li>)}</ul>
+              </details> : null}
+            </div>
+          </aside>
+        </TenantEditorDialog>;
+      }
       return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
         <aside className={`tenant-drawer appointment-drawer sale-detail appointment-sale-drawer${paymentStep ? " appointment-sale-drawer--payment" : ""}`} data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
           <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose></header>
@@ -425,9 +526,6 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               <div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong></div>
               {selectedSale.locationName ? <small>{selectedSale.locationName}</small> : null}
             </section>
-            {manager && selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment") ?
-              <Link className="waybook-action waybook-action--secondary sale-detail__action"
-                href={tenantPath(tenantSlug, `/app/sales/receipt?sale=${selectedSale.id}`)}>View receipt</Link> : null}
             {!paymentStep ? <section aria-label="Checkout items" className="appointment-checkout__items">
               <h3>Checkout items</h3>
               <ul>

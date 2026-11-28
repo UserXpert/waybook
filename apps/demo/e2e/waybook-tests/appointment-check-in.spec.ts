@@ -110,6 +110,20 @@ test("check in, resume checkout, and complete the same appointment", { tag: "@mo
     await expect.poll(() => state(early.id)).toEqual({ status: "completed", attendance_stage: null });
     expect((await db`SELECT starts_at > now() AS early FROM bookings WHERE id=${early.id}`)[0].early).toBe(true);
     expect(await db`SELECT amount_cents FROM payment_records WHERE tenant_id=${tenantId} AND booking_id=${early.id}`).toEqual([{ amount_cents: 6500 }]);
+    const saleActions = earlySale.getByLabel("Sale actions", { exact: true });
+    await expect(earlySale.getByRole("heading", { name: "Appointment sale" })).toBeVisible();
+    await expect(earlySale.getByLabel("Phone")).toHaveCount(0);
+    await saleActions.click();
+    await expect(earlySale.getByRole("link", { name: "Print receipt" })).toHaveAttribute("href", /&print=1$/);
+    await earlySale.getByRole("link", { name: "Reopen for corrections" }).click();
+    await expect(earlySale.getByRole("region", { name: "Sale corrections" })).toBeVisible();
+    expect(await state(early.id)).toEqual({ status: "completed", attendance_stage: null });
+    await earlySale.getByRole("link", { name: "Back to sale" }).click();
+    await expect(earlySale.getByRole("region", { name: "Sale corrections" })).toHaveCount(0);
+    await saleActions.click();
+    await earlySale.getByRole("link", { name: "Send receipt" }).click();
+    await expect(page.getByRole("link", { name: "Open email draft" })).toHaveAttribute("href", /^mailto:.*subject=.*Appointment%20receipt/);
+    await page.getByRole("link", { name: "Back to sale" }).click();
     const viewReceipt = earlySale.getByRole("link", { name: "View receipt", exact: true });
     await viewReceipt.click();
     const receiptUrl = page.url();
@@ -129,6 +143,15 @@ test("check in, resume checkout, and complete the same appointment", { tag: "@mo
     await page.getByRole("link", { name: "Back to sale" }).click();
     await expect(viewReceipt).toBeVisible();
     expect((await page.request.get(receiptUrl.replace("/nordic/", "/copenhagen/"))).status()).toBe(404);
+    await saleActions.click();
+    await earlySale.getByRole("link", { name: "Refund", exact: true }).click();
+    const refund = earlySale.getByRole("region", { name: "Refund" });
+    await expect(refund.getByLabel("Method")).toHaveValue("cash");
+    await refund.getByLabel("Amount (DKK)").fill("5.00");
+    await refund.getByRole("button", { name: "Record refund", exact: true }).click();
+    await expect(refund.getByRole("status")).toHaveText("Refund recorded.");
+    await expect(earlySale.getByText("Refund · Cash", { exact: true })).toBeVisible();
+    expect(await state(early.id)).toEqual({ status: "completed", attendance_stage: null });
     const providerEmail = `arrival-staff-${tag}@example.test`;
     const [identity] = await control`INSERT INTO identities (email, password_hash, display_name)
       SELECT ${providerEmail}, password_hash, 'Check-in staff' FROM identities WHERE email='owner@nordic.local' RETURNING id`;
