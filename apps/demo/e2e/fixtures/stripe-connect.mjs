@@ -27,6 +27,14 @@ globalThis.fetch = async (input, init) => {
   if (url.origin !== "https://api.stripe.com") return originalFetch(input, init);
   const request = new Request(input, init);
   if (request.headers.get("Authorization") !== `Bearer ${secret}`) return error(401);
+  if (url.pathname === "/v1/payment_method_configurations" && request.method === "GET") {
+    if (request.headers.get("Stripe-Account") !== "acct_checkoutFixture") return error(403);
+    return Response.json({ object: "list", has_more: false, data: [{
+      id: "pmc_fixturemobilepay", object: "payment_method_configuration", parent: "pmc_fixtureparent",
+      active: true, is_default: true, livemode: false,
+      mobilepay: { available: true, display_preference: { value: "on" } },
+    }] });
+  }
   if (url.pathname.startsWith("/v1/refunds")) {
     if (request.headers.get("Stripe-Account") !== "acct_checkoutFixture") return error(403);
     if (request.method === "POST" && url.pathname === "/v1/refunds") {
@@ -114,23 +122,25 @@ globalThis.fetch = async (input, init) => {
       }
       const amount = Number(body.get("line_items[0][price_data][unit_amount]"));
       const customer = body.get("customer");
+      const method = body.get("allowed_payment_method_types[0]");
       if (customer && !redisplayCustomers.has(customer)) return error(400);
       if (!key || body.get("client_reference_id") !== key || body.get("mode") !== "payment" ||
           body.get("line_items[0][price_data][currency]") !== "dkk" ||
-          body.get("allowed_payment_method_types[0]") !== "card" || body.get("adaptive_pricing[enabled]") !== "false" ||
+          !["card", "mobilepay"].includes(method) || body.get("adaptive_pricing[enabled]") !== "false" ||
           !body.get("success_url")?.startsWith(origin + "/nordic/app/sales?booking=")) return error(400);
+      if (method === "mobilepay" && (amount !== 6505 || customer || body.has("payment_method_types[0]") ||
+          [...body.keys()].filter((field) => field.startsWith("allowed_payment_method_types[")).length !== 1)) return error(400);
       const id = `cs_test_${key.replaceAll("-", "")}`;
       const existing = sessions.get(id);
       if (existing) return existing.request === body.toString() ? Response.json(existing.checkout) : error(409);
-      sessions.set(id, {
-        request: body.toString(), reads: 0, checkout: {
-          id, object: "checkout.session", livemode: false, mode: "payment",
-          client_reference_id: key, amount_total: amount, currency: "dkk", customer,
-          expires_at: Number(body.get("expires_at")), payment_method_types: ["card"],
-          status: "open", payment_status: "unpaid", url: `https://checkout.stripe.com/c/pay/${id}`,
-        },
-      });
-      return error(503);
+      const checkout = {
+        id, object: "checkout.session", livemode: false, mode: "payment",
+        client_reference_id: key, amount_total: amount, currency: "dkk", customer,
+        expires_at: Number(body.get("expires_at")), payment_method_types: [method],
+        status: "open", payment_status: "unpaid", url: `https://checkout.stripe.com/c/pay/${id}`,
+      };
+      sessions.set(id, { request: body.toString(), reads: 0, checkout });
+      return method === "mobilepay" ? Response.json(checkout) : error(503);
     }
     const [, id, expiration] = url.pathname.match(/^\/v1\/checkout\/sessions\/(cs_test_[A-Za-z0-9]+)(\/expire)?$/) ?? [];
     const setup = cardSetups.get(id);
@@ -149,7 +159,8 @@ globalThis.fetch = async (input, init) => {
       Object.assign(session.checkout, { status: "expired", url: null });
     } else if (request.method === "GET" && !expiration) {
       session.reads++;
-      const completesPayment = [6501, 6503].includes(session.checkout.amount_total) ||
+      const mobilePay = session.checkout.payment_method_types[0] === "mobilepay";
+      const completesPayment = mobilePay || [6501, 6503].includes(session.checkout.amount_total) ||
         redisplayCustomers.has(session.checkout.customer);
       if (completesPayment && session.reads >= 2 && session.checkout.status === "open") {
         Object.assign(session.checkout, { status: "complete", payment_status: "paid", payment_intent: `pi_${id.slice(8)}`, url: null });

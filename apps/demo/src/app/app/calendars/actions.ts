@@ -1101,7 +1101,9 @@ export async function updateStripeAppointmentPayment(_state: PaymentState, formD
   try {
     const config = appointmentStripeConfig();
     if (!config) throw new Error("Stripe sandbox checkout is unavailable.");
-    const action = formData.get("action");
+    const requestedAction = formData.get("action");
+    const paymentMethod = requestedAction === "open-mobilepay" ? "mobilepay" : requestedAction === "open-card" ? "card" : undefined;
+    const action = paymentMethod ? "open" : requestedAction;
     const bookingId = String(formData.get("bookingId") ?? "");
     const expectedCents = Number(formData.get("expectedCents"));
     if (action !== "open" && action !== "check" && action !== "cancel" && action !== "return") throw new Error("Choose a payment action.");
@@ -1112,11 +1114,12 @@ export async function updateStripeAppointmentPayment(_state: PaymentState, formD
     const reviewPath = tenantPath(slug, `/app/sales?booking=${bookingId}`);
     const outcome = await runAppointmentStripeCheckout({ db, tenantId: tenant.id, bookingId }, config, {
       action, expectedCents, actorId: identity.id, returnPath: `${reviewPath}&step=payment&stripe=return`,
+      paymentMethod,
     });
     if (outcome.state === "open" && action === "open") destination = outcome.url;
     if (outcome.state === "paid") destination = reviewPath;
     if (outcome.state === "expired") success = "Stripe checkout is closed. You can choose a payment method.";
-    if (outcome.state === "open") success = "Stripe is waiting for the card payment.";
+    if (outcome.state === "open") success = "Stripe is waiting for the payment.";
     if (outcome.state === "processing") success = "Stripe is processing the payment. Check again shortly.";
   } catch (error) {
     revalidateCalendars();

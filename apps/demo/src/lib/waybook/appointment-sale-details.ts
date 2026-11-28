@@ -22,7 +22,13 @@ export function getAppointmentSaleProducts({ db, tenantId }: SaleItemContext, sa
 
 export function getAppointmentSalePayments({ db, tenantId }: SaleItemContext, bookingId: string) {
   return db<PaymentItem[]>`
-    SELECT p.id, p.kind, p.amount_cents AS "amountCents", p.method, p.recorded_at AS "recordedAt",
+    SELECT p.id, p.kind, p.amount_cents AS "amountCents", p.recorded_at AS "recordedAt",
+      CASE WHEN EXISTS (SELECT 1 FROM booking_events e
+        WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+          AND e.event_type IN ('payment.payment', 'payment.refund', 'payment.refund_returned')
+          AND e.metadata->>'paymentId' = p.id::text AND e.metadata->>'source' = 'stripe_sandbox'
+          AND e.metadata->>'stripePaymentMethod' = 'mobilepay')
+        THEN 'mobilepay' ELSE p.method END AS method,
       EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
         AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text) AS adjustment,
       EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id

@@ -2,10 +2,17 @@ import type { tenantDb } from "./database";
 
 export const manualPaymentMethods = ["card", "cash", "bank_transfer", "other"] as const;
 export const paymentMethodLabels: Record<string, string> = {
-  card: "Card", cash: "Cash", bank_transfer: "Bank transfer", other: "Other", gift_card: "Gift card",
+  card: "Card", cash: "Cash", bank_transfer: "Bank transfer", other: "Other", gift_card: "Gift card", mobilepay: "MobilePay",
 };
 
-export type RecordedAppointmentPayment = { id: string; amountCents: number; method: string; revision: string | null; stripeSandbox?: boolean };
+export type RecordedAppointmentPayment = {
+  id: string;
+  amountCents: number;
+  method: string;
+  revision: string | null;
+  stripeSandbox?: boolean;
+  stripePaymentMethod?: "card" | "mobilepay" | null;
+};
 
 export function hasNonGiftCardPayment(payments: RecordedAppointmentPayment[]) {
   return payments.some(({ method }) => method !== "gift_card");
@@ -21,10 +28,15 @@ export function activeAppointmentPayments(db: Pick<ReturnType<typeof tenantDb>, 
   return db.unsafe<RecordedAppointmentPayment[]>(`
     SELECT p.id, coalesce((edit.metadata->>'amountCents')::int, p.amount_cents) AS "amountCents",
       coalesce(edit.metadata->>'method', p.method) AS method, edit.id AS revision,
-      EXISTS (SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
-        AND e.event_type = 'payment.payment' AND e.metadata->>'paymentId' = p.id::text
-        AND e.metadata->>'source' = 'stripe_sandbox') AS "stripeSandbox"
+      stripe.metadata IS NOT NULL AS "stripeSandbox",
+      stripe.metadata->>'stripePaymentMethod' AS "stripePaymentMethod"
     FROM payment_records p
+    LEFT JOIN LATERAL (
+      SELECT metadata FROM booking_events
+      WHERE tenant_id = p.tenant_id AND booking_id = p.booking_id AND event_type = 'payment.payment'
+        AND metadata->>'paymentId' = p.id::text AND metadata->>'source' = 'stripe_sandbox'
+      LIMIT 1
+    ) stripe ON true
     LEFT JOIN LATERAL (
       SELECT id, event_type, metadata FROM booking_events
       WHERE tenant_id = p.tenant_id AND booking_id = p.booking_id

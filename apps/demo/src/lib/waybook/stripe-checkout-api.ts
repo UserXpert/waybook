@@ -11,6 +11,7 @@ export type SandboxCheckoutAttempt = {
   amountCents: number;
   expiresAtSeconds: number;
   returnPath: string;
+  paymentMethod?: "card" | "mobilepay";
   stripeCustomerId?: string | null;
 };
 
@@ -48,14 +49,15 @@ function verifySession(
   attempt: SandboxCheckoutAttempt,
   expectedId?: string,
 ): SandboxCheckoutSession {
+  const paymentMethod = attempt.paymentMethod ?? "card";
   if (typeof session?.id !== "string" || !sessionIdPattern.test(session.id) ||
       (expectedId !== undefined && session.id !== expectedId) ||
       session.object !== "checkout.session" || session.livemode !== false || session.mode !== "payment" ||
       session.client_reference_id !== attempt.id || session.amount_total !== attempt.amountCents ||
-      (attempt.stripeCustomerId != null && session.customer !== attempt.stripeCustomerId) ||
+      (paymentMethod === "card" && attempt.stripeCustomerId != null && session.customer !== attempt.stripeCustomerId) ||
       session.currency !== "dkk" || session.expires_at !== attempt.expiresAtSeconds ||
       !Array.isArray(session.payment_method_types) || session.payment_method_types.length !== 1 ||
-      session.payment_method_types[0] !== "card") {
+      session.payment_method_types[0] !== paymentMethod) {
     throw new Error("Stripe did not confirm the expected sandbox checkout session.");
   }
   const id = session.id;
@@ -96,6 +98,30 @@ export async function stripeSandboxRequest(config: StripeSandboxConfig, request:
   return response;
 }
 
+type PaymentMethodConfiguration = {
+  object?: unknown;
+  active?: unknown;
+  is_default?: unknown;
+  livemode?: unknown;
+  parent?: unknown;
+  mobilepay?: { available?: unknown } | null;
+};
+
+export async function stripeSandboxMobilePayAvailable(config: StripeSandboxConfig, accountId: string, request: typeof fetch = fetch) {
+  try {
+    const response = await stripeSandboxRequest(config, request, accountId, "/v1/payment_method_configurations", "GET");
+    const list = await response.json() as { object?: unknown; has_more?: unknown; data?: (PaymentMethodConfiguration | null)[] } | null;
+    if (list?.object !== "list" || list.has_more !== false || !Array.isArray(list.data)) return false;
+    const defaults = list.data.filter((configuration) =>
+      configuration?.object === "payment_method_configuration" && configuration.is_default === true &&
+      configuration.active === true && configuration.livemode === false &&
+      typeof configuration.parent === "string" && /^pmc_[A-Za-z0-9]+$/.test(configuration.parent));
+    return defaults.length === 1 && defaults[0]?.mobilepay?.available === true;
+  } catch {
+    return false;
+  }
+}
+
 export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: typeof fetch = fetch) {
   async function call(
     attempt: SandboxCheckoutAttempt,
@@ -103,9 +129,11 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
     sessionId?: string,
     body?: URLSearchParams,
   ) {
+    const paymentMethod = attempt.paymentMethod ?? "card";
     if (!attemptIdPattern.test(attempt.id) ||
         !Number.isInteger(attempt.amountCents) || attempt.amountCents <= 0 || attempt.amountCents > 10_000_000 ||
         !Number.isSafeInteger(attempt.expiresAtSeconds) || attempt.expiresAtSeconds <= 0 ||
+        (paymentMethod !== "card" && paymentMethod !== "mobilepay") ||
         (sessionId !== undefined && !sessionIdPattern.test(sessionId))) {
       throw new Error("Invalid Stripe sandbox checkout context.");
     }
@@ -167,12 +195,14 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
       // Existing attempts retain the exact callback URLs sent with their original retry key.
       const cancelUrl = new URL(returnUrl);
       if (cancelUrl.searchParams.get("stripe") === "return") cancelUrl.searchParams.delete("stripe");
-      if (attempt.stripeCustomerId != null && !/^cus_[A-Za-z0-9]+$/.test(attempt.stripeCustomerId)) {
+      const paymentMethod = attempt.paymentMethod ?? "card";
+      const customer = paymentMethod === "card" ? attempt.stripeCustomerId : null;
+      if (customer != null && !/^cus_[A-Za-z0-9]+$/.test(customer)) {
         throw new Error("Invalid Stripe checkout customer.");
       }
       const params = new URLSearchParams({
         mode: "payment",
-        "allowed_payment_method_types[0]": "card",
+        "allowed_payment_method_types[0]": paymentMethod,
         "adaptive_pricing[enabled]": "false",
         client_reference_id: attempt.id,
         expires_at: String(attempt.expiresAtSeconds),
@@ -183,7 +213,7 @@ export function stripeCheckoutSandbox(config: StripeSandboxConfig, request: type
         "line_items[0][price_data][product_data][name]": "Appointment checkout",
         "line_items[0][quantity]": "1",
       });
-      if (attempt.stripeCustomerId) params.set("customer", attempt.stripeCustomerId);
+      if (customer) params.set("customer", customer);
       return call(attempt, "create", undefined, params);
     },
     retrieve(attempt: SandboxCheckoutAttempt, sessionId: string) {
