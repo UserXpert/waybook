@@ -58,6 +58,8 @@ for (const tenant of [
     await expect(page.getByRole("img", { name: "Current product" })).toHaveCount(0);
 
     await page.getByRole("complementary", { name: "Edit product" }).getByRole("link", { name: "Close product editor" }).click();
+    const options = page.getByRole("button", { name: "Options", exact: true });
+    await options.click();
     await expect(page.getByRole("dialog", { name: "Edit product" })).toHaveCount(0);
     await page.getByRole("searchbox", { name: "Search", exact: true }).fill(sku);
     await page.getByRole("button", { name: "Apply", exact: true }).click();
@@ -68,7 +70,9 @@ for (const tenant of [
     await openProduct.click();
     await closeProduct("Edit product").click();
     await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku && !url.searchParams.has("product"));
+    await options.click();
     await expect(page.getByRole("searchbox", { name: "Search", exact: true })).toHaveValue(sku);
+    await page.getByRole("button", { name: "Close options" }).click();
     await page.getByRole("link", { name: "Add product", exact: true }).click();
     await expect(page).toHaveURL(/new=1/);
     await name.fill("Duplicate SKU Draft");
@@ -78,7 +82,9 @@ for (const tenant of [
     await expect(name).toHaveValue("Duplicate SKU Draft");
     await closeProduct("Add product").click();
     await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku && !url.searchParams.has("new"));
+    await options.click();
     await expect(page.getByRole("searchbox", { name: "Search", exact: true })).toHaveValue(sku);
+    await page.getByRole("button", { name: "Close options" }).click();
     expect(await db`SELECT id FROM commerce_catalog_items WHERE sku = ${sku}`).toHaveLength(1);
     await page.goto(productUrl);
     await expect(name).toHaveValue("Synthetic Catalogue QA");
@@ -91,7 +97,9 @@ for (const tenant of [
     await expect(page).toHaveURL((url) => url.searchParams.get("q") === sku && url.searchParams.has("product"));
     await expect(page.getByRole("textbox", { name: "SKU", exact: true })).toHaveValue(revisedSku);
     await closeProduct("Edit product").click();
+    await options.click();
     await expect(page.getByRole("searchbox", { name: "Search", exact: true })).toHaveValue(sku);
+    await page.getByRole("button", { name: "Close options" }).click();
     await expect(page.getByText("No matching products. Try a different name or SKU.", { exact: true })).toBeVisible();
   } finally {
     try {

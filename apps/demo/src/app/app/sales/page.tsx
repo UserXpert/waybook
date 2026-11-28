@@ -1,3 +1,4 @@
+import { ListFilterOptions } from "@/components/workspace-options";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { hasNonGiftCardPayment, hasOnlyManualAppointmentPayments, paymentMethodLabels } from "@/lib/waybook/appointment-payment-records";
@@ -321,8 +322,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       <article><span>Credit due</span><strong>{money(Number(refundDueCents))}</strong></article>
     </section>
     <section className="waybook-data-card">
+      <div className="waybook-section-heading workspace-filter-bar">
       <h2>Appointment checkouts</h2>
-      <form action={salesPath} method="get" className="waybook-list-filter sales-filters">
+      <ListFilterOptions label="Appointment checkouts" action={salesPath} active={Boolean(selectedLocation || search || dates.from || dates.to || selectedStatus !== "all" || selectedActivity !== "all" || selectedSort !== "appointment-today")} clearHref={salesPath}>
         <label>Location<select name="location" defaultValue={selectedLocation?.id ?? ""}>
           <option value="">All locations</option>
           {locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -340,9 +342,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
           {saleSortOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
         </select></label>
         <TableDateFields dates={dates} label="Appointment date range" withSort={false} />
-        <label>Search<input name="q" type="search" defaultValue={search} placeholder={`${clientLabel} or service`} /></label>
-        <button type="submit">Apply</button>
-      </form>
+        <label>Search<input name="q" type="search" defaultValue={search} placeholder={`${clientLabel} or service`} /></label></ListFilterOptions>
+      </div>
       <div className="waybook-table-wrap"><table>
         <thead><tr><th>Sale</th><th>Status</th><th aria-sort={sortingPayments ? undefined : sortDirection}>Appointment date</th><th>{clientLabel}</th><th>Service</th><th>Total</th><th aria-sort={sortingPayments ? sortDirection : undefined}>Payments</th></tr></thead>
         <tbody>{sales.map((row) => {

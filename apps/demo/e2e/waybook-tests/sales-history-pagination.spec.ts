@@ -8,7 +8,7 @@ const workspaces = [
 ];
 
 for (const workspace of workspaces) {
-  test(`appointment sales can find older records and count all matches in ${workspace.route}`, async ({ page }) => {
+  test(`appointment sales can find older records and count all matches in ${workspace.route}`, { tag: workspace.route === "nordic" ? "@mobile" : [] }, async ({ page }) => {
     const db = postgres(process.env[workspace.database]!, { max: 1, ssl: false });
     const tag = `QA sales ${randomUUID().slice(0, 8)}`;
     const olderName = `${tag} older`;
@@ -48,14 +48,23 @@ for (const workspace of workspaces) {
         await page.getByRole("button", { name: "Sign in", exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/${workspace.route}/app`));
         await page.goto(`${path}?${query}`);
+        const options = page.getByRole("button", { name: "Options", exact: true });
+        const sidebar = page.getByRole("dialog", { name: "Appointment checkouts options" });
+        const apply = sidebar.getByRole("button", { name: "Apply", exact: true });
+        await expect(sidebar).toHaveCount(0);
+        await expect(page.getByRole("columnheader", { name: "Appointment date" })).toHaveAttribute("aria-sort", "other");
+        await expect(page.locator("tbody tr").first()).toContainText(olderName);
+        await options.click();
         const sort = page.getByRole("combobox", { name: "Sort by", exact: true });
         const paymentActivity = page.getByRole("combobox", { name: "Payment activity", exact: true });
         await expect(sort).toHaveValue("appointment-today");
-        await expect(page.getByRole("columnheader", { name: "Appointment date" })).toHaveAttribute("aria-sort", "other");
-        await expect(page.locator("tbody tr").first()).toContainText(olderName);
+        await sort.selectOption("appointment-oldest");
+        await sidebar.getByRole("button", { name: "Close options" }).click();
+        await expect(options).toBeFocused();
+        await options.click();
+        await expect(sort).toHaveValue("appointment-today");
         await sort.selectOption("appointment-newest");
-        await page.getByRole("button", { name: "Apply", exact: true }).click();
-        await expect(sort).toHaveValue("appointment-newest");
+        await apply.click();
         await expect(page.getByRole("columnheader", { name: "Appointment date" })).toHaveAttribute("aria-sort", "descending");
         const summary = page.locator(".waybook-data-metrics article").filter({ hasText: "Open balance" });
         const expected = new Intl.NumberFormat("en-DK", { style: "currency", currency: "DKK" }).format(151 * 100.25);
@@ -76,40 +85,56 @@ for (const workspace of workspaces) {
         await expect(summary.locator("strong")).toHaveText(expected);
         await pagination.getByRole("link", { name: "Previous page" }).click();
         await expect(olderRow).toHaveCount(0);
+        await options.click();
+        await expect(sort).toHaveValue("appointment-newest");
         await page.getByLabel("Status").selectOption("cancelled");
-        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        await apply.click();
         await expect(olderRow).toBeVisible();
         await expect(page.getByRole("link", { name: "Next page" })).toHaveCount(0);
+        await options.click();
         await page.getByLabel("Status").selectOption("all");
         await sort.selectOption("appointment-oldest");
         await paymentActivity.selectOption("without");
-        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        await apply.click();
         await expect(page.getByRole("columnheader", { name: "Appointment date" })).toHaveAttribute("aria-sort", "ascending");
         await expect(page.locator("tbody tr").first()).toContainText(olderName);
         await pagination.getByRole("link", { name: "Next page" }).click();
         await expect(pagination).toContainText("Showing 151–152 of 152");
+        await options.click();
         await expect(sort).toHaveValue("appointment-oldest");
         await expect(paymentActivity).toHaveValue("without");
+        await sidebar.getByRole("button", { name: "Close options" }).click();
         await pagination.getByRole("link", { name: "Previous page" }).click();
         await olderRow.getByRole("link", { name: /Appointment/ }).click();
         await expect(details).toBeVisible();
         await details.getByRole("link", { name: "Close sale details" }).click();
+        await expect(page.locator("tbody tr").first()).toContainText(olderName);
+        await options.click();
         await expect(sort).toHaveValue("appointment-oldest");
         await expect(paymentActivity).toHaveValue("without");
-        await expect(page.locator("tbody tr").first()).toContainText(olderName);
 
-        await page.getByLabel("Appointment date range from").fill("2041-01-01");
-        await page.getByLabel("Appointment date range to").fill("2041-01-01");
-        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        const dateRange = sidebar.getByRole("button", { name: /^Appointment date range/ });
+        await dateRange.click();
+        await sidebar.getByRole("combobox", { name: "Year", exact: true }).selectOption("2041");
+        await sidebar.getByRole("combobox", { name: "Month", exact: true }).selectOption("0");
+        const day = sidebar.getByRole("button", { name: /\b1 January 2041$/ });
+        await day.click();
+        await day.click();
+        await expect(dateRange).toContainText("1 Jan 2041");
+        await apply.click();
         await expect(page.locator("tbody tr")).toHaveCount(6);
         await expect(olderRow).toBeVisible();
         await olderRow.getByRole("link", { name: /Appointment/ }).click();
         await details.getByRole("link", { name: "Close sale details" }).click();
-        await expect(page.getByLabel("Appointment date range to")).toHaveValue("2041-01-01");
+        await options.click();
+        await expect(dateRange).toContainText("1 Jan 2041");
 
         await paymentActivity.selectOption("with");
-        await page.getByRole("button", { name: "Apply", exact: true }).click();
+        await apply.click();
         await expect(page.getByText("No appointment sales match these filters.")).toBeVisible();
+        await options.click();
+        await sidebar.getByRole("link", { name: "Clear filters" }).click();
+        await expect(page).toHaveURL((url) => url.pathname === path && !url.search);
         await page.goto(`${path}?sale=${fixture.saleId}`);
         await expect(details).toBeVisible();
       } finally {

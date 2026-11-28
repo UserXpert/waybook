@@ -13,7 +13,7 @@ import { calendarBookingTime } from "@/lib/waybook/calendar-timezones";
 import { calendarHolidays } from "@/lib/waybook/calendar-holidays";
 import { CalendarDatePicker } from "@/components/calendar-date-picker";
 import { CalendarActiveFilters } from "@/components/calendar-active-filters";
-import { CalendarFilterDismiss } from "@/components/calendar-filter-panel";
+import { WorkspaceOptions } from "@/components/workspace-options";
 import { CalendarRosterControls } from "@/components/calendar-roster-controls";
 import { CalendarBookingDragDrop } from "@/components/calendar-booking-drag-drop";
 import { CalendarAppointmentDrawer } from "@/components/calendar-appointment-drawer";
@@ -354,6 +354,7 @@ export default async function CalendarsPage({
   // All-staff uses the operational Day board. A selected staff member uses
   // their Week board; there is intentionally no single-staff Day board.
   const monthlyView = view === "month";
+  const calendarOptionsKey = JSON.stringify([requestedLocationId, employee, service, staffSearch, showOffShift]);
   const teamView = !monthlyView && !hasSelectedEmployee;
   const calendarDatePickerScope = {
     location: selectedLocation?.id,
@@ -690,6 +691,7 @@ export default async function CalendarsPage({
     };
   };
   const teamDayBookings = teamView ? teamBookings : [];
+  const calendarOptionsActive = Boolean(requestedLocation || hasSelectedEmployee || selectedService || staffSearch || showOffShift === "0");
   const visibleTeamMembers = showOffShift !== "0" ? members : members.filter((member) =>
     teamDayBookings.some((booking) => booking.teamMemberId === member.id)
     || Array.from(serviceForBookableSlot.keys()).some((key) => key.startsWith(`${member.id}|${teamDay}T`)),
@@ -786,7 +788,6 @@ export default async function CalendarsPage({
         tenantName={tenant.name}
         active="calendars"
       />
-      <CalendarFilterDismiss />
       {(canManage || permissions.canManageOwnAppointments || permissions.canManageTeamAppointments) ? (
         <CalendarBookingDragDrop />
       ) : null}
@@ -820,12 +821,11 @@ export default async function CalendarsPage({
                       <span>{selectedLocation.name} · {hasSelectedEmployee ? selected?.name : `All ${terms.staffPlural}`} · {calendarTimezone}</span>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
-                      <details className="calendar-filter-panel">
-                        <summary>Filters</summary>
-                        <div className="calendar-filter-panel__content">
+                      <WorkspaceOptions key={calendarOptionsKey} label="Calendar" active={calendarOptionsActive}>
+                        <div className="workspace-options-fields">
                           <CalendarSelectors terminology={terms} location={selectedLocation} members={members} services={monthCalendarServices} week={currentWeek} fixedView="month" />
                         </div>
-                      </details>
+                      </WorkspaceOptions>
                       <CalendarActiveFilters staffLabel={titleTerminology(terms.staffPlural)}
                         location={{ name: selectedLocation.name, isExplicit: Boolean(requestedLocation) }}
                         staff={hasSelectedEmployee && selected ? { name: selected.name, id: selected.id } : undefined}
@@ -883,9 +883,8 @@ export default async function CalendarsPage({
                       {dayHoliday ? <span className="calendar-holiday">{dayHoliday}</span> : null}
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
-                      <details className="calendar-filter-panel">
-                        <summary>Filters</summary>
-                        <div className="calendar-filter-panel__content">
+                      <WorkspaceOptions key={calendarOptionsKey} label="Calendar" active={calendarOptionsActive}>
+                        <div className="workspace-options-fields">
                           <CalendarSelectors terminology={terms}
                             location={selectedLocation!}
                             members={members}
@@ -895,7 +894,7 @@ export default async function CalendarsPage({
                           <CalendarRosterControls staffPlural={terms.staffPlural} includeOffShift={showOffShift !== "0"} />
                           <p className="calendar-selectors__hint" id="calendar-search-hint">Type 2+ characters to search.</p>
                         </div>
-                      </details>
+                      </WorkspaceOptions>
                       <CalendarActiveFilters staffLabel={titleTerminology(terms.staffPlural)}
                         location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
                         service={selectedService ? { name: selectedService.title, id: selectedService.id } : undefined}
@@ -1090,9 +1089,8 @@ export default async function CalendarsPage({
                       </span>
                     </div>
                     <div className="waybook-calendar-toolbar__actions">
-                      <details className="calendar-filter-panel">
-                        <summary>Filters</summary>
-                        <div className="calendar-filter-panel__content">
+                      <WorkspaceOptions key={calendarOptionsKey} label="Calendar" active={calendarOptionsActive}>
+                        <div className="workspace-options-fields">
                           <CalendarSelectors terminology={terms}
                             location={selectedLocation!}
                             members={members}
@@ -1100,7 +1098,7 @@ export default async function CalendarsPage({
                             week={currentWeek}
                           />
                         </div>
-                      </details>
+                      </WorkspaceOptions>
                       <CalendarActiveFilters staffLabel={titleTerminology(terms.staffPlural)}
                         location={{ name: selectedLocation!.name, isExplicit: Boolean(requestedLocation) }}
                         staff={selected ? { name: selected.name, id: selected.id } : undefined}

@@ -1,3 +1,4 @@
+import { ListFilterOptions } from "@/components/workspace-options";
 import { notFound } from "next/navigation";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -151,7 +152,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
           {canManage ? <Link className="waybook-primary-link" href={basePath + "?new=1"}>Add {terms.staff}</Link> : null}
         </div>
         <p className="staff-workspace__directory-copy">{canSelectTeamTimeOff ? "Select a person to manage their time off." : canManage ? "Select a person to manage their profile, schedule, services, and time off." : "View your profile and schedule."}</p>
-        {canManage || canSelectTeamTimeOff ? <form method="get" className="waybook-list-filter">{canSelectTeamTimeOff ? <input type="hidden" name="tab" value="time-off" /> : null}<label>Search {terms.staffPlural}<input name="q" type="search" defaultValue={search} placeholder={canSelectTeamTimeOff ? "Name" : "Name or email"} /></label><button type="submit">Search</button></form> : null}
+        {canManage || canSelectTeamTimeOff ? <ListFilterOptions label={titleTerminology(terms.staffPlural)} active={Boolean(search)} clearHref={basePath + (canSelectTeamTimeOff ? "?tab=time-off" : "")}>{canSelectTeamTimeOff ? <input type="hidden" name="tab" value="time-off" /> : null}<label>Search {terms.staffPlural}<input name="q" type="search" defaultValue={search} placeholder={canSelectTeamTimeOff ? "Name" : "Name or email"} /></label></ListFilterOptions> : null}
         <nav>
           {members.map((member) => <Link key={member.id} href={staffPath(member.id)} aria-current={selected?.id === member.id ? "page" : undefined}>
             <span className="staff-workspace__avatar" aria-hidden="true">{member.photoDataUrl && (!canSelectTeamTimeOff || member.id === signedInPermissions.teamMemberId) ? <img src={member.photoDataUrl} alt="" /> : member.name.slice(0, 1)}</span>

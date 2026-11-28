@@ -162,11 +162,13 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await page.keyboard.press("Escape");
     await expect(saleDrawer).toHaveCount(0);
     await page.goto("/nordic/app/sales");
+    await page.getByRole("button", { name: "Options", exact: true }).click();
     await page.getByRole("combobox", { name: "Sort by", exact: true }).selectOption("payment-newest");
     await page.getByRole("combobox", { name: "Payment activity", exact: true }).selectOption("with");
     await page.getByRole("button", { name: "Apply", exact: true }).click();
     await expect(page.getByRole("columnheader", { name: "Payments", exact: true })).toHaveAttribute("aria-sort", "descending");
     await expect(page.locator("tbody tr").first()).toContainText(customerName);
+    await page.getByRole("button", { name: "Options", exact: true }).click();
     await page.getByRole("combobox", { name: "Sort by", exact: true }).selectOption("payment-oldest");
     await page.getByRole("button", { name: "Apply", exact: true }).click();
     await expect(page.getByRole("columnheader", { name: "Payments", exact: true })).toHaveAttribute("aria-sort", "ascending");

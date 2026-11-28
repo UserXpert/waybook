@@ -1,3 +1,4 @@
+import { ListFilterOptions } from "@/components/workspace-options";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { FormToggle } from "@/components/form-toggle";
@@ -139,7 +140,7 @@ export default async function LocationsPage({
         </form>
       </header>
       <section className="waybook-data-card">
-        <div className="waybook-section-heading">
+        <div className="waybook-section-heading workspace-filter-bar">
           <div>
             <h2>Locations</h2>
             <p>
@@ -152,8 +153,7 @@ export default async function LocationsPage({
               Add location
             </Link>
           ) : null}
-        </div>
-        <form method="get" className="waybook-list-filter">
+        <ListFilterOptions label="Locations" active={Boolean(search)} clearHref={path}>
           <label>
             Search locations
             <input
@@ -162,9 +162,8 @@ export default async function LocationsPage({
               defaultValue={search}
               placeholder="Location name"
             />
-          </label>
-          <button type="submit">Search</button>
-        </form>
+          </label></ListFilterOptions></div>
+
         <div className="waybook-service-list">
           {locations.map((item) => (
             <Link

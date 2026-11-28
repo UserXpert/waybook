@@ -33,6 +33,8 @@ for (const tenant of [
     await expect(detail.getByText(`+${amount}`, { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page).toHaveURL((url) => url.pathname === route && !url.search);
+    const options = page.getByRole("button", { name: "Options", exact: true });
+    await options.click();
     const search = page.getByRole("searchbox", { name: "Search" });
     await search.fill(owner);
     await page.getByRole("button", { name: "Apply" }).click();
@@ -50,10 +52,13 @@ for (const tenant of [
     await expect(page).toHaveURL((url) => url.searchParams.get("page") === "2" && url.searchParams.get("q") === owner);
     await page.keyboard.press("Escape");
     await expect(open).toBeFocused();
+    await options.click();
     await expect(search).toHaveValue(owner);
+    await page.getByRole("button", { name: "Close options" }).click();
     await pager.getByRole("link", { name: "Previous page" }).click();
     await expect(pager).toContainText("Showing 1–150 of 152");
     expect(await db`SELECT amount_cents FROM commerce_gift_card_entries WHERE gift_card_id=${id}`).toEqual([{ amount_cents: 10050 }]);
+    await options.click();
     await search.fill(`missing-${id}`);
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByText("No gift cards match this search.", { exact: true })).toBeVisible();
