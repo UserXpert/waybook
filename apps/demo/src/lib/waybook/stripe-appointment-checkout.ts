@@ -91,6 +91,13 @@ async function reserveAttempt(
     }
     if (!stripeCanStartPayment(config)) throw new Error("New Stripe payments are currently disabled.");
     if (!canStart) throw new Error("The Stripe payment changed. Review checkout and try again.");
+    if (livemode) {
+      const [{ pending }] = await sql.unsafe<{ pending: boolean }[]>(`
+        SELECT EXISTS (SELECT 1 FROM commerce_sales WHERE tenant_id=$1 AND is_stripe_practice
+          AND stripe_practice_cleared_at IS NULL) AS pending
+      `, [tenantId]);
+      if (pending) throw new Error("Clear practice sales in Settings → Payments before taking live Stripe payments.");
+    }
     const paymentMethod = input.paymentMethod ?? "card";
     const [cart] = await sql.unsafe<{ total: number; currency: string; alreadyRecorded: boolean; stripeCustomerId: string | null }[]>(`
       SELECT cart.chargeable_cents::int AS total, sale.currency,
