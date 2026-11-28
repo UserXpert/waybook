@@ -25,7 +25,7 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
 import { stripeDkkMinimumCents, stripeMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
-import { stripeAppointmentPaymentConfig, stripeCanStartPayment, stripePaymentAccount } from "@/lib/waybook/stripe-payment-mode";
+import { stripeAppointmentCollection, stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
 import { stripeAppointmentRefundDetails } from "@/lib/waybook/stripe-appointment-refunds";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
@@ -264,20 +264,25 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   ` : [];
   const clock = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, hour: "2-digit", minute: "2-digit" });
   const stripeConfig = stripeAppointmentPaymentConfig(process.env);
-  const stripeCollectionEnabled = stripeConfig ? stripeCanStartPayment(stripeConfig) : false;
-  const [stripeState, stripeAccount, stripeRefund] = selectedSale && stripeConfig ? await Promise.all([
-    appointmentStripeState({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }),
-    manager && stripeCollectionEnabled ? stripePaymentAccount(tenant.id, stripeConfig) : null,
-    manager && ["completed", "cancelled"].includes(selectedSale.status) && paymentBalance?.payments.some((payment) => payment.stripeMode)
-      ? stripeAppointmentRefundDetails({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }, stripeConfig)
+  const stripeStatePromise = selectedSale && stripeConfig
+    ? appointmentStripeState({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }) : null;
+  const stripeEligible = selectedSale?.status === "arrived" && selectedSale.attendanceStage === "checking_out" &&
+    selectedSale.currency === "DKK" && paymentItems.length === 0;
+  const [stripeState, stripeAvailability, stripeRefund] = await Promise.all([
+    stripeStatePromise,
+    manager && step === "payment" && stripeEligible
+      ? Promise.resolve(stripeStatePromise).then((state) => state?.state === "pending" ? null : stripeAppointmentCollection(db, tenant.id, stripeConfig))
       : null,
-  ]) : [null, null, null];
+    manager && selectedSale && stripeConfig && ["completed", "cancelled"].includes(selectedSale.status) &&
+      paymentBalance?.payments.some((payment) => payment.stripeMode)
+      ? stripeAppointmentRefundDetails({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }, stripeConfig) : null,
+  ]);
   const pendingStripeMethod = stripeState?.state === "pending" ? stripeState.paymentMethod : null;
   const stripePending = Boolean(pendingStripeMethod);
   const currentStripeMode = !stripePending || stripeState?.livemode === (stripeConfig?.livemode === true);
-  const mobilePayAvailable = Boolean(stripeConfig && stripeAccount && !stripePending &&
-    step === "payment" && selectedSale?.attendanceStage === "checking_out" && selectedSale.currency === "DKK" &&
-    selectedSale.chargeableCents - selectedSale.paidCents >= stripeDkkMinimumCents && paymentItems.length === 0 &&
+  const stripeAccount = stripeAvailability?.status === "ready" ? stripeAvailability.accountId : null;
+  const mobilePayAvailable = Boolean(stripeConfig && stripeAccount && selectedSale &&
+    selectedSale.chargeableCents - selectedSale.paidCents >= stripeDkkMinimumCents &&
     await stripeMobilePayAvailable(stripeConfig, stripeAccount));
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
@@ -383,9 +388,15 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const canUseGiftCard = manager && !stripePending && activeAppointment && !selectedSale.giftCardRedeemed && recorded.length === 0 && canRecordPayment && selectedSale.currency === "DKK";
       const giftCardStep = canUseGiftCard && tender === "gift-card";
       const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0 && !stripePending;
-      const stripeCheckoutAvailable = Boolean(stripeAccount) && selectedSale.attendanceStage === "checking_out" &&
-        selectedSale.currency === "DKK" && paymentItems.length === 0;
-      const canStartStripe = stripeCheckoutAvailable && outstandingCents >= stripeDkkMinimumCents;
+      const canStartStripe = Boolean(stripeAccount) && outstandingCents >= stripeDkkMinimumCents;
+      const stripeUnavailable = stripeAvailability && stripeAvailability.status !== "ready" ? {
+        unavailable: "Stripe is unavailable for online payments.",
+        "live-off": "Live Stripe payments are off.",
+        unlinked: "Connect Stripe to accept online payments.",
+        "setup-incomplete": "Finish Stripe setup to accept online payments.",
+        "practice-sales": "Clear practice sales before taking live payments.",
+      }[stripeAvailability.status] : !activeCheckout && activeAppointment && paymentItems.length === 0
+        ? "Start appointment checkout before taking an online payment." : null;
       const bookedServices = [{
         id: selectedSale.bookingId, title: selectedSale.serviceTitle, provider: selectedSale.teamMemberName,
         startsAt: selectedSale.startsAt, endsAt: selectedSale.endsAt, priceCents: selectedSale.bookedPriceCents,
@@ -456,9 +467,13 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {manager && currentStripeMode && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
                   amountCents={outstandingCents} pendingPayment={pendingStripeMethod} mobilePayAvailable={mobilePayAvailable}
                   livemode={stripeConfig?.livemode === true} verifyOnReturn={stripe === "return"} /> : null}
-                {manager && !stripePending && stripeCheckoutAvailable && !canStartStripe ? <p className="sale-detail__note">
+                {manager && !stripePending && stripeAccount && !canStartStripe ? <p className="sale-detail__note">
                   Stripe payments must be at least DKK 2.50.
                 </p> : null}
+                {manager && !stripePending && stripeUnavailable ? <div className="appointment-online-status">
+                  <p className="sale-detail__note">{stripeUnavailable}</p>
+                  {membership.role === "owner" ? <Link href={tenantPath(tenantSlug, "/app/settings?tab=payments")}>Payment settings</Link> : null}
+                </div> : null}
                 {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
                   canFinishCheckout={activeCheckout} manualSplit={manualSplit}
                   giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} /> : null}

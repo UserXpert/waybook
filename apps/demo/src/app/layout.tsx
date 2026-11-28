@@ -7,6 +7,7 @@ import "./ice-blue.css";
 import "./workspace-backgrounds.css";
 import "./workspace-header.css";
 import "./workspace-options.css";
+import "./workspace-payments.css";
 
 export const metadata: Metadata = {
   title: "Waybook — Booking operations",

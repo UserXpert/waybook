@@ -31,10 +31,16 @@ test("owners can rehearse in Sales and clear only practice sales", { tag: "@mobi
     const sandboxPanel = page.getByRole("region", { name: "Stripe sandbox" });
     await expect(livePanel.getByRole("status")).toHaveText("Unavailable");
     await expect(sandboxPanel.getByRole("status")).toHaveText("Not linked");
-    const logo = sandboxPanel.locator(".stripe-wordmark--light");
+    const logo = sandboxPanel.locator(".payment-provider__logo-light");
     await expect(logo).toBeVisible();
     await expect.poll(() => logo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
-    await expect(page.getByText(/Sign in with your Stripe login/)).toBeVisible();
+    for (const provider of ["Quickpay", "Nets Easy", "Mollie"]) {
+      const row = page.getByRole("region", { name: provider, exact: true });
+      await expect(row.getByRole("status")).toHaveText("Planned");
+      await expect(row.getByRole("button", { name: `Connect ${provider}` })).toBeDisabled();
+      await expect.poll(() => row.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+    }
+    await expect(page.getByRole("heading", { name: "Record payments" })).toHaveCount(0);
     const start = page.getByRole("button", { name: "Set up Stripe sandbox" });
     await start.scrollIntoViewIfNeeded();
     await start.press("Enter");
@@ -49,7 +55,7 @@ test("owners can rehearse in Sales and clear only practice sales", { tag: "@mobi
     expect(first.creation_key).toBe(interrupted.creation_key);
     expect(first.account_id).toBe(`acct_${interrupted.creation_key.replaceAll("-", "")}`);
     await page.goto(path + "&stripe=returned");
-    await expect(sandboxPanel.getByRole("status")).toHaveText("Setup in progress");
+    await expect(sandboxPanel.getByRole("status")).toHaveText("Setup incomplete");
     await expect(page.getByRole("button", { name: /Check (Stripe|sandbox) status/ })).toHaveCount(0);
 
     await page.goto(path + "&stripe=resume");
@@ -58,8 +64,7 @@ test("owners can rehearse in Sales and clear only practice sales", { tag: "@mobi
     await expect(page).toHaveURL(/^https:\/\/accounts\.stripe\.com\/r\/acct_/);
     expect(await connections()).toEqual([first]);
     await page.goto(path + "&stripe=returned");
-    await expect(sandboxPanel.getByRole("status")).toHaveText("Linked");
-    await expect(sandboxPanel.getByText(/verified your sandbox account for card payments/)).toBeVisible();
+    await expect(sandboxPanel.getByRole("status")).toHaveText("Test payments on");
     await tenant`INSERT INTO commerce_sales (id,tenant_id,customer_id)
       SELECT ${regularSale},${tenantId},id FROM customers WHERE tenant_id=${tenantId} LIMIT 1`;
     const paymentsBefore = await tenant`SELECT count(*) FROM payment_records WHERE tenant_id=${tenantId}`;
@@ -83,7 +88,7 @@ test("owners can rehearse in Sales and clear only practice sales", { tag: "@mobi
       expect(await table.evaluate((element) => element.scrollWidth)).toBe(await table.evaluate((element) => element.clientWidth));
     }
     await page.goto(path);
-    await page.getByRole("button", { name: "Clear demo sales data (1)", exact: true }).click();
+    await page.getByRole("button", { name: "Clear practice sales (1)", exact: true }).click();
     await expect(page.getByRole("status").filter({ hasText: "Practice sales cleared." })).toBeVisible();
     await page.goto(`${retailPath}?sale=${practice.id}`);
     await expect(page.getByRole("link", { name: "Practice sale", exact: true })).toHaveCount(0);

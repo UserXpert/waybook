@@ -70,6 +70,8 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
     await page.goto(`/nordic/app/sales?booking=${minimumBooking}&step=payment`);
     const card = sale.getByRole("button", { name: "Pay by card in Stripe sandbox" });
     const mobilePay = sale.getByRole("button", { name: "Pay with MobilePay in Stripe sandbox" });
+    await expect(sale.getByRole("heading", { name: "Pay online" })).toBeVisible();
+    await expect(sale.getByText("Stripe test mode", { exact: true })).toBeVisible();
     await expect(card).toBeVisible();
     await expect(mobilePay).toBeVisible();
     await db`UPDATE bookings SET booked_price_cents = 249 WHERE id = ${minimumBooking}`;

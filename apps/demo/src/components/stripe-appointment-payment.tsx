@@ -1,5 +1,6 @@
 "use client";
 
+import { CreditCard } from "lucide-react";
 import { startTransition, useActionState, useEffect, useRef } from "react";
 import { updateStripeAppointmentPayment } from "@/app/app/calendars/actions";
 
@@ -22,18 +23,20 @@ export function StripeAppointmentPayment({ bookingId, amountCents, pendingPaymen
     startTransition(() => submit(data));
   }, [bookingId, pendingPayment, submit, verifyOnReturn]);
 
-  return <form action={submit} className="tenant-drawer-form">
+  return <form action={submit} className="tenant-drawer-form appointment-online-payment">
     <input type="hidden" name="bookingId" value={bookingId} />
     <input type="hidden" name="expectedCents" value={amountCents} />
-    <p className="sale-detail__note">{pendingPayment
-      ? "Waybook checks the payment when you return from Stripe. Cancel the open payment to choose another method."
-      : livemode ? "Complete the payment on Stripe." : mobilePayAvailable
-        ? "Complete the test payment on Stripe." : "Use a Stripe test card on Stripe’s payment page."}</p>
+    <div className="appointment-online-payment__heading">
+      <CreditCard size={17} aria-hidden="true" />
+      <h3>{pendingPayment ? "Online payment in progress" : "Pay online"}</h3>
+      <span>{livemode ? "Stripe Checkout" : "Stripe test mode"}</span>
+    </div>
+    {pendingPayment ? <p className="sale-detail__note">Cancel the open payment to choose another method.</p> : null}
     {result.error ? <p className="manual-appointment__message is-error" role="alert">{result.error}</p> : null}
     {result.success ? <p className="sale-detail__note" role="status">{result.success}</p> : null}
     <div className="recorded-appointment-payments__actions" aria-busy={submitting}>
       <button className="waybook-action" name="action" value={pendingPayment ? "check" : "open-card"} disabled={submitting} type="submit">
-        {submitting ? "Checking Stripe…" : pendingPayment ? "Check payment status" : livemode ? "Pay by card" : "Pay by card in Stripe sandbox"}
+        {submitting ? "Checking Stripe…" : pendingPayment ? "Check payment status" : livemode ? "Pay by card with Stripe" : "Pay by card in Stripe sandbox"}
       </button>
       {pendingPayment ? <>
         <button className="waybook-action waybook-action--secondary" name="action" value="open" disabled={submitting} type="submit">Continue in Stripe</button>
