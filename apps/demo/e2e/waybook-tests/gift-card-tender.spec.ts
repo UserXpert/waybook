@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
 for (const settleRemainder of [false, true]) test(
-  settleRemainder ? "partial gift-card tender leaves one manual remainder on the same sale" : "gift-card tender returns to the same card on cancellation", async ({ page, browser, baseURL, ignoreHTTPSErrors }, testInfo) => {
+  settleRemainder ? "partial gift-card tender leaves one manual remainder on the same sale" : "gift-card tender returns to the same card on cancellation",
+  { tag: settleRemainder ? "@mobile" : [] }, async ({ page, browser, baseURL, ignoreHTTPSErrors }, testInfo) => {
   test.setTimeout(180_000);
   const raw = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
   const url = new URL(raw);
@@ -102,7 +103,7 @@ for (const settleRemainder of [false, true]) test(
     await expect(checkout.getByLabel("Amount (DKK)")).toHaveValue("550.00");
     await expect(checkout.getByLabel("Amount (DKK)")).not.toBeEditable();
     await expect(checkout.getByRole("link", { name: "Gift card", exact: true })).toHaveCount(0);
-    await expect(checkout.getByRole("button", { name: "Finish checkout" })).toHaveCount(0);
+    await expect(checkout.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
     const [afterPay] = await db<{ debits: number; payments: number; transactions: number }[]>`
       SELECT (SELECT count(*)::int FROM commerce_gift_card_entries WHERE booking_id=${fixture.booking.id} AND kind='redeem') AS debits,
         (SELECT count(*)::int FROM payment_records WHERE booking_id=${fixture.booking.id} AND method='gift_card' AND kind='payment') AS payments,
@@ -125,15 +126,14 @@ for (const settleRemainder of [false, true]) test(
         await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
         await checkout.getByRole("button", { name: "Record payment" }).click();
         await expect(checkout.getByText("Paid SALE", { exact: true })).toBeVisible();
-        await stalePage.getByRole("button", { name: "Record payment", exact: true }).click();
+        await stalePage.getByRole("button", { name: "Record payment and finish checkout", exact: true }).click();
         await expect(stalePage.getByRole("dialog", { name: "Appointment checkout" }).getByRole("alert"))
-          .toContainText("A payment is already recorded.");
+          .toContainText("This checkout is already complete.");
       } finally {
         await stalePage.close();
       }
       expect(await db`SELECT method, amount_cents FROM payment_records WHERE booking_id=${fixture.booking.id} ORDER BY method`)
         .toEqual([{ method: "cash", amount_cents: 55000 }, { method: "gift_card", amount_cents: 10000 }]);
-      await checkout.getByRole("button", { name: "Finish checkout" }).click();
       await expect.poll(async () => (await db`SELECT status FROM bookings WHERE id=${fixture.booking.id}`)[0].status).toBe("completed");
       expect(await db`SELECT id FROM commerce_sales WHERE booking_id=${fixture.booking.id}`).toEqual([fixture.sale]);
       return;

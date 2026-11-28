@@ -93,7 +93,7 @@ export default async function AppointmentReceipt({ searchParams }: {
         <caption>Payments and refunds</caption>
         <thead><tr><th scope="col">Transaction</th><th scope="col">Amount</th></tr></thead>
         <tbody>{[...payments].reverse().map((item) => <tr key={item.id}>
-          <td>{item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {paymentMethodLabels[item.method] ?? item.method}<small>{date.format(item.recordedAt)}</small></td>
+          <td>{item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {paymentMethodLabels[item.method] ?? item.method}<small>{date.format(item.recordedAt)}</small></td>
           <td>{money.format((item.kind === "refund" ? -item.amountCents : item.amountCents) / 100)}</td>
         </tr>)}</tbody>
         <tfoot><tr><th scope="row">Net payments</th><td>{money.format(netPaid / 100)}</td></tr></tfoot>

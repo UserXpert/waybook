@@ -6,7 +6,7 @@ import postgres from "postgres";
 for (const tenant of [
   { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
   { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
-]) test(`public booking preserves second location, staff, time and price in ${tenant.route}`, async ({ page, browser, baseURL, hasTouch, ignoreHTTPSErrors }) => {
+]) test(`public booking preserves second location, staff, time and price in ${tenant.route}`, { tag: tenant.route === "nordic" ? "@mobile" : [] }, async ({ page, browser, baseURL, hasTouch, ignoreHTTPSErrors }) => {
   page.setDefaultTimeout(8000);
   const db = postgres(process.env[tenant.database]!, { max: 1, ssl: false });
   const tag = randomUUID().slice(0, 8);

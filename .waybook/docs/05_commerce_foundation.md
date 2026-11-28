@@ -108,6 +108,146 @@ merchant-approved. Do not create a multi-provider checkout or collect
 provider API keys before the Stripe lifecycle above has passed end-to-end
 tests.
 
+The sandbox onboarding slice gives workspace owners a **Payments** tab in a
+test deployment. After Control migration 0007, configure
+`WAYBOOK_STRIPE_SANDBOX_SECRET_KEY` with a Stripe sandbox platform key and
+`WAYBOOK_STRIPE_SANDBOX_ORIGIN` with the test application's origin. Apply the
+migration before enabling the settings. For local testing, use an isolated
+Control database and tenant databases.
+
+The owner can create a Danish merchant through Stripe-hosted Accounts v2
+onboarding, resume an expired link, and see the card capability reported by
+Stripe. Waybook stores the sandbox account ID and a retry key in Control.
+Owners who already use Stripe can sign in on Stripe and reuse their business
+details when eligible for [Legal Entity Sharing](https://support.stripe.com/questions/legal-entity-sharing).
+Stripe controls which business details can be reused and which connected
+account receives Waybook payments. The owner can check verification again
+from the **Payments** tab.
+An interrupted creation reuses the key inside Stripe’s replay window.
+An unresolved attempt beyond that window requires reconciliation. Account
+verification is checked on return and refreshed from Stripe.
+
+Tenant migration 0067 adds sandbox-only Stripe card checkout for a DKK
+appointment in **Checking out** with a balance and no payment entries.
+In **Sales → Go to payments**, choose **Pay by card in Stripe sandbox**.
+Complete the test payment on Stripe. Waybook checks the saved session
+automatically on return. Use **Check payment status** if Stripe is still
+processing and **Finish checkout** once the receipt appears. Staff can resume
+an open session or ask Stripe to cancel it and then choose another method.
+An open attempt reserves the amount and prevents another payment or cart
+change. Stripe's session must match the original account, reference, currency
+and amount before Waybook writes the receipt. The receipt retains its Stripe
+source and follows provider reconciliation.
+
+If Stripe creates a session but the response is interrupted, retrying can
+recover the original session with the same key. Configure a Stripe sandbox
+webhook listening to **Events on connected accounts** with snapshot events
+and set `WAYBOOK_STRIPE_SANDBOX_WEBHOOK_SECRET` for the same isolated deployment.
+The endpoint is `/api/webhooks/stripe-sandbox`. Subscribe to
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+and `checkout.session.expired`. Waybook verifies the original signed payload
+and confirms the session on the connected account before settling or releasing
+the balance. A signed terminal event can recover a session ID even if the
+session creation response never reached Waybook. The manual status check
+uses the same ledger transaction and remains available.
+
+An unresolved attempt without a saved session or a confirmed notification
+stays reserved past the replay deadline and needs provider reconciliation.
+
+Tenant migration 0068 adds full and partial Stripe sandbox refunds. After
+finishing checkout, open the sale, enter an amount under **Payment details**,
+and choose **Refund in Stripe sandbox**. If the result is pending, use
+**Check refund status**. The amount returns to the original test card.
+Waybook records a refund only when Stripe confirms the same amount and
+original payment. Pending requests reserve the refundable balance and reuse
+the same Stripe request when retried. Sales shows returned amounts separately
+from open balances.
+
+Subscribe the same connected-account webhook to `refund.created`,
+`refund.updated`, and `refund.failed`. A verified notification can resolve a
+pending Waybook refund while the drawer is closed or recover the Stripe refund
+ID after an interrupted response. After a failed refund, the drawer displays
+the failure and the refundable balance is available again.
+
+Tenant migration 0069 adds refund returns. If Stripe reports a previously
+recorded refund as failed, Waybook waits for the linked Stripe balance
+transaction that confirms the return. It preserves the original refund and
+adds a separate return entry for the same amount. Sales restores the
+refundable balance and Reports shows the return separately from collections.
+
+Tenant migration 0070 adds Stripe Dashboard refund reconciliation. When
+Stripe sends a signed refund notification for a payment already recorded in
+Waybook, Waybook matches the connected account and payment intent and confirms
+the exact refund through Stripe. The sale activity identifies Stripe as the
+source. Refunding an appointment in Stripe before staff finish checkout still
+allows them to finish the original appointment.
+
+If the refund notification arrives ahead of the checkout notification, Waybook
+finds the provider's Checkout Session by payment intent on the same account.
+It verifies the original pending attempt and records the payment before
+applying the refund. Duplicate checkout and refund notifications preserve one
+payment receipt and one refund entry.
+
+Hosted sandbox verification, including the reuse option for an eligible
+existing Stripe business, remains part of
+issue [#30](https://github.com/UserXpert/waybook/issues/30).
+
+### MobilePay for appointment checkout
+
+Tenant migration 0073 adds an explicit tender to sandbox Checkout attempts.
+When Stripe reports MobilePay available for the connected merchant, a
+manager can choose **Pay with MobilePay in Stripe sandbox** on a DKK
+appointment balance of at least DKK 2.50. Waybook reserves the same
+balance while Stripe hosts the payment. An open attempt can be resumed
+or cancelled before choosing another tender.
+
+Stripe confirms the exact account, session, amount, currency and tender
+before Waybook records the payment. Refunds follow the original Stripe
+transaction. Appointment payments and receipts identify MobilePay, and
+the underlying ledger continues to use the card settlement rail. The
+existing card-on-file setup remains available for card payments.
+
+Resolve open MobilePay sessions and refunds in Stripe before rolling
+back to a card-only build. That build cannot reconcile a MobilePay
+checkout session.
+
+## Live Stripe onboarding
+
+When the live Stripe Connect platform is configured, every workspace owner
+can open **Settings → Payments → Connect Stripe**, select a supported business
+country, and complete Stripe-hosted onboarding. On return, Waybook looks up
+the workspace's stored account in Stripe and shows its current status.
+
+Before exposing this flow, apply Control migration 0008 through the release
+process and configure `WAYBOOK_STRIPE_LIVE_SECRET_KEY` as a Production secret,
+`WAYBOOK_STRIPE_LIVE_ORIGIN` as the HTTPS app origin, and
+`WAYBOOK_STRIPE_LIVE_COUNTRIES` as the comma-separated ISO country codes enabled
+for the live platform. Confirm the Stripe platform configuration for each
+enabled business country. The live and sandbox connections use separate
+Control tables. See [#30](https://github.com/UserXpert/waybook/issues/30).
+
+### Live appointment payments
+
+Tenant migration 0074 pins Stripe mode on each checkout reservation and
+preserves the existing reservation constraint across both modes. Appointment
+payments are DKK direct charges on the connected business's Stripe account.
+MobilePay is available when the connected merchant enables it on Stripe.
+Refunds use the mode, account and payment of the original transaction.
+
+Before enabling live collection, apply the reviewed migrations, verify the
+connected account, and set up a dedicated **Connected accounts** destination
+at `/api/webhooks/stripe-live`. Subscribe to `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`, `checkout.session.expired`,
+`refund.created`, `refund.updated`, and `refund.failed`. Store its
+signing secret as `WAYBOOK_STRIPE_LIVE_WEBHOOK_SECRET` in Production.
+Set `WAYBOOK_STRIPE_LIVE_COLLECTION_ENABLED=true` only after testing direct
+delivery and confirming the pilot release. Saved card setup continues to
+use the sandbox workflow.
+
+To stop new live charges, unset the collection flag. Keep the live
+credential, webhook configuration, and compatible build in place while
+open sessions and refunds reconcile.
+
 ## Planned: two distinct Waybook money products (2026-11-08)
 
 These flows must never share a balance, provider credential, or ledger:

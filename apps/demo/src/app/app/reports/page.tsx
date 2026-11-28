@@ -17,8 +17,8 @@ type ServicePerformance = { id: string; title: string; bookingCount: number; del
 type StaffPerformance = { id: string; name: string; bookingCount: number; deliveredCount: number; bookedValueCents: number };
 type BookingHealth = { totalCount: number; cancelledCount: number; noShowCount: number; averageLeadHours: number | null };
 type LeadTimeBucket = { bucket: string; count: number };
-type PaymentSummary = { paymentCents: number; refundCents: number; adjustmentCents: number };
-type PaymentActivity = { id: string; adjustment: boolean; kind: string; amountCents: number; method: string; recordedAt: Date; customerName: string; serviceTitle: string };
+type PaymentSummary = { paymentCents: number; refundCents: number; adjustmentCents: number; refundReturnCents: number };
+type PaymentActivity = { id: string; adjustment: boolean; refundReturned: boolean; kind: string; amountCents: number; method: string; recordedAt: Date; customerName: string; serviceTitle: string };
 type LocationPerformance = { id: string; name: string; bookingCount: number; bookedValueCents: number; paidRevenueCents: number };
 type ClientPulse = { activeClients: number; newClients: number; returningClients: number; lapsedClients: number; dueSoonClients: number; overdueClients: number };
 type AvailabilityRule = { memberId: string; memberName: string; startTime: string; endTime: string; rrule: string };
@@ -55,11 +55,15 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         SELECT pr.kind, pr.amount_cents, EXISTS (
           SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
             AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = pr.id::text
-        ) AS adjustment
+        ) AS adjustment, EXISTS (
+          SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
+            AND e.event_type = 'payment.refund_returned' AND e.metadata->>'paymentId' = pr.id::text
+        ) AS refund_returned
         FROM payment_records pr WHERE pr.tenant_id = ${tenant.id} AND pr.recorded_at >= ${startsAt} AND pr.recorded_at < ${endsAt}
       )
-      SELECT coalesce(sum(amount_cents) FILTER (WHERE kind = 'payment' AND NOT adjustment),0)::int AS "paymentCents",
+      SELECT coalesce(sum(amount_cents) FILTER (WHERE kind = 'payment' AND NOT adjustment AND NOT refund_returned),0)::int AS "paymentCents",
         coalesce(sum(amount_cents) FILTER (WHERE kind = 'refund' AND NOT adjustment),0)::int AS "refundCents",
+        coalesce(sum(amount_cents) FILTER (WHERE refund_returned),0)::int AS "refundReturnCents",
         coalesce(sum(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END)
           FILTER (WHERE adjustment),0)::int AS "adjustmentCents"
       FROM entries
@@ -69,7 +73,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         c.name AS "customerName", s.title AS "serviceTitle", EXISTS (
           SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
             AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = pr.id::text
-        ) AS adjustment
+        ) AS adjustment, EXISTS (
+          SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
+            AND e.event_type = 'payment.refund_returned' AND e.metadata->>'paymentId' = pr.id::text
+        ) AS "refundReturned"
       FROM payment_records pr JOIN bookings b ON b.id = pr.booking_id AND b.tenant_id = pr.tenant_id
         JOIN customers c ON c.id = b.customer_id AND c.tenant_id = b.tenant_id
         JOIN services s ON s.id = b.service_id AND s.tenant_id = b.tenant_id
@@ -90,8 +97,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const bookingHealth = health[0] ?? { totalCount: 0, cancelledCount: 0, noShowCount: 0, averageLeadHours: null };
   const lostCount = bookingHealth.cancelledCount + bookingHealth.noShowCount;
   const lostRate = bookingHealth.totalCount ? Math.round(lostCount / bookingHealth.totalCount * 100) : 0;
-  const paymentSummary = payments[0] ?? { paymentCents: 0, refundCents: 0, adjustmentCents: 0 };
-  const netRevenueCents = paymentSummary.paymentCents - paymentSummary.refundCents + paymentSummary.adjustmentCents;
+  const paymentSummary = payments[0] ?? { paymentCents: 0, refundCents: 0, adjustmentCents: 0, refundReturnCents: 0 };
+  const netRevenueCents = paymentSummary.paymentCents - paymentSummary.refundCents + paymentSummary.adjustmentCents + paymentSummary.refundReturnCents;
   const clientPulse = clientPulseRows[0] ?? { activeClients: 0, newClients: 0, returningClients: 0, lapsedClients: 0, dueSoonClients: 0, overdueClients: 0 };
   const availableMinutes = availabilityRules.reduce((total, rule) => {
     const dates = tableDateFilters({ sort, from, to }, tenant.timezone);
@@ -116,8 +123,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="reports" />
     <header><div><p>REPORTS · DATABASE-BACKED</p><h1>{tenant.name}</h1><span>{formatDate.format(startsAt)}–{formatDate.format(endsAt)} · {tenant.timezone}</span></div><form action={logout}><button>Sign out</button></form></header>
     <section className="reports-intro"><div><p>REPORTS · DATABASE-BACKED</p><h1>{tenant.name}</h1><span>{formatDate.format(startsAt)}–{formatDate.format(endsAt)} · {tenant.timezone}</span></div><nav className="reports-range" aria-label="Report date range">{[7, 30, 90].map((value) => <Link key={value} href={reportsPath + "?range=" + value} aria-current={days === value ? "page" : undefined}>Last {value} days</Link>)}{permissions.isManager ? <Link href={tenantPath(tenantSlug, "/app/targets")}>Monthly targets</Link> : null}</nav></section>
-    <section className="waybook-data-metrics reports-metrics"><article><span>Paid revenue</span><strong>{money(netRevenueCents)}</strong><small>{money(paymentSummary.paymentCents)} collected · {money(paymentSummary.refundCents)} refunded{paymentSummary.adjustmentCents ? ` · ${money(paymentSummary.adjustmentCents)} adjustments` : ""}</small></article><article><span>Scheduled value</span><strong>{money(scheduled)}</strong><small>Confirmed and arrived · not paid revenue</small></article><article><span>Delivered value</span><strong>{money(delivered)}</strong><small>Completed services · not paid revenue</small></article><article><span>Lost value</span><strong>{money(lost)}</strong><small>Cancelled and no-show</small></article></section>
-    <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>PAYMENT ACTIVITY</p><h2>Recent recorded entries</h2><span>Payments, refunds, and adjustments in the selected period.</span></div></div><form method="get" className="waybook-list-filter dated-list-filters">{range ? <input type="hidden" name="range" value={range} /> : null}<TableDateFields dates={dates} label="Recorded date range" /><button type="submit">Apply</button></form><div className="waybook-table-wrap"><table><thead><tr><th>Recorded</th><th>{clientLabel}</th><th>Service</th><th>Type</th><th>Method</th><th>Amount</th></tr></thead><tbody>{paymentActivity.map((item) => <tr key={item.id}><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.recordedAt)}</td><td>{item.customerName}</td><td>{item.serviceTitle}</td><td>{item.adjustment ? "adjustment" : item.kind}</td><td>{item.method.replace("_", " ")}</td><td>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</td></tr>)}{paymentActivity.length === 0 ? <tr><td colSpan={6}>No payment activity in this period.</td></tr> : null}</tbody></table></div></section>
+    <section className="waybook-data-metrics reports-metrics"><article><span>Paid revenue</span><strong>{money(netRevenueCents)}</strong><small>{money(paymentSummary.paymentCents)} collected · {money(paymentSummary.refundCents)} refunded{paymentSummary.refundReturnCents ? ` · ${money(paymentSummary.refundReturnCents)} refunds returned` : ""}{paymentSummary.adjustmentCents ? ` · ${money(paymentSummary.adjustmentCents)} adjustments` : ""}</small></article><article><span>Scheduled value</span><strong>{money(scheduled)}</strong><small>Confirmed and arrived · not paid revenue</small></article><article><span>Delivered value</span><strong>{money(delivered)}</strong><small>Completed services · not paid revenue</small></article><article><span>Lost value</span><strong>{money(lost)}</strong><small>Cancelled and no-show</small></article></section>
+    <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>PAYMENT ACTIVITY</p><h2>Recent recorded entries</h2><span>Payments, refunds, and adjustments in the selected period.</span></div></div><form method="get" className="waybook-list-filter dated-list-filters">{range ? <input type="hidden" name="range" value={range} /> : null}<TableDateFields dates={dates} label="Recorded date range" /><button type="submit">Apply</button></form><div className="waybook-table-wrap"><table><thead><tr><th>Recorded</th><th>{clientLabel}</th><th>Service</th><th>Type</th><th>Method</th><th>Amount</th></tr></thead><tbody>{paymentActivity.map((item) => <tr key={item.id}><td>{new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" }).format(item.recordedAt)}</td><td>{item.customerName}</td><td>{item.serviceTitle}</td><td>{item.refundReturned ? "refund returned" : item.adjustment ? "adjustment" : item.kind}</td><td>{item.method.replace("_", " ")}</td><td>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</td></tr>)}{paymentActivity.length === 0 ? <tr><td colSpan={6}>No payment activity in this period.</td></tr> : null}</tbody></table></div></section>
     <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>LOCATION PERFORMANCE</p><h2>Bookings and value by location</h2><span>Booked value is based on appointment date; paid revenue is based on payment-recorded date.</span></div></div><div className="waybook-table-wrap"><table><thead><tr><th>Location</th><th>Bookings</th><th>Booked value</th><th>Paid revenue</th></tr></thead><tbody>{locationPerformance.map((location) => <tr key={location.id}><td>{location.name}</td><td>{location.bookingCount}</td><td>{money(location.bookedValueCents)}</td><td>{money(location.paidRevenueCents)}</td></tr>)}{locationPerformance.length === 0 ? <tr><td colSpan={4}>No locations configured.</td></tr> : null}</tbody></table></div></section>
     <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>BOOKING HEALTH</p><h2>Cancellation and no-show behaviour</h2><span>Based on appointments scheduled in this range, not payment activity.</span></div></div><div className="waybook-data-metrics reports-health"><article><span>Lost appointments</span><strong>{lostRate}%</strong><small>{lostCount} of {bookingHealth.totalCount} cancelled or no-show</small></article><article><span>Cancelled</span><strong>{bookingHealth.cancelledCount}</strong><small>Appointments cancelled in this range</small></article><article><span>No-shows</span><strong>{bookingHealth.noShowCount}</strong><small>Appointments marked no-show</small></article><article><span>Average booking lead</span><strong>{bookingHealth.averageLeadHours === null ? "—" : bookingHealth.averageLeadHours + "h"}</strong><small>Creation to appointment start</small></article></div></section>
     <section className="waybook-data-card reports-section"><div className="waybook-section-heading"><div><p>BOOKING LEAD TIME</p><h2>How far ahead {terminology.clients} book</h2><span>Appointments in the selected range, grouped by creation-to-start interval.</span></div></div><div className="waybook-data-metrics reports-health">{leadTimeBuckets.map((item) => <article key={item.bucket}><span>{item.bucket}</span><strong>{item.count}</strong><small>Appointments booked</small></article>)}{leadTimeBuckets.length === 0 ? <p>No valid lead-time data in this period.</p> : null}</div></section>

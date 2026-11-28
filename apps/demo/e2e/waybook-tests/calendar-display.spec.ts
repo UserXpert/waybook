@@ -135,8 +135,8 @@ test("holiday preferences add labels to Day, Week and Month", async ({ page }) =
 
 test("calendar settings persist and change visible hours, grid density and the current-time marker", async ({ page }) => {
   const timezone = "Europe/Copenhagen";
-  const today = formatInTimeZone(new Date(), timezone, "yyyy-MM-dd");
-  await page.clock.setFixedTime(fromZonedTime(`${today}T15:17`, timezone));
+  const weekday = "2026-06-15";
+  await page.clock.setFixedTime(fromZonedTime(`${weekday}T15:17`, timezone));
   await page.goto("/login");
   await page.getByLabel("Work email").fill("owner@nordic.local");
   await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
@@ -152,7 +152,7 @@ test("calendar settings persist and change visible hours, grid density and the c
   await page.getByRole("button", { name: "Save calendar preferences" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Calendar preferences saved." })).toBeVisible();
 
-  const calendar = `/nordic/app/calendars?day=${today}`;
+  const calendar = `/nordic/app/calendars?day=${weekday}`;
   const grid = page.locator(".team-day-calendar__grid");
   const timeHeaders = grid.locator(".team-day-calendar__time-header");
   await page.goto(calendar);
@@ -174,7 +174,7 @@ test("calendar settings persist and change visible hours, grid density and the c
   await expect(page.locator(".waybook-month-calendar__weekday")).toHaveText(["Mon", "Tue", "Wed", "Thu", "Fri"]);
 });
 
-test("Today and view switches preserve calendar scope", async ({ page }) => {
+test("Today and view switches preserve calendar scope", { tag: "@mobile" }, async ({ page }) => {
   const timezone = "Europe/Copenhagen";
   const instant = new Date();
   const today = formatInTimeZone(instant, timezone, "yyyy-MM-dd");

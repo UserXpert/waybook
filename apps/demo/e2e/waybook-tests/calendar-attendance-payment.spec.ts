@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-for (const [bookedCents, productCents] of [[25050, 0], [0, 0], [0, 3750]]) test(`calendar saves payment and completion together for a ${bookedCents ? "paid service" : productCents ? "product-only cart" : "zero-price no-show"}`, async ({ page }, testInfo) => {
+for (const [bookedCents, productCents] of [[25050, 0], [0, 0], [0, 3750]]) test(`calendar saves payment and completion together for a ${bookedCents ? "paid service" : productCents ? "product-only cart" : "zero-price no-show"}`, { tag: bookedCents ? "@mobile" : [] }, async ({ page }, testInfo) => {
   const due = bookedCents + productCents;
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const marker = randomUUID().slice(0, 8);

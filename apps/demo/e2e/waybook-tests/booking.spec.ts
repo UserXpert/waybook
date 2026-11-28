@@ -280,7 +280,7 @@ async function managementState(bookingNumber: string) {
   }
 }
 
-test("customer books, reschedules and cancels without a stale confirmation", { tag: "@smoke" }, async ({ page }) => {
+test("customer books, reschedules and cancels without a stale confirmation", { tag: ["@smoke", "@mobile"] }, async ({ page }) => {
   test.setTimeout(120_000);
   const check = expect.configure({ timeout: 30_000 });
   const runId = `${Date.now()}-${test.info().retry}`;
@@ -418,7 +418,7 @@ test("customer books, reschedules and cancels without a stale confirmation", { t
   await calendar.close();
 });
 
-test("tenant owner can sign in but cannot access another workspace", { tag: "@smoke" }, async ({ page }) => {
+test("tenant owner can sign in but cannot access another workspace", { tag: ["@smoke", "@mobile"] }, async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Work email").fill("owner@nordic.local");
   await page.getByPlaceholder("Enter your password").fill("waybook-local-only");

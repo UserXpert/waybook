@@ -15,10 +15,10 @@ The prior Lab was reconciled and retained as [`archive/lab-reconciled-20261121`]
 
 1. Implement a bounded change, update its GitHub issue and record migrations, environment changes and data effects separately.
 2. Run the relevant build and tests; verify UI changes on desktop and mobile against an isolated test database. Confirm that local-only changes are committed before claiming they are included.
-3. Push the branch and open a pull request. The fast PR tier runs package checks, Postgres migration integration, migration history, and tagged desktop and mobile browser smoke tests for booking, checkout, payment integrity, and workspace access.
+3. Push the branch and open a pull request. The fast PR tier runs package checks, Postgres migration integration, migration history, and a small smoke suite for booking, checkout, payment integrity, and workspace access. It runs the browser journeys at desktop and mobile widths and runs request-only checks once.
 4. Before any merge to main, pass the comprehensive release tier on the exact candidate and verify its Waybook preview. The main branch automatically triggers Vercel production deployment. Group changes when practical and assess migrations and rollback before merging.
 
-Keep the PR in draft while iterating. Draft PRs run the migration-history guard. Marking the PR ready starts the fast tier. Run the same browser subset with `npm run e2e:smoke --workspace=@waybook/app` against disposable local databases. Add `@smoke` only to short journeys that protect key workflows across the app. All browser tests also run in the comprehensive tier.
+Keep the PR in draft while iterating. Draft PRs run the migration-history guard. Marking the PR ready starts the fast tier. Run the same smoke subset with `npm run e2e:smoke --workspace=@waybook/app` against disposable local databases. Use `@smoke` for short checks that protect key workflows across the app and `@mobile` for journeys that need a second run at the mobile viewport.
 
 ### Comprehensive pre-deployment checks
 
@@ -28,7 +28,7 @@ The release collector dispatches `Release branch validation` for its combined ca
 gh workflow run release-validation.yml --ref main -f release_sha="$release_sha" -f base_sha="$base_sha"
 ```
 
-The workflow verifies both SHAs and runs the full browser suite plus package, integration, and migration-history checks. Require a successful run for those exact inputs before merging. If the candidate or main changes, refresh the candidate and rerun release validation. An ordinary PR's `e2e` check runs the smoke subset. Use the named release workflow and its validated inputs as the pre-merge evidence. A timeout or a run stopped after test failures requires a fresh successful run.
+The workflow verifies both SHAs and runs the comprehensive suite alongside package, integration, and migration-history checks. It runs every distinct scenario once on desktop and repeats only selected touch, viewport, and payment journeys on mobile. Use the named release workflow and its validated inputs as pre-merge evidence. Require a successful run for those exact inputs before merging. If the candidate or main changes, refresh the candidate and rerun release validation. A cancelled, timed-out, or failed run requires a fresh successful run.
 
 ### Batch several PRs into one production release
 

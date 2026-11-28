@@ -9,6 +9,7 @@ type PaymentItem = {
   method: string;
   recordedAt: Date;
   adjustment: boolean;
+  refundReturned: boolean;
 };
 
 export function getAppointmentSaleProducts({ db, tenantId }: SaleItemContext, saleId: string) {
@@ -21,9 +22,17 @@ export function getAppointmentSaleProducts({ db, tenantId }: SaleItemContext, sa
 
 export function getAppointmentSalePayments({ db, tenantId }: SaleItemContext, bookingId: string) {
   return db<PaymentItem[]>`
-    SELECT p.id, p.kind, p.amount_cents AS "amountCents", p.method, p.recorded_at AS "recordedAt",
+    SELECT p.id, p.kind, p.amount_cents AS "amountCents", p.recorded_at AS "recordedAt",
+      CASE WHEN EXISTS (SELECT 1 FROM booking_events e
+        WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+          AND e.event_type IN ('payment.payment', 'payment.refund', 'payment.refund_returned')
+          AND e.metadata->>'paymentId' = p.id::text AND e.metadata->>'source' IN ('stripe_sandbox', 'stripe_live')
+          AND e.metadata->>'stripePaymentMethod' = 'mobilepay')
+        THEN 'mobilepay' ELSE p.method END AS method,
       EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
-        AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text) AS adjustment
+        AND e.event_type IN ('payment.corrected', 'payment.deleted') AND e.metadata->>'adjustmentId' = p.id::text) AS adjustment,
+      EXISTS(SELECT 1 FROM booking_events e WHERE e.tenant_id = p.tenant_id AND e.booking_id = p.booking_id
+        AND e.event_type = 'payment.refund_returned' AND e.metadata->>'paymentId' = p.id::text) AS "refundReturned"
     FROM payment_records p WHERE p.tenant_id = ${tenantId} AND p.booking_id = ${bookingId}
     ORDER BY p.recorded_at DESC, p.id DESC
   `;

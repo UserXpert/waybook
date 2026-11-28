@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("appointment payment and refund limits preserve exact amounts in Reports", { tag: "@smoke" }, async ({ page }) => {
+test("appointment payment and refund limits preserve exact amounts in Reports", { tag: ["@smoke", "@mobile"] }, async ({ page }) => {
   const db = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const marker = randomUUID().slice(0, 8);
   const customerName = `Payment QA ${marker}`;
@@ -128,6 +128,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
     await saleDrawer.getByRole("link", { name: "Go to payments" }).click();
     await expect(salePayment.getByLabel("Amount (DKK)")).toHaveValue("250.50");
     await expect(salePayment.getByRole("button", { name: "Record payment" })).toBeDisabled();
+    await expect(salePayment.getByRole("button", { name: "Record payment" })).toBeInViewport({ ratio: 1 });
     await saleDrawer.getByRole("link", { name: "Back to checkout" }).click();
     await expect(salePayment).toHaveCount(0);
     await saleDrawer.getByRole("link", { name: "Go to payments" }).click();
@@ -146,7 +147,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
       await expect(salePayment).toHaveCount(0);
       await expect(saleDrawer.locator(".recorded-appointment-payments")).toContainText("250,50");
       await stalePayment.getByRole("button", { name: "Record payment" }).click();
-      await expect(stalePayment.getByRole("alert")).toContainText("A payment is already recorded.");
+      await expect(stalePayment.getByRole("alert")).toContainText("This checkout is already complete.");
     } finally {
       await staleTab.close();
     }
@@ -174,7 +175,7 @@ test("appointment payment and refund limits preserve exact amounts in Reports", 
   }
 });
 
-test("appointment and products share one reviewed checkout balance", async ({ page }) => {
+test("appointment and products share one reviewed checkout balance", { tag: "@mobile" }, async ({ page }) => {
   page.setDefaultTimeout(8_000);
   const uri = new URL(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!);
   if (!["localhost", "127.0.0.1"].includes(uri.hostname) || !uri.pathname.startsWith("/waybook_e2e_")) {
@@ -246,6 +247,116 @@ test("appointment and products share one reviewed checkout balance", async ({ pa
       { kind: "payment", amount_cents: 20000, method: "cash" },
     ]);
     await expect(db`UPDATE commerce_sale_lines SET quantity=1 WHERE tenant_id=${fixture.tenantId} AND sale_id=${fixture.sale.id}`).rejects.toThrow("products cannot be changed after an appointment payment");
+  } finally {
+    await db.end();
+  }
+});
+
+test("manager records split tender and completes checkout with the final payment", { tag: "@mobile" }, async ({ page }) => {
+  const uri = new URL(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!);
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(uri.hostname) || !uri.pathname.startsWith("/waybook_e2e_")) {
+    throw new Error("Split-tender checkout requires a disposable local database.");
+  }
+  const db = postgres(uri.toString(), { max: 1, ssl: false });
+  const marker = randomUUID().slice(0, 8);
+  const customerName = `Split tender client ${marker}`;
+  try {
+    const { booking, sale, tenantId } = await db.begin(async (tx) => {
+      const [{ tenant_id: tenantId }] = await tx`SELECT tenant_id FROM tenant_settings LIMIT 1`;
+      const [location] = await tx`SELECT id FROM locations WHERE tenant_id=${tenantId} AND slug='primary'`;
+      const [service] = await tx`SELECT id FROM services WHERE tenant_id=${tenantId} AND slug='studio-session'`;
+      const [staff] = await tx`INSERT INTO team_members (tenant_id,name,email,role)
+        VALUES (${tenantId},${`Split tender staff ${marker}`},${`split-staff-${marker}@example.test`},'staff') RETURNING id`;
+      const [customer] = await tx`INSERT INTO customers (tenant_id,name,email)
+        VALUES (${tenantId},${customerName},${`split-client-${marker}@example.test`}) RETURNING id`;
+      const [block] = await tx`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
+        VALUES (${tenantId},${staff.id},${location.id},now()-interval '2 hours',now()-interval '1 hour','confirmed') RETURNING id,starts_at,ends_at`;
+      const [booking] = await tx`INSERT INTO bookings
+        (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,attendance_stage,booked_price_cents)
+        VALUES (${tenantId},${block.id},${service.id},${staff.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'arrived','checking_out',12500)
+        RETURNING id`;
+      const [sale] = await tx`SELECT id FROM commerce_sales WHERE tenant_id=${tenantId} AND booking_id=${booking.id}`;
+      return { booking, sale, tenantId };
+    });
+
+    const payments = () => db`SELECT kind,method,amount_cents FROM payment_records
+      WHERE tenant_id=${tenantId} AND booking_id=${booking.id} ORDER BY method`;
+    const completedEvents = () => db`SELECT id FROM booking_events
+      WHERE tenant_id=${tenantId} AND booking_id=${booking.id} AND event_type='booking.completed'`;
+
+    await page.goto("/login");
+    await page.getByLabel("Work email").fill("owner@nordic.local");
+    await page.getByPlaceholder("Enter your password").fill("waybook-local-only");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/nordic\/app/);
+    const checkoutPath = `/nordic/app/sales?sale=${sale.id}&step=payment`;
+    const checkout = page.getByRole("dialog", { name: "Appointment checkout" });
+    const amount = checkout.getByLabel("Amount (DKK)");
+    await page.goto(checkoutPath);
+    await expect(amount).toHaveValue("125.00");
+    const stalePage = await page.context().newPage();
+    try {
+      await stalePage.goto(checkoutPath);
+      const staleCheckout = stalePage.getByRole("dialog", { name: "Appointment checkout" });
+      await expect(staleCheckout.getByLabel("Amount (DKK)")).toHaveValue("125.00");
+
+      await amount.fill("50.25");
+      await checkout.getByRole("radio", { name: "Cash", exact: true }).check();
+      await checkout.getByRole("button", { name: "Record partial payment", exact: true }).click();
+      await expect(amount).toHaveValue("74.75");
+      await expect(checkout.getByText("Open SALE", { exact: true })).toBeVisible();
+      const recorded = checkout.getByRole("region", { name: "Payments recorded", exact: true });
+      await expect(recorded).toContainText("Cash");
+      await expect(recorded).toContainText(/50,25\s*kr\./);
+      expect(await payments()).toEqual([{ kind: "payment", method: "cash", amount_cents: 5025 }]);
+      expect(await db`SELECT status,attendance_stage FROM bookings WHERE tenant_id=${tenantId} AND id=${booking.id}`)
+        .toEqual([{ status: "arrived", attendance_stage: "checking_out" }]);
+      expect(await completedEvents()).toHaveLength(0);
+
+      await staleCheckout.getByLabel("Amount (DKK)").fill("25.00");
+      await staleCheckout.getByRole("radio", { name: "Cash", exact: true }).check();
+      await staleCheckout.getByRole("button", { name: "Record partial payment", exact: true }).click();
+      await expect(staleCheckout.getByRole("alert")).toContainText("The checkout balance changed");
+      expect(await payments()).toHaveLength(1);
+    } finally {
+      await stalePage.close();
+    }
+
+    const externalCard = checkout.getByRole("radio", { name: "Card paid elsewhere", exact: true });
+    await expect(checkout.getByRole("radio", { name: "Cash", exact: true })).not.toBeChecked();
+    await externalCard.check();
+    await checkout.getByRole("button", { name: "Record payment and finish checkout", exact: true }).click();
+    await expect(checkout.getByText("Paid SALE", { exact: true })).toBeVisible();
+    await expect(checkout.getByRole("link", { name: "View receipt", exact: true })).toBeVisible();
+    expect(await db`SELECT status,attendance_stage FROM bookings WHERE tenant_id=${tenantId} AND id=${booking.id}`)
+      .toEqual([{ status: "completed", attendance_stage: null }]);
+    expect(await payments()).toEqual([
+      { kind: "payment", method: "card", amount_cents: 7475 },
+      { kind: "payment", method: "cash", amount_cents: 5025 },
+    ]);
+    expect(await completedEvents()).toHaveLength(1);
+
+    const originalPayments = () => db`SELECT id,method,amount_cents FROM payment_records
+      WHERE tenant_id=${tenantId} AND booking_id=${booking.id} AND kind='payment' ORDER BY id`;
+    const receipts = await originalPayments();
+    await page.goto(`/nordic/app/bookings?booking=${booking.id}&q=${encodeURIComponent(customerName)}`);
+    const ledger = page.getByRole("complementary", { name: `Appointment with ${customerName}` }).locator(".appointment-payment-form");
+    await ledger.getByRole("combobox", { name: "Payment", exact: true }).selectOption("refund");
+    await ledger.getByLabel("Method").selectOption("cash");
+    const refund = ledger.getByLabel("Amount (DKK)");
+    const recordEntry = ledger.getByRole("button", { name: "Record entry", exact: true });
+    await refund.fill("50.26");
+    await recordEntry.click();
+    await expect(ledger.getByRole("alert")).toContainText("Refund cannot exceed the amount collected with this payment method.");
+    expect(await payments()).toHaveLength(2);
+
+    await refund.fill("20.10");
+    await recordEntry.click();
+    await expect(ledger.getByRole("status")).toContainText("Refund recorded.");
+    expect(await db`SELECT method,amount_cents FROM payment_records
+      WHERE tenant_id=${tenantId} AND booking_id=${booking.id} AND kind='refund'`)
+      .toEqual([{ method: "cash", amount_cents: 2010 }]);
+    expect(await originalPayments()).toEqual(receipts);
   } finally {
     await db.end();
   }

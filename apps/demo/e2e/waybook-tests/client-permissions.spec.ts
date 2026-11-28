@@ -13,7 +13,7 @@ async function openSession(page: Page, email: string, landingPath: string) {
 for (const tenant of [
   { route: "nordic", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
   { route: "copenhagen", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
-]) test(`client directory follows effective permissions in ${tenant.route}`, async ({ page, browser, baseURL, ignoreHTTPSErrors }) => {
+]) test(`client directory follows effective permissions in ${tenant.route}`, { tag: tenant.route === "nordic" ? "@mobile" : [] }, async ({ page, browser, baseURL, ignoreHTTPSErrors }) => {
   const db = postgres(process.env[tenant.database]!, { max: 1, ssl: false });
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
   const tag = randomUUID().slice(0, 8);

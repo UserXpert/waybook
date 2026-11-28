@@ -5,7 +5,7 @@ import postgres from "postgres";
 for (const fixture of [
   { route: "nordic", slug: "nordic-studio", owner: "owner@nordic.local", database: "WAYBOOK_NORDIC_STUDIO_DATABASE_URL" },
   { route: "copenhagen", slug: "copenhagen-physio", owner: "owner@copenhagen-physio.local", database: "WAYBOOK_COPENHAGEN_PHYSIO_DATABASE_URL" },
-]) test(`owners can create and assign a role and manage its access in Settings in ${fixture.route}`, async ({ page, browser }) => {
+]) test(`owners can create and assign a role and manage its access in Settings in ${fixture.route}`, { tag: fixture.route === "nordic" ? "@mobile" : [] }, async ({ page, browser }) => {
   const app = `/${fixture.route}/app`;
   // The Waybook E2E configuration requires disposable local databases.
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
@@ -81,7 +81,7 @@ for (const fixture of [
       const paymentsTab = settingsNav.getByRole("link", { name: "Payments", exact: true });
       await paymentsTab.click();
       await expect(paymentsTab).toHaveAttribute("aria-current", "page");
-      await expect(page.getByRole("region", { name: "Stripe", exact: true })).toContainText("Setup unavailable");
+      await expect(page.getByRole("region", { name: /^Stripe(?: sandbox)?$/ })).toBeVisible();
       await expect(page.getByRole("link", { name: "Open Sales", exact: true })).toHaveAttribute("href", `${app}/sales`);
       await expect(page.locator("#business-settings").getByRole("link", { name: /^Roles & permissions/ })).toHaveCount(0);
       const rolesTab = settingsNav.getByRole("link", { name: "Roles & permissions" });

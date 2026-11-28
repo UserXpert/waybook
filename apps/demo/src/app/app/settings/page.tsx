@@ -4,12 +4,17 @@ import { notFound } from "next/navigation";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
 import { TenantBusinessProfileForm } from "@/components/tenant-business-profile-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
+import { StripeOnboardingButton } from "@/components/stripe-onboarding-button";
 import { TenantTerminologyForm } from "@/components/tenant-terminology-form";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-page-media";
 import { parseBusinessProfile } from "@/lib/waybook/business-profile";
 import { tenantDb } from "@/lib/waybook/database";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
+import { stripeLiveConfig, stripeSandboxConfig } from "@/lib/waybook/stripe-connect-api";
+import { stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
+import { liveMerchantStatus } from "@/lib/waybook/stripe-live";
+import { sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -18,9 +23,11 @@ import { calendarDisplayIntervals, getCalendarDisplay } from "@/lib/waybook/cale
 import { calendarHolidayRegions } from "@/lib/waybook/calendar-holidays";
 import { calendarTimezones } from "@/lib/waybook/calendar-timezones";
 import { saveCalendarDisplay } from "./calendar-actions";
+import { LiveStripePanel } from "./live-stripe-panel";
 import { StaffRolesPanel } from "./roles/panel";
+import { checkStripeSandboxStatus, startStripeSandboxOnboarding } from "./payment-actions";
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; calendarStatus?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; calendarStatus?: string; stripe?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
   const [params, slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled, terminology] = await Promise.all([
     searchParams,
@@ -44,6 +51,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const rolesHref = `${settingsHref}?tab=roles`;
   const businessHref = `${settingsHref}?tab=business`;
   const paymentsHref = `${settingsHref}?tab=payments`;
+  const liveStripe = showingPayments && isOwner ? stripeLiveConfig(process.env) : null;
+  const collection = liveStripe ? stripeAppointmentPaymentConfig(process.env) : null;
+  const liveStatus = liveStripe ? await liveMerchantStatus(tenant.id, liveStripe) : null;
+  const sandbox = showingPayments && isOwner ? stripeSandboxConfig(process.env) : null;
+  const merchantStatus = sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -113,11 +125,39 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <button type="submit" className="waybook-action">Save calendar preferences</button>
             </form>
           </section> : showingPayments ? <>
-            <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
+            {liveStripe && liveStatus ? <LiveStripePanel
+              status={liveStatus}
+              feedback={params.stripe}
+              countries={liveStripe.allowedCountries}
+              collectionEnabled={collection?.livemode === true && collection.allowNewPayments}
+            /> : merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
+              <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
+              {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
+              {params.stripe === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
+              <p role={params.stripe === "returned" || params.stripe === "checked" ? "status" : undefined}>{{
+                unconnected: "Set up a Danish sandbox merchant to test card payments.",
+                pending: "Stripe setup is incomplete or awaiting verification.",
+                ready: "Stripe has verified your sandbox account for card payments.",
+                restricted: "Stripe has restricted card payments on this sandbox account.",
+                disconnected: "Stripe could not find this sandbox account. Review the account in Stripe.",
+                unresolved: "An earlier setup attempt needs to be reconciled before you can continue.",
+                unavailable: "Stripe status is temporarily unavailable. Try refreshing the status.",
+              }[merchantStatus]}</p>
+              {merchantStatus === "unconnected" || merchantStatus === "pending" ? <p>
+                Already use Stripe? Sign in with your Stripe login and select your existing business if Stripe offers it.
+              </p> : null}
+              <div className="workspace-settings__payment-actions">
+                {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
+                  <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : "Continue Stripe setup"} />
+                </form> : null}
+                {merchantStatus !== "unconnected" ? <form action={checkStripeSandboxStatus}>
+                  <StripeOnboardingButton label="Check Stripe status" checkStatus />
+                </form> : null}
+              </div>
+            </section> : <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
               <h2 id="stripe-settings-title">Stripe</h2>
-              <p><strong>Setup unavailable</strong></p>
-              <p>You’ll be able to connect your Stripe account here when Waybook enables card processing for this workspace.</p>
-            </section>
+              <p>Live Stripe setup will appear here when Waybook activates its Stripe Connect platform.</p>
+            </section>}
             <section className="workspace-settings__panel" aria-labelledby="record-payments-title">
               <h2 id="record-payments-title">Record payments</h2>
               <p>Record cash, bank transfers, and card payments taken elsewhere from appointment checkout in Sales.</p>

@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { hasNonGiftCardPayment } from "@/lib/waybook/appointment-payment-records";
+import { hasNonGiftCardPayment, hasOnlyManualAppointmentPayments, paymentMethodLabels } from "@/lib/waybook/appointment-payment-records";
 import { getAppointmentSaleProducts, getAppointmentSalePayments } from "@/lib/waybook/appointment-sale-details";
 import { getAppointmentPaymentBalance } from "@/lib/waybook/appointment-payment-balance";
 import { RecordedAppointmentPayments } from "@/components/recorded-appointment-payments";
 import { AppointmentPaymentForm } from "@/components/appointment-payment-form";
+import { StripeAppointmentPayment } from "@/components/stripe-appointment-payment";
+import { StripeAppointmentRefund } from "@/components/stripe-appointment-refund";
 import { FinishAppointmentCheckout } from "@/components/appointment-attendance-journey";
 import type { AppointmentAttendanceStage } from "@/lib/waybook/appointment-lifecycle";
 import { TableDateFields } from "@/components/table-date-fields";
@@ -20,6 +22,10 @@ import { appointmentCheckoutAccess } from "@/lib/waybook/appointment-checkout-ac
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
+import { appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
+import { stripeDkkMinimumCents, stripeMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
+import { stripeAppointmentPaymentConfig, stripeCanStartPayment, stripePaymentAccount } from "@/lib/waybook/stripe-payment-mode";
+import { stripeAppointmentRefundDetails } from "@/lib/waybook/stripe-appointment-refunds";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { getAdditionalAppointmentServices } from "@/lib/waybook/appointment-service-segments";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
@@ -39,6 +45,7 @@ type SaleRow = {
   bookedPriceCents: number;
   noShowChargeCents: number;
   paidCents: number;
+  stripeRefundedCents: number;
   chargeableCents: number;
   paymentCount: number;
   lastPaymentAt: Date | null;
@@ -56,12 +63,12 @@ type SaleRow = {
 type Location = { id: string; name: string };
 type Product = { id: string; title: string; priceCents: number; currency: string };
 type EligiblePackage = { id: string; title: string; remainingUnits: number; expiresAt: Date | null };
-type BookingActivity = { id: string; eventType: string; actorIdentityId: string | null; createdAt: Date };
+type BookingActivity = { id: string; eventType: string; actorIdentityId: string | null; createdAt: Date; providerRecorded: boolean };
 type ActivityActor = { id: string; displayName: string };
 type SaleSummary = { outstandingCents: string; collectedCents: string; refundDueCents: string; matchingCount: number; page: number };
 
 const salesPageSize = 150;
-const saleStatuses = ["all", "open", "paid", "refund", "cancelled"];
+const saleStatuses = ["all", "open", "paid", "refund", "refunded", "cancelled"];
 const defaultSaleSort = "appointment-today";
 const saleSortOptions = [
   { value: defaultSaleSort, label: "Appointment date · today first" },
@@ -91,6 +98,7 @@ function activityLabel(eventType: string, clientLabel: string) {
     "booking.no_show": "Marked as no-show",
     "payment.payment": "Payment recorded",
     "payment.refund": "Refund recorded",
+    "payment.refund_returned": "Stripe returned a refund",
     "payment.gift_card": "Gift card redeemed",
     "payment.gift_card_refund": "Gift card refunded",
     "payment.corrected": "Payment updated",
@@ -103,6 +111,8 @@ function activityLabel(eventType: string, clientLabel: string) {
 
 function settlement(row: SaleRow) {
   if (row.status === "cancelled") return { label: "Cancelled", detail: "No checkout", tone: "is-cancelled" };
+  if (row.stripeRefundedCents > 0) return { label: row.paidCents > 0 ? "Partially refunded" : "Refunded",
+    detail: `${money(row.stripeRefundedCents)} returned`, tone: "is-refund" };
   const balance = row.chargeableCents - row.paidCents;
   if (row.packageRedeemed && row.chargeableCents === 0) return { label: "Package", detail: "Service visit redeemed", tone: "is-paid" };
   if (balance === 0) return { label: "Paid", detail: `${money(row.paidCents)} collected`, tone: "is-paid" };
@@ -110,8 +120,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; tender?: string; page?: string; sort?: string; activity?: string } & TableDateParams> }) {
-  const { location: rawLocation, q, status, sale, booking, step, tender, page: rawPage, sort, activity: paymentActivity, from, to } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; tender?: string; page?: string; sort?: string; activity?: string; stripe?: string } & TableDateParams> }) {
+  const { location: rawLocation, q, status, sale, booking, step, tender, page: rawPage, sort, activity: paymentActivity, from, to, stripe } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -147,6 +157,11 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const saleRows = db`
       SELECT cs.id, cs.currency, b.id AS "bookingId", b.booking_number AS "bookingNumber", b.customer_id AS "customerId", b.starts_at AS "startsAt", b.ends_at AS "endsAt", b.status, b.attendance_stage AS "attendanceStage", b.booked_price_cents AS "bookedPriceCents", b.no_show_charge_cents AS "noShowChargeCents",
         coalesce(sum(CASE WHEN pr.kind = 'payment' THEN pr.amount_cents ELSE -pr.amount_cents END), 0)::int AS "paidCents",
+        coalesce(sum(CASE pr.kind WHEN 'refund' THEN pr.amount_cents ELSE -pr.amount_cents END) FILTER (WHERE EXISTS (
+          SELECT 1 FROM booking_events e WHERE e.tenant_id = pr.tenant_id AND e.booking_id = pr.booking_id
+            AND e.event_type IN ('payment.refund', 'payment.refund_returned') AND e.metadata->>'paymentId' = pr.id::text
+            AND e.metadata->>'source' IN ('stripe_sandbox', 'stripe_live')
+        )), 0)::int AS "stripeRefundedCents",
         count(pr.id)::int AS "paymentCount", max(pr.recorded_at) AS "lastPaymentAt",
         c.name AS "customerName", c.email AS "customerEmail", c.phone AS "customerPhone", s.title AS "serviceTitle",
         b.team_member_id AS "teamMemberId", tm.name AS "teamMemberName", b.location_id AS "locationId", l.name AS "locationName"
@@ -175,6 +190,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       ), classified AS (
         SELECT *, CASE
           WHEN status = 'cancelled' THEN 'cancelled'
+          WHEN "stripeRefundedCents" > 0 THEN 'refunded'
           WHEN "chargeableCents" = "paidCents" THEN 'paid'
           WHEN "chargeableCents" > "paidCents" THEN 'open'
           ELSE 'refund'
@@ -184,7 +200,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       ), totals AS (
         SELECT count(*) FILTER (WHERE ${statusFilter})::int AS "matchingCount",
           coalesce(sum(greatest(0, "chargeableCents" - "paidCents"))
-            FILTER (WHERE status <> 'cancelled'), 0) AS "outstandingCents",
+            FILTER (WHERE status <> 'cancelled' AND "stripeRefundedCents" = 0), 0) AS "outstandingCents",
           coalesce(sum("paidCents"), 0) AS "collectedCents",
           coalesce(sum(greatest(0, "paidCents" - "chargeableCents"))
             FILTER (WHERE status <> 'cancelled'), 0) AS "refundDueCents"
@@ -222,7 +238,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   ]) : [null, [], []] as const;
   const additionalServiceLines = selectedSale ? await getAdditionalAppointmentServices(db, tenant.id, selectedSale.bookingId) : [];
   const activity = manager && selectedSale ? await db<BookingActivity[]>`
-    SELECT id, event_type AS "eventType", actor_identity_id AS "actorIdentityId", created_at AS "createdAt"
+    SELECT id, event_type AS "eventType", actor_identity_id AS "actorIdentityId", created_at AS "createdAt",
+      metadata->>'recordedVia' = 'stripe' AS "providerRecorded"
     FROM booking_events WHERE tenant_id=${tenant.id} AND booking_id=${selectedSale.bookingId}
     ORDER BY created_at DESC, id DESC LIMIT 100
   ` : [];
@@ -245,6 +262,22 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     ORDER BY cp.created_at
   ` : [];
   const clock = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, hour: "2-digit", minute: "2-digit" });
+  const stripeConfig = stripeAppointmentPaymentConfig(process.env);
+  const stripeCollectionEnabled = stripeConfig ? stripeCanStartPayment(stripeConfig) : false;
+  const [stripeState, stripeAccount, stripeRefund] = selectedSale && stripeConfig ? await Promise.all([
+    appointmentStripeState({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }),
+    manager && stripeCollectionEnabled ? stripePaymentAccount(tenant.id, stripeConfig) : null,
+    manager && ["completed", "cancelled"].includes(selectedSale.status) && paymentBalance?.payments.some((payment) => payment.stripeMode)
+      ? stripeAppointmentRefundDetails({ db, tenantId: tenant.id, bookingId: selectedSale.bookingId }, stripeConfig)
+      : null,
+  ]) : [null, null, null];
+  const pendingStripeMethod = stripeState?.state === "pending" ? stripeState.paymentMethod : null;
+  const stripePending = Boolean(pendingStripeMethod);
+  const currentStripeMode = !stripePending || stripeState?.livemode === (stripeConfig?.livemode === true);
+  const mobilePayAvailable = Boolean(stripeConfig && stripeAccount && !stripePending &&
+    step === "payment" && selectedSale?.attendanceStage === "checking_out" && selectedSale.currency === "DKK" &&
+    selectedSale.chargeableCents - selectedSale.paidCents >= stripeDkkMinimumCents && paymentItems.length === 0 &&
+    await stripeMobilePayAvailable(stripeConfig, stripeAccount));
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
   const saleListParams = dateFilterParams(new URLSearchParams(), dates);
@@ -296,7 +329,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         </select></label>
         <label>Status<select name="status" defaultValue={selectedStatus}>
           <option value="all">All sales</option><option value="open">Open balance</option>
-          <option value="paid">Paid</option><option value="refund">Credit due</option><option value="cancelled">Cancelled</option>
+          <option value="paid">Paid</option><option value="refund">Credit due</option><option value="refunded">Refunded</option><option value="cancelled">Cancelled</option>
         </select></label>
         <label>Payment activity<select name="activity" defaultValue={selectedActivity}>
           <option value="all">Any payment activity</option>
@@ -335,30 +368,39 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const state = settlement(selectedSale);
       const balance = selectedSale.chargeableCents - selectedSale.paidCents;
       const activeAppointment = ["confirmed", "arrived"].includes(selectedSale.status);
-      const canChangeProducts = manager && activeAppointment && paymentItems.length === 0;
+      const canChangeProducts = manager && activeAppointment && paymentItems.length === 0 && !stripePending;
       const availableProducts = products.filter((product) => product.currency === selectedSale.currency);
       const outstandingCents = selectedSale.status === "cancelled" ? 0 : Math.max(balance, 0);
       const recorded = paymentBalance?.payments ?? [];
-      const canRecordPayment = (manager || selectedSale.attendanceStage === "checking_out") && paymentBalance && !hasNonGiftCardPayment(recorded) && outstandingCents > 0;
+      const activeCheckout = selectedSale.status === "arrived" && selectedSale.attendanceStage === "checking_out";
+      const manualSplit = activeCheckout && !stripePending && hasOnlyManualAppointmentPayments(recorded);
+      const canRecordPayment = (manager || (activeCheckout && !stripePending)) && paymentBalance &&
+        (manualSplit || !hasNonGiftCardPayment(recorded)) && outstandingCents > 0;
       const paymentStep = step === "payment" && Boolean(canRecordPayment);
       const reviewHref = saleHref(selectedSale);
       const paymentHref = `${reviewHref}&step=payment`;
-      const canUseGiftCard = manager && activeAppointment && !selectedSale.giftCardRedeemed && recorded.length === 0 && canRecordPayment && selectedSale.currency === "DKK";
+      const canUseGiftCard = manager && !stripePending && activeAppointment && !selectedSale.giftCardRedeemed && recorded.length === 0 && canRecordPayment && selectedSale.currency === "DKK";
       const giftCardStep = canUseGiftCard && tender === "gift-card";
-      const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0;
+      const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0 && !stripePending;
+      const stripeCheckoutAvailable = Boolean(stripeAccount) && selectedSale.attendanceStage === "checking_out" &&
+        selectedSale.currency === "DKK" && paymentItems.length === 0;
+      const canStartStripe = stripeCheckoutAvailable && outstandingCents >= stripeDkkMinimumCents;
       const bookedServices = [{
         id: selectedSale.bookingId, title: selectedSale.serviceTitle, provider: selectedSale.teamMemberName,
         startsAt: selectedSale.startsAt, endsAt: selectedSale.endsAt, priceCents: selectedSale.bookedPriceCents,
       }, ...additionalServiceLines];
       return <TenantEditorDialog key={selectedSale.id} title="Appointment checkout" closeHref={saleListHref} cycleFocus dismissSuccessToastOnClose>
-        <aside className="tenant-drawer appointment-drawer sale-detail appointment-sale-drawer" data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
+        <aside className={`tenant-drawer appointment-drawer sale-detail appointment-sale-drawer${paymentStep ? " appointment-sale-drawer--payment" : ""}`} data-drawer-inline-actions aria-label={`Sale details for ${selectedSale.customerName}`}>
           <header><div><p>{state.label} SALE</p><h2>Appointment checkout</h2><span>{dateTime.format(selectedSale.startsAt)}</span></div><TenantEditorClose href={saleListHref} label="Close sale details">Close</TenantEditorClose></header>
           <div className="appointment-drawer__body">
-            {paymentStep ? <Link className="waybook-action waybook-action--secondary sale-detail__action" href={reviewHref}>Back to checkout</Link> : null}
+            {paymentStep ? <Link className="appointment-checkout__back" href={reviewHref}>Back to checkout</Link> : null}
             <section className="appointment-checkout__client" aria-label={clientLabel}>
               <div><span>{clientLabel}</span><strong>{selectedSale.customerName}</strong></div>
               {selectedSale.locationName ? <small>{selectedSale.locationName}</small> : null}
             </section>
+            {manager && selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment") ?
+              <Link className="waybook-action waybook-action--secondary sale-detail__action"
+                href={tenantPath(tenantSlug, `/app/sales/receipt?sale=${selectedSale.id}`)}>View receipt</Link> : null}
             {!paymentStep ? <section aria-label="Checkout items" className="appointment-checkout__items">
               <h3>Checkout items</h3>
               <ul>
@@ -376,31 +418,56 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 </li>)}
               </ul>
             </section> : null}
-            <section aria-label="Checkout totals"><h3>Totals</h3><dl className="sale-detail__totals">
+            {!paymentStep ? <section aria-label="Checkout totals"><h3>Totals</h3><dl className="sale-detail__totals">
               {selectedSale.packageRedeemed ? <div><dt>Package coverage</dt><dd>−{money(selectedSale.bookedPriceCents)}</dd></div> : null}
               <div><dt>Checkout total</dt><dd>{money(selectedSale.chargeableCents)}</dd></div>
               <div><dt>Net payments</dt><dd>{money(selectedSale.paidCents)}</dd></div>
-              {selectedSale.status !== "cancelled" ? <div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}>
+              {selectedSale.stripeRefundedCents > 0 ? <div><dt>Refunds issued</dt><dd>{money(selectedSale.stripeRefundedCents)}</dd></div> :
+                selectedSale.status !== "cancelled" ? <div className={balance === 0 ? "is-settled" : balance < 0 ? "is-credit" : ""}>
                 <dt>{balance < 0 ? "Credit due" : "Balance due"}</dt><dd>{money(Math.abs(balance))}</dd>
               </div> : null}
             </dl>
-              {!paymentStep && canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={paymentHref}>Go to payments</Link> : null}
-              {!paymentStep && selectedSale.attendanceStage === "checking_out" && balance === 0 ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
-            </section>
-            {paymentStep && paymentBalance ? <section><h3>{giftCardStep ? "Gift card" : "Payments"}</h3>
+              {!manager && stripePending ? <p className="sale-detail__note" role="status">
+                {pendingStripeMethod === "mobilepay" ? "A MobilePay payment is in progress." : "A card payment is in progress."} Ask a manager to review it before taking another payment.
+              </p> : null}
+              {canRecordPayment ? <Link className="waybook-primary-link sale-detail__action" href={paymentHref}>Go to payments</Link> : null}
+              {selectedSale.attendanceStage === "checking_out" && !stripePending && (balance === 0 || (manager && selectedSale.stripeRefundedCents > 0)) ? <FinishAppointmentCheckout bookingId={selectedSale.bookingId} /> : null}
+            </section> : null}
+            {paymentStep && paymentBalance ? <section aria-label={giftCardStep ? "Gift card payment" : "Record payment"} className="appointment-checkout__payment">
+              <dl className="appointment-checkout__balance"><div><dt>Balance due</dt><dd>{money(outstandingCents)}</dd></div></dl>
+              {manualSplit && recorded.length > 0 ? <section aria-label="Payments recorded">
+                <h3>Payments recorded</h3>
+                <ul className="client-record__ledger">
+                  {recorded.map((payment) => <li key={payment.id}>
+                    <span>{payment.method === "card" ? "Card paid elsewhere" : paymentMethodLabels[payment.method]}</span>
+                    <b>{money(payment.amountCents)}</b>
+                  </li>)}
+                </ul>
+              </section> : null}
               {giftCardStep ? <>
+                <h3>Gift card</h3>
                 <GiftCardTenderForm saleId={selectedSale.id} balanceCents={outstandingCents} />
                 <Link className="waybook-action waybook-action--secondary sale-detail__action" href={paymentHref}>Other payment methods</Link>
-              </> : <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
-                giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} />}
+              </> : <>
+                {manager && stripePending && !currentStripeMode ? <p role="status" className="sale-detail__note">
+                  Resolve the open payment in its original Stripe environment.
+                </p> : null}
+                {manager && currentStripeMode && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
+                  amountCents={outstandingCents} pendingPayment={pendingStripeMethod} mobilePayAvailable={mobilePayAvailable}
+                  livemode={stripeConfig?.livemode === true} verifyOnReturn={stripe === "return"} /> : null}
+                {manager && !stripePending && stripeCheckoutAvailable && !canStartStripe ? <p className="sale-detail__note">
+                  Stripe payments must be at least DKK 2.50.
+                </p> : null}
+                {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
+                  canFinishCheckout={activeCheckout} manualSplit={manualSplit}
+                  giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} /> : null}
+              </>}
             </section> : null}
             {!paymentStep && recorded.length > 0 ? <section><h3>Payment details</h3>
               <RecordedAppointmentPayments bookingId={selectedSale.bookingId} payments={recorded} allowEdit={manager && selectedSale.status !== "cancelled"} />
+              {stripeRefund ? <StripeAppointmentRefund bookingId={selectedSale.bookingId} requestId={crypto.randomUUID()} {...stripeRefund} /> : null}
             </section> : null}
             {!paymentStep ? <>
-              {manager && selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
-                <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
-              </section> : null}
               {canChangeProducts && (availableProducts.length > 0 || saleLines.length > 0) ? <section><h3>Products</h3>
                 {saleLines.map((line) => <form key={line.id} action={removeProductFromAppointmentSale} className="tenant-drawer-form">
                   <input type="hidden" name="saleId" value={selectedSale.id} />
@@ -425,12 +492,12 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
               {selectedSale.giftCardRedeemed ? <section><h3>Gift card</h3>
                 <p className="sale-detail__note">A gift card has been used for this appointment.</p>
               </section> : null}
-              {manager && selectedSale.status === "completed" && paymentItems.some((item) => item.kind === "payment") ?
-                <Link className="waybook-action waybook-action--secondary sale-detail__action"
-                  href={tenantPath(tenantSlug, `/app/sales/receipt?sale=${selectedSale.id}`)}>View receipt</Link> : null}
+              {manager && selectedSale.status !== "cancelled" ? <section><h3>{clientLabel} details</h3>
+                <SaleAppointmentDetailsForm bookingId={selectedSale.bookingId} name={selectedSale.customerName} email={selectedSale.customerEmail} phone={selectedSale.customerPhone ?? ""} />
+              </section> : null}
               <Link className="waybook-action waybook-action--secondary sale-detail__action" href={checkoutHref(selectedSale)}>Open appointment</Link>
-              {manager ? <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section> : null}
-              {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
+              {manager ? <section><h3>Transactions</h3>{paymentItems.length ? <ul className="client-record__ledger">{paymentItems.map((item) => <li key={item.id}><div><strong>{item.refundReturned ? "Refund returned" : item.adjustment ? "Payment adjustment" : item.kind === "refund" ? "Refund" : "Payment"} · {item.method.replaceAll("_", " ")}</strong><span>{dateTime.format(item.recordedAt)}</span></div><b className={item.kind === "refund" ? "is-refund" : undefined}>{item.kind === "refund" ? "−" : "+"}{money(item.amountCents)}</b></li>)}</ul> : <p className="sale-detail__note">No transactions yet.</p>}</section> : null}
+              {activity.length > 0 ? <section><h3>Appointment activity</h3><ul className="client-record__ledger">{activity.map((event) => <li key={event.id}><div><strong>{activityLabel(event.eventType, clientLabel)}</strong><span>{dateTime.format(event.createdAt)} · {event.providerRecorded ? "Stripe sandbox" : event.actorIdentityId ? actorNames.get(event.actorIdentityId) ?? "Team member" : "Actor not recorded"}</span></div></li>)}</ul>{activity.length === 100 ? <p className="sale-detail__note">Showing the 100 most recent events.</p> : null}</section> : null}
             </> : null}
           </div>
         </aside>

@@ -66,6 +66,12 @@ Staff checkout shows the selected appointment and payment record. Workspace sale
 
 **Verified in the playground.** Checkout showed a $100 service subtotal with Add service, Add product, and More. Go to payments displayed optional tip, a $100 total, and an editable $100 charge amount. Available choices were Front Desk, Self Checkout, Credit Card, Cash, Gift Card, Account Balance, and Other. Credit Card opened a confirmation view with the amount and card selection. Mangomint supplied a test card in playground mode. Submitting it opened Sale #18 (Closed), with a $100 card transaction and Rebook appointment. The test did not move real funds.
 
+### Card on file
+
+Mangomint puts **Add Credit Card** in the appointment’s client section and shows a masked card once one is saved. Waybook’s sandbox drawer offers **Add credit card** to owners and managers in a connected workspace. After the client consents, staff open Stripe’s hosted setup page. Returning to the appointment verifies the setup under that workspace’s Stripe account and displays the card brand and last four digits. Cancel returns to the appointment, where staff can resume an open setup. Saving a card takes no payment and leaves the appointment state and balance unchanged. [Mangomint card-on-file guide](https://www.mangomint.com/learn/managing-cards-on-file/) · [Stripe hosted setup guide](https://docs.stripe.com/payments/checkout/save-and-reuse)
+
+A subsequent sandbox checkout can offer the saved card on Stripe’s hosted payment page. Waybook pins the consented client’s Stripe customer to that sale’s payment attempt and verifies it again on return. The customer can confirm the saved card or enter a new card on Stripe. The payment ledger updates only after Stripe confirms settlement. [Stripe hosted checkout for existing customers](https://docs.stripe.com/payments/existing-customers?platform=web&ui=stripe-hosted)
+
 ### Additional tender paths documented by Mangomint
 
 | Path | Front-desk behaviour |
@@ -80,7 +86,7 @@ Staff checkout shows the selected appointment and payment record. Workspace sale
 ### Additional playground evidence
 
 - **Cart.** Checkout carried the two services into one cart with separate $100 and $80 lines and a $180 subtotal. Expanding a service showed its editable price and provider. Add Product opened a searchable, grouped catalogue. Adding a $20 product associated it with the provider and raised the subtotal to $200. More offered Gift Card, Package, Offer, and Account Balance.
-- **Payment choice.** Gift Card opened a search field and Cancel. Account Balance displayed the current balance and amount, warned explicitly when applying the amount would create an IOU, and required Confirm. Other showed the amount and an optional reference. Self Checkout displayed a phone confirmation and Send. The test stopped before sending a text.
+- **Payment choice.** Gift Card opened a lookup by card number or client. On an $80 demo sale with a $0 client balance, Account Balance showed both amounts and warned that confirming would create an IOU. Other showed the amount and an optional reference. Self Checkout displayed the prefilled destination phone number and separate Cancel and Send actions. The test dismissed the payment prompts and left the demo sale open.
 - **Split settlement.** Changing the amount to $20 and choosing Cash posted the entry in the playground and prefilled the $180 remainder. Front Desk offered a simulation with **Complete test payment**. Completing it closed Sale #19 with $20 Cash and $180 Other, identified as Front Desk Demo. The $200 cart and its three lines remained visible. Both calendar segments were completed and the appointment exposed View Sale.
 - **Sale and transaction menus.** The closed sale exposed Change Date, Add Notes, Reopen, Refund, Print Receipt, and Send Receipt. Send Receipt opened an email confirmation. The test cancelled that dialog. Transaction View Details showed the amount, timestamp, method, and staff payment channel. The cash line offered a transaction-level Refund action in this sale.
 - **Refund draft.** Mangomint offered a refund for specific line items or a payment-only refund that would reopen an amount due. Selecting a product let staff set the return quantity and choose whether to restock it, then select Full refund, Partial refund, or No refund. The draft summary showed a $20 refund for one returned product and one unit to restock. **Refund (Continue)** reopened the draft from the closed sale and kept those selections. At the final step, Cash and Other were selectable original methods, with Gift card and Account balance offered separately. Staff could add an optional note. The draft was left in the playground without posting a refund.
@@ -88,7 +94,7 @@ Staff checkout shows the selected appointment and payment record. Workspace sale
 
 ### Benchmark verification still open
 
-The complete linked appointment, product checkout, split cash and simulated Front Desk settlement, card settlement, and standalone manual settlement were exercised in Chrome. Additional live verification remains for gift card redemption, account balance and IOU completion, actual front-desk hardware, the customer's text-link experience, receipt delivery, and refund settlement. The documentation above distinguishes those steps from observed screens and transactions.
+The complete linked appointment, product checkout, split cash and simulated Front Desk settlement, card settlement, and standalone manual settlement were exercised in Chrome. The Gift Cards register had no entries. Its setup form showed a scannable card number, starting balance, and owner lookup or inline creation. The form was closed without issuing a card. Additional live verification remains for gift card redemption, account balance and IOU completion, actual front-desk hardware, the customer's text-link experience, receipt delivery, and refund settlement. The documentation above distinguishes those steps from observed screens and transactions.
 
 ## Waybook acceptance checks
 

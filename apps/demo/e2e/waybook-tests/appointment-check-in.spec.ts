@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import postgres from "postgres";
 
-test("check in, resume checkout, and complete the same appointment", async ({ page }) => {
+test("check in, resume checkout, and complete the same appointment", { tag: "@mobile" }, async ({ page }) => {
   test.setTimeout(90_000);
   page.setDefaultTimeout(8000);
   const database = process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!;
@@ -106,8 +106,7 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await earlySale.getByRole("link", { name: "Go to payments" }).click();
     await expect(earlySale.getByLabel("Amount (DKK)")).toHaveValue("65.00");
     await earlySale.getByRole("radio", { name: "Cash", exact: true }).check();
-    await earlySale.getByRole("button", { name: "Record payment" }).click();
-    await earlySale.getByRole("button", { name: "Finish checkout" }).click();
+    await earlySale.getByRole("button", { name: "Record payment and finish checkout", exact: true }).click();
     await expect.poll(() => state(early.id)).toEqual({ status: "completed", attendance_stage: null });
     expect((await db`SELECT starts_at > now() AS early FROM bookings WHERE id=${early.id}`)[0].early).toBe(true);
     expect(await db`SELECT amount_cents FROM payment_records WHERE tenant_id=${tenantId} AND booking_id=${early.id}`).toEqual([{ amount_cents: 6500 }]);
@@ -253,8 +252,7 @@ test("check in, resume checkout, and complete the same appointment", async ({ pa
     await expect(page).toHaveURL((url) => url.searchParams.get("step") === "payment");
     await expect(sale.getByLabel("Amount (DKK)")).toHaveValue("65.00");
     await sale.getByRole("radio", { name: "Cash", exact: true }).check();
-    await sale.getByRole("button", { name: "Record payment" }).click();
-    await sale.getByRole("button", { name: "Finish checkout", exact: true }).click();
+    await sale.getByRole("button", { name: "Record payment and finish checkout", exact: true }).click();
     await expect.poll(() => state(waiting.id)).toEqual({ status: "completed", attendance_stage: null });
     await expect(sale.getByRole("button", { name: "Finish checkout", exact: true })).toHaveCount(0);
     expect(await db`SELECT id FROM commerce_sales WHERE tenant_id=${tenantId} AND booking_id=${waiting.id}`).toEqual([openSale]);

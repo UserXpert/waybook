@@ -27,7 +27,11 @@ export default defineConfig({
   use: { baseURL: "http://localhost:3336", trace: "on-first-retry", screenshot: "only-on-failure", timezoneId: "Europe/Copenhagen", ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } } : {}) },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile", use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 } } },
+    {
+      name: "mobile",
+      grep: /@mobile\b/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 } },
+    },
   ],
   webServer: {
     command: "../../node_modules/.bin/next start -p 3336",
@@ -39,7 +43,10 @@ export default defineConfig({
       GOOGLE_CLIENT_SECRET: "waybook-e2e-google-secret",
       BETTER_AUTH_SECRET: "waybook-e2e-google-fixture-signing-key",
       BETTER_AUTH_URL: "http://localhost:3336",
-      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${JSON.stringify(path.join(here, "fixtures/google-oauth.mjs"))}`.trim(),
+      WAYBOOK_STRIPE_SANDBOX_SECRET_KEY: "sk_test_waybookE2EFixture",
+      WAYBOOK_STRIPE_SANDBOX_ORIGIN: "http://localhost:3336",
+      WAYBOOK_STRIPE_SANDBOX_WEBHOOK_SECRET: "whsec_waybookE2EFixture",
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${JSON.stringify(path.join(here, "fixtures/google-oauth.mjs"))} --import ${JSON.stringify(path.join(here, "fixtures/stripe-connect.mjs"))}`.trim(),
     },
     reuseExistingServer: false,
     timeout: 60_000,

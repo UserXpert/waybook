@@ -3963,6 +3963,9 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .workspace-settings__nav a[aria-current] { font-weight: 600; }
 .workspace-settings__content { display: grid; gap: 1rem; min-width: 0; }
 .workspace-settings__panel { padding: 1.5rem; border: 1px solid #e5e5e8; border-radius: .9rem; background: #fff; }
+.workspace-settings__payment-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
+.workspace-settings__payment-country { display: grid; gap: .35rem; margin-bottom: .75rem; font-size: .875rem; font-weight: 600; }
+.workspace-settings__payment-country select { width: 100%; min-height: 2.5rem; font-weight: 400; }
 .workspace-settings__panel h2 { margin: 0; font-size: 1.15rem; font-weight: 500; }
 .workspace-settings__panel > p { margin: .35rem 0 1.25rem; }
 .workspace-settings .tenant-appearance { max-width: 31rem; gap: .7rem; border: 0; padding: 0; }
@@ -5077,6 +5080,17 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   font-size: .8rem;
   font-weight: 600;
 }
+
+.appointment-client-card,
+.appointment-client-card__consent { display: grid; gap: .45rem; justify-items: start; }
+.appointment-client-card__consent label,
+.appointment-client-card__line {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  flex-wrap: wrap;
+}
+.appointment-client-card__line { margin-top: .4rem; }
 .calendar-appointment-drawer__client dl,
 .calendar-appointment-drawer__booking dl {
   display: grid;
@@ -5170,6 +5184,31 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 .appointment-checkout__items li b { flex-shrink: 0; }
 .sale-detail__totals + .sale-detail__action { margin-top: .5rem; }
+.appointment-sale-drawer--payment .appointment-drawer__body {
+  gap: .75rem;
+}
+.appointment-checkout__back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: inherit;
+  font-size: .85rem;
+  text-underline-offset: .18em;
+}
+.appointment-checkout__balance { margin: 0 0 .75rem; }
+.appointment-checkout__balance > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 600;
+}
+.appointment-checkout__balance dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.appointment-checkout__payment .appointment-payment-form > button { width: 100%; }
 
 
 .manual-appointment__service-row,
@@ -5248,6 +5287,9 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   margin: 0;
   padding: 0;
   border: 0;
+}
+.appointment-payment-form__amount {
+  grid-template-columns: minmax(0, 1fr);
 }
 .appointment-payment-methods legend {
   margin-block-end: .5rem;
