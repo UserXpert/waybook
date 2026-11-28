@@ -74,9 +74,8 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
     await expect(mobilePay).toBeVisible();
     await db`UPDATE bookings SET booked_price_cents = 249 WHERE id = ${minimumBooking}`;
     await sale.locator('input[name="expectedCents"]').evaluate((input: HTMLInputElement) => { input.value = "249"; });
-    const rejectedPayment = page.waitForResponse((response) => response.request().method() === "POST");
     await card.click();
-    expect(await (await rejectedPayment).text()).toContain("Stripe payments must be at least DKK 2.50.");
+    await expect(sale.getByText("Stripe payments must be at least DKK 2.50.", { exact: true })).toBeVisible();
     expect(await attempts(minimumBooking)).toEqual([]);
     await page.reload();
     await expect(card).toHaveCount(0);
