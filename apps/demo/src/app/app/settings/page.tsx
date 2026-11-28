@@ -11,7 +11,8 @@ import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-p
 import { parseBusinessProfile } from "@/lib/waybook/business-profile";
 import { tenantDb } from "@/lib/waybook/database";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
-import { stripeSandboxConfig } from "@/lib/waybook/stripe-connect-api";
+import { stripeLiveConfig, stripeSandboxConfig } from "@/lib/waybook/stripe-connect-api";
+import { liveMerchantStatus } from "@/lib/waybook/stripe-live";
 import { sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
@@ -21,6 +22,7 @@ import { calendarDisplayIntervals, getCalendarDisplay } from "@/lib/waybook/cale
 import { calendarHolidayRegions } from "@/lib/waybook/calendar-holidays";
 import { calendarTimezones } from "@/lib/waybook/calendar-timezones";
 import { saveCalendarDisplay } from "./calendar-actions";
+import { LiveStripePanel } from "./live-stripe-panel";
 import { StaffRolesPanel } from "./roles/panel";
 import { checkStripeSandboxStatus, startStripeSandboxOnboarding } from "./payment-actions";
 
@@ -48,6 +50,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const rolesHref = `${settingsHref}?tab=roles`;
   const businessHref = `${settingsHref}?tab=business`;
   const paymentsHref = `${settingsHref}?tab=payments`;
+  const liveStripe = showingPayments && isOwner ? stripeLiveConfig(process.env) : null;
+  const liveStatus = liveStripe ? await liveMerchantStatus(tenant.id, liveStripe) : null;
   const sandbox = showingPayments && isOwner ? stripeSandboxConfig(process.env) : null;
   const merchantStatus = sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
@@ -119,7 +123,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <button type="submit" className="waybook-action">Save calendar preferences</button>
             </form>
           </section> : showingPayments ? <>
-            {merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
+            {liveStripe && liveStatus ? <LiveStripePanel
+              status={liveStatus}
+              feedback={params.stripe}
+              countries={liveStripe.allowedCountries}
+            /> : merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
               <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
               {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
               {params.stripe === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
@@ -145,8 +153,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </div>
             </section> : <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
               <h2 id="stripe-settings-title">Stripe</h2>
-              <p><strong>Setup unavailable</strong></p>
-              <p>You’ll be able to connect your Stripe account here when Waybook enables card processing for this workspace.</p>
+              <p>Live Stripe setup will appear here when Waybook activates its Stripe Connect platform.</p>
             </section>}
             <section className="workspace-settings__panel" aria-labelledby="record-payments-title">
               <h2 id="record-payments-title">Record payments</h2>

@@ -192,6 +192,22 @@ Hosted sandbox verification, including the reuse option for an eligible
 existing Stripe business, remains part of
 issue [#30](https://github.com/UserXpert/waybook/issues/30).
 
+## Live Stripe onboarding
+
+When the live Stripe Connect platform is configured, every workspace owner
+can open **Settings → Payments → Connect Stripe**, select a supported business
+country, and complete Stripe-hosted onboarding. On return, Waybook looks up
+the workspace's stored account in Stripe and shows its current status.
+
+Before exposing this flow, apply Control migration 0008 through the release
+process and configure `WAYBOOK_STRIPE_LIVE_SECRET_KEY` as a Production secret,
+`WAYBOOK_STRIPE_LIVE_ORIGIN` as the HTTPS app origin, and
+`WAYBOOK_STRIPE_LIVE_COUNTRIES` as the comma-separated ISO country codes enabled
+for the live platform. Confirm the Stripe platform configuration for each
+enabled business country. The live and sandbox connections use separate
+Control tables. Live card collection, refunds, and saved cards require a
+separate release. See [#30](https://github.com/UserXpert/waybook/issues/30).
+
 ## Planned: two distinct Waybook money products (2026-11-08)
 
 These flows must never share a balance, provider credential, or ledger:
