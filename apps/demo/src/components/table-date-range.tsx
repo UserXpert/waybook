@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, ChevronDown } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { CalendarMonthPicker, parsePickerDate } from "./calendar-month-picker";
 
 const shortDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -19,12 +19,17 @@ export function TableDateRange({ label, today, initialFrom = "", initialTo = "" 
   initialTo?: string;
 }) {
   const id = useId();
+  const picker = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [range, setRange] = useState({ from: initialFrom, to: initialTo });
   const [visibleMonth, setVisibleMonth] = useState(() => parsePickerDate(initialFrom || initialTo || today));
   const { from, to } = range;
   const summary = from && to ? from === to ? format(from) : `${format(from)} – ${format(to)}`
     : from ? `From ${format(from)}` : to ? `Through ${format(to)}` : "All dates";
+
+  useEffect(() => {
+    if (open) picker.current?.scrollIntoView({ block: "nearest" });
+  }, [open]);
 
   function selectDay(day: string) {
     if (!from || to) setRange({ from: day, to: "" });
@@ -46,7 +51,7 @@ export function TableDateRange({ label, today, initialFrom = "", initialTo = "" 
     </button>
     <input type="hidden" name="from" value={from} />
     <input type="hidden" name="to" value={to} />
-    {open ? <div id={id + "-dates"} className="workspace-date-range__picker">
+    {open ? <div id={id + "-dates"} ref={picker} className="workspace-date-range__picker">
       <div className="workspace-date-range__presets" aria-label="Date presets" role="group">
         {presets.map((preset) => <button type="button" className="waybook-action waybook-action--secondary" key={preset.name}
           aria-pressed={from === preset.from && to === preset.to} onClick={() => {
