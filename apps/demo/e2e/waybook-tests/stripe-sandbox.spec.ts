@@ -10,7 +10,7 @@ async function signIn(page: Page, email: string) {
   await expect(page).toHaveURL(/\/app(?:\/calendars)?$/);
 }
 
-test("owners can resume their sandbox onboarding without creating a second account", async ({ page, browser, baseURL, viewport }) => {
+test("owners can resume sandbox onboarding and rehearse payments outside Sales", { tag: "@mobile" }, async ({ page, browser, baseURL, viewport }) => {
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
   const tenant = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const path = "/nordic/app/settings?tab=payments";
@@ -53,6 +53,13 @@ test("owners can resume their sandbox onboarding without creating a second accou
     expect(await connections()).toEqual([first]);
     await page.goto(path + "&stripe=returned");
     await expect(page.getByRole("status").filter({ hasText: "Stripe has verified your sandbox account for card payments." })).toBeVisible();
+    const paymentsBefore = await tenant`SELECT count(*) FROM payment_records WHERE tenant_id=${tenantId}`;
+    await page.route("https://checkout.stripe.com/**", (route) => route.fulfill({ body: "Stripe sandbox checkout fixture" }));
+    await page.getByRole("button", { name: "Start a DKK 10 test payment" }).click();
+    await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_/);
+    await page.goto(path + "&sandbox=payment-returned");
+    await expect(page.getByRole("list", { name: "Recent test payments" })).toContainText("DKK 10 · Paid");
+    expect(await tenant`SELECT count(*) FROM payment_records WHERE tenant_id=${tenantId}`).toEqual(paymentsBefore);
 
     const otherContext = await browser.newContext({ baseURL, viewport });
     try {
@@ -60,6 +67,7 @@ test("owners can resume their sandbox onboarding without creating a second accou
       await signIn(other, "owner@copenhagen-physio.local");
       await other.goto("/copenhagen/app/settings?tab=payments");
       await expect(other.getByRole("button", { name: "Set up Stripe sandbox" })).toBeVisible();
+      await expect(other.getByRole("list", { name: "Recent test payments" })).toHaveCount(0);
       expect((await other.goto(path))?.status()).toBe(404);
     } finally {
       await otherContext.close();

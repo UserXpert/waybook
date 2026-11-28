@@ -213,6 +213,16 @@ checkout session.
 
 ## Live Stripe onboarding
 
+Workspace owners can practise in **Settings → Payments → Stripe sandbox** before
+activating real payments. Set `WAYBOOK_STRIPE_WORKSPACE_SANDBOX_SECRET_KEY` to
+a sandbox platform key with Connect and Checkout access and set
+`WAYBOOK_STRIPE_WORKSPACE_SANDBOX_ORIGIN` to the canonical HTTPS app origin.
+These Production variables enable practice checkout only. Test payments use
+the workspace's sandbox connected account and stay in Stripe sandbox history.
+They never enter Waybook Sales, appointment balances or Reports. Once Stripe
+verifies the live account and live collection is enabled, the live panel
+replaces the practice controls. Stripe retains the test history separately.
+
 When the live Stripe Connect platform is configured, every workspace owner
 can open **Settings → Payments → Connect Stripe**, select a supported business
 country, and complete Stripe-hosted onboarding. On return, Waybook looks up

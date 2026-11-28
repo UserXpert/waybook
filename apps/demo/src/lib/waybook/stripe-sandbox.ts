@@ -13,7 +13,7 @@ export async function stripeSandboxTenantForAccount(accountId: string) {
   return tenant?.lifecycleStatus === "active" ? tenant : null;
 }
 
-async function sandboxConnection(tenantId: string) {
+export async function sandboxConnection(tenantId: string) {
   const [connection] = await controlDb<Connection[]>`
     SELECT account_id AS "accountId", creation_key AS "creationKey",
            creation_started_at > now() - interval '29 days' AS retryable
@@ -33,7 +33,7 @@ export async function sandboxMerchantStatus(tenantId: string, config: StripeSand
   }
 }
 
-export async function sandboxOnboardingUrl(tenantId: string, config: StripeSandboxConfig, settingsPath: string) {
+export async function sandboxOnboardingUrl(tenantId: string, config: StripeSandboxConfig, settingsPath: string, feedbackKey: "stripe" | "sandbox" = "stripe") {
   await controlDb`
     INSERT INTO waybook_stripe_sandbox_connections (tenant_id) VALUES (${tenantId})
     ON CONFLICT (tenant_id) DO NOTHING
@@ -41,7 +41,7 @@ export async function sandboxOnboardingUrl(tenantId: string, config: StripeSandb
   const connection = await sandboxConnection(tenantId);
   if (!connection) throw new Error("The Stripe sandbox connection was not saved.");
   const stripe = stripeConnectSandbox(config);
-  if (connection.accountId) return stripe.merchantOnboardingLink(connection.accountId, settingsPath);
+  if (connection.accountId) return stripe.merchantOnboardingLink(connection.accountId, settingsPath, feedbackKey);
   // Never submit a new create request after Stripe's safe replay window.
   if (!connection.retryable) throw new Error("The earlier Stripe setup must be reconciled before it can continue.");
   const accountId = await stripe.createMerchant(connection.creationKey);
@@ -52,5 +52,5 @@ export async function sandboxOnboardingUrl(tenantId: string, config: StripeSandb
     RETURNING account_id AS "accountId"
   `;
   if (saved?.accountId !== accountId) throw new Error("The Stripe sandbox account could not be confirmed.");
-  return stripe.merchantOnboardingLink(accountId, settingsPath);
+  return stripe.merchantOnboardingLink(accountId, settingsPath, feedbackKey);
 }

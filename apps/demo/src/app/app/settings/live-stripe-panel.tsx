@@ -24,7 +24,8 @@ export function LiveStripePanel({ status, feedback, countries, collectionEnabled
 }) {
   const canContinue = status === "pending" || status === "restricted";
   return <section className="workspace-settings__panel" aria-labelledby="stripe-live-title">
-    <h2 id="stripe-live-title">Stripe</h2>
+    <h2 id="stripe-live-title">Stripe Connect</h2>
+    <p>Accept real appointment payments into this clinic’s Stripe account.</p>
     <p role={feedback === "returned" || feedback === "checked" ? "status" : undefined}>
       {status === "ready" && collectionEnabled ? "Stripe has verified your account for appointment payments in Waybook." : statusDescriptions[status]}
     </p>

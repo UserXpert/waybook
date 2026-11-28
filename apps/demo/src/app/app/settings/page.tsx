@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { randomUUID } from "node:crypto";
 import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, UsersRound, Wrench } from "lucide-react";
 import { notFound } from "next/navigation";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
@@ -11,10 +12,11 @@ import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-p
 import { parseBusinessProfile } from "@/lib/waybook/business-profile";
 import { tenantDb } from "@/lib/waybook/database";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
-import { stripeLiveConfig, stripeSandboxConfig } from "@/lib/waybook/stripe-connect-api";
+import { stripeLiveConfig, stripeWorkspaceSandboxConfig } from "@/lib/waybook/stripe-connect-api";
 import { stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
 import { liveMerchantStatus } from "@/lib/waybook/stripe-live";
-import { sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
+import { sandboxConnection, sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
+import { listSandboxRehearsals } from "@/lib/waybook/stripe-sandbox-rehearsal";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -25,9 +27,11 @@ import { calendarTimezones } from "@/lib/waybook/calendar-timezones";
 import { saveCalendarDisplay } from "./calendar-actions";
 import { LiveStripePanel } from "./live-stripe-panel";
 import { StaffRolesPanel } from "./roles/panel";
-import { checkStripeSandboxStatus, startStripeSandboxOnboarding } from "./payment-actions";
+import { checkStripeSandboxStatus, startStripeSandboxOnboarding, startStripeSandboxRehearsal } from "./payment-actions";
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; calendarStatus?: string; stripe?: string }> }) {
+const rehearsalDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Copenhagen" });
+
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; calendarStatus?: string; stripe?: string; sandbox?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
   const [params, slug, permissions, teamEnabled, resourcesEnabled, emailsEnabled, terminology] = await Promise.all([
     searchParams,
@@ -54,8 +58,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const liveStripe = showingPayments && isOwner ? stripeLiveConfig(process.env) : null;
   const collection = liveStripe ? stripeAppointmentPaymentConfig(process.env) : null;
   const liveStatus = liveStripe ? await liveMerchantStatus(tenant.id, liveStripe) : null;
-  const sandbox = showingPayments && isOwner ? stripeSandboxConfig(process.env) : null;
+  const livePaymentsReady = liveStatus === "ready" && collection?.livemode && collection.allowNewPayments;
+  const production = process.env.VERCEL_ENV === "production";
+  const sandbox = showingPayments && isOwner && !livePaymentsReady ? stripeWorkspaceSandboxConfig(process.env) : null;
   const merchantStatus = sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
+  const sandboxFeedback = production ? params.sandbox : params.stripe;
+  const rehearsalAccount = sandbox && merchantStatus === "ready" ? (await sandboxConnection(tenant.id))?.accountId : null;
+  const rehearsals = sandbox && rehearsalAccount ? await listSandboxRehearsals(sandbox, rehearsalAccount).catch(() => null) : null;
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -130,11 +139,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               feedback={params.stripe}
               countries={liveStripe.allowedCountries}
               collectionEnabled={collection?.livemode === true && collection.allowNewPayments}
-            /> : merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
+            /> : production || !merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
+              <h2 id="stripe-settings-title">Stripe Connect</h2>
+              <p>Live Stripe setup will appear here when Waybook activates its Stripe Connect platform.</p>
+            </section> : null}
+            {merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
               <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
-              {params.stripe === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
-              {params.stripe === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
-              <p role={params.stripe === "returned" || params.stripe === "checked" ? "status" : undefined}>{{
+              <p>Practise taking payments with Stripe test cards before going live. Test payments stay out of Sales and Reports.</p>
+              {sandboxFeedback === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
+              {sandboxFeedback === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
+              <p role={sandboxFeedback === "returned" || sandboxFeedback === "checked" ? "status" : undefined}>{{
                 unconnected: "Set up a Danish sandbox merchant to test card payments.",
                 pending: "Stripe setup is incomplete or awaiting verification.",
                 ready: "Stripe has verified your sandbox account for card payments.",
@@ -148,16 +162,26 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </p> : null}
               <div className="workspace-settings__payment-actions">
                 {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
-                  <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : "Continue Stripe setup"} />
+                  <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : production ? "Continue sandbox setup" : "Continue Stripe setup"} />
                 </form> : null}
                 {merchantStatus !== "unconnected" ? <form action={checkStripeSandboxStatus}>
-                  <StripeOnboardingButton label="Check Stripe status" checkStatus />
+                  <StripeOnboardingButton label={production ? "Check sandbox status" : "Check Stripe status"} checkStatus />
                 </form> : null}
               </div>
-            </section> : <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
-              <h2 id="stripe-settings-title">Stripe</h2>
-              <p>Live Stripe setup will appear here when Waybook activates its Stripe Connect platform.</p>
-            </section>}
+              {rehearsalAccount ? <>
+                <h3>Practice payments</h3>
+                {params.sandbox === "payment-returned" ? <p role="status">Returned from Stripe. Review the payment status below.</p> : null}
+                {params.sandbox === "payment-cancelled" ? <p role="status">Checkout closed. You can start another test payment.</p> : null}
+                {params.sandbox === "payment-unavailable" ? <p role="alert">Test checkout could not open. Try again in a moment.</p> : null}
+                <form action={startStripeSandboxRehearsal}>
+                  <input type="hidden" name="nonce" value={randomUUID()} />
+                  <StripeOnboardingButton label="Start a DKK 10 test payment" />
+                </form>
+                {rehearsals === null ? <p>Stripe test payment history is temporarily unavailable.</p> : rehearsals.length ? <ul aria-label="Recent test payments">
+                  {rehearsals.map(({ id, state, created }) => <li key={id}>{rehearsalDate.format(new Date(created * 1000))} · DKK 10 · {state}</li>)}
+                </ul> : <p>Test payments will appear here.</p>}
+              </> : null}
+            </section> : null}
             <section className="workspace-settings__panel" aria-labelledby="record-payments-title">
               <h2 id="record-payments-title">Record payments</h2>
               <p>Record cash, bank transfers, and card payments taken elsewhere from appointment checkout in Sales.</p>

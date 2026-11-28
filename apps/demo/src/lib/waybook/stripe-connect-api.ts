@@ -23,6 +23,18 @@ export function stripeSandboxConfig(env: NodeJS.ProcessEnv): StripeSandboxConfig
   }
 }
 
+/** Test connections exposed in workspace settings. Production sales never use this config. */
+export function stripeWorkspaceSandboxConfig(env: NodeJS.ProcessEnv): StripeSandboxConfig | null {
+  if (env.VERCEL_ENV !== "production") return stripeSandboxConfig(env);
+  const origin = env.WAYBOOK_STRIPE_WORKSPACE_SANDBOX_ORIGIN?.trim();
+  if (!origin?.startsWith("https://")) return null;
+  return stripeSandboxConfig({
+    NODE_ENV: env.NODE_ENV,
+    WAYBOOK_STRIPE_SANDBOX_SECRET_KEY: env.WAYBOOK_STRIPE_WORKSPACE_SANDBOX_SECRET_KEY,
+    WAYBOOK_STRIPE_SANDBOX_ORIGIN: origin,
+  });
+}
+
 export function stripeLiveConfig(env: NodeJS.ProcessEnv): StripeLiveConfig | null {
   if (env.VERCEL_ENV !== "production") return null;
   const secretKey = env.WAYBOOK_STRIPE_LIVE_SECRET_KEY?.trim();
@@ -103,15 +115,15 @@ function stripeConnect(config: StripeSandboxConfig, livemode: boolean, request: 
       return "pending";
     },
 
-    async merchantOnboardingLink(accountId: string, settingsPath: string) {
+    async merchantOnboardingLink(accountId: string, settingsPath: string, feedbackKey: "stripe" | "sandbox" = "stripe") {
       const settings = new URL(settingsPath, config.origin);
       if (settings.origin !== config.origin || !accountIdPattern.test(accountId) ||
           (livemode && (settings.username || settings.password || settings.hash))) {
         throw new Error("Invalid Stripe onboarding context.");
       }
       const refresh = new URL(settings);
-      refresh.searchParams.set("stripe", "resume");
-      settings.searchParams.set("stripe", "returned");
+      refresh.searchParams.set(feedbackKey, "resume");
+      settings.searchParams.set(feedbackKey, "returned");
       const link = await call<{ account?: unknown; url?: unknown; livemode?: unknown }>("/v2/core/account_links", {
         account: accountId,
         use_case: {
