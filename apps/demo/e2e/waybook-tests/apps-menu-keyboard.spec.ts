@@ -45,6 +45,33 @@ for (const workspace of workspaces) {
 
     await opener.click();
     await expect(search).toHaveValue("");
+    if (workspace.route === "nordic") {
+      const searchField = dialog.locator(".tenant-app-menu__search");
+      const icon = dialog.getByRole("link", { name: "Sales", exact: true }).locator("i");
+      const selectTint = (tint: string) => page.evaluate((value) => {
+        document.documentElement.dataset.waybookTint = value;
+      }, tint);
+
+      await expect(page.locator("html")).toHaveAttribute("data-waybook-tint", "blue");
+      for (const theme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme: theme });
+        await expect(page.locator("html")).toHaveAttribute("data-waybook-theme", theme);
+        const blueSurface = await dialog.evaluate((node) => getComputedStyle(node).backgroundColor);
+        const blueSearch = await searchField.evaluate((node) => getComputedStyle(node).backgroundColor);
+
+        if (theme === "light") {
+          const iconFill = await icon.evaluate((node) => getComputedStyle(node).backgroundColor);
+          await expect(searchField).toHaveCSS("border-top-style", "solid");
+          await expect(searchField).toHaveCSS("border-top-color", iconFill);
+        }
+
+        await selectTint("neutral");
+        await expect(dialog).toHaveCSS("background-color", blueSurface);
+        await expect(searchField).toHaveCSS("background-color", blueSearch);
+        await selectTint("blue");
+      }
+      await page.emulateMedia({ colorScheme: "light" });
+    }
     await page.locator(".tenant-app-menu__scrim").click({ position: { x: 3, y: 3 } });
     await expect(dialog).toHaveCount(0);
     await expect(opener).toBeFocused();
@@ -70,30 +97,7 @@ test("Apps and account menus use glass surfaces and a compact, aligned Sign out 
   await page.getByRole("button", { name: "Apps", exact: true }).click();
   const apps = page.getByRole("dialog", { name: "Apps & settings" });
   await expect(apps).toHaveCSS("backdrop-filter", "blur(16px)");
-  const searchField = apps.locator(".tenant-app-menu__search");
   const sales = apps.getByRole("link", { name: "Sales", exact: true });
-  const selectTint = (tint: string) => page.evaluate((value) => {
-    document.documentElement.dataset.waybookTint = value;
-  }, tint);
-  await expect(page.locator("html")).toHaveAttribute("data-waybook-tint", "blue");
-  for (const theme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme: theme });
-    await expect(page.locator("html")).toHaveAttribute("data-waybook-theme", theme);
-    const blueSurface = await apps.evaluate((node) => getComputedStyle(node).backgroundColor);
-    const blueSearch = await searchField.evaluate((node) => getComputedStyle(node).backgroundColor);
-
-    if (theme === "light") {
-      const iconFill = await sales.locator("i").evaluate((node) => getComputedStyle(node).backgroundColor);
-      await expect(searchField).toHaveCSS("border-top-style", "solid");
-      await expect(searchField).toHaveCSS("border-top-color", iconFill);
-    }
-
-    await selectTint("neutral");
-    await expect(apps).toHaveCSS("background-color", blueSurface);
-    await expect(searchField).toHaveCSS("background-color", blueSearch);
-    await selectTint("blue");
-  }
-  await page.emulateMedia({ colorScheme: "light" });
   await sales.hover();
   await expect(sales).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await page.keyboard.press("Escape");
