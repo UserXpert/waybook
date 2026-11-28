@@ -95,6 +95,42 @@ test("owners can rehearse in Sales and clear only practice sales", { tag: "@mobi
     await expect(page.getByRole("link", { name: "Retail checkout", exact: true }).first()).toBeVisible();
     expect(await tenant`SELECT id FROM commerce_sales WHERE id=${regularSale} AND stripe_practice_cleared_at IS NULL`).toHaveLength(1);
 
+    const appointment = await tenant.begin(async (tx) => {
+      const [customer] = await tx`INSERT INTO customers (tenant_id,name,email)
+        VALUES (${tenantId},'Practice appointment',${randomUUID() + "@example.test"}) RETURNING id`;
+      const [location] = await tx`SELECT id FROM locations WHERE tenant_id=${tenantId} AND slug='primary'`;
+      const [service] = await tx`SELECT id FROM services WHERE tenant_id=${tenantId} LIMIT 1`;
+      const [member] = await tx`INSERT INTO team_members (tenant_id,name,email,role)
+        VALUES (${tenantId},'Practice test provider',${randomUUID() + "@example.test"},'staff') RETURNING id`;
+      const [block] = await tx`INSERT INTO booking_blocks (tenant_id,team_member_id,location_id,starts_at,ends_at,state)
+        VALUES (${tenantId},${member.id},${location.id},now()+interval '2 days',now()+interval '49 hours','confirmed')
+        RETURNING id,starts_at,ends_at`;
+      const [booking] = await tx`INSERT INTO bookings (tenant_id,booking_block_id,service_id,team_member_id,location_id,customer_id,starts_at,ends_at,status,booked_price_cents)
+        VALUES (${tenantId},${block.id},${service.id},${member.id},${location.id},${customer.id},${block.starts_at},${block.ends_at},'confirmed',1425) RETURNING id`;
+      return booking;
+    });
+    const appointmentPath = `/nordic/app/sales?booking=${appointment.id}`;
+    await page.goto(appointmentPath);
+    await page.getByRole("link", { name: "Go to payments", exact: true }).click();
+    await page.getByRole("button", { name: "Pay with test card", exact: true }).click();
+    await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_/);
+    const [appointmentPractice] = await tenant`SELECT id FROM commerce_sales WHERE tenant_id=${tenantId}
+      AND is_stripe_practice AND stripe_practice_cleared_at IS NULL`;
+    const appointmentReturn = `${retailPath}?sale=${appointmentPractice.id}&sandbox=payment-returned`;
+    await page.goto(appointmentReturn);
+    await expect(page.getByRole("heading", { name: "Completed test payment" })).toBeVisible();
+    await page.goto(appointmentReturn);
+    await expect(page.getByRole("heading", { name: "Completed test payment" })).toBeVisible();
+    expect(await tenant`SELECT amount_cents FROM commerce_sale_transactions WHERE tenant_id=${tenantId} AND sale_id=${appointmentPractice.id}`)
+      .toEqual([{ amount_cents: 1425 }]);
+    expect(await tenant`SELECT id FROM payment_records WHERE booking_id=${appointment.id}`).toHaveLength(0);
+    expect(await tenant`SELECT status FROM bookings WHERE id=${appointment.id}`).toEqual([{ status: "confirmed" }]);
+    await page.goto(path);
+    await page.getByRole("button", { name: "Clear practice sales (1)", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Practice sales cleared." })).toBeVisible();
+    await page.goto(`${retailPath}?sale=${appointmentPractice.id}`);
+    await expect(page.getByRole("link", { name: "Practice sale", exact: true })).toHaveCount(0);
+
     const otherContext = await browser.newContext({ baseURL, viewport });
     try {
       const other = await otherContext.newPage();

@@ -25,6 +25,12 @@ import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/te
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
 import { stripeDkkMinimumCents, stripeMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
+import { StripeOnboardingButton } from "@/components/stripe-onboarding-button";
+import { stripeWorkspaceSandboxConfig } from "@/lib/waybook/stripe-connect-api";
+import { liveMerchantStatus } from "@/lib/waybook/stripe-live";
+import { isRehearsalAmount } from "@/lib/waybook/stripe-sandbox-rehearsal";
+import { sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
+import { startStripeSandboxRehearsal } from "../settings/payment-actions";
 import { stripeAppointmentCollection, stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
 import { stripeAppointmentRefundDetails } from "@/lib/waybook/stripe-appointment-refunds";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
@@ -121,8 +127,8 @@ function settlement(row: SaleRow) {
   return { label: "Credit due", detail: `${money(-balance)} to refund`, tone: "is-refund" };
 }
 
-export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; tender?: string; page?: string; sort?: string; activity?: string; stripe?: string } & TableDateParams> }) {
-  const { location: rawLocation, q, status, sale, booking, step, tender, page: rawPage, sort, activity: paymentActivity, from, to, stripe } = await searchParams;
+export default async function SalesPage({ searchParams }: { searchParams: Promise<{ location?: string; q?: string; status?: string; sale?: string; booking?: string; step?: string; tender?: string; page?: string; sort?: string; activity?: string; stripe?: string; practice?: string } & TableDateParams> }) {
+  const { location: rawLocation, q, status, sale, booking, step, tender, page: rawPage, sort, activity: paymentActivity, from, to, stripe, practice } = await searchParams;
   const { tenant, membership } = await requireTenantWorkspace();
   await requirePageFeature(tenant.id, "booking-essentials");
   const tenantSlug = await currentTenantRouteSlug(tenant.slug);
@@ -284,6 +290,15 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const mobilePayAvailable = Boolean(stripeConfig && stripeAccount && selectedSale &&
     selectedSale.chargeableCents - selectedSale.paidCents >= stripeDkkMinimumCents &&
     await stripeMobilePayAvailable(stripeConfig, stripeAccount));
+  const canOfferPractice = membership.role === "owner" && step === "payment" && !stripePending && !stripeAccount &&
+    selectedSale?.currency === "DKK" && ["confirmed", "arrived"].includes(selectedSale.status) &&
+    isRehearsalAmount(selectedSale.chargeableCents - selectedSale.paidCents);
+  const sandboxConfig = canOfferPractice ? stripeWorkspaceSandboxConfig(process.env) : null;
+  const liveAccountReady = sandboxConfig && stripeConfig?.livemode && stripeConfig.allowNewPayments &&
+    (stripeAvailability?.status === "practice-sales" ||
+      (!stripeAvailability && await liveMerchantStatus(tenant.id, stripeConfig) === "ready"));
+  const practiceAvailable = sandboxConfig && !liveAccountReady &&
+    await sandboxMerchantStatus(tenant.id, sandboxConfig) === "ready";
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
   const saleListParams = dateFilterParams(new URLSearchParams(), dates);
@@ -470,7 +485,19 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {manager && !stripePending && stripeAccount && !canStartStripe ? <p className="sale-detail__note">
                   Stripe payments must be at least DKK 2.50.
                 </p> : null}
-                {manager && !stripePending && stripeUnavailable ? <div className="appointment-online-status">
+                {practice === "unavailable" ? <p role="alert" className="sale-detail__note">
+                  Test checkout could not open. Review the balance and try again.
+                </p> : null}
+                {practiceAvailable ? <form action={startStripeSandboxRehearsal} className="tenant-drawer-form appointment-online-payment">
+                  <div className="appointment-online-payment__heading">
+                    <h3>Pay online</h3><span>Stripe test mode</span>
+                  </div>
+                  <input type="hidden" name="bookingId" value={selectedSale.bookingId} />
+                  <input type="hidden" name="nonce" value={crypto.randomUUID()} />
+                  <input type="hidden" name="expectedCents" value={outstandingCents} />
+                  <div><StripeOnboardingButton label="Pay with test card" /></div>
+                </form> : null}
+                {manager && !stripePending && !practiceAvailable && stripeUnavailable ? <div className="appointment-online-status">
                   <p className="sale-detail__note">{stripeUnavailable}</p>
                   {membership.role === "owner" ? <Link href={tenantPath(tenantSlug, "/app/settings?tab=payments")}>Payment settings</Link> : null}
                 </div> : null}
