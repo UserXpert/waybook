@@ -3947,8 +3947,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-app-menu__groups a { gap: .8rem; padding: .48rem .5rem; font-size: .875rem; font-weight: 400; }
 .tenant-app-menu__groups a i { flex-basis: 2.35rem; width: 2.35rem; height: 2.35rem; }
 .tenant-app-menu__groups a i svg { width: 1.2rem; height: 1.2rem; stroke-width: 1.8; }
-:root .tenant-app-menu__groups a i,
-:root[data-waybook-theme="dark"] .tenant-app-menu__groups a i { background: color-mix(in srgb, var(--waybook-accent) 10%, transparent); }
+
 
 /* Settings: personal appearance and links to existing workspace controls. */
 .tenant-dashboard-page .workspace-settings { max-width: 1160px; margin: 0 auto; padding: 2rem 0 4rem; }
@@ -4049,9 +4048,29 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   background: var(--wb-dark-raised, #292929);
 }
 :root[data-waybook-theme] :is(.tenant-app-menu__dialog, .tenant-user-menu__popover) {
-  background-color: color-mix(in srgb, var(--ice-layer, var(--wb-dark-surface, #f8f8f9)) 90%, transparent);
-  border-color: var(--ice-edge, var(--wb-dark-border, #dedee0));
+  background-color: color-mix(in srgb, var(--menu-glass-surface) 90%, transparent);
+  border-color: var(--menu-glass-edge);
   backdrop-filter: blur(16px);
+}
+.tenant-user-menu__popover {
+  --menu-glass-surface: var(--ice-layer, var(--wb-dark-surface, #f8f8f9));
+  --menu-glass-edge: var(--ice-edge, var(--wb-dark-border, #dedee0));
+}
+.tenant-app-menu__dialog {
+  --menu-glass-surface: #f8f8f9;
+  --menu-glass-edge: #dedee0;
+  --tenant-app-menu-icon-bg: color-mix(in srgb, var(--waybook-accent) 10%, transparent);
+}
+:root[data-waybook-theme="dark"] .tenant-app-menu__dialog {
+  --menu-glass-surface: #151516;
+  --menu-glass-edge: #2d2d30;
+}
+:root[data-waybook-theme="light"] .tenant-app-menu__search {
+  border: 1px solid var(--tenant-app-menu-icon-bg);
+  background-clip: padding-box;
+}
+:root[data-waybook-theme="light"] .tenant-app-menu__search:focus-within {
+  outline: 1px solid var(--tenant-app-menu-icon-bg);
 }
 :root[data-waybook-theme="light"] :is(
   .tenant-app-menu__groups a,
@@ -4109,7 +4128,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .tenant-app-menu__groups a i { flex-basis: 2.35rem; width: 2.35rem; height: 2.35rem; }
 .tenant-app-menu__groups a i svg { width: 1.2rem; height: 1.2rem; stroke-width: 1.8; }
 :root .tenant-app-menu__groups a i,
-:root[data-waybook-theme="dark"] .tenant-app-menu__groups a i { background: color-mix(in srgb, var(--waybook-accent) 10%, transparent); }
+:root[data-waybook-theme="dark"] .tenant-app-menu__groups a i { background: var(--tenant-app-menu-icon-bg); }
 
 /* Compact Apps menu columns follow the available screen width. */
 .tenant-app-menu__dialog { width: min(100%, 60rem); }
@@ -5277,7 +5296,7 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   }
 
   :is(input:not(:where([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"])), select, textarea):focus:not([aria-invalid="true"]),
-  :is(.tenant-app-menu__search, .embed-studio__colour):has(input:not([type="color"]):focus) {
+  .embed-studio__colour:has(input:not([type="color"]):focus) {
     border-color: var(--waybook-field-focus-border) !important;
   }
 }
