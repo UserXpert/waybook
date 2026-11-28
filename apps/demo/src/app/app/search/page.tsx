@@ -1,5 +1,6 @@
+import { ListFilterOptions } from "@/components/workspace-options";
 import { TableDateFields } from "@/components/table-date-fields";
-import { dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
+import { hasTableDateFilters, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
 import { titleTerminology } from "@/lib/waybook/terminology-labels";
 import Link from "next/link";
@@ -76,7 +77,17 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <TenantDashboardNav tenantId={tenant.id} tenantSlug={tenantSlug} tenantName={tenant.name} active="search" />
     <section className="reports-intro"><div><p>SEARCH · DATABASE-BACKED</p><h1>Find a {terms.client} or appointment</h1><span>Search only the records your role can access in {tenant.name}.</span></div></section>
     <section className="waybook-data-card">
-      <div className="waybook-section-heading"><div><p>WORKSPACE SEARCH</p><h2>{search ? `${total} matching result${total === 1 ? "" : "s"}` : "Start a search"}</h2><span>{search ? `Results for “${search}”.` : `Look up a ${terms.client} by contact detail, or an appointment by booking number, ${terms.client}, service, or ${terms.staffMember}.`}</span></div></div><form method="get" className="waybook-list-filter dated-list-filters"><label>Search<input name="q" type="search" defaultValue={search} placeholder={`Booking number, ${terms.client}, or service`} autoFocus /></label><TableDateFields dates={dates} label="Appointment date range" /><button type="submit">Search</button></form>
+      <div className="waybook-section-heading"><div><p>WORKSPACE SEARCH</p><h2>{search ? `${total} matching result${total === 1 ? "" : "s"}` : "Start a search"}</h2><span>{search ? `Results for “${search}”.` : `Look up a ${terms.client} by contact detail, or an appointment by booking number, ${terms.client}, service, or ${terms.staffMember}.`}</span></div></div><div className="workspace-filter-bar workspace-filter-bar--search">
+      <form method="get" className="waybook-list-filter workspace-quick-search"><label>Search<input name="q" type="search" defaultValue={search} placeholder={`Booking number, ${terms.client}, or service`} /></label>{dates.sort !== "today" ? <input type="hidden" name="sort" value={dates.sort} /> : null}
+        {dates.from ? <input type="hidden" name="from" value={dates.from} /> : null}
+        {dates.to ? <input type="hidden" name="to" value={dates.to} /> : null}
+        <button type="submit">Search</button>
+      </form>
+      <ListFilterOptions label="Workspace search" active={hasTableDateFilters(dates)} clearHref={tenantPath(tenantSlug, "/app/search") + (search ? `?q=${encodeURIComponent(search)}` : "")}>
+        {search ? <input type="hidden" name="q" value={search} /> : null}
+        <TableDateFields dates={dates} label="Appointment date range" />
+      </ListFilterOptions>
+    </div>
       {search && canSearchClients ? <section className="search-results"><div className="client-record__section-heading"><div><h3>{titleTerminology(terms.clients)}</h3><p>{clients.length ? `Open the ${terms.client} record or continue to their next booking.` : `No matching ${terms.clients}.`}</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>{titleTerminology(terms.client)}</th><th>Contact</th><th>Visits</th><th>Next appointment</th></tr></thead><tbody>{clients.map((client) => <tr key={client.id}><td><Link className="waybook-row-link" href={clientHref(client.id)}>{client.name}</Link></td><td>{client.email}<small>{client.phone ?? "No phone"}</small></td><td>{client.bookingCount}</td><td>{client.nextBookingAt ? dateTime.format(client.nextBookingAt) : "No upcoming appointment"}</td></tr>)}{clients.length === 0 ? <tr><td colSpan={4}>No {terms.clients} match this search.</td></tr> : null}</tbody></table></div></section> : null}
       {search && canSearchAppointments ? <section className="search-results"><div className="client-record__section-heading"><div><h3>Appointments</h3><p>{appointments.length ? "Open an appointment in Calendar to manage its status, reschedule, or payment ledger." : "No matching appointments."}</p></div></div><div className="waybook-table-wrap"><table><thead><tr><th>When</th><th>{titleTerminology(terms.client)}</th><th>Service</th><th>{titleTerminology(terms.staffPlural)} / location</th><th>Status</th></tr></thead><tbody>{appointments.map((appointment) => { const href = appointmentHref(appointment); return <tr key={appointment.id}><td>{href ? <Link className="waybook-row-link" href={href}>{dateTime.format(appointment.startsAt)}</Link> : dateTime.format(appointment.startsAt)}<small>{appointment.bookingNumber}</small></td><td>{appointment.customerName}<small>{appointment.customerEmail}</small></td><td>{appointment.serviceTitle}</td><td>{appointment.teamMemberName ?? "Unassigned"}<small>{appointment.locationName ?? "No location"}</small></td><td>{appointment.status.replace("_", " ")}</td></tr>; })}{appointments.length === 0 ? <tr><td colSpan={5}>No appointments match this search.</td></tr> : null}</tbody></table></div></section> : null}
     </section>

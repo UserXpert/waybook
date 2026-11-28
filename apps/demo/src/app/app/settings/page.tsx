@@ -1,21 +1,15 @@
 import Link from "next/link";
-import { randomUUID } from "node:crypto";
 import { ArrowUpRight, CalendarDays, Mail, MapPin, Package, UsersRound, Wrench } from "lucide-react";
 import { notFound } from "next/navigation";
 import { TenantAppearanceControls } from "@/components/tenant-appearance-controls";
 import { TenantBusinessProfileForm } from "@/components/tenant-business-profile-form";
 import { TenantDashboardNav } from "@/components/tenant-dashboard-nav";
-import { StripeOnboardingButton } from "@/components/stripe-onboarding-button";
 import { TenantTerminologyForm } from "@/components/tenant-terminology-form";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { parseBookingPage, publicBookingImageUrl } from "@/lib/waybook/booking-page-media";
 import { parseBusinessProfile } from "@/lib/waybook/business-profile";
 import { tenantDb } from "@/lib/waybook/database";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
-import { stripeLiveConfig, stripeWorkspaceSandboxConfig } from "@/lib/waybook/stripe-connect-api";
-import { stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
-import { liveMerchantStatus } from "@/lib/waybook/stripe-live";
-import { sandboxConnection, sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -24,9 +18,8 @@ import { calendarDisplayIntervals, getCalendarDisplay } from "@/lib/waybook/cale
 import { calendarHolidayRegions } from "@/lib/waybook/calendar-holidays";
 import { calendarTimezones } from "@/lib/waybook/calendar-timezones";
 import { saveCalendarDisplay } from "./calendar-actions";
-import { LiveStripePanel } from "./live-stripe-panel";
+import { PaymentSettings } from "./payment-settings";
 import { StaffRolesPanel } from "./roles/panel";
-import { checkStripeSandboxStatus, clearStripePracticeSales, startStripeSandboxOnboarding, startStripeSandboxRehearsal } from "./payment-actions";
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; calendarStatus?: string; stripe?: string; sandbox?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -52,19 +45,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const rolesHref = `${settingsHref}?tab=roles`;
   const businessHref = `${settingsHref}?tab=business`;
   const paymentsHref = `${settingsHref}?tab=payments`;
-  const liveStripe = showingPayments && isOwner ? stripeLiveConfig(process.env) : null;
-  const collection = liveStripe ? stripeAppointmentPaymentConfig(process.env) : null;
-  const liveStatus = liveStripe ? await liveMerchantStatus(tenant.id, liveStripe) : null;
-  const livePaymentsReady = liveStatus === "ready" && collection?.livemode && collection.allowNewPayments;
-  const production = process.env.VERCEL_ENV === "production";
-  const sandbox = showingPayments && isOwner && !livePaymentsReady ? stripeWorkspaceSandboxConfig(process.env) : null;
-  const merchantStatus = sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
-  const sandboxFeedback = production ? params.sandbox : params.stripe;
-  const rehearsalAccount = sandbox && merchantStatus === "ready" ? (await sandboxConnection(tenant.id))?.accountId : null;
-  const [practiceSales] = showingPayments && isOwner && (sandbox || liveStripe) ? await tenantDb(tenant)<{ count: number }[]>`
-    SELECT count(*)::int AS count FROM commerce_sales WHERE tenant_id=${tenant.id}
-      AND is_stripe_practice AND stripe_practice_cleared_at IS NULL
-  ` : [];
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -94,7 +74,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <Link href={settingsHref} aria-current={!showingRoles && !showingBusiness && !showingCalendar && !showingPayments ? "page" : undefined}>Appearance</Link>
           <Link href={`${settingsHref}?tab=calendar`} aria-current={showingCalendar ? "page" : undefined}>Calendar</Link>
           {canViewBusiness ? <Link href={businessHref} aria-current={showingBusiness ? "page" : undefined}>Business setup</Link> : null}
-          {isOwner ? <Link href={paymentsHref} aria-current={showingPayments ? "page" : undefined}>Payments</Link> : null}
+          {isOwner ? <Link href={paymentsHref} prefetch={false} aria-current={showingPayments ? "page" : undefined}>Payments</Link> : null}
           {canManageRoles ? <Link href={rolesHref} aria-current={showingRoles ? "page" : undefined}>Roles &amp; permissions</Link> : null}
         </nav>
         <div className="workspace-settings__content">
@@ -133,67 +113,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <label className="calendar-display-form__check"><input type="checkbox" name="autofillLatestService" defaultChecked={calendar.autofillLatestService} /> Autofill service from the latest completed appointment</label>
               <button type="submit" className="waybook-action">Save calendar preferences</button>
             </form>
-          </section> : showingPayments ? <>
-            {liveStripe && liveStatus ? <LiveStripePanel
-              status={liveStatus}
-              feedback={params.stripe}
-              countries={liveStripe.allowedCountries}
-              collectionEnabled={collection?.livemode === true && collection.allowNewPayments}
-              practiceSalesPending={Boolean(practiceSales?.count)}
-            /> : production || !merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
-              <h2 id="stripe-settings-title">Stripe Connect</h2>
-              <p>Live Stripe setup will appear here when Waybook activates its Stripe Connect platform.</p>
-            </section> : null}
-            {merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
-              <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
-              <p>Practise taking payments with Stripe test cards before going live. Test payments are marked as practice in Sales and do not count as revenue.</p>
-              {sandboxFeedback === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
-              {sandboxFeedback === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
-              <p role={sandboxFeedback === "returned" || sandboxFeedback === "checked" ? "status" : undefined}>{{
-                unconnected: "Set up a Danish sandbox merchant to test card payments.",
-                pending: "Stripe setup is incomplete or awaiting verification.",
-                ready: "Stripe has verified your sandbox account for card payments.",
-                restricted: "Stripe has restricted card payments on this sandbox account.",
-                disconnected: "Stripe could not find this sandbox account. Review the account in Stripe.",
-                unresolved: "An earlier setup attempt needs to be reconciled before you can continue.",
-                unavailable: "Stripe status is temporarily unavailable. Try refreshing the status.",
-              }[merchantStatus]}</p>
-              {merchantStatus === "unconnected" || merchantStatus === "pending" ? <p>
-                Already use Stripe? Sign in with your Stripe login and select your existing business if Stripe offers it.
-              </p> : null}
-              <div className="workspace-settings__payment-actions">
-                {merchantStatus === "unconnected" || merchantStatus === "pending" ? <form action={startStripeSandboxOnboarding}>
-                  <StripeOnboardingButton label={merchantStatus === "unconnected" ? "Set up Stripe sandbox" : production ? "Continue sandbox setup" : "Continue Stripe setup"} />
-                </form> : null}
-                {merchantStatus !== "unconnected" ? <form action={checkStripeSandboxStatus}>
-                  <StripeOnboardingButton label={production ? "Check sandbox status" : "Check Stripe status"} checkStatus />
-                </form> : null}
-              </div>
-              {rehearsalAccount ? <>
-                <h3>Practice payments</h3>
-                {params.sandbox === "payment-unavailable" ? <p role="alert">Test checkout could not open. Try again in a moment.</p> : null}
-                <form action={startStripeSandboxRehearsal}>
-                  <input type="hidden" name="nonce" value={randomUUID()} />
-                  <StripeOnboardingButton label="Start a DKK 10 test payment" />
-                </form>
-                <Link href={tenantPath(slug, "/app/sales/retail")}>View test payments in Sales</Link>
-              </> : null}
-            </section> : null}
-            {merchantStatus || practiceSales?.count || params.sandbox === "cleared" ? <section className="workspace-settings__panel" aria-labelledby="stripe-practice-cleanup-title">
-              <h2 id="stripe-practice-cleanup-title">Before you go live</h2>
-              <p>Clear practice sales from Sales before accepting live payments. Existing cash, bank-transfer and card sales and their receipts stay in place.</p>
-              {params.sandbox === "cleared" ? <p role="status">Practice sales cleared.</p> : null}
-              {practiceSales?.count ? <form action={clearStripePracticeSales}>
-                <label><input type="checkbox" name="confirmClear" required /> Clear {practiceSales.count} practice {practiceSales.count === 1 ? "sale" : "sales"}</label>
-                <div className="workspace-settings__payment-actions"><button type="submit" className="waybook-action waybook-action--secondary">Clear practice sales</button></div>
-              </form> : null}
-            </section> : null}
-            <section className="workspace-settings__panel" aria-labelledby="record-payments-title">
-              <h2 id="record-payments-title">Record payments</h2>
-              <p>Record cash, bank transfers, and card payments taken elsewhere from appointment checkout in Sales.</p>
-              <Link className="waybook-primary-link" href={tenantPath(slug, "/app/sales")}>Open Sales</Link>
-            </section>
-          </> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
+          </section> : showingPayments ? <PaymentSettings tenant={tenant} slug={slug} stripeFeedback={params.stripe} sandboxFeedback={params.sandbox} /> : showingRoles ? <StaffRolesPanel tenant={tenant} rolesHref={rolesHref} roleKey={params.role} creating={params.new === "1"} /> : showingBusiness ? <>
             {isOwner ? <section className="workspace-settings__panel" id="business-settings">
               <h2>Business details</h2>
               <p>Manage your branding, registration and contact details.</p>

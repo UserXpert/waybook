@@ -220,10 +220,6 @@ export function CalendarSelectors({ location, members, services, week, teamMode 
   }, [location.id, selectedServiceId]);
   const serviceSearchUrl = useCallback((query: string) => `${tenantApiPrefix()}/api/app/services?${new URLSearchParams({ locationId: location.id, q: query, limit: "8" }).toString()}`, [location.id]);
   const go = (nextLocationId: string, nextEmployeeId: string, nextServiceId: string, nextRosterSearch = "") => {
-    // On compact layouts the filter panel participates in the toolbar flow.
-    // Close it before changing scope so the next tap does not first collapse
-    // the panel and move the calendar controls beneath the pointer.
-    document.querySelectorAll<HTMLDetailsElement>(".calendar-filter-panel[open]").forEach((panel) => { panel.open = false; });
     const params = new URLSearchParams({ location: nextLocationId, employee: nextEmployeeId, week });
     if (selectedDay) params.set("day", selectedDay);
     if (nextServiceId) params.set("service", nextServiceId);

@@ -1,7 +1,6 @@
 "use server";
 
 import { notFound, redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { requireIdentity } from "@/lib/waybook/auth";
 import { tenantDb } from "@/lib/waybook/database";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
@@ -9,21 +8,21 @@ import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { stripeLiveConfig, stripeWorkspaceSandboxConfig } from "@/lib/waybook/stripe-connect-api";
 import { liveMerchantStatus, liveOnboardingUrl } from "@/lib/waybook/stripe-live";
 import { stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
-import { sandboxConnection, sandboxOnboardingUrl } from "@/lib/waybook/stripe-sandbox";
-import { openSandboxRehearsal, rehearsalAmountCents, sandboxRehearsalPaid } from "@/lib/waybook/stripe-sandbox-rehearsal";
+import { sandboxConnection, sandboxMerchantStatus, sandboxOnboardingUrl } from "@/lib/waybook/stripe-sandbox";
+import { isRehearsalAmount, openSandboxRehearsal, rehearsalAmountCents, sandboxRehearsalPaid } from "@/lib/waybook/stripe-sandbox-rehearsal";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function sandboxSettingsContext() {
+async function sandboxSettingsContext({ starting = true } = {}) {
   const { tenant, membership } = await requireTenantWorkspace();
   const config = stripeWorkspaceSandboxConfig(process.env);
   if (membership.role !== "owner" || !config) notFound();
   const collection = stripeAppointmentPaymentConfig(process.env);
-  if (collection?.livemode && collection.allowNewPayments && await liveMerchantStatus(tenant.id, collection) === "ready") notFound();
+  if (starting && collection?.livemode && collection.allowNewPayments && await liveMerchantStatus(tenant.id, collection) === "ready") notFound();
   const slug = await currentTenantRouteSlug(tenant.slug);
   const settingsPath = tenantPath(slug, "/app/settings?tab=payments");
   const feedbackKey = process.env.VERCEL_ENV === "production" ? "sandbox" : "stripe";
-  return { tenant, config, settingsPath, feedbackKey, salesPath: tenantPath(slug, "/app/sales/retail") } as const;
+  return { tenant, config, settingsPath, feedbackKey, salesPath: tenantPath(slug, "/app/sales/retail"), appointmentSalesPath: tenantPath(slug, "/app/sales") } as const;
 }
 
 export async function startStripeSandboxOnboarding() {
@@ -37,19 +36,38 @@ export async function startStripeSandboxOnboarding() {
   redirect(destination);
 }
 
-export async function checkStripeSandboxStatus() {
-  const { settingsPath, feedbackKey } = await sandboxSettingsContext();
-  revalidatePath("/app/settings");
-  redirect(`${settingsPath}&${feedbackKey}=checked`);
-}
-
 export async function startStripeSandboxRehearsal(formData: FormData) {
-  const { tenant, config, settingsPath, salesPath } = await sandboxSettingsContext();
-  const connection = await sandboxConnection(tenant.id);
+  const { tenant, config, settingsPath, salesPath, appointmentSalesPath } = await sandboxSettingsContext();
   const nonce = formData.get("nonce");
-  if (!connection?.accountId || typeof nonce !== "string" || !uuidPattern.test(nonce)) notFound();
+  const bookingId = formData.get("bookingId");
+  if (typeof nonce !== "string" || !uuidPattern.test(nonce) ||
+      (bookingId !== null && (typeof bookingId !== "string" || !uuidPattern.test(bookingId)))) notFound();
+  const failed = bookingId ? `${appointmentSalesPath}?booking=${bookingId}&step=payment&practice=unavailable`
+    : `${settingsPath}&sandbox=payment-unavailable`;
+  const connection = await sandboxConnection(tenant.id);
+  if (!connection?.accountId || await sandboxMerchantStatus(tenant.id, config) !== "ready") redirect(failed);
+
   const identity = await requireIdentity();
   const db = tenantDb(tenant);
+  let amount = rehearsalAmountCents;
+  if (bookingId) {
+    // The appointment supplies a server-verified price. The rehearsal creates a
+    // separate tagged sale and never settles the appointment's payment ledger.
+    const [booking] = await db<{ balance: number }[]>`
+      SELECT (cart.chargeable_cents - COALESCE((
+        SELECT SUM(CASE WHEN payment.kind='payment' THEN payment.amount_cents ELSE -payment.amount_cents END)
+        FROM payment_records payment WHERE payment.tenant_id=b.tenant_id AND payment.booking_id=b.id
+      ), 0))::int AS balance
+      FROM bookings b
+      JOIN commerce_sales sale ON sale.tenant_id=b.tenant_id AND sale.booking_id=b.id
+      CROSS JOIN LATERAL appointment_checkout_amounts(b.tenant_id,b.id) cart
+      WHERE b.tenant_id=${tenant.id} AND b.id=${bookingId} AND sale.currency='DKK'
+        AND b.status IN ('confirmed','arrived')
+    `;
+    if (!booking || Number(formData.get("expectedCents")) !== booking.balance ||
+        !isRehearsalAmount(booking.balance)) redirect(failed);
+    amount = booking.balance;
+  }
   await db.begin(async (tx) => {
     const [sale] = await tx.unsafe<{ id: string }[]>(`
       INSERT INTO commerce_sales (id, tenant_id, is_stripe_practice, opened_by_identity_id)
@@ -57,18 +75,21 @@ export async function startStripeSandboxRehearsal(formData: FormData) {
     `, [nonce, tenant.id, identity.id]);
     if (sale) await tx.unsafe(`
       INSERT INTO commerce_sale_lines (tenant_id, sale_id, line_kind, title_snapshot, unit_price_cents)
-      VALUES ($1,$2,'custom','Stripe sandbox practice payment',$3)
-    `, [tenant.id, nonce, rehearsalAmountCents]);
+      VALUES ($1,$2,'custom',$3,$4)
+    `, [tenant.id, nonce, bookingId ? "Appointment checkout · test card" : "Stripe sandbox practice payment", amount]);
   });
-  const [pending] = await db<{ sessionId: string | null }[]>`
-    SELECT stripe_practice_session_id AS "sessionId" FROM commerce_sales
-    WHERE id=${nonce} AND tenant_id=${tenant.id} AND is_stripe_practice
-      AND stripe_practice_cleared_at IS NULL AND status='draft'
+
+  const [pending] = await db<{ amount: number }[]>`
+    SELECT line.unit_price_cents AS amount
+    FROM commerce_sales sale
+    JOIN commerce_sale_lines line ON line.tenant_id=sale.tenant_id AND line.sale_id=sale.id AND line.line_kind='custom'
+    WHERE sale.id=${nonce} AND sale.tenant_id=${tenant.id} AND sale.is_stripe_practice
+      AND sale.stripe_practice_cleared_at IS NULL AND sale.status='draft'
   `;
   if (!pending) redirect(`${salesPath}?sale=${nonce}`);
   let destination: string;
   try {
-    const session = await openSandboxRehearsal(config, connection.accountId, salesPath, nonce);
+    const session = await openSandboxRehearsal(config, connection.accountId, salesPath, nonce, fetch, pending.amount);
     const [saved] = await db<{ id: string }[]>`
       UPDATE commerce_sales SET stripe_practice_session_id=${session.id}
       WHERE id=${nonce} AND tenant_id=${tenant.id} AND is_stripe_practice AND stripe_practice_cleared_at IS NULL
@@ -77,25 +98,27 @@ export async function startStripeSandboxRehearsal(formData: FormData) {
     if (!saved) throw new Error("Stripe practice sale was cleared.");
     destination = session.url;
   } catch {
-    redirect(`${settingsPath}&sandbox=payment-unavailable`);
+    redirect(failed);
   }
   redirect(destination);
 }
 
 export async function checkStripePracticePayment(formData: FormData) {
-  const { tenant, config, salesPath } = await sandboxSettingsContext();
+  const { tenant, config, salesPath } = await sandboxSettingsContext({ starting: false });
   const id = formData.get("saleId");
   if (typeof id !== "string" || !uuidPattern.test(id)) notFound();
   const connection = await sandboxConnection(tenant.id);
   const db = tenantDb(tenant);
-  const [sale] = await db<{ sessionId: string | null; status: string }[]>`
-    SELECT stripe_practice_session_id AS "sessionId", status FROM commerce_sales
-    WHERE tenant_id=${tenant.id} AND id=${id} AND is_stripe_practice AND stripe_practice_cleared_at IS NULL
+  const [sale] = await db<{ sessionId: string | null; status: string; amount: number }[]>`
+    SELECT sale.stripe_practice_session_id AS "sessionId", sale.status, line.unit_price_cents AS amount
+    FROM commerce_sales sale
+    JOIN commerce_sale_lines line ON line.tenant_id=sale.tenant_id AND line.sale_id=sale.id AND line.line_kind='custom'
+    WHERE sale.tenant_id=${tenant.id} AND sale.id=${id} AND sale.is_stripe_practice AND sale.stripe_practice_cleared_at IS NULL
   `;
   const href = `${salesPath}?sale=${id}`;
   if (!sale || !connection?.accountId || !sale.sessionId) notFound();
   if (sale.status === "closed") redirect(href);
-  const paid = await sandboxRehearsalPaid(config, connection.accountId, sale.sessionId, id).catch(() => null);
+  const paid = await sandboxRehearsalPaid(config, connection.accountId, sale.sessionId, id, fetch, sale.amount).catch(() => null);
   if (paid !== true) redirect(`${href}&sandbox=${paid === null ? "payment-unavailable" : "payment-pending"}`);
   const identity = await requireIdentity();
   await db.begin(async (tx) => {
@@ -106,7 +129,7 @@ export async function checkStripePracticePayment(formData: FormData) {
     if (!pending) return;
     await tx.unsafe(`INSERT INTO commerce_sale_transactions
       (tenant_id,sale_id,kind,method,amount_cents,processor_reference,recorded_by_identity_id)
-      VALUES ($1,$2,'payment','card',$3,$4,$5)`, [tenant.id, id, rehearsalAmountCents, sale.sessionId, identity.id]);
+      VALUES ($1,$2,'payment','card',$3,$4,$5)`, [tenant.id, id, sale.amount, sale.sessionId, identity.id]);
     await tx.unsafe(`UPDATE commerce_sales SET status='closed',closed_at=now(),closed_by_identity_id=$1,updated_at=now()
       WHERE id=$2 AND tenant_id=$3`, [identity.id, id, tenant.id]);
   });
@@ -149,12 +172,4 @@ export async function startStripeLiveOnboarding(formData: FormData) {
     redirect(`${settingsPath}&stripe=unavailable`);
   }
   redirect(destination);
-}
-
-export async function checkStripeLiveStatus() {
-  const { tenant, membership } = await requireTenantWorkspace();
-  if (membership.role !== "owner" || !stripeLiveConfig(process.env)) notFound();
-  const slug = await currentTenantRouteSlug(tenant.slug);
-  revalidatePath("/app/settings");
-  redirect(tenantPath(slug, "/app/settings?tab=payments&stripe=checked"));
 }

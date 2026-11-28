@@ -18,7 +18,7 @@ export function PaymentMethodOptions() {
   return <>{paymentMethods.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</>;
 }
 
-export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, requireFullBalance = false, canFinishCheckout = false, manualSplit = false, giftCardHref }: {
+export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkout = false, requireFullBalance = false, canFinishCheckout = false, manualSplit = false, giftCardHref, refundOnly = false }: {
   bookingId: string;
   balance: AppointmentPaymentBalance;
   onRecorded?: (bookingId: string) => Promise<void>;
@@ -27,6 +27,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   canFinishCheckout?: boolean;
   manualSplit?: boolean;
   giftCardHref?: string;
+  refundOnly?: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<PaymentState>({ error: null, success: null });
@@ -37,8 +38,8 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   const { outstandingCents, refundableCents, payments } = balance;
   const canAddPayment = (manualSplit || !hasNonGiftCardPayment(payments)) && outstandingCents > 0;
   const [entryKind, setKind] = useState("");
-  const kind = checkout ? "payment" : entryKind;
-  const [method, setMethod] = useState(checkout ? "" : "card");
+  const kind = refundOnly ? "refund" : checkout ? "payment" : entryKind;
+  const [method, setMethod] = useState(refundOnly ? payments[0]?.method ?? "" : checkout ? "" : "card");
   const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const settlingGiftCard = kind === "payment" && canAddPayment && payments.some(({ method }) => method === "gift_card");
   const remainingAmount = kind !== "refund" && canAddPayment ? (outstandingCents / 100).toFixed(2) : "";
@@ -46,7 +47,7 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
   const amount = fixedAmount ? remainingAmount : draftAmount ?? remainingAmount;
   const finishCheckout = canFinishCheckout && canAddPayment && Number(amount) === Number(remainingAmount);
   const partialPayment = manualSplit && !fixedAmount && Number(amount) > 0 && Number(amount) < Number(remainingAmount);
-  const recordLabel = finishCheckout ? "Record payment and finish checkout"
+  const recordLabel = refundOnly ? "Record refund" : finishCheckout ? "Record payment and finish checkout"
     : partialPayment ? "Record partial payment" : checkout ? "Record payment" : "Record entry";
   const editingDisabled = pending || retryRequired;
   const canRecord = (kind === "payment" && canAddPayment || kind === "refund" && refundableCents > 0) && Boolean(method) && Number(amount) > 0;
@@ -91,13 +92,14 @@ export function AppointmentPaymentForm({ bookingId, balance, onRecorded, checkou
     {finishCheckout ? <input type="hidden" name="finishCheckout" value="true" /> : null}
     {settlingGiftCard ? <p className="sale-detail__note">Gift card applied. Record the remaining balance.</p> : null}
     <div className={`tenant-drawer-form__grid${checkout ? " appointment-payment-form__amount" : ""}`}>
-      {checkout ? <><input type="hidden" name="kind" value="payment" /><input type="hidden" name="expectedBalanceCents" value={outstandingCents} /></> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
+      {refundOnly ? <input type="hidden" name="kind" value="refund" /> : checkout ? <><input type="hidden" name="kind" value="payment" /><input type="hidden" name="expectedBalanceCents" value={outstandingCents} /></> : <label>Payment<select name="kind" value={kind} onChange={(event) => changeKind(event.target.value)} disabled={editingDisabled} required>
         <option value="" disabled>Select payment action</option>
         {canAddPayment || kind === "payment" ? <option value="payment" disabled={!canAddPayment}>Payment received</option> : null}
         <option value="refund" disabled={refundableCents <= 0}>Refund issued</option>
       </select></label>}
       {!checkout ? <label>Method<select name="method" value={method} onChange={(event) => setMethod(event.target.value)} disabled={editingDisabled} required>
-        <PaymentMethodOptions />
+        {refundOnly ? paymentMethods.filter(({ value }) => payments.some(payment => payment.method === value))
+          .map(({ value, label }) => <option key={value} value={value}>{label}</option>) : <PaymentMethodOptions />}
       </select></label> : null}
       <label>Amount (DKK)<input name="amountDkk" type="number" min="0.01" step="0.01" value={amount} readOnly={fixedAmount} onChange={(event) => setDraftAmount(event.target.value)} disabled={editingDisabled} required /></label>
     </div>

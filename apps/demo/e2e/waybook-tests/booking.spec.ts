@@ -495,7 +495,7 @@ test("monthly calendar keeps all-staff scope and shows every booking for a day",
   await page.getByLabel("Next month").click();
   expect(new URL(page.url()).searchParams.has("employee")).toBe(false);
   await page.getByLabel("Previous month").click();
-  await page.getByText("Filters", { exact: true }).click();
+  await page.getByRole("button", { name: "Options", exact: true }).click();
   await page.getByLabel("Staff").fill("Z E2E roster 21");
   await page.getByRole("option", { name: "Z E2E roster 21" }).click();
   await check(page).toHaveURL(/employee=/);

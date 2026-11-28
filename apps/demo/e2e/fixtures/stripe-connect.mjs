@@ -103,11 +103,12 @@ globalThis.fetch = async (input, init) => {
       if (request.method === "POST" && url.pathname === "/v1/checkout/sessions") {
         const body = new URLSearchParams(await request.text());
         const reference = body.get("client_reference_id");
+        const amount = Number(body.get("line_items[0][price_data][unit_amount]"));
         if (!reference?.startsWith("waybook-rehearsal-") || reference !== request.headers.get("Idempotency-Key") ||
-            body.get("line_items[0][price_data][unit_amount]") !== "1000" ||
+            ![1000, 1425].includes(amount) ||
             body.get("allowed_payment_method_types[0]") !== "card" || body.has("payment_method_types[0]")) return error(400);
         const id = `cs_test_${reference.replaceAll("-", "")}`;
-        const session = { id, object: "checkout.session", livemode: false, mode: "payment", amount_total: 1000,
+        const session = { id, object: "checkout.session", livemode: false, mode: "payment", amount_total: amount,
           currency: "dkk", client_reference_id: reference, status: "open", payment_status: "unpaid", payment_method_types: ["card"],
           created: Math.floor(Date.now() / 1000), url: `https://checkout.stripe.com/c/pay/${id}` };
         // Simulate Stripe confirming payment before the browser returns to Waybook.

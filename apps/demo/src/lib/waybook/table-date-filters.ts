@@ -36,6 +36,10 @@ export function tableDateFilters(params: TableDateParams, timezone: string, now 
 
 export type TableDateFilters = ReturnType<typeof tableDateFilters>;
 
+export function hasTableDateFilters({ sort, from, to }: TableDateFilters) {
+  return sort !== "today" || Boolean(from || to);
+}
+
 export function dateFilterParams(params: URLSearchParams, filters: TableDateFilters) {
   if (filters.sort !== "today") params.set("sort", filters.sort);
   if (filters.from) params.set("from", filters.from);

@@ -1,3 +1,4 @@
+import { ListFilterOptions } from "@/components/workspace-options";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { StaffAccessRequests } from "@/components/staff-access-requests";
@@ -8,7 +9,7 @@ import { tenantDb } from "@/lib/waybook/database";
 import { isFeatureEnabled } from "@/lib/waybook/features";
 import { arrivalAlertsEnabled, canReceiveArrivalAlerts, providerArrivalInbox } from "@/lib/waybook/provider-arrival-alerts";
 import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
-import { dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
+import { hasTableDateFilters, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
@@ -83,13 +84,13 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       </form>
     </section> : null}
     {permissions.isManager ? <section className="waybook-data-card">
-      <div className="waybook-section-heading"><div>
+      <div className="waybook-section-heading workspace-filter-bar"><div>
         <h2>Appointments needing review</h2>
         <p>These {terms.clients} were marked arrived, but their appointments have ended. Review the booking and update its status.</p>
-      </div></div>
-      <form method="get" className="waybook-list-filter dated-list-filters">
-        <TableDateFields dates={dates} label="Appointment date range" /><button type="submit">Apply</button>
-      </form>
+      </div>
+      <ListFilterOptions label="Notifications" active={hasTableDateFilters(dates)} clearHref={tenantPath(tenantSlug, "/app/notifications")}>
+        <TableDateFields dates={dates} label="Appointment date range" />
+      </ListFilterOptions></div>
       {overdueArrivals.length ? <div className="waybook-table-wrap"><table>
         <thead><tr><th>{titleTerminology(terms.client)}</th><th>Appointment</th><th>Action</th></tr></thead>
         <tbody>{overdueArrivals.map((booking) => {

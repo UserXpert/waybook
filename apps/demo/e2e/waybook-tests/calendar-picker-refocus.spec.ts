@@ -12,11 +12,9 @@ for (const tenant of [
   const app = `/${tenant.route}/app`;
   await expect(page).toHaveURL((url) => url.pathname === app);
   await page.goto(`${app}/calendars`);
-  const filters = page.locator(".calendar-filter-panel");
-  const collapsedFilters = filters.locator("summary").filter({ visible: true });
-  if (await collapsedFilters.count() && !await filters.evaluate((panel) => (panel as HTMLDetailsElement).open)) {
-    await collapsedFilters.click();
-  }
+  const options = page.getByRole("button", { name: "Options", exact: true });
+  await options.click();
+  await expect(page.getByRole("dialog", { name: "Calendar options" })).toBeVisible();
   const location = page.getByRole("combobox", { name: "Location", exact: true });
   const query = `No location ${randomUUID()}`;
   await location.fill("First search");
@@ -39,5 +37,5 @@ for (const tenant of [
   await expect(location).toBeFocused();
   await location.press("Escape");
   await expect(location).toBeHidden();
-  await expect(collapsedFilters).toBeFocused();
+  await expect(options).toBeFocused();
 });

@@ -1,7 +1,7 @@
 import "server-only";
 
-import { controlDb, findTenantById } from "./database";
-import { stripeLiveConfig, stripeSandboxConfig, type StripeLiveConfig, type StripeSandboxConfig } from "./stripe-connect-api";
+import { controlDb, findTenantById, type tenantDb } from "./database";
+import { stripeConnectLive, stripeConnectSandbox, stripeLiveConfig, stripeSandboxConfig, type StripeLiveConfig, type StripeSandboxConfig } from "./stripe-connect-api";
 import { stripeSandboxTenantForAccount } from "./stripe-sandbox";
 
 export type StripePaymentConfig = (StripeSandboxConfig & { livemode?: false }) |
@@ -39,6 +39,25 @@ export async function stripePaymentAccount(tenantId: string, config: StripePayme
         WHERE tenant_id = ${tenantId} AND account_id IS NOT NULL
       `;
   return connection?.accountId ?? null;
+}
+
+export async function stripeAppointmentCollection(db: ReturnType<typeof tenantDb>, tenantId: string, config: StripePaymentConfig | null) {
+  if (!config) return { status: "unavailable" } as const;
+  if (!stripeCanStartPayment(config)) return { status: "live-off" } as const;
+  const accountId = await stripePaymentAccount(tenantId, config);
+  if (!accountId) return { status: "unlinked" } as const;
+  const stripe = config.livemode ? stripeConnectLive(config) : stripeConnectSandbox(config);
+  const merchantStatus = await stripe.merchantStatus(accountId).catch(() => "unavailable" as const);
+  if (merchantStatus === "unavailable") return { status: "unavailable" } as const;
+  if (merchantStatus !== "ready") return { status: "setup-incomplete" } as const;
+  if (config.livemode) {
+    const [{ pending }] = await db<{ pending: boolean }[]>`
+      SELECT EXISTS (SELECT 1 FROM commerce_sales WHERE tenant_id=${tenantId} AND is_stripe_practice
+        AND stripe_practice_cleared_at IS NULL) AS pending
+    `;
+    if (pending) return { status: "practice-sales" } as const;
+  }
+  return { status: "ready", accountId } as const;
 }
 
 export async function stripePaymentTenantForAccount(accountId: string, config: StripePaymentConfig) {

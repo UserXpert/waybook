@@ -1,5 +1,6 @@
+import { ListFilterOptions } from "@/components/workspace-options";
 import { TableDateFields } from "@/components/table-date-fields";
-import { dateFilterParams, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
+import { hasTableDateFilters, dateFilterParams, dateRangeWhere, tableDateFilters, tableDateOrder, type TableDateParams } from "@/lib/waybook/table-date-filters";
 import Link from "next/link";
 import { CalendarDays, CalendarPlus, ListPlus } from "lucide-react";
 import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
@@ -133,16 +134,17 @@ export default async function WaitlistPage({ searchParams }: { searchParams: Pro
     </section>
 
     <section className="waybook-data-card waitlist-register" aria-label="Waitlist entries">
-      <nav className="waitlist-filter" aria-label="Waitlist status filter">
-        {statuses.map(value => <Link key={value} href={listHref(value)} aria-current={chosenStatus === value ? "page" : undefined}>
-          {value === "all" ? "All" : statusLabel(value)}
-        </Link>)}
-      </nav>
-      <form method="get" className="waybook-list-filter dated-list-filters waitlist-date-filters">
-        <input type="hidden" name="status" value={chosenStatus} />
-        <TableDateFields dates={dates} label="Preferred date range" />
-        <button type="submit">Apply</button>
-      </form>
+      <div className="waybook-section-heading workspace-filter-bar">
+        <h2>Waitlist entries</h2>
+        <ListFilterOptions label="Waitlist" active={chosenStatus !== "waiting" || hasTableDateFilters(dates)} clearHref={path}>
+          <label>Status
+            <select name="status" defaultValue={chosenStatus}>
+              {statuses.map(value => <option key={value} value={value}>{value === "all" ? "All" : statusLabel(value)}</option>)}
+            </select>
+          </label>
+          <TableDateFields dates={dates} label="Preferred date range" />
+        </ListFilterOptions>
+      </div>
 
       {entries.length ? <div className="waybook-table-wrap waitlist-table-wrap">
         <table className="waitlist-table" role="table" aria-label="Waitlist results">

@@ -1169,83 +1169,21 @@ body {
 
 /* Filters are deliberately secondary to the operational board. They stay out
    of the daily working canvas until someone needs to change scope. */
-.tenant-dashboard-page .calendar-filter-panel { position: relative; }
-.tenant-dashboard-page .calendar-filter-panel > summary {
-  display: inline-flex;
-  min-height: 2.2rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #d4d4d4;
-  border-radius: .42rem;
-  padding: 0 .65rem;
-  background: #fff;
-  color: #262626;
-  cursor: pointer;
-  font-size: .75rem;
-  font-weight: 600;
-  list-style: none;
-  user-select: none;
-}
-.tenant-dashboard-page .calendar-filter-panel > summary::-webkit-details-marker { display: none; }
-.tenant-dashboard-page .calendar-filter-panel > summary::after { content: "+"; margin-left: .4rem; color: #737373; font-size: 1rem; font-weight: 500; }
-.tenant-dashboard-page .calendar-filter-panel[open] > summary { border-color: #171717; background: #f4f4f4; }
-.tenant-dashboard-page .calendar-filter-panel[open] > summary::after { content: "−"; }
 .tenant-dashboard-page .calendar-active-filters { display: inline-flex; max-width: 100%; flex-wrap: wrap; align-items: center; gap: .25rem; }
 .tenant-dashboard-page .waybook-calendar-toolbar__actions > .calendar-active-filters { flex-basis: 100%; justify-content: flex-end; order: 2; }
 .tenant-dashboard-page .calendar-active-filters__chip { display: inline-flex; min-width: 0; height: 1.7rem; align-items: center; gap: .12rem; border: 1px solid #dedee2; border-radius: .32rem; padding: 0 .12rem 0 .42rem; background: #fafafa; color: #606068; font-size: .64rem; font-weight: 500; white-space: nowrap; }
 .tenant-dashboard-page .calendar-active-filters__chip > span { overflow: hidden; text-overflow: ellipsis; }
 .tenant-dashboard-page .calendar-active-filters__chip button { display: grid; width: 1.4rem; height: 1.4rem; place-items: center; border: 0; border-radius: .25rem; padding: 0; background: transparent; color: inherit; cursor: pointer; }
 .tenant-dashboard-page .calendar-active-filters__chip button:hover,.tenant-dashboard-page .calendar-active-filters__chip button:focus-visible { background: #e4e4e7; color: #171717; outline: 0; }
-.tenant-dashboard-page .calendar-filter-panel__content {
-  position: absolute;
-  top: calc(100% + .5rem);
-  right: 0;
-  z-index: 20;
-  display: grid;
-  gap: .85rem;
-  width: min(42rem, calc(100vw - 3rem));
-  border: 1px solid #d4d4d4;
-  border-radius: .55rem;
-  padding: 1rem;
-  background: #fff;
-  box-shadow: 0 .75rem 1.75rem rgba(0, 0, 0, .14);
-}
-/* The filter surface belongs to the calendar canvas, not the narrow Filters
-   trigger. This keeps its right edge inside the board at tablet widths. */
 .tenant-dashboard-page .waybook-calendar-toolbar { position: relative; }
-.tenant-dashboard-page .calendar-filter-panel { position: static; }
-.tenant-dashboard-page .calendar-filter-panel__content { right: 1.25rem; width: min(42rem, calc(100% - 2.5rem)); }
-.tenant-dashboard-page .calendar-filter-panel__content .calendar-selectors { display: flex; }
-.tenant-dashboard-page .calendar-filter-panel__content .calendar-row-filter {
-  align-items: end;
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
-.tenant-dashboard-page .calendar-filter-panel__content .calendar-row-filter__toggle {
-  width: fit-content;
-  color: #3f3f46;
-  font-size: .75rem;
-  font-weight: 600;
-}
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-filter-panel > summary { border-color: #3a3a3f; background: #202023; color: #f4f4f5; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-filter-panel[open] > summary { border-color: #71717a; background: #29292d; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-active-filters__chip { border-color: #44444a; background: #29292d; color: #e4e4e7; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-active-filters__chip button:hover,:root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-active-filters__chip button:focus-visible { background: #414148; color: #fff; }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-filter-panel__content { border-color: #3a3a3f; background: #202023; box-shadow: 0 .75rem 1.75rem rgba(0, 0, 0, .45); }
-:root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-filter-panel__content .calendar-row-filter__toggle { color: #d4d4d8; }
 @media (max-width: 760px) {
   .tenant-dashboard-page .waybook-calendar-toolbar__actions > .calendar-active-filters { justify-content: flex-start; }
-  .tenant-dashboard-page .calendar-filter-panel[open] { flex-basis: 100%; }
-  .tenant-dashboard-page .calendar-filter-panel__content { position: static; width: 100%; margin-top: .5rem; box-shadow: none; }
-  .tenant-dashboard-page .calendar-filter-panel__content .calendar-row-filter { align-items: stretch; flex-direction: column; }
-  .tenant-dashboard-page .calendar-filter-panel__content .calendar-row-filter button { width: 100%; }
 }
 
 /* Search fields are comboboxes, not native selects: operators search a large
    directory deliberately and only ever see a bounded result set. */
-.tenant-dashboard-page .calendar-filter-panel__content { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-.tenant-dashboard-page .calendar-filter-panel__content .calendar-selectors { display: contents; }
 .tenant-dashboard-page .calendar-search-picker { position: relative; display: grid; gap: .3rem; min-width: 0; }
 .tenant-dashboard-page .calendar-search-picker > label,.tenant-dashboard-page .calendar-row-filter label { color: #555; font-size: .66rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .tenant-dashboard-page .calendar-search-picker > input,.tenant-dashboard-page .calendar-row-filter input {
@@ -1302,7 +1240,6 @@ body {
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-search-picker__clear { background: #3a3a3f; color: #f4f4f5; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .calendar-off-shift-toggle { border-color: #44444a; background: #171719; color: #d4d4d8; }
 @media (max-width: 760px) {
-  .tenant-dashboard-page .calendar-filter-panel__content { grid-template-columns: 1fr; }
   .tenant-dashboard-page .calendar-row-filter { grid-template-columns: 1fr; }
   .tenant-dashboard-page .calendar-row-filter button { width: 100%; }
 }
@@ -1330,7 +1267,6 @@ body {
 }
 .tenant-dashboard-page .waybook-calendar-toolbar__context.is-standalone { margin-left: 0; }
 .tenant-dashboard-page .waybook-calendar-toolbar__actions { gap: 1rem; }
-.tenant-dashboard-page .calendar-filter-panel > summary,
 .tenant-dashboard-page .waybook-calendar-date-nav,
 .tenant-dashboard-page .waybook-calendar-toolbar__actions .waybook-primary-link {
   box-sizing: border-box;
@@ -2851,22 +2787,6 @@ body {
     padding-right: .72rem;
     white-space: nowrap;
   }
-  .tenant-dashboard-page .team-day-calendar .calendar-filter-panel {
-    position: absolute;
-    top: 1.9rem;
-    right: 1rem;
-    z-index: 30;
-  }
-  .tenant-dashboard-page .team-day-calendar .calendar-filter-panel__content {
-    position: absolute;
-    top: calc(100% + .5rem);
-    right: 0;
-    left: auto;
-    width: min(25rem, calc(100vw - 2rem));
-    box-sizing: border-box;
-    margin-top: 0;
-    box-shadow: 0 .75rem 1.75rem rgba(0, 0, 0, .14);
-  }
 }
 
 /* Calendar final surface contract: open capacity is quiet white space; only
@@ -3962,9 +3882,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .workspace-settings__nav a[aria-current] { font-weight: 600; }
 .workspace-settings__content { display: grid; gap: 1rem; min-width: 0; }
 .workspace-settings__panel { padding: 1.5rem; border: 1px solid #e5e5e8; border-radius: .9rem; background: #fff; }
-.workspace-settings__payment-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1rem; }
-.workspace-settings__payment-country { display: grid; gap: .35rem; margin-bottom: .75rem; font-size: .875rem; font-weight: 600; }
-.workspace-settings__payment-country select { width: 100%; min-height: 2.5rem; font-weight: 400; }
 .workspace-settings__panel h2 { margin: 0; font-size: 1.15rem; font-weight: 500; }
 .workspace-settings__panel > p { margin: .35rem 0 1.25rem; }
 .workspace-settings .tenant-appearance { max-width: 31rem; gap: .7rem; border: 0; padding: 0; }
@@ -4309,7 +4226,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 
 /* Calendar toolbar controls share one exact control height and the month
    preview must float above later grid cells, not beneath them. */
-.tenant-dashboard-page .waybook-calendar-toolbar__actions > .calendar-filter-panel > summary,
 .tenant-dashboard-page .waybook-calendar-toolbar__actions > .calendar-view-toggle,
 .tenant-dashboard-page .waybook-calendar-toolbar__actions > .waybook-calendar-date-nav,
 .tenant-dashboard-page .waybook-calendar-toolbar__actions > .waybook-primary-link { height: 2.5rem; min-height: 2.5rem; }
@@ -4389,6 +4305,53 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 
 .retail-checkout-form fieldset { display: contents; }
 .retail-checkout-form__error { grid-column: 1 / -1; }
+
+.retail-checkout-page .retail-checkout-form { grid-template-columns: minmax(0, 1fr) 5rem auto; }
+.retail-checkout-page .retail-checkout-page__new .retail-checkout-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 5rem auto;
+  align-items: start;
+}
+.retail-checkout-page__new .retail-checkout-form > button { margin-top: 1.65rem; }
+.retail-checkout-page .retail-checkout-form :is(input, select) { font-weight: 400; }
+.retail-checkout-page .retail-checkout-form > fieldset > :is(label, .client-picker) { min-width: 0; }
+.retail-checkout-page .retail-checkout-form select { min-width: 0; }
+.retail-checkout-page .client-picker__fields small { display: none; }
+.retail-checkout-page .client-picker__actions { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; margin-top: .45rem; }
+.retail-checkout-page .retail-checkout-form .client-picker__actions :is(button, a) {
+  width: auto;
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 .55rem;
+  border: 1px solid transparent;
+  border-radius: .4rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: .78rem;
+  text-decoration: underline;
+  text-underline-offset: .18em;
+}
+.retail-checkout-page .client-picker__actions :is(button, a):hover { background: var(--waybook-accent-soft); }
+.retail-checkout-history__compact { display: none; }
+.retail-checkout-drawer .appointment-drawer__body { gap: 1rem; padding-top: 1rem; }
+.retail-checkout-drawer .appointment-drawer__body > section:first-child { border-top: 0; padding-top: 0; }
+.retail-checkout-drawer .retail-checkout-form:has(select[name="method"]) { grid-template-columns: minmax(0, 1fr) auto; }
+
+@media (max-width: 900px) {
+  .retail-checkout-page .retail-checkout-page__new .retail-checkout-form { grid-template-columns: minmax(0, 1fr) 5rem auto; }
+  .retail-checkout-page__new .client-picker { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .retail-checkout-page :is(.retail-checkout-page__new, .retail-checkout-drawer) .retail-checkout-form { grid-template-columns: minmax(0, 1fr) 5rem; }
+  .retail-checkout-page .retail-checkout-form > button { grid-column: 1 / -1; margin-top: 0; }
+  .retail-checkout-drawer .retail-checkout-form:has(select[name="method"]) > fieldset > label { grid-column: 1 / -1; }
+  .tenant-dashboard-page .retail-checkout-history table { width: 100%; min-width: 0; table-layout: fixed; }
+  .retail-checkout-history :is(th, td):not([colspan]):first-child { width: 54%; }
+  .retail-checkout-history .retail-checkout-history__wide { display: none; }
+  .retail-checkout-history__compact { display: grid; gap: .16rem; margin-top: .3rem; overflow-wrap: anywhere; }
+  .retail-checkout-history__compact time { color: var(--wb-dark-muted, #5c646c); font-size: .68rem; }
+}
 
 .workspace-business-form {
   display: grid;
@@ -4553,21 +4516,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
   outline: none;
 }
 
-.tenant-dashboard-page .sales-filters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.4fr) minmax(15rem, 1.4fr) minmax(0, 1fr) auto;
-  margin: .85rem 0 1.1rem;
-}
-.tenant-dashboard-page .sales-filters :is(input, select) { width: 100%; min-width: 0; font-weight: 400; }
-.tenant-dashboard-page .sales-filters > button { align-self: end; }
-@media (max-width: 1190px) {
-  .tenant-dashboard-page .sales-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-@media (max-width: 560px) {
-  .tenant-dashboard-page .sales-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sales-filters label:has(select[name="activity"], select[name="sort"]) { grid-column: 1 / -1; }
-}
-
 :root[data-waybook-theme] .tenant-dashboard-page .dashboard-four {
   --overview-ink: #181a1e;
   --overview-muted-ink: #565c64;
@@ -4655,32 +4603,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 .target-widget__track { stroke: var(--overview-edge); }
 .target-widget__progress { stroke: var(--waybook-accent-indicator, var(--waybook-accent)); }
 
-.tenant-dashboard-page .dated-list-filters {
-  display: flex;
-  flex-flow: row wrap;
-  align-items: end;
-  margin: .85rem 0 1.1rem;
-}
-.tenant-dashboard-page .dated-list-filters > label { flex: 1 1 8rem; min-width: 0; }
-.tenant-dashboard-page .dated-list-filters > label :is(input, select) { width: 100%; min-width: 0; font-weight: 400; }
-.tenant-dashboard-page .table-date-range {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  min-width: 0;
-  grid-column: span 2;
-  flex: 1 1 15rem;
-  gap: .45rem;
-  padding: 0;
-  margin: 0;
-  border: 0;
-}
-.tenant-dashboard-page .table-date-range legend { margin-bottom: .4rem; padding: 0; color: inherit; font-size: .74rem; font-weight: 600; }
-.tenant-dashboard-page .table-date-range label { min-width: 0; }
-.tenant-dashboard-page .table-date-range input { width: 100%; min-width: 0; max-width: 100%; font-weight: 400; }
-@media (min-width: 1191px) {
-  .tenant-dashboard-page .sales-filters .table-date-range { grid-column: span 1; }
-}
-
 
 .tenant-dashboard-page :is(.waitlist-register, .waitlist-form) {
   --waitlist-line: var(--wb-dark-border, #d9e1e8);
@@ -4693,27 +4615,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 }
 .waitlist-intro .waybook-primary-link { display: inline-flex; align-items: center; gap: .45rem; }
 .waitlist-intro .waybook-primary-link svg { width: 1rem; height: 1rem; }
-.waitlist-filter { display: flex; flex-wrap: wrap; gap: .35rem; }
-.waitlist-filter a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.35rem;
-  padding-inline: .75rem;
-  border: 1px solid transparent;
-  border-radius: .55rem;
-  color: var(--waitlist-muted);
-  font-size: .78rem;
-  font-weight: 600;
-  text-decoration: none;
-}
-.waitlist-filter a:is(:hover, :focus-visible) { background: var(--waitlist-surface); color: inherit; }
-.waitlist-filter a[aria-current="page"] {
-  border-color: var(--waitlist-line);
-  background: var(--waitlist-surface);
-  box-shadow: inset 0 -2px var(--waybook-accent-indicator, var(--waybook-accent));
-  color: var(--waitlist-accent);
-}
-.waitlist-date-filters { max-width: 37rem; }
 .waitlist-row__label { display: none; }
 .waitlist-table :is(.waitlist-row__client, .waitlist-row__request) { overflow-wrap: anywhere; }
 .waitlist-table :is(.waitlist-row__added, .waitlist-row__preference) time { white-space: nowrap; }
@@ -4802,9 +4703,6 @@ input::placeholder, textarea::placeholder { font-weight:400 !important; }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waitlist-form .waitlist-time-range__copy b { color: var(--wb-dark-text); }
 :root[data-waybook-theme="dark"] .tenant-dashboard-page .waitlist-form :is(legend, .waitlist-time-range__copy) small {
   color: var(--waitlist-muted);
-}
-:root[data-waybook-theme="dark"] .tenant-dashboard-page :is(.waitlist-form, .waitlist-date-filters) input[type="date"] {
-  color-scheme: dark;
 }
 
 @media (max-width: 820px) {

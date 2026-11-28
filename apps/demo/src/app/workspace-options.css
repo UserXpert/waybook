@@ -1,0 +1,126 @@
+.tenant-dashboard-page .workspace-filter-bar {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: .75rem;
+}
+.workspace-filter-bar > :first-child { margin-right: auto; }
+.tenant-dashboard-page .workspace-filter-bar--search { margin-block: .75rem 1rem; align-items: flex-end; }
+.tenant-dashboard-page .workspace-quick-search { flex: 1 1 15rem; margin: 0; }
+
+.tenant-dashboard-page .workspace-options-trigger { gap: .45rem; white-space: nowrap; }
+.workspace-options-trigger__indicator {
+  width: .45rem;
+  height: .45rem;
+  border-radius: 50%;
+  background: var(--waybook-accent);
+}
+.tenant-dashboard-page .workspace-options-drawer {
+  width: min(100%, 27rem);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--wb-dark-surface, #fff);
+  color: var(--wb-dark-text, #171717);
+}
+.tenant-dashboard-page .workspace-options-drawer > header {
+  flex: 0 0 auto;
+  padding: 1.25rem 1.4rem;
+}
+.tenant-dashboard-page .workspace-options-drawer > header h2 { color: inherit; font-size: 1.35rem; margin: .32rem 0 0; }
+.tenant-dashboard-page .workspace-options-drawer > header p { color: var(--wb-dark-muted, #606069); font-size: .72rem; letter-spacing: .05em; margin: 0; }
+:root[data-waybook-theme] .tenant-dashboard-page .workspace-options-drawer .tenant-drawer-close {
+  flex: 0 0 auto;
+  border-color: var(--wb-dark-border, var(--ice-field-edge, #d6d6da));
+  background: var(--wb-dark-raised, var(--ice-field, #f5f5f5));
+  color: var(--wb-dark-text, var(--ice-ink, #262626));
+}
+.workspace-options-form { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.workspace-options-fields {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  overflow: auto;
+  padding: 1rem 1.4rem 1.4rem;
+  scrollbar-gutter: stable;
+}
+.workspace-options-drawer .workspace-options-fields { flex: 1; }
+.workspace-options-form > footer {
+  display: flex;
+  gap: .65rem;
+  justify-content: flex-end;
+  padding: .9rem 1.4rem max(.9rem, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--wb-dark-border, #e3e3e6);
+}
+.workspace-options-fields > label,
+.workspace-date-range__manual label {
+  display: grid;
+  gap: .35rem;
+  min-width: 0;
+  font-size: .82rem;
+  font-weight: 600;
+}
+.workspace-options-fields > label :is(input, select),
+.workspace-date-range__manual input,
+.workspace-date-range__toggle {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.65rem;
+  border: 1px solid var(--wb-dark-border, #d6d6da);
+  border-radius: .55rem;
+  padding: .5rem .7rem;
+  background: var(--wb-dark-input, var(--wb-dark-surface, #fff));
+  color: inherit;
+  font: inherit;
+  font-size: .85rem;
+  font-weight: 400;
+}
+
+.workspace-date-range { min-width: 0; padding: 0; margin: 0; border: 0; }
+.workspace-date-range legend { padding: 0; margin-bottom: .35rem; font-size: .82rem; font-weight: 600; }
+.workspace-date-range__toggle {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: .5rem;
+  text-align: left;
+  cursor: pointer;
+  border-color: var(--ice-field-edge, var(--wb-dark-border, #d6d6da));
+  background: var(--ice-field, var(--wb-dark-raised, #fff));
+}
+.workspace-date-range__picker {
+  display: grid;
+  gap: .65rem;
+  margin-top: .45rem;
+  border: 1px solid var(--wb-dark-border, #dedee2);
+  border-radius: .65rem;
+  padding: .75rem;
+}
+.workspace-date-range__picker > p { margin: 0; font-size: .75rem; color: var(--wb-dark-muted, #5c5c64); }
+.workspace-date-range__presets { display: flex; flex-wrap: wrap; gap: .3rem; }
+.tenant-dashboard-page .workspace-date-range__presets button { min-height: 1.9rem; padding: .35rem .55rem; font-size: .7rem; }
+.tenant-dashboard-page .workspace-date-range__presets button[aria-pressed="true"],
+.tenant-dashboard-page .workspace-date-range__picker .calendar-date-picker__grid .is-in-range {
+  background: var(--waybook-accent-soft);
+  color: var(--waybook-accent-ink);
+}
+.workspace-date-range__picker summary { cursor: pointer; font-size: .78rem; }
+.workspace-date-range__manual { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; margin-top: .65rem; }
+
+.tenant-dashboard-page .workspace-options-drawer .calendar-selectors { display: contents; }
+.tenant-dashboard-page .workspace-options-drawer .calendar-search-picker { width: 100%; min-width: 0; }
+.tenant-dashboard-page .workspace-options-drawer .calendar-search-picker:first-child { margin-top: 0; }
+.tenant-dashboard-page .workspace-options-drawer .calendar-selectors__hint {
+  color: var(--wb-dark-muted, #606069);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+@media (max-width: 480px) {
+  .tenant-dashboard-page .workspace-options-drawer > header,
+  .workspace-options-fields,
+  .workspace-options-form > footer { padding-inline: 1rem; }
+  .tenant-dashboard-page .workspace-filter-bar--search { flex-wrap: nowrap; }
+}
