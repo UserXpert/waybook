@@ -1,14 +1,14 @@
 import type { StripeSandboxConfig } from "./stripe-connect-api";
 import { stripeHostedCheckoutUrl, stripeSandboxRequest } from "./stripe-checkout-api";
 
-const rehearsalAmountCents = 1000;
+export const rehearsalAmountCents = 1000;
 const rehearsalPrefix = "waybook-rehearsal-";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type StripeSession = {
   id?: unknown; object?: unknown; livemode?: unknown; mode?: unknown;
   amount_total?: unknown; currency?: unknown; client_reference_id?: unknown;
-  status?: unknown; payment_status?: unknown; created?: unknown; url?: unknown;
+  status?: unknown; payment_status?: unknown; url?: unknown;
 };
 
 function isRehearsal(session: StripeSession) {
@@ -24,6 +24,8 @@ export async function openSandboxRehearsal(config: StripeSandboxConfig, accountI
   if (!uuidPattern.test(nonce) || returnUrl.origin !== config.origin || !settingsPath.startsWith("/") ||
       returnUrl.username || returnUrl.password || returnUrl.hash) throw new Error("Invalid sandbox rehearsal context.");
   const cancelUrl = new URL(returnUrl);
+  returnUrl.searchParams.set("sale", nonce);
+  cancelUrl.searchParams.set("sale", nonce);
   returnUrl.searchParams.set("sandbox", "payment-returned");
   cancelUrl.searchParams.set("sandbox", "payment-cancelled");
   const reference = rehearsalPrefix + nonce;
@@ -45,21 +47,15 @@ export async function openSandboxRehearsal(config: StripeSandboxConfig, accountI
   if (!isRehearsal(session) || session.client_reference_id !== reference || session.status !== "open" || !url) {
     throw new Error("Stripe did not confirm the expected sandbox rehearsal.");
   }
-  return url;
+  return { id: session.id as string, url };
 }
 
-export async function listSandboxRehearsals(config: StripeSandboxConfig, accountId: string, request = fetch) {
-  const response = await stripeSandboxRequest(config, request, accountId, "/v1/checkout/sessions?limit=30", "GET");
-  const { data } = await response.json() as { data: StripeSession[] };
-  return data.filter((session): session is StripeSession & { id: string; created: number } =>
-    isRehearsal(session) && typeof session.created === "number" && Number.isSafeInteger(session.created) &&
-    session.created > 0 && session.created < 4_102_444_800 &&
-    ["open", "complete", "expired"].includes(String(session.status)))
-    .slice(0, 10)
-    .map((session) => ({
-      id: session.id,
-      created: session.created,
-      state: session.status === "expired" ? "Expired" : session.payment_status === "paid" ? "Paid" :
-        session.status === "complete" ? "Processing" : "Awaiting payment",
-    }));
+export async function sandboxRehearsalPaid(config: StripeSandboxConfig, accountId: string, id: string, nonce: string, request = fetch) {
+  if (!/^cs_test_[A-Za-z0-9]+$/.test(id) || !uuidPattern.test(nonce)) throw new Error("Invalid sandbox rehearsal context.");
+  const response = await stripeSandboxRequest(config, request, accountId, `/v1/checkout/sessions/${id}`, "GET");
+  const session = await response.json() as StripeSession;
+  if (!isRehearsal(session) || session.id !== id || session.client_reference_id !== rehearsalPrefix + nonce) {
+    throw new Error("Stripe did not confirm the expected sandbox rehearsal.");
+  }
+  return session.status === "complete" && session.payment_status === "paid";
 }

@@ -16,7 +16,6 @@ import { stripeLiveConfig, stripeWorkspaceSandboxConfig } from "@/lib/waybook/st
 import { stripeAppointmentPaymentConfig } from "@/lib/waybook/stripe-payment-mode";
 import { liveMerchantStatus } from "@/lib/waybook/stripe-live";
 import { sandboxConnection, sandboxMerchantStatus } from "@/lib/waybook/stripe-sandbox";
-import { listSandboxRehearsals } from "@/lib/waybook/stripe-sandbox-rehearsal";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { getTenantTerminologySettings } from "@/lib/waybook/tenant-terminology";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
@@ -27,9 +26,7 @@ import { calendarTimezones } from "@/lib/waybook/calendar-timezones";
 import { saveCalendarDisplay } from "./calendar-actions";
 import { LiveStripePanel } from "./live-stripe-panel";
 import { StaffRolesPanel } from "./roles/panel";
-import { checkStripeSandboxStatus, startStripeSandboxOnboarding, startStripeSandboxRehearsal } from "./payment-actions";
-
-const rehearsalDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Copenhagen" });
+import { checkStripeSandboxStatus, clearStripePracticeSales, startStripeSandboxOnboarding, startStripeSandboxRehearsal } from "./payment-actions";
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string; new?: string; calendarStatus?: string; stripe?: string; sandbox?: string }> }) {
   const { tenant, membership } = await requireTenantWorkspace();
@@ -64,7 +61,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const merchantStatus = sandbox ? await sandboxMerchantStatus(tenant.id, sandbox) : null;
   const sandboxFeedback = production ? params.sandbox : params.stripe;
   const rehearsalAccount = sandbox && merchantStatus === "ready" ? (await sandboxConnection(tenant.id))?.accountId : null;
-  const rehearsals = sandbox && rehearsalAccount ? await listSandboxRehearsals(sandbox, rehearsalAccount).catch(() => null) : null;
+  const [practiceSales] = showingPayments && isOwner && (sandbox || liveStripe) ? await tenantDb(tenant)<{ count: number }[]>`
+    SELECT count(*)::int AS count FROM commerce_sales WHERE tenant_id=${tenant.id}
+      AND is_stripe_practice AND stripe_practice_cleared_at IS NULL
+  ` : [];
   const bookingSettings = permissions.isManager || permissions.canManageServiceSettings;
   const links = [
     ...(bookingSettings ? [
@@ -139,13 +139,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               feedback={params.stripe}
               countries={liveStripe.allowedCountries}
               collectionEnabled={collection?.livemode === true && collection.allowNewPayments}
+              practiceSalesPending={Boolean(practiceSales?.count)}
             /> : production || !merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-settings-title">
               <h2 id="stripe-settings-title">Stripe Connect</h2>
               <p>Live Stripe setup will appear here when Waybook activates its Stripe Connect platform.</p>
             </section> : null}
             {merchantStatus ? <section className="workspace-settings__panel" aria-labelledby="stripe-sandbox-title">
               <h2 id="stripe-sandbox-title">Stripe sandbox</h2>
-              <p>Practise taking payments with Stripe test cards before going live. Test payments stay out of Sales and Reports.</p>
+              <p>Practise taking payments with Stripe test cards before going live. Test payments are marked as practice in Sales and do not count as revenue.</p>
               {sandboxFeedback === "unavailable" ? <p role="alert">Stripe setup could not open. Try again in a moment.</p> : null}
               {sandboxFeedback === "resume" && merchantStatus === "pending" ? <p role="status">Continue setup to open a fresh Stripe link.</p> : null}
               <p role={sandboxFeedback === "returned" || sandboxFeedback === "checked" ? "status" : undefined}>{{
@@ -170,17 +171,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </div>
               {rehearsalAccount ? <>
                 <h3>Practice payments</h3>
-                {params.sandbox === "payment-returned" ? <p role="status">Returned from Stripe. Review the payment status below.</p> : null}
-                {params.sandbox === "payment-cancelled" ? <p role="status">Checkout closed. You can start another test payment.</p> : null}
                 {params.sandbox === "payment-unavailable" ? <p role="alert">Test checkout could not open. Try again in a moment.</p> : null}
                 <form action={startStripeSandboxRehearsal}>
                   <input type="hidden" name="nonce" value={randomUUID()} />
                   <StripeOnboardingButton label="Start a DKK 10 test payment" />
                 </form>
-                {rehearsals === null ? <p>Stripe test payment history is temporarily unavailable.</p> : rehearsals.length ? <ul aria-label="Recent test payments">
-                  {rehearsals.map(({ id, state, created }) => <li key={id}>{rehearsalDate.format(new Date(created * 1000))} · DKK 10 · {state}</li>)}
-                </ul> : <p>Test payments will appear here.</p>}
+                <Link href={tenantPath(slug, "/app/sales/retail")}>View test payments in Sales</Link>
               </> : null}
+            </section> : null}
+            {merchantStatus || practiceSales?.count || params.sandbox === "cleared" ? <section className="workspace-settings__panel" aria-labelledby="stripe-practice-cleanup-title">
+              <h2 id="stripe-practice-cleanup-title">Before you go live</h2>
+              <p>Clear practice sales from Sales before accepting live payments. Existing cash, bank-transfer and card sales and their receipts stay in place.</p>
+              {params.sandbox === "cleared" ? <p role="status">Practice sales cleared.</p> : null}
+              {practiceSales?.count ? <form action={clearStripePracticeSales}>
+                <label><input type="checkbox" name="confirmClear" required /> Clear {practiceSales.count} practice {practiceSales.count === 1 ? "sale" : "sales"}</label>
+                <div className="workspace-settings__payment-actions"><button type="submit" className="waybook-action waybook-action--secondary">Clear practice sales</button></div>
+              </form> : null}
             </section> : null}
             <section className="workspace-settings__panel" aria-labelledby="record-payments-title">
               <h2 id="record-payments-title">Record payments</h2>

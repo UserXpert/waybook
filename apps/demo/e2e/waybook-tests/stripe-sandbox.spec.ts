@@ -10,11 +10,13 @@ async function signIn(page: Page, email: string) {
   await expect(page).toHaveURL(/\/app(?:\/calendars)?$/);
 }
 
-test("owners can resume sandbox onboarding and rehearse payments outside Sales", { tag: "@mobile" }, async ({ page, browser, baseURL, viewport }) => {
+test("owners can rehearse in Sales and clear only practice sales", { tag: "@mobile" }, async ({ page, browser, baseURL, viewport }) => {
   const control = postgres(process.env.WAYBOOK_CONTROL_DATABASE_URL!, { max: 1, ssl: false });
   const tenant = postgres(process.env.WAYBOOK_NORDIC_STUDIO_DATABASE_URL!, { max: 1, ssl: false });
   const path = "/nordic/app/settings?tab=payments";
   const [{ id: tenantId }] = await control`SELECT id FROM tenants WHERE slug='nordic-studio'`;
+  const retailPath = "/nordic/app/sales/retail";
+  const regularSale = randomUUID();
   const connections = () => control`SELECT account_id, creation_key
     FROM waybook_stripe_sandbox_connections WHERE tenant_id=${tenantId}`;
   try {
@@ -53,13 +55,28 @@ test("owners can resume sandbox onboarding and rehearse payments outside Sales",
     expect(await connections()).toEqual([first]);
     await page.goto(path + "&stripe=returned");
     await expect(page.getByRole("status").filter({ hasText: "Stripe has verified your sandbox account for card payments." })).toBeVisible();
+    await tenant`INSERT INTO commerce_sales (id,tenant_id,customer_id)
+      SELECT ${regularSale},${tenantId},id FROM customers WHERE tenant_id=${tenantId} LIMIT 1`;
     const paymentsBefore = await tenant`SELECT count(*) FROM payment_records WHERE tenant_id=${tenantId}`;
     await page.route("https://checkout.stripe.com/**", (route) => route.fulfill({ body: "Stripe sandbox checkout fixture" }));
     await page.getByRole("button", { name: "Start a DKK 10 test payment" }).click();
     await expect(page).toHaveURL(/^https:\/\/checkout\.stripe\.com\/c\/pay\/cs_test_/);
-    await page.goto(path + "&sandbox=payment-returned");
-    await expect(page.getByRole("list", { name: "Recent test payments" })).toContainText("DKK 10 · Paid");
+    const [practice] = await tenant`SELECT id FROM commerce_sales WHERE tenant_id=${tenantId} AND is_stripe_practice AND stripe_practice_cleared_at IS NULL`;
+    await page.goto(`${retailPath}?sale=${practice.id}&sandbox=payment-returned`);
+    await expect(page.getByRole("link", { name: "Practice sale", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Check test payment" }).click();
+    await expect(page.getByRole("heading", { name: "Completed test payment" })).toBeVisible();
+    expect(await tenant`SELECT amount_cents FROM commerce_sale_transactions WHERE tenant_id=${tenantId} AND sale_id=${practice.id}`)
+      .toEqual([{ amount_cents: 1000 }]);
     expect(await tenant`SELECT count(*) FROM payment_records WHERE tenant_id=${tenantId}`).toEqual(paymentsBefore);
+    await page.goto(path);
+    await page.getByRole("checkbox", { name: "Clear 1 practice sale" }).check();
+    await page.getByRole("button", { name: "Clear practice sales", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Practice sales cleared." })).toBeVisible();
+    await page.goto(`${retailPath}?sale=${practice.id}`);
+    await expect(page.getByRole("link", { name: "Practice sale", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Retail checkout", exact: true }).first()).toBeVisible();
+    expect(await tenant`SELECT id FROM commerce_sales WHERE id=${regularSale} AND stripe_practice_cleared_at IS NULL`).toHaveLength(1);
 
     const otherContext = await browser.newContext({ baseURL, viewport });
     try {
@@ -67,7 +84,7 @@ test("owners can resume sandbox onboarding and rehearse payments outside Sales",
       await signIn(other, "owner@copenhagen-physio.local");
       await other.goto("/copenhagen/app/settings?tab=payments");
       await expect(other.getByRole("button", { name: "Set up Stripe sandbox" })).toBeVisible();
-      await expect(other.getByRole("list", { name: "Recent test payments" })).toHaveCount(0);
+      await expect(other.getByRole("link", { name: "View test payments in Sales" })).toHaveCount(0);
       expect((await other.goto(path))?.status()).toBe(404);
     } finally {
       await otherContext.close();
@@ -99,6 +116,7 @@ test("owners can resume sandbox onboarding and rehearse payments outside Sales",
       }
     }
   } finally {
+    await tenant`DELETE FROM commerce_sales WHERE id=${regularSale} AND tenant_id=${tenantId}`;
     await control`DELETE FROM waybook_stripe_sandbox_connections WHERE tenant_id=${tenantId}`;
     await Promise.all([control.end(), tenant.end()]);
   }

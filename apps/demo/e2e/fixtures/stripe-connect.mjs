@@ -94,12 +94,13 @@ globalThis.fetch = async (input, init) => {
   }
   if (url.pathname.startsWith("/v1/checkout/sessions")) {
     const account = request.headers.get("Stripe-Account");
-    if (accounts.has(account) && url.pathname === "/v1/checkout/sessions") {
-      if (request.method === "GET" && url.searchParams.get("limit") === "30") {
-        return Response.json({ object: "list", data: [...rehearsals.values()]
-          .filter((entry) => entry.account === account).map(({ session }) => session) });
+    if (accounts.has(account)) {
+      if (request.method === "GET") {
+        const id = url.pathname.split("/").at(-1);
+        const entry = rehearsals.get(id);
+        return entry?.account === account ? Response.json(entry.session) : error(404);
       }
-      if (request.method === "POST") {
+      if (request.method === "POST" && url.pathname === "/v1/checkout/sessions") {
         const body = new URLSearchParams(await request.text());
         const reference = body.get("client_reference_id");
         if (!reference?.startsWith("waybook-rehearsal-") || reference !== request.headers.get("Idempotency-Key") ||
@@ -109,7 +110,7 @@ globalThis.fetch = async (input, init) => {
           currency: "dkk", client_reference_id: reference, status: "open", payment_status: "unpaid",
           created: Math.floor(Date.now() / 1000), url: `https://checkout.stripe.com/c/pay/${id}` };
         // Simulate Stripe confirming payment before the browser returns to Waybook.
-        rehearsals.set(reference, { account, session: { ...session, status: "complete", payment_status: "paid" } });
+        rehearsals.set(id, { account, session: { ...session, status: "complete", payment_status: "paid" } });
         return Response.json(session);
       }
     }

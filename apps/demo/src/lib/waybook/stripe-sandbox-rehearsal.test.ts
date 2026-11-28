@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { stripeSandboxConfig, stripeWorkspaceSandboxConfig } from "./stripe-connect-api";
-import { listSandboxRehearsals, openSandboxRehearsal } from "./stripe-sandbox-rehearsal";
+import { openSandboxRehearsal, sandboxRehearsalPaid } from "./stripe-sandbox-rehearsal";
 
 const origin = "https://waybook.example";
 const account = "acct_nordicSandbox";
 const nonce = "6f47d356-3183-41c6-9ce3-61d4decccd48";
 const reference = `waybook-rehearsal-${nonce}`;
-const settings = "/nordic/app/settings?tab=payments";
+const sales = "/nordic/app/sales/retail";
 const config = { origin, secretKey: "rk_test_rehearsalFixture" };
 const session = {
   id: "cs_test_rehearsal", object: "checkout.session", livemode: false, mode: "payment",
@@ -34,26 +34,24 @@ test("rehearsal creates a tenant-scoped sandbox checkout and rejects forged live
     assert.equal(headers.get("Idempotency-Key"), reference);
     const body = init?.body as URLSearchParams;
     assert.equal(body.get("client_reference_id"), reference);
-    assert.equal(body.get("success_url"), origin + settings + "&sandbox=payment-returned");
-    assert.equal(body.get("cancel_url"), origin + settings + "&sandbox=payment-cancelled");
+    assert.equal(body.get("success_url"), origin + sales + `?sale=${nonce}&sandbox=payment-returned`);
+    assert.equal(body.get("cancel_url"), origin + sales + `?sale=${nonce}&sandbox=payment-cancelled`);
     assert.equal(body.get("line_items[0][price_data][unit_amount]"), "1000");
     return Response.json(session);
   };
-  assert.equal(await openSandboxRehearsal(config, account, settings, nonce, request), session.url);
-  await assert.rejects(() => openSandboxRehearsal(config, account, settings, nonce, async () =>
+  assert.deepEqual(await openSandboxRehearsal(config, account, sales, nonce, request), { id: session.id, url: session.url });
+  await assert.rejects(() => openSandboxRehearsal(config, account, sales, nonce, async () =>
     Response.json({ ...session, livemode: true })));
 });
 
-test("practice history reads only tagged test payments from the workspace sandbox", async () => {
-  const items = await listSandboxRehearsals(config, account, async (input, init) => {
-    assert.equal(input, "https://api.stripe.com/v1/checkout/sessions?limit=30");
+test("reconciliation only accepts the saved test session from the workspace sandbox", async () => {
+  const paid = await sandboxRehearsalPaid(config, account, session.id, nonce, async (input, init) => {
+    assert.equal(input, `https://api.stripe.com/v1/checkout/sessions/${session.id}`);
     assert.equal(new Headers(init?.headers).get("Stripe-Account"), account);
-    return Response.json({ data: [
-      { ...session, status: "complete", payment_status: "paid" },
-      { ...session, id: "cs_test_pending", status: "open" },
-      { ...session, id: "cs_test_actualAppointment", client_reference_id: nonce },
-      { ...session, id: "cs_live_foreign", livemode: true },
-    ] });
+    return Response.json({ ...session, status: "complete", payment_status: "paid" });
   });
-  assert.deepEqual(items.map(({ id, state }) => [id, state]), [["cs_test_rehearsal", "Paid"], ["cs_test_pending", "Awaiting payment"]]);
+  assert.equal(paid, true);
+  assert.equal(await sandboxRehearsalPaid(config, account, session.id, nonce, async () => Response.json(session)), false);
+  await assert.rejects(() => sandboxRehearsalPaid(config, account, session.id, nonce, async () =>
+    Response.json({ ...session, client_reference_id: nonce })));
 });

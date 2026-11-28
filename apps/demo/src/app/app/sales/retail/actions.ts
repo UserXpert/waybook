@@ -91,7 +91,7 @@ export async function addProductToRetailCheckout(formData: FormData): Promise<Re
   const db = tenantDb(tenant);
   const saved = await db.begin(async (transaction) => {
     const [sale] = await transaction.unsafe<{ status: string }[]>(
-      "SELECT status FROM commerce_sales WHERE id=$1 AND tenant_id=$2 AND booking_id IS NULL FOR UPDATE", [saleId, tenant.id],
+      "SELECT status FROM commerce_sales WHERE id=$1 AND tenant_id=$2 AND booking_id IS NULL AND NOT is_stripe_practice FOR UPDATE", [saleId, tenant.id],
     );
     if (!sale) return false;
     const [prior] = await transaction.unsafe<{ matches: boolean }[]>(`
@@ -130,7 +130,7 @@ export async function closeRetailCheckout(formData: FormData): Promise<RetailChe
   const db = tenantDb(tenant);
   const error = await db.begin(async (transaction) => {
     const [sale] = await transaction.unsafe<{ status: string; currency: string }[]>(
-      "SELECT status,currency FROM commerce_sales WHERE id=$1 AND tenant_id=$2 AND booking_id IS NULL FOR UPDATE", [saleId, tenant.id],
+      "SELECT status,currency FROM commerce_sales WHERE id=$1 AND tenant_id=$2 AND booking_id IS NULL AND NOT is_stripe_practice FOR UPDATE", [saleId, tenant.id],
     );
     if (sale?.status === "closed") {
       const [prior] = await transaction.unsafe<{ id: string }[]>(`
