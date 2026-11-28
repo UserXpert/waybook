@@ -30,7 +30,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
       const [customer] = await tx`INSERT INTO customers (tenant_id, name, email)
         VALUES (${tenantId}, ${name}, ${`stripe-client-${marker}@example.test`}) RETURNING id`;
       const bookings: string[] = [];
-      for (const [hoursAgo, amount] of [[25, 6501], [27, 6502], [29, 6503], [31, 6504], [33, 6505]]) {
+      for (const [hoursAgo, amount] of [[23, 250], [25, 6501], [27, 6502], [29, 6503], [31, 6504], [33, 6505]]) {
         const [block] = await tx`INSERT INTO booking_blocks (tenant_id, team_member_id, location_id, starts_at, ends_at, state)
           VALUES (${tenantId}, ${member.id}, ${location.id}, now() - ${hoursAgo} * interval '1 hour',
             now() - ${hoursAgo - 1} * interval '1 hour', 'confirmed') RETURNING id, starts_at, ends_at`;
@@ -66,7 +66,28 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
           AND action = 'booking.completed'`).toEqual([attempt]);
     };
 
-    for (const [index, id] of appointments.slice(0, -1).entries()) {
+    const [minimumBooking, ...stripeBookings] = appointments;
+    await page.goto(`/nordic/app/sales?booking=${minimumBooking}&step=payment`);
+    const card = sale.getByRole("button", { name: "Pay by card in Stripe sandbox" });
+    const mobilePay = sale.getByRole("button", { name: "Pay with MobilePay in Stripe sandbox" });
+    await expect(card).toBeVisible();
+    await expect(mobilePay).toBeVisible();
+    await db`UPDATE bookings SET booked_price_cents = 249 WHERE id = ${minimumBooking}`;
+    await sale.locator('input[name="expectedCents"]').evaluate((input: HTMLInputElement) => { input.value = "249"; });
+    const rejectedPayment = page.waitForResponse((response) => response.request().method() === "POST");
+    await card.click();
+    expect(await (await rejectedPayment).text()).toContain("Stripe payments must be at least DKK 2.50.");
+    expect(await attempts(minimumBooking)).toEqual([]);
+    await page.reload();
+    await expect(card).toHaveCount(0);
+    await expect(mobilePay).toHaveCount(0);
+    await expect(sale.getByText("Stripe payments must be at least DKK 2.50.", { exact: true })).toBeVisible();
+    await sale.getByRole("radio", { name: "Cash", exact: true }).check();
+    await sale.getByRole("button", { name: "Record payment and finish checkout", exact: true }).click();
+    await expect(sale.getByText("Paid SALE", { exact: true })).toBeVisible();
+    expect(await receipts(minimumBooking)).toEqual([{ id: expect.any(String), amount_cents: 249, method: "cash" }]);
+
+    for (const [index, id] of stripeBookings.slice(0, -1).entries()) {
       const paymentPath = `/nordic/app/sales?booking=${id}&step=payment`;
       await page.goto(paymentPath);
       await sale.getByRole("button", { name: "Pay by card in Stripe sandbox" }).click();
@@ -268,7 +289,7 @@ test("Stripe checkout reserves one balance, reconciles once, and releases a canc
       }
     }
 
-    const mobilePayBooking = appointments.at(-1)!;
+    const mobilePayBooking = stripeBookings.at(-1)!;
     const paymentPath = `/nordic/app/sales?booking=${mobilePayBooking}&step=payment`;
     await page.goto(paymentPath);
     await sale.getByRole("button", { name: "Pay with MobilePay in Stripe sandbox", exact: true }).click();

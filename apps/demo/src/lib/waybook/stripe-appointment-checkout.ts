@@ -3,7 +3,7 @@ import "server-only";
 import { completeSettledAppointment } from "./appointment-checkout-completion";
 import { controlDb, tenantDb } from "./database";
 import { stripeConnectLive, stripeConnectSandbox, stripeSandboxConfig } from "./stripe-connect-api";
-import { stripeCheckoutLifetimeSeconds, stripeCheckout, stripeMobilePayAvailable, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
+import { stripeCheckoutLifetimeSeconds, stripeCheckout, stripeDkkMinimumCents, stripeMobilePayAvailable, type SandboxCheckoutAttempt, type SandboxCheckoutSession } from "./stripe-checkout-api";
 import type { StripeCheckoutNotification } from "./stripe-sandbox-webhook";
 import { stripeCanStartPayment, stripePaymentAccount, stripePaymentTenantForAccount, type StripePaymentConfig } from "./stripe-payment-mode";
 
@@ -106,8 +106,9 @@ async function reserveAttempt(
     `, [tenantId, bookingId, accountId, paymentMethod, livemode]);
     if (!cart || cart.currency !== "DKK" || cart.alreadyRecorded || cart.total <= 0 ||
         cart.total > 10_000_000 || cart.total !== input.expectedCents) {
-      throw new Error("Review the current checkout total before opening a Stripe sandbox payment.");
+      throw new Error("Review the current checkout total before opening a Stripe payment.");
     }
+    if (cart.total < stripeDkkMinimumCents) throw new Error("Stripe payments must be at least DKK 2.50.");
     await sql.unsafe(`
       INSERT INTO stripe_sandbox_checkout_attempts
         (tenant_id, booking_id, account_id, amount_cents, return_path, return_origin, created_by_identity_id,
@@ -180,9 +181,6 @@ export async function runAppointmentStripeCheckout(
   const canStart = Boolean(accountId && stripeCanStartPayment(config) && input.action === "open" &&
     !await currentAttempt(context.db, context.tenantId, context.bookingId));
   if (canStart && accountId) {
-    if (input.paymentMethod === "mobilepay" && input.expectedCents < 250) {
-      throw new Error("MobilePay payments must be at least DKK 2.50.");
-    }
     const stripeConnect = config.livemode === true ? stripeConnectLive(config) : stripeConnectSandbox(config);
     if (await stripeConnect.merchantStatus(accountId) !== "ready") {
       throw new Error("Finish Stripe setup in Settings before taking a payment.");

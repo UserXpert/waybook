@@ -23,7 +23,7 @@ import { staffPermissionContext } from "@/lib/waybook/staff-permissions";
 import { currentTenantRouteSlug, requireTenantWorkspace } from "@/lib/waybook/tenant-context";
 import { tenantPath } from "@/lib/waybook/tenant-routes";
 import { appointmentStripeState } from "@/lib/waybook/stripe-appointment-checkout";
-import { stripeMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
+import { stripeDkkMinimumCents, stripeMobilePayAvailable } from "@/lib/waybook/stripe-checkout-api";
 import { stripeAppointmentPaymentConfig, stripeCanStartPayment, stripePaymentAccount } from "@/lib/waybook/stripe-payment-mode";
 import { stripeAppointmentRefundDetails } from "@/lib/waybook/stripe-appointment-refunds";
 import { getTenantTerminology } from "@/lib/waybook/tenant-terminology";
@@ -276,7 +276,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   const currentStripeMode = !stripePending || stripeState?.livemode === (stripeConfig?.livemode === true);
   const mobilePayAvailable = Boolean(stripeConfig && stripeAccount && !stripePending &&
     step === "payment" && selectedSale?.attendanceStage === "checking_out" && selectedSale.currency === "DKK" &&
-    selectedSale.chargeableCents - selectedSale.paidCents >= 250 && paymentItems.length === 0 &&
+    selectedSale.chargeableCents - selectedSale.paidCents >= stripeDkkMinimumCents && paymentItems.length === 0 &&
     await stripeMobilePayAvailable(stripeConfig, stripeAccount));
   const dateTime = new Intl.DateTimeFormat("en-GB", { timeZone: tenant.timezone, dateStyle: "medium", timeStyle: "short" });
   const salesPath = tenantPath(tenantSlug, "/app/sales");
@@ -382,8 +382,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       const canUseGiftCard = manager && !stripePending && activeAppointment && !selectedSale.giftCardRedeemed && recorded.length === 0 && canRecordPayment && selectedSale.currency === "DKK";
       const giftCardStep = canUseGiftCard && tender === "gift-card";
       const canRedeemPackage = activeAppointment && paymentItems.length === 0 && eligiblePackages.length > 0 && !stripePending;
-      const canStartStripe = Boolean(stripeAccount) && selectedSale.attendanceStage === "checking_out" &&
+      const stripeCheckoutAvailable = Boolean(stripeAccount) && selectedSale.attendanceStage === "checking_out" &&
         selectedSale.currency === "DKK" && paymentItems.length === 0;
+      const canStartStripe = stripeCheckoutAvailable && outstandingCents >= stripeDkkMinimumCents;
       const bookedServices = [{
         id: selectedSale.bookingId, title: selectedSale.serviceTitle, provider: selectedSale.teamMemberName,
         startsAt: selectedSale.startsAt, endsAt: selectedSale.endsAt, priceCents: selectedSale.bookedPriceCents,
@@ -454,6 +455,9 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                 {manager && currentStripeMode && (stripePending || canStartStripe) ? <StripeAppointmentPayment bookingId={selectedSale.bookingId}
                   amountCents={outstandingCents} pendingPayment={pendingStripeMethod} mobilePayAvailable={mobilePayAvailable}
                   livemode={stripeConfig?.livemode === true} verifyOnReturn={stripe === "return"} /> : null}
+                {manager && !stripePending && stripeCheckoutAvailable && !canStartStripe ? <p className="sale-detail__note">
+                  Stripe payments must be at least DKK 2.50.
+                </p> : null}
                 {!stripePending ? <AppointmentPaymentForm bookingId={selectedSale.bookingId} balance={paymentBalance} checkout requireFullBalance={!manager}
                   canFinishCheckout={activeCheckout} manualSplit={manualSplit}
                   giftCardHref={canUseGiftCard ? `${paymentHref}&tender=gift-card` : undefined} /> : null}

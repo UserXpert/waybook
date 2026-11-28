@@ -6,6 +6,7 @@ const sandboxSessionId = /^cs_test_[A-Za-z0-9]+$/;
 const liveSessionId = /^cs_live_[A-Za-z0-9]+$/;
 const attemptIdPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 export const stripeCheckoutLifetimeSeconds = 2 * 60 * 60;
+export const stripeDkkMinimumCents = 250;
 type SandboxPaymentConfig = Extract<StripePaymentConfig, { livemode?: false }>;
 
 export type SandboxCheckoutAttempt = {
